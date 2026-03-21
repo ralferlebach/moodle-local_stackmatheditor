@@ -19,6 +19,9 @@ define([
     /** @type {boolean} Enable console debug logging. */
     var DEBUG = true;
 
+    /** @type {number} Debounce delay for syncing to STACK input (ms). */
+    var SYNC_DELAY = 500;
+
     /**
      * Log a debug message to the browser console.
      *
@@ -29,6 +32,28 @@ define([
             var msgArgs = ['[SME]'].concat(Array.prototype.slice.call(arguments));
             window.console.log.apply(window.console, msgArgs);
         }
+    }
+
+    /**
+     * Creates a debounced version of a function.
+     *
+     * @param {Function} func The function to debounce.
+     * @param {number} wait Delay in milliseconds.
+     * @returns {Function} Debounced function.
+     */
+    function debounce(func, wait) {
+        var timeout = null;
+        return function() {
+            var context = this;
+            var args = arguments;
+            if (timeout) {
+                clearTimeout(timeout);
+            }
+            timeout = setTimeout(function() {
+                timeout = null;
+                func.apply(context, args);
+            }, wait);
+        };
     }
 
     /** @type {Object} Toolbar button definitions per category. */
@@ -140,7 +165,6 @@ define([
 
     /**
      * Ensures jQuery is available globally, which MathQuill requires.
-     * Moodle loads jQuery as AMD module only; MathQuill expects window.jQuery.
      */
     function ensureGlobalJquery() {
         if (!window.jQuery) {
@@ -151,11 +175,6 @@ define([
 
     /**
      * Dynamically loads MathQuill JS while preventing AMD detection.
-     *
-     * MathQuill uses a UMD wrapper that detects define/define.amd.
-     * Since Moodle uses RequireJS, MathQuill would register as AMD module
-     * instead of setting window.MathQuill. We temporarily hide define
-     * to force MathQuill into its IIFE/global code path.
      *
      * @param {string} url JS file URL.
      * @returns {Promise} Resolves with MathQuill global object.
@@ -168,13 +187,10 @@ define([
                 return;
             }
 
-            // Step 1: Ensure jQuery is global (MathQuill requires it).
             ensureGlobalJquery();
 
             log('Loading MathQuill from:', url);
-            log('jQuery version:', (window.jQuery && window.jQuery.fn) ? window.jQuery.fn.jquery : 'NOT FOUND');
 
-            // Step 2: Fetch the script source as text.
             fetch(url)
                 .then(function(response) {
                     if (!response.ok) {
@@ -185,13 +201,11 @@ define([
                 .then(function(scriptText) {
                     log('MathQuill source fetched, length:', scriptText.length);
 
-                    // Step 3: Temporarily hide AMD define so MathQuill
-                    //          falls through to its global/IIFE path.
+                    // Temporarily hide AMD define so MathQuill uses global path.
                     var originalDefine = window.define;
                     window.define = undefined;
 
                     try {
-                        // Step 4: Execute the script in global scope.
                         var scriptEl = document.createElement('script');
                         scriptEl.type = 'text/javascript';
                         scriptEl.text = scriptText;
@@ -200,21 +214,14 @@ define([
                         log('Error executing MathQuill script:', e.message);
                     }
 
-                    // Step 5: Restore AMD define immediately.
+                    // Restore AMD define immediately.
                     window.define = originalDefine;
 
-                    // Step 6: Check if MathQuill is now available.
                     if (window.MathQuill) {
                         log('MathQuill global is set. Success!');
                         resolve(window.MathQuill);
                     } else {
-                        log('window.MathQuill is still undefined after execution.');
-                        log('Checking window.jQuery:', typeof window.jQuery);
-                        log('Checking window.$:', typeof window.$);
-                        reject(new Error(
-                            'MathQuill executed but window.MathQuill not set. ' +
-                            'Check browser console for script errors.'
-                        ));
+                        reject(new Error('MathQuill executed but window.MathQuill not set.'));
                     }
                 })
                 .catch(function(err) {
@@ -265,19 +272,28 @@ define([
     }
 
     /**
-     * Synchronises MathQuill LaTeX output to the hidden STACK input field.
+     * Performs the actual sync of MathQuill value to the hidden STACK input.
+     * Dispatches native events so STACK's JS picks up the change.
+     * Wraps event dispatch in try/catch to guard against MathJax errors in STACK.
      *
      * @param {jQuery} $input The original STACK input element.
      * @param {Object} mathField MathQuill MathField instance.
      */
-    function syncToInput($input, mathField) {
+    function doSync($input, mathField) {
         var latex = mathField.latex();
         var maxima = Tex2Max.convert(latex);
         log('Sync: LaTeX="' + latex + '" Maxima="' + maxima + '"');
         $input.val(maxima);
+
         var el = $input[0];
-        el.dispatchEvent(new Event('input', {bubbles: true}));
-        el.dispatchEvent(new Event('change', {bubbles: true}));
+
+        try {
+            el.dispatchEvent(new Event('input', {bubbles: true}));
+            el.dispatchEvent(new Event('change', {bubbles: true}));
+        } catch (e) {
+            // Guard against STACK/MathJax errors triggered by the event.
+            log('Event dispatch caused error (non-fatal):', e.message);
+        }
     }
 
     /**
@@ -309,11 +325,17 @@ define([
         $container.append($mqSpan);
         $input.after($container);
 
+        // Create a debounced sync function for this specific field.
+        var debouncedSync = debounce(function() {
+            doSync($input, mathField);
+        }, SYNC_DELAY);
+
         var mathField = MQ.MathField($mqSpan[0], {
             spaceBehavesLikeTab: true,
             handlers: {
                 edit: function() {
-                    syncToInput($input, mathField);
+                    // Debounced: waits until user pauses typing.
+                    debouncedSync();
                 }
             }
         });
@@ -372,7 +394,7 @@ define([
 
         log('No STACK inputs found. Dumping page info:');
         $('input[type="text"]').each(function() {
-            log('  input: name="' + this.name + '" id="' + this.id + '" class="' + this.className + '"');
+            log('  input: name="' + this.name + '" id="' + this.id + '"');
         });
         $('.que').each(function() {
             log('  que: class="' + this.className + '" id="' + this.id + '"');
