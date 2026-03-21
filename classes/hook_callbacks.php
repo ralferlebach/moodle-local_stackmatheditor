@@ -3,11 +3,17 @@ namespace local_stackmatheditor;
 
 defined('MOODLE_INTERNAL') || die();
 
+/**
+ * Hook callbacks for local_stackmatheditor.
+ *
+ * @package    local_stackmatheditor
+ * @copyright  2026 Your Name
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
 class hook_callbacks {
 
     /**
-     * Injiziert MathQuill auf Quiz-Seiten mit STACK-Fragen.
-     * Wird über die Hooks API aufgerufen (Moodle 4.4+).
+     * Injects MathQuill on quiz pages containing STACK questions.
      *
      * @param \core\hook\output\before_footer_html_generation $hook
      */
@@ -30,18 +36,29 @@ class hook_callbacks {
             return;
         }
 
-        $PAGE->requires->css(
-            new \moodle_url('/local/stackmatheditor/thirdparty/mathquill/mathquill.css')
-        );
+        // Detect which JS file exists: .min.js or .js
+        $plugindir = __DIR__ . '/../thirdparty/mathquill/';
+        if (file_exists($plugindir . 'mathquill.min.js')) {
+            $jsfile = 'mathquill.min.js';
+        } else {
+            $jsfile = 'mathquill.js';
+        }
 
-        $mqurl = (new \moodle_url(
-            '/local/stackmatheditor/thirdparty/mathquill/mathquill.min.js'
+        $mqjsurl = (new \moodle_url(
+            '/local/stackmatheditor/thirdparty/mathquill/' . $jsfile
+        ))->out(false);
+
+        $mqcssurl = (new \moodle_url(
+            '/local/stackmatheditor/thirdparty/mathquill/mathquill.css'
         ))->out(false);
 
         $PAGE->requires->js_call_amd(
             'local_stackmatheditor/mathquill_init',
             'init',
-            [['mathquillJsUrl' => $mqurl]]
+            [[
+                'mathquillJsUrl'  => $mqjsurl,
+                'mathquillCssUrl' => $mqcssurl,
+            ]]
         );
     }
 }

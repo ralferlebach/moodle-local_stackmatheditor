@@ -1,7 +1,9 @@
 /**
  * Initialises MathQuill editors on STACK answer fields.
  *
- * @module local_stackmatheditor/mathquill_init
+ * @module     local_stackmatheditor/mathquill_init
+ * @copyright  2026 Your Name
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 define([
     'jquery',
@@ -11,9 +13,25 @@ define([
 ], function($, Ajax, Notification, Tex2Max) {
     'use strict';
 
+    /** @type {Object|null} MathQuill interface (v2). */
     var MQ = null;
 
-    // Toolbar category definitions.
+    /** @type {boolean} Enable console debug logging. */
+    var DEBUG = true;
+
+    /**
+     * Log a debug message to the browser console.
+     *
+     * @param {...*} args Values to log.
+     */
+    function log(args) { // eslint-disable-line no-unused-vars
+        if (DEBUG && window.console && window.console.log) {
+            var msgArgs = ['[SME]'].concat(Array.prototype.slice.call(arguments));
+            window.console.log.apply(window.console, msgArgs);
+        }
+    }
+
+    /** @type {Object} Toolbar button definitions per category. */
     var TOOLBAR_DEFS = {
         fractions: [
             {label: '\\frac{a}{b}', write: '\\frac{}{}', display: 'a/b'}
@@ -26,15 +44,15 @@ define([
             {label: '\u221Bx', write: '\\sqrt[3]{}', display: '\u221B'}
         ],
         trigonometry: [
-            {label: 'sin',  cmd: '\\sin'},
-            {label: 'cos',  cmd: '\\cos'},
-            {label: 'tan',  cmd: '\\tan'},
+            {label: 'sin', cmd: '\\sin'},
+            {label: 'cos', cmd: '\\cos'},
+            {label: 'tan', cmd: '\\tan'},
             {label: 'asin', cmd: '\\arcsin'},
             {label: 'acos', cmd: '\\arccos'},
             {label: 'atan', cmd: '\\arctan'}
         ],
         logarithms: [
-            {label: 'ln',  cmd: '\\ln'},
+            {label: 'ln', cmd: '\\ln'},
             {label: 'log', cmd: '\\log'},
             {label: 'exp', cmd: '\\exp'}
         ],
@@ -70,18 +88,66 @@ define([
         matrices: []
     };
 
+    /**
+     * Returns the default toolbar configuration.
+     *
+     * @returns {Object} Category name to boolean map.
+     */
     function getDefaultConfig() {
         return {
-            fractions: true, powers: true, roots: true,
-            trigonometry: true, logarithms: true, constants: true,
-            comparison: true, parentheses: true,
-            calculus: false, greek: false, matrices: false
+            fractions: true,
+            powers: true,
+            roots: true,
+            trigonometry: true,
+            logarithms: true,
+            constants: true,
+            comparison: true,
+            parentheses: true,
+            calculus: false,
+            greek: false,
+            matrices: false
         };
     }
 
+    /**
+     * Dynamically loads a CSS file by injecting a link element into head.
+     *
+     * @param {string} url CSS file URL.
+     * @returns {Promise} Resolves when loaded.
+     */
+    function loadCss(url) {
+        return new Promise(function(resolve) {
+            if (document.querySelector('link[href="' + url + '"]')) {
+                log('CSS already loaded:', url);
+                resolve();
+                return;
+            }
+            var link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.type = 'text/css';
+            link.href = url;
+            link.onload = function() {
+                log('CSS loaded:', url);
+                resolve();
+            };
+            link.onerror = function() {
+                log('CSS FAILED:', url);
+                resolve();
+            };
+            document.head.appendChild(link);
+        });
+    }
+
+    /**
+     * Dynamically loads the MathQuill JS library.
+     *
+     * @param {string} url JS file URL.
+     * @returns {Promise} Resolves with MathQuill global.
+     */
     function loadMathQuillScript(url) {
         return new Promise(function(resolve, reject) {
             if (window.MathQuill) {
+                log('MathQuill already loaded.');
                 resolve(window.MathQuill);
                 return;
             }
@@ -89,6 +155,7 @@ define([
             script.src = url;
             script.onload = function() {
                 if (window.MathQuill) {
+                    log('MathQuill loaded successfully.');
                     resolve(window.MathQuill);
                 } else {
                     reject(new Error('MathQuill global not available after loading.'));
@@ -101,6 +168,13 @@ define([
         });
     }
 
+    /**
+     * Builds the toolbar element for a MathQuill field.
+     *
+     * @param {Object} config Category-to-boolean configuration map.
+     * @param {Object} mathField MathQuill MathField instance.
+     * @returns {jQuery} Toolbar element.
+     */
     function buildToolbar(config, mathField) {
         var $toolbar = $('<div class="sme-toolbar" role="toolbar" aria-label="Math Editor Toolbar"></div>');
 
@@ -109,15 +183,13 @@ define([
                 return;
             }
             var buttons = TOOLBAR_DEFS[category];
-            if (!buttons || buttons.length === 0) {
+            if (!buttons || !buttons.length) {
                 return;
             }
-
             var $group = $('<div class="sme-toolbar-group" role="group"></div>');
             buttons.forEach(function(btn) {
                 var $button = $('<button type="button" class="sme-toolbar-btn"></button>');
-                $button.attr('title', btn.label);
-                $button.text(btn.display || btn.label);
+                $button.attr('title', btn.label).text(btn.display || btn.label);
                 $button.on('click', function(e) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -136,17 +208,37 @@ define([
         return $toolbar;
     }
 
+    /**
+     * Synchronises the MathQuill LaTeX output to the hidden STACK input field.
+     *
+     * @param {jQuery} $input The original STACK input element.
+     * @param {Object} mathField MathQuill MathField instance.
+     */
     function syncToInput($input, mathField) {
-        var latex  = mathField.latex();
+        var latex = mathField.latex();
         var maxima = Tex2Max.convert(latex);
+        log('Sync: LaTeX="' + latex + '" → Maxima="' + maxima + '"');
         $input.val(maxima);
-
         var el = $input[0];
-        el.dispatchEvent(new Event('input',  {bubbles: true}));
+        el.dispatchEvent(new Event('input', {bubbles: true}));
         el.dispatchEvent(new Event('change', {bubbles: true}));
     }
 
+    /**
+     * Replaces a single STACK input field with a MathQuill editor.
+     *
+     * @param {jQuery} $input The STACK input element to replace.
+     * @param {Object} config Toolbar configuration.
+     * @returns {Object|undefined} MathQuill MathField instance or undefined if already initialised.
+     */
     function initMathQuillField($input, config) {
+        if ($input.data('sme-initialized')) {
+            return undefined;
+        }
+        $input.data('sme-initialized', true);
+
+        log('Initialising MathQuill on input:', $input.attr('name'));
+
         $input.css({
             position: 'absolute',
             left: '-9999px',
@@ -157,7 +249,7 @@ define([
         });
 
         var $container = $('<div class="sme-container"></div>');
-        var $mqSpan    = $('<span class="sme-mathquill-field"></span>');
+        var $mqSpan = $('<span class="sme-mathquill-field"></span>');
         $container.append($mqSpan);
         $input.after($container);
 
@@ -172,67 +264,146 @@ define([
 
         var existing = $input.val();
         if (existing) {
+            log('Pre-filling with existing value:', existing);
             mathField.latex(existing);
         }
 
-        var $toolbar = buildToolbar(config, mathField);
-        $container.prepend($toolbar);
-
+        $container.prepend(buildToolbar(config, mathField));
         return mathField;
     }
 
-    return {
+    /**
+     * Finds STACK input fields using multiple selector strategies.
+     *
+     * @returns {jQuery} Matched input elements.
+     */
+    function findStackInputs() {
+        var $inputs;
+
+        // Strategy 1: Classic Moodle quiz – .que.stack container.
+        $inputs = $('.que.stack').find('input[type="text"]').filter(function() {
+            return this.name && /_ans\d*$/.test(this.name);
+        });
+        if ($inputs.length) {
+            log('Strategy 1 matched: .que.stack input[name*=_ans] →', $inputs.length, 'fields');
+            return $inputs;
+        }
+
+        // Strategy 2: STACK input class (some versions add a class).
+        $inputs = $('input.stackinput, input.algebraic');
+        if ($inputs.length) {
+            log('Strategy 2 matched: input.stackinput / input.algebraic →', $inputs.length, 'fields');
+            return $inputs;
+        }
+
+        // Strategy 3: Any text input whose ID contains "ans" inside a STACK container.
+        $inputs = $('[class*="stack"]').find('input[type="text"]').filter(function() {
+            return (this.id && /ans\d/.test(this.id)) || (this.name && /ans\d/.test(this.name));
+        });
+        if ($inputs.length) {
+            log('Strategy 3 matched: [class*=stack] input[id*=ans] →', $inputs.length, 'fields');
+            return $inputs;
+        }
+
+        // Strategy 4: Broadest – any text input with _ans in name.
+        $inputs = $('input[type="text"]').filter(function() {
+            return this.name && /_ans/.test(this.name);
+        });
+        if ($inputs.length) {
+            log('Strategy 4 (broad) matched: input[name*=_ans] →', $inputs.length, 'fields');
+            return $inputs;
+        }
+
+        log('No STACK input fields found on this page.');
+        log('DEBUG: All text inputs on page:');
+        $('input[type="text"]').each(function() {
+            log('  name="' + this.name + '" id="' + this.id + '" class="' + this.className + '"');
+        });
+        log('DEBUG: Question containers:');
+        $('.que').each(function() {
+            log('  class="' + this.className + '" id="' + this.id + '"');
+        });
+
+        return $();
+    }
+
+    /**
+     * Initialises editors on all found STACK inputs using given config map.
+     *
+     * @param {jQuery} $inputs The matched input elements.
+     * @param {Object} configMap Question ID to config mapping.
+     */
+    function applyEditors($inputs, configMap) {
+        $inputs.each(function() {
+            var $input = $(this);
+            var $que = $input.closest('.que');
+            var qid = $que.data('questionid');
+            var cfg = (qid && configMap[qid]) ? configMap[qid] : getDefaultConfig();
+            initMathQuillField($input, cfg);
+        });
+    }
+
+    return /** @alias module:local_stackmatheditor/mathquill_init */ {
+
+        /**
+         * Entry point – called from hook_callbacks.php via js_call_amd.
+         *
+         * @param {Object} params Configuration parameters.
+         * @param {string} params.mathquillJsUrl URL to mathquill.min.js.
+         * @param {string} params.mathquillCssUrl URL to mathquill.css.
+         */
         init: function(params) {
-            loadMathQuillScript(params.mathquillJsUrl)
-                .then(function(MathQuillGlobal) {
-                    MQ = MathQuillGlobal.getInterface(2);
+            log('init() called with params:', JSON.stringify(params));
 
-                    var $inputs = $('.que.stack')
-                        .find('input[type="text"]')
-                        .filter(function() {
-                            return this.name && /_ans\d*$/.test(this.name);
-                        });
+            var cssReady = loadCss(params.mathquillCssUrl);
+            var jsReady = loadMathQuillScript(params.mathquillJsUrl);
 
-                    if ($inputs.length === 0) {
+            Promise.all([cssReady, jsReady])
+                .then(function(results) {
+                    MQ = results[1].getInterface(2);
+                    log('MathQuill interface ready.');
+
+                    var $inputs = findStackInputs();
+                    if (!$inputs.length) {
                         return;
                     }
 
+                    // Collect question IDs.
                     var questionIds = [];
-                    $('.que.stack').each(function() {
-                        var qid = $(this).data('questionid');
-                        if (qid) {
-                            questionIds.push(parseInt(qid, 10));
+                    var $questions = $inputs.closest('.que');
+                    $questions.each(function() {
+                        var rawId = $(this).data('questionid') || $(this).attr('id');
+                        if (rawId) {
+                            var match = String(rawId).match(/(\d+)/);
+                            if (match) {
+                                questionIds.push(parseInt(match[1], 10));
+                            }
                         }
                     });
+                    log('Question IDs found:', questionIds);
 
-                    if (questionIds.length > 0) {
+                    if (questionIds.length) {
                         Ajax.call([{
                             methodname: 'local_stackmatheditor_get_config',
                             args: {questionids: questionIds}
-                        }])[0].done(function(results) {
+                        }])[0].done(function(configResults) {
+                            log('Config loaded for', configResults.length, 'questions');
                             var configMap = {};
-                            results.forEach(function(r) {
+                            configResults.forEach(function(r) {
                                 configMap[r.questionid] = JSON.parse(r.config);
                             });
-                            $inputs.each(function() {
-                                var $input = $(this);
-                                var $que   = $input.closest('.que.stack');
-                                var qid    = $que.data('questionid');
-                                var cfg    = configMap[qid] || getDefaultConfig();
-                                initMathQuillField($input, cfg);
-                            });
-                        }).fail(function() {
-                            $inputs.each(function() {
-                                initMathQuillField($(this), getDefaultConfig());
-                            });
+                            applyEditors($inputs, configMap);
+                        }).fail(function(err) {
+                            log('Config AJAX failed, using defaults. Error:', err);
+                            applyEditors($inputs, {});
                         });
                     } else {
-                        $inputs.each(function() {
-                            initMathQuillField($(this), getDefaultConfig());
-                        });
+                        log('No question IDs, using default config.');
+                        applyEditors($inputs, {});
                     }
                 })
                 .catch(function(err) {
+                    log('FATAL ERROR:', err.message);
                     Notification.exception({message: err.message});
                 });
         }
