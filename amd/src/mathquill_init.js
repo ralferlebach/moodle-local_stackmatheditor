@@ -22,9 +22,9 @@ define([
     /**
      * Log a debug message to the browser console.
      *
-     * @param {...*} args Values to log.
+     * @param {...*} varArgs Values to log.
      */
-    function log(args) { // eslint-disable-line no-unused-vars
+    function log(varArgs) { // eslint-disable-line no-unused-vars
         if (DEBUG && window.console && window.console.log) {
             var msgArgs = ['[SME]'].concat(Array.prototype.slice.call(arguments));
             window.console.log.apply(window.console, msgArgs);
@@ -139,10 +139,26 @@ define([
     }
 
     /**
-     * Dynamically loads the MathQuill JS library.
+     * Ensures jQuery is available globally, which MathQuill requires.
+     * Moodle loads jQuery as AMD module only; MathQuill expects window.jQuery.
+     */
+    function ensureGlobalJquery() {
+        if (!window.jQuery) {
+            window.jQuery = $;
+            log('Exposed jQuery as window.jQuery for MathQuill.');
+        }
+    }
+
+    /**
+     * Dynamically loads MathQuill JS while preventing AMD detection.
+     *
+     * MathQuill uses a UMD wrapper that detects define/define.amd.
+     * Since Moodle uses RequireJS, MathQuill would register as AMD module
+     * instead of setting window.MathQuill. We temporarily hide define
+     * to force MathQuill into its IIFE/global code path.
      *
      * @param {string} url JS file URL.
-     * @returns {Promise} Resolves with MathQuill global.
+     * @returns {Promise} Resolves with MathQuill global object.
      */
     function loadMathQuillScript(url) {
         return new Promise(function(resolve, reject) {
@@ -151,20 +167,60 @@ define([
                 resolve(window.MathQuill);
                 return;
             }
-            var script = document.createElement('script');
-            script.src = url;
-            script.onload = function() {
-                if (window.MathQuill) {
-                    log('MathQuill loaded successfully.');
-                    resolve(window.MathQuill);
-                } else {
-                    reject(new Error('MathQuill global not available after loading.'));
-                }
-            };
-            script.onerror = function() {
-                reject(new Error('Failed to load MathQuill script: ' + url));
-            };
-            document.head.appendChild(script);
+
+            // Step 1: Ensure jQuery is global (MathQuill requires it).
+            ensureGlobalJquery();
+
+            log('Loading MathQuill from:', url);
+            log('jQuery version:', (window.jQuery && window.jQuery.fn) ? window.jQuery.fn.jquery : 'NOT FOUND');
+
+            // Step 2: Fetch the script source as text.
+            fetch(url)
+                .then(function(response) {
+                    if (!response.ok) {
+                        throw new Error('HTTP ' + response.status + ' for ' + url);
+                    }
+                    return response.text();
+                })
+                .then(function(scriptText) {
+                    log('MathQuill source fetched, length:', scriptText.length);
+
+                    // Step 3: Temporarily hide AMD define so MathQuill
+                    //          falls through to its global/IIFE path.
+                    var originalDefine = window.define;
+                    window.define = undefined;
+
+                    try {
+                        // Step 4: Execute the script in global scope.
+                        var scriptEl = document.createElement('script');
+                        scriptEl.type = 'text/javascript';
+                        scriptEl.text = scriptText;
+                        document.head.appendChild(scriptEl);
+                    } catch (e) {
+                        log('Error executing MathQuill script:', e.message);
+                    }
+
+                    // Step 5: Restore AMD define immediately.
+                    window.define = originalDefine;
+
+                    // Step 6: Check if MathQuill is now available.
+                    if (window.MathQuill) {
+                        log('MathQuill global is set. Success!');
+                        resolve(window.MathQuill);
+                    } else {
+                        log('window.MathQuill is still undefined after execution.');
+                        log('Checking window.jQuery:', typeof window.jQuery);
+                        log('Checking window.$:', typeof window.$);
+                        reject(new Error(
+                            'MathQuill executed but window.MathQuill not set. ' +
+                            'Check browser console for script errors.'
+                        ));
+                    }
+                })
+                .catch(function(err) {
+                    log('FETCH FAILED:', err.message);
+                    reject(new Error('Failed to load MathQuill: ' + err.message));
+                });
         });
     }
 
@@ -209,7 +265,7 @@ define([
     }
 
     /**
-     * Synchronises the MathQuill LaTeX output to the hidden STACK input field.
+     * Synchronises MathQuill LaTeX output to the hidden STACK input field.
      *
      * @param {jQuery} $input The original STACK input element.
      * @param {Object} mathField MathQuill MathField instance.
@@ -217,7 +273,7 @@ define([
     function syncToInput($input, mathField) {
         var latex = mathField.latex();
         var maxima = Tex2Max.convert(latex);
-        log('Sync: LaTeX="' + latex + '" → Maxima="' + maxima + '"');
+        log('Sync: LaTeX="' + latex + '" Maxima="' + maxima + '"');
         $input.val(maxima);
         var el = $input[0];
         el.dispatchEvent(new Event('input', {bubbles: true}));
@@ -229,7 +285,7 @@ define([
      *
      * @param {jQuery} $input The STACK input element to replace.
      * @param {Object} config Toolbar configuration.
-     * @returns {Object|undefined} MathQuill MathField instance or undefined if already initialised.
+     * @returns {Object|undefined} MathQuill MathField or undefined.
      */
     function initMathQuillField($input, config) {
         if ($input.data('sme-initialized')) {
@@ -280,57 +336,55 @@ define([
     function findStackInputs() {
         var $inputs;
 
-        // Strategy 1: Classic Moodle quiz – .que.stack container.
+        // Strategy 1: Classic .que.stack container.
         $inputs = $('.que.stack').find('input[type="text"]').filter(function() {
             return this.name && /_ans\d*$/.test(this.name);
         });
         if ($inputs.length) {
-            log('Strategy 1 matched: .que.stack input[name*=_ans] →', $inputs.length, 'fields');
+            log('Strategy 1 matched:', $inputs.length, 'fields');
             return $inputs;
         }
 
-        // Strategy 2: STACK input class (some versions add a class).
+        // Strategy 2: STACK input class.
         $inputs = $('input.stackinput, input.algebraic');
         if ($inputs.length) {
-            log('Strategy 2 matched: input.stackinput / input.algebraic →', $inputs.length, 'fields');
+            log('Strategy 2 matched:', $inputs.length, 'fields');
             return $inputs;
         }
 
-        // Strategy 3: Any text input whose ID contains "ans" inside a STACK container.
+        // Strategy 3: Container with "stack" in class.
         $inputs = $('[class*="stack"]').find('input[type="text"]').filter(function() {
             return (this.id && /ans\d/.test(this.id)) || (this.name && /ans\d/.test(this.name));
         });
         if ($inputs.length) {
-            log('Strategy 3 matched: [class*=stack] input[id*=ans] →', $inputs.length, 'fields');
+            log('Strategy 3 matched:', $inputs.length, 'fields');
             return $inputs;
         }
 
-        // Strategy 4: Broadest – any text input with _ans in name.
+        // Strategy 4: Broadest fallback.
         $inputs = $('input[type="text"]').filter(function() {
             return this.name && /_ans/.test(this.name);
         });
         if ($inputs.length) {
-            log('Strategy 4 (broad) matched: input[name*=_ans] →', $inputs.length, 'fields');
+            log('Strategy 4 matched:', $inputs.length, 'fields');
             return $inputs;
         }
 
-        log('No STACK input fields found on this page.');
-        log('DEBUG: All text inputs on page:');
+        log('No STACK inputs found. Dumping page info:');
         $('input[type="text"]').each(function() {
-            log('  name="' + this.name + '" id="' + this.id + '" class="' + this.className + '"');
+            log('  input: name="' + this.name + '" id="' + this.id + '" class="' + this.className + '"');
         });
-        log('DEBUG: Question containers:');
         $('.que').each(function() {
-            log('  class="' + this.className + '" id="' + this.id + '"');
+            log('  que: class="' + this.className + '" id="' + this.id + '"');
         });
 
         return $();
     }
 
     /**
-     * Initialises editors on all found STACK inputs using given config map.
+     * Applies MathQuill editors to all found STACK inputs.
      *
-     * @param {jQuery} $inputs The matched input elements.
+     * @param {jQuery} $inputs Matched input elements.
      * @param {Object} configMap Question ID to config mapping.
      */
     function applyEditors($inputs, configMap) {
@@ -346,14 +400,16 @@ define([
     return /** @alias module:local_stackmatheditor/mathquill_init */ {
 
         /**
-         * Entry point – called from hook_callbacks.php via js_call_amd.
+         * Entry point called from hook_callbacks.php via js_call_amd.
          *
          * @param {Object} params Configuration parameters.
-         * @param {string} params.mathquillJsUrl URL to mathquill.min.js.
-         * @param {string} params.mathquillCssUrl URL to mathquill.css.
+         * @param {string} params.mathquillJsUrl URL to MathQuill JS file.
+         * @param {string} params.mathquillCssUrl URL to MathQuill CSS file.
          */
         init: function(params) {
-            log('init() called with params:', JSON.stringify(params));
+            log('init() called.');
+            log('JS URL:', params.mathquillJsUrl);
+            log('CSS URL:', params.mathquillCssUrl);
 
             var cssReady = loadCss(params.mathquillCssUrl);
             var jsReady = loadMathQuillScript(params.mathquillJsUrl);
@@ -368,10 +424,8 @@ define([
                         return;
                     }
 
-                    // Collect question IDs.
                     var questionIds = [];
-                    var $questions = $inputs.closest('.que');
-                    $questions.each(function() {
+                    $inputs.closest('.que').each(function() {
                         var rawId = $(this).data('questionid') || $(this).attr('id');
                         if (rawId) {
                             var match = String(rawId).match(/(\d+)/);
@@ -380,7 +434,7 @@ define([
                             }
                         }
                     });
-                    log('Question IDs found:', questionIds);
+                    log('Question IDs:', questionIds);
 
                     if (questionIds.length) {
                         Ajax.call([{
@@ -394,16 +448,16 @@ define([
                             });
                             applyEditors($inputs, configMap);
                         }).fail(function(err) {
-                            log('Config AJAX failed, using defaults. Error:', err);
+                            log('Config AJAX failed:', err);
                             applyEditors($inputs, {});
                         });
                     } else {
-                        log('No question IDs, using default config.');
+                        log('No question IDs, using defaults.');
                         applyEditors($inputs, {});
                     }
                 })
                 .catch(function(err) {
-                    log('FATAL ERROR:', err.message);
+                    log('FATAL:', err.message);
                     Notification.exception({message: err.message});
                 });
         }
