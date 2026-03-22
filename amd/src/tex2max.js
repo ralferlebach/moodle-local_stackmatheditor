@@ -1,8 +1,13 @@
 /**
  * Converts MathQuill LaTeX output to Maxima CAS notation.
  *
- * All function names, units, constants, and operators are read from
- * options.defs (passed from PHP definitions.php via mathquill_init.js).
+ * Protected tokens that are NOT split by implicit multiplication:
+ * - Function names: sin, cos, sqrt, log, exp, arcsin, ...
+ * - Unit symbols: kg, Hz, kW, mol, ...
+ * - Greek letter names: alpha, beta, Gamma, Delta, ...
+ * - Percent-constants: %pi, %e, %i, %phi, %gamma
+ * - Reserved words: max, min, inf, minf, diff, integrate, ...
+ * - Subscript groups: _(abc)
  *
  * @module     local_stackmatheditor/tex2max
  * @copyright  2026 Your Name
@@ -12,12 +17,12 @@ define([], function() {
     'use strict';
 
     /**
-     * Apply regex in fixpoint loop until string stops changing.
+     * Apply regex in fixpoint loop.
      *
      * @param {string} s Input.
      * @param {RegExp} regex Pattern.
      * @param {string|Function} replacement Replacement.
-     * @param {number} [maxIter=50] Max iterations.
+     * @param {number} [maxIter=50] Safety limit.
      * @returns {string} Result.
      */
     function fixpoint(s, regex, replacement, maxIter) {
@@ -32,7 +37,7 @@ define([], function() {
     }
 
     /**
-     * Process \frac{...}{...} with lazy quantifiers.
+     * Process \frac{...}{...}.
      *
      * @param {string} s Input.
      * @returns {string} Converted.
@@ -76,7 +81,8 @@ define([], function() {
     }
 
     /**
-     * Process _{...} subscripts.
+     * Process _{...} subscripts. Preserves multi-char subscripts.
+     * _{abc} -> _(abc)
      *
      * @param {string} s Input.
      * @returns {string} Converted.
@@ -84,16 +90,16 @@ define([], function() {
     function processSubscripts(s) {
         return fixpoint(s,
             /_\{((?:[^{}]|\{[^{}]*?\})*?)\}/,
-            '_$1'
+            '_($1)'
         );
     }
 
     /**
-     * Process a single LaTeX function command to Maxima.
+     * Process a LaTeX function command to Maxima.
      *
      * @param {string} s Input.
-     * @param {string} latexCmd LaTeX command (e.g. '\\sin').
-     * @param {string} maximaName Maxima name (e.g. 'sin').
+     * @param {string} latexCmd LaTeX command.
+     * @param {string} maximaName Maxima name.
      * @returns {string} Converted.
      */
     function processFunction(s, latexCmd, maximaName) {
@@ -110,6 +116,7 @@ define([], function() {
             }
 
             var afterCmd = idx + latexCmd.length;
+            // Ensure not a prefix of a longer command.
             if (afterCmd < s.length && /[a-zA-Z]/.test(s[afterCmd])) {
                 result += s.substring(i, idx + 1);
                 i = idx + 1;
@@ -122,7 +129,7 @@ define([], function() {
                 argStart++;
             }
 
-            // Case 1: {braces}
+            // Case 1: {braces}.
             if (argStart < s.length && s[argStart] === '{') {
                 var braceMatch = s.substring(argStart).match(
                     /^\{((?:[^{}]|\{[^{}]*?\})*?)\}/
@@ -134,14 +141,14 @@ define([], function() {
                 }
             }
 
-            // Case 2: already parenthesized
+            // Case 2: already parenthesized.
             if (argStart < s.length && s[argStart] === '(') {
                 result += maximaName;
                 i = afterCmd;
                 continue;
             }
 
-            // Case 3: bare argument
+            // Case 3: bare argument.
             if (argStart < s.length) {
                 var argEnd = argStart;
                 var depth = 0;
@@ -184,10 +191,10 @@ define([], function() {
     }
 
     /**
-     * Process all functions defined in defs.
+     * Process all functions from definitions.
      *
      * @param {string} s Input.
-     * @param {Array} funcDefs Function definitions from PHP.
+     * @param {Array} funcDefs Definitions.
      * @returns {string} Converted.
      */
     function processAllFunctions(s, funcDefs) {
@@ -234,79 +241,213 @@ define([], function() {
     }
 
     /**
-     * Insert implicit multiplication — reads units and functions from defs.
+     * Build sorted (longest-first) list of all protected multi-char tokens.
+     * These are NEVER split by implicit multiplication in single-char mode.
      *
-     * @param {string} s Input (already in Maxima notation).
-     * @param {Object} opts Options with defs and variableMode.
-     * @returns {string} Converted.
+     * @param {Object} defs Definitions from PHP.
+     * @returns {string[]} Sorted protected tokens.
      */
-    function insertImplicitMultiplication(s, opts) {
-        var units = (opts.defs && opts.defs.unitSymbols) ? opts.defs.unitSymbols : [];
-        var funcNames = (opts.defs && opts.defs.functionNames) ? opts.defs.functionNames : [];
-        var varMode = opts.variableMode || 'single';
+    function buildProtectedTokens(defs) {
+        var tokens = [];
+        var i;
+        var seen = {};
 
         /**
-         * @param {string} str String to test.
-         * @returns {boolean} True if known unit.
+         * Add a token to the protected tokens list if it is multi-char
+         * and has not already been added.
+         *
+         * @param {string} t The token to add.
          */
-        function checkUnit(str) {
-            return units.indexOf(str) !== -1;
+        function addToken(t) {
+            if (t && t.length > 1 && !seen[t]) {
+                seen[t] = true;
+                tokens.push(t);
+            }
         }
 
-        /**
-         * @param {string} str String to test.
-         * @returns {string|null} Matched function name or null.
-         */
-        function checkFunc(str) {
-            var j;
-            for (j = 0; j < funcNames.length; j++) {
-                if (str.indexOf(funcNames[j]) === 0) {
-                    var after = str.charAt(funcNames[j].length);
-                    if (!after || !/[a-zA-Z]/.test(after)) {
-                        return funcNames[j];
-                    }
+        // Function names.
+        var funcNames = (defs && defs.functionNames) ? defs.functionNames : [];
+        for (i = 0; i < funcNames.length; i++) {
+            addToken(funcNames[i]);
+        }
+
+        // Unit symbols.
+        var unitSymbols = (defs && defs.unitSymbols) ? defs.unitSymbols : [];
+        for (i = 0; i < unitSymbols.length; i++) {
+            addToken(unitSymbols[i]);
+        }
+
+        // Greek letter names (lower + upper).
+        var greek = (defs && defs.greek) ? defs.greek : [];
+        for (i = 0; i < greek.length; i++) {
+            addToken(greek[i]);
+        }
+
+        // Reserved words: max, min, inf, minf, diff, integrate, ...
+        var reserved = (defs && defs.reservedWords) ? defs.reservedWords : [];
+        for (i = 0; i < reserved.length; i++) {
+            addToken(reserved[i]);
+        }
+
+        // Percent-constants: %pi, %e, %i, %phi, %gamma.
+        var pctConst = (defs && defs.percentConstants) ? defs.percentConstants : [];
+        for (i = 0; i < pctConst.length; i++) {
+            addToken(pctConst[i]);
+        }
+
+        // Sort longest first: "arcsin" before "sin", "Gamma" before "am".
+        tokens.sort(function(a, b) {
+            return b.length - a.length;
+        });
+
+        return tokens;
+    }
+
+    /**
+     * Check if str at position pos matches a protected token.
+     * Returns the matched token or null.
+     *
+     * @param {string} str Full string.
+     * @param {number} pos Start position.
+     * @param {string[]} tokens Protected tokens (sorted longest-first).
+     * @returns {string|null} Matched token or null.
+     */
+    function matchProtectedToken(str, pos, tokens) {
+        var remaining = str.substring(pos);
+        var i;
+        for (i = 0; i < tokens.length; i++) {
+            var token = tokens[i];
+            if (remaining.indexOf(token) === 0) {
+                // Ensure not a prefix of a longer identifier.
+                var afterToken = remaining.charAt(token.length);
+                if (!afterToken || !/[a-zA-Z]/.test(afterToken)) {
+                    return token;
                 }
             }
-            return null;
         }
+        return null;
+    }
 
+    /**
+     * Check if position is inside a subscript group _(abc).
+     *
+     * @param {string} str The string.
+     * @param {number} pos Position.
+     * @returns {boolean} True if inside _(...).
+     */
+    function insideSubscript(str, pos) {
+        var j = pos - 1;
+        var depth = 0;
+        while (j >= 0) {
+            if (str[j] === ')') {
+                depth++;
+            }
+            if (str[j] === '(') {
+                if (depth > 0) {
+                    depth--;
+                } else {
+                    return j >= 1 && str[j - 1] === '_';
+                }
+            }
+            j--;
+        }
+        return false;
+    }
+
+    /**
+     * Check if position is inside or adjacent to a %-constant.
+     *
+     * @param {string} str The string.
+     * @param {number} pos Position.
+     * @returns {boolean} True if inside a %-constant.
+     */
+    function insidePercentConstant(str, pos) {
+        var start = Math.max(0, pos - 6);
+        var chunk = str.substring(start, pos + 7);
+        return /%pi|%phi|%gamma|%e(?![a-zA-Z])|%i(?![a-zA-Z])/.test(chunk);
+    }
+
+    /**
+     * Insert implicit multiplication.
+     *
+     * @param {string} s Input (Maxima notation).
+     * @param {Object} opts Options.
+     * @returns {string} With explicit * inserted.
+     */
+    function insertImplicitMultiplication(s, opts) {
+        var defs = opts.defs || {};
+        var varMode = opts.variableMode || 'single';
+        var protectedTokens = buildProtectedTokens(defs);
+        var unitSymbols = (defs && defs.unitSymbols) ? defs.unitSymbols : [];
+
+        // Basic structural patterns.
         s = s.replace(/\)\s*\(/g, ')*(');
         s = s.replace(/\)\s*([a-zA-Z%])/g, ')*$1');
         s = s.replace(/\)\s*(\d)/g, ')*$1');
         s = s.replace(/(\d)\s*\(/g, '$1*(');
         s = s.replace(/(\d)\s*(%)/g, '$1*$2');
-        s = s.replace(/(%pi|%e)([a-zA-Z(])/g, '$1*$2');
+        s = s.replace(/(%pi|%e|%i|%phi|%gamma)\s*([a-zA-Z(])/g, '$1*$2');
 
-        // digit + letters
+        // Digit followed by letters: check for units.
         s = s.replace(/(\d)\s*([a-zA-Z]+)/g, function(match, digit, letters) {
-            if (checkUnit(letters)) {
+            if (unitSymbols.indexOf(letters) !== -1) {
                 return digit + letters;
             }
             return digit + '*' + letters;
         });
 
-        // Single-char mode: split consecutive letters
+        // Single-char mode: split consecutive letters unless protected.
         if (varMode === 'single') {
             var result = '';
             var idx = 0;
-            while (idx < s.length) {
-                result += s[idx];
-                if (/[a-zA-Z]/.test(s[idx]) && idx + 1 < s.length && /[a-zA-Z]/.test(s[idx + 1])) {
-                    var remaining = s.substring(idx);
-                    var fn = checkFunc(remaining);
-                    var wordMatch = remaining.match(/^([a-zA-Z]+)/);
-                    var word = wordMatch ? wordMatch[1] : '';
 
-                    if (fn && fn.length > 1 && remaining.indexOf(fn) === 0) {
-                        result += s.substring(idx + 1, idx + fn.length);
-                        idx = idx + fn.length;
+            while (idx < s.length) {
+                // Check if current position starts a protected token.
+                if (/[a-zA-Z%]/.test(s[idx])) {
+                    var token = matchProtectedToken(s, idx, protectedTokens);
+                    if (token) {
+                        // Insert * before the token if preceding char is a letter.
+                        if (result.length > 0) {
+                            var lastChar = result[result.length - 1];
+                            if (/[a-zA-Z]/.test(lastChar)) {
+                                result += '*';
+                            }
+                        }
+                        result += token;
+                        idx += token.length;
                         continue;
                     }
-                    if (word && checkUnit(word)) {
-                        result += s.substring(idx + 1, idx + word.length);
-                        idx = idx + word.length;
+                }
+
+                var ch = s[idx];
+                result += ch;
+
+                // Check if we should insert * between two adjacent letters.
+                if (/[a-zA-Z]/.test(ch) && idx + 1 < s.length &&
+                    /[a-zA-Z]/.test(s[idx + 1])) {
+
+                    // Don't split inside subscript groups _(abc).
+                    if (insideSubscript(s, idx) || insideSubscript(s, idx + 1)) {
+                        idx++;
                         continue;
                     }
+
+                    // Don't split inside %-constants.
+                    if (insidePercentConstant(s, idx) ||
+                        insidePercentConstant(s, idx + 1)) {
+                        idx++;
+                        continue;
+                    }
+
+                    // Check if NEXT position starts a protected token.
+                    var nextToken = matchProtectedToken(s, idx + 1, protectedTokens);
+                    if (nextToken) {
+                        result += '*';
+                        idx++;
+                        continue;
+                    }
+
+                    // Default: insert *.
                     result += '*';
                 }
                 idx++;
@@ -314,6 +455,7 @@ define([], function() {
             s = result;
         }
 
+        // Clean double *.
         s = s.replace(/\*\s*\*/g, '*');
         return s;
     }
@@ -337,10 +479,11 @@ define([], function() {
             return s;
         }
 
+        // Remove \left / \right.
         s = s.replace(/\\left/g, '');
         s = s.replace(/\\right/g, '');
 
-        // Structural: fixpoint loop
+        // Structural: fixpoint loop.
         prev = '';
         while (s !== prev) {
             prev = s;
@@ -350,10 +493,10 @@ define([], function() {
             s = processSubscripts(s);
         }
 
-        // Functions from definitions
+        // Functions.
         s = processAllFunctions(s, defs.functions);
 
-        // Constants from definitions
+        // Constants.
         var constants = defs.constants || [];
         var c;
         for (c = 0; c < constants.length; c++) {
@@ -361,11 +504,14 @@ define([], function() {
             if (con.latex_regex) {
                 s = s.replace(new RegExp(con.latex_regex, 'g'), con.maxima);
             } else {
-                s = s.replace(new RegExp(con.latex.replace(/\\/g, '\\\\'), 'g'), con.maxima);
+                s = s.replace(
+                    new RegExp(con.latex.replace(/\\/g, '\\\\'), 'g'),
+                    con.maxima
+                );
             }
         }
 
-        // Operators from definitions
+        // Operators.
         var operators = defs.operators || [];
         var o;
         for (o = 0; o < operators.length; o++) {
@@ -375,16 +521,19 @@ define([], function() {
             );
         }
 
-        // Comparison from definitions
+        // Comparison.
         var comparison = defs.comparison || [];
         var cmp;
         for (cmp = 0; cmp < comparison.length; cmp++) {
             if (comparison[cmp].latex_regex) {
-                s = s.replace(new RegExp(comparison[cmp].latex_regex, 'g'), comparison[cmp].maxima);
+                s = s.replace(
+                    new RegExp(comparison[cmp].latex_regex, 'g'),
+                    comparison[cmp].maxima
+                );
             }
         }
 
-        // Greek letters from definitions
+        // Greek letters: \alpha -> alpha, \Gamma -> Gamma.
         var greek = defs.greek || [];
         var g;
         for (g = 0; g < greek.length; g++) {
@@ -394,7 +543,7 @@ define([], function() {
             );
         }
 
-        // Cleanup
+        // Cleanup.
         s = s.replace(/\\ /g, '');
         s = s.replace(/[{}]/g, '');
 
@@ -402,7 +551,10 @@ define([], function() {
             s = replaceDecimalCommas(s);
         }
 
+        // Implicit multiplication (LAST step).
         s = insertImplicitMultiplication(s, opts);
+
+        // Final cleanup.
         s = s.replace(/\*\s*\*/g, '*');
         s = s.replace(/\s+/g, ' ').trim();
 

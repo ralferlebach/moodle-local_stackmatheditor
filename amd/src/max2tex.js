@@ -1,8 +1,6 @@
 /**
  * Converts Maxima CAS notation back to LaTeX for MathQuill display.
  *
- * All function names, constants, operators are read from options.defs.
- *
  * @module     local_stackmatheditor/max2tex
  * @copyright  2026 Your Name
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -11,12 +9,12 @@ define([], function() {
     'use strict';
 
     /**
-     * Fixpoint loop.
+     * Apply regex in fixpoint loop.
      *
      * @param {string} s Input.
      * @param {RegExp} regex Pattern.
      * @param {string|Function} replacement Replacement.
-     * @param {number} [maxIter=50] Max iterations.
+     * @param {number} [maxIter=50] Safety limit.
      * @returns {string} Result.
      */
     function fixpoint(s, regex, replacement, maxIter) {
@@ -53,7 +51,7 @@ define([], function() {
     }
 
     /**
-     * Find matching opening paren (searching backwards).
+     * Find matching opening paren (backwards).
      *
      * @param {string} s String.
      * @param {number} closePos Position of ')'.
@@ -75,7 +73,7 @@ define([], function() {
     }
 
     /**
-     * Convert (a)/(b) fractions using paren-matching.
+     * Convert (a)/(b) -> \frac{a}{b}.
      *
      * @param {string} s Input.
      * @returns {string} Converted.
@@ -108,7 +106,7 @@ define([], function() {
     }
 
     /**
-     * Convert funcname(arg) to LaTeX using paren-matching.
+     * Convert funcname(arg) to LaTeX.
      *
      * @param {string} s Input.
      * @param {string} funcName Maxima function name.
@@ -153,7 +151,7 @@ define([], function() {
     }
 
     /**
-     * Convert n-th roots: (expr)^(1/(n)) -> \sqrt[n]{expr}
+     * Convert n-th roots: (expr)^(1/(n)) -> \sqrt[n]{expr}.
      *
      * @param {string} s Input.
      * @returns {string} Converted.
@@ -166,7 +164,7 @@ define([], function() {
     }
 
     /**
-     * Convert ^(expr) -> ^{expr}
+     * Convert ^(expr) -> ^{expr}.
      *
      * @param {string} s Input.
      * @returns {string} Converted.
@@ -176,13 +174,16 @@ define([], function() {
     }
 
     /**
-     * Convert subscripts.
+     * Convert subscripts: _(abc) -> _{abc}, _x -> _{x}.
      *
      * @param {string} s Input.
      * @returns {string} Converted.
      */
     function processSubscripts(s) {
-        s = s.replace(/_([a-zA-Z0-9]+)(?!\{)/g, '_{$1}');
+        // First: _(content) -> _{content}.
+        s = fixpoint(s, /_\(([^()]*?)\)/, '_{$1}');
+        // Then: _x (single char not already in braces) -> _{x}.
+        s = s.replace(/_([a-zA-Z0-9])(?!\{)(?!\()/g, '_{$1}');
         return s;
     }
 
@@ -193,8 +194,11 @@ define([], function() {
      * @returns {string} Converted.
      */
     function cleanMultiplication(s) {
+        // digit * letter -> juxtapose.
         s = s.replace(/(\d)\s*\*\s*([a-zA-Z\\])/g, '$1$2');
+        // letter * letter -> \cdot.
         s = s.replace(/([a-zA-Z)\]])\s*\*\s*([a-zA-Z\\(])/g, '$1\\cdot $2');
+        // remaining *.
         s = s.replace(/\*/g, '\\cdot ');
         return s;
     }
@@ -218,7 +222,7 @@ define([], function() {
             return s;
         }
 
-        // Constants -> LaTeX
+        // %-constants -> LaTeX (BEFORE Greek letter replacement).
         var constants = defs.constants || [];
         for (k = 0; k < constants.length; k++) {
             var con = constants[k];
@@ -230,8 +234,13 @@ define([], function() {
                 s = s.replace(/%e(?![a-zA-Z])/g, 'e');
             }
         }
+        // Additional %-constants not in the constants list.
+        s = s.replace(/%i(?![a-zA-Z])/g, 'i');
+        s = s.replace(/%phi(?![a-zA-Z])/g, '\\phi ');
+        s = s.replace(/%gamma(?![a-zA-Z])/g, '\\gamma ');
+        s = s.replace(/\bminf\b/g, '-\\infty ');
 
-        // Comparison -> LaTeX
+        // Comparison -> LaTeX.
         var comparison = defs.comparison || [];
         for (k = 0; k < comparison.length; k++) {
             var cmpItem = comparison[k];
@@ -241,54 +250,57 @@ define([], function() {
             );
         }
 
-        // Functions -> LaTeX (from definitions)
+        // Functions -> LaTeX.
         var funcDefs = defs.functions || [];
         for (k = 0; k < funcDefs.length; k++) {
             var def = funcDefs[k];
             var wrapType = def.type === 'brace' ? 'brace' : 'paren';
-            // For max2tex: Maxima name -> LaTeX command
-            // Handle log -> \ln mapping
-            var latexTarget = def.latex_cmd;
-            s = processFunc(s, def.maxima_name, latexTarget, wrapType);
+            s = processFunc(s, def.maxima_name, def.latex_cmd, wrapType);
         }
 
-        // Fractions
+        // Fractions.
         prev = '';
         while (s !== prev) {
             prev = s;
             s = processFractions(s);
         }
 
-        // N-th roots before exponents
+        // N-th roots.
         prev = '';
         while (s !== prev) {
             prev = s;
             s = processNthRoots(s);
         }
 
-        // Exponents
+        // Exponents.
         prev = '';
         while (s !== prev) {
             prev = s;
             s = processExponents(s);
         }
 
-        // Subscripts
+        // Subscripts.
         s = processSubscripts(s);
 
-        // Greek letters
+        // Greek letters: word -> \word.
+        // Sort longest first to prevent "epsilon" matching "e" + "psilon".
         var greek = defs.greek || [];
-        for (k = 0; k < greek.length; k++) {
+        var sortedGreek = greek.slice().sort(function(a, b) {
+            return b.length - a.length;
+        });
+        for (k = 0; k < sortedGreek.length; k++) {
+            // Use lookbehind to avoid matching inside longer words or
+            // already-converted \commands.
             s = s.replace(
-                new RegExp('\\b' + greek[k] + '\\b', 'g'),
-                '\\' + greek[k] + ' '
+                new RegExp('(?<![a-zA-Z\\\\])' + sortedGreek[k] + '(?![a-zA-Z])', 'g'),
+                '\\' + sortedGreek[k] + ' '
             );
         }
 
-        // Multiplication signs
+        // Multiplication signs.
         s = cleanMultiplication(s);
 
-        // Decimal separator
+        // Decimal separator.
         if (commaDecimal) {
             s = s.replace(/(\d)\.(\d)/g, '$1,$2');
         }
@@ -298,7 +310,7 @@ define([], function() {
     }
 
     /**
-     * Detect whether a string is Maxima notation.
+     * Detect whether a string is Maxima notation (vs LaTeX).
      *
      * @param {string} s String to check.
      * @returns {boolean} True if Maxima.
@@ -307,12 +319,15 @@ define([], function() {
         if (!s || !s.trim()) {
             return false;
         }
+        // LaTeX indicators.
         if (/\\frac|\\sqrt|\\sin|\\cos|\\pi|\\left/.test(s)) {
             return false;
         }
+        // Maxima indicators.
         if (/%pi|%e|sqrt\(|log\(|\)\/\(/.test(s)) {
             return true;
         }
+        // No backslashes -> probably Maxima.
         if (s.indexOf('\\') === -1) {
             return true;
         }

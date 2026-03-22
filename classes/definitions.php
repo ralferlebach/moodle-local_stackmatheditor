@@ -7,7 +7,8 @@ defined('MOODLE_INTERNAL') || die();
  * Central definitions for all math elements, functions, units, and mappings.
  *
  * SINGLE SOURCE OF TRUTH for toolbar groups, LaTeX/Maxima mappings,
- * constants, operators, Greek letters, and units.
+ * constants, operators, Greek letters (lower+upper), units,
+ * reserved words, and percent-constants.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Your Name
@@ -15,7 +16,10 @@ defined('MOODLE_INTERNAL') || die();
  */
 class definitions {
 
+    /** @var string Variable mode: each letter is a separate variable. */
     const VAR_SINGLE = 'single';
+
+    /** @var string Variable mode: consecutive letters form one variable. */
     const VAR_MULTI = 'multi';
 
     /**
@@ -121,6 +125,7 @@ class definitions {
                 'langkey' => 'group_greek',
                 'default_enabled' => true,
                 'elements' => [
+                    // Lowercase.
                     ['label' => "\u{03B1}", 'cmd' => '\\alpha'],
                     ['label' => "\u{03B2}", 'cmd' => '\\beta'],
                     ['label' => "\u{03B3}", 'cmd' => '\\gamma'],
@@ -133,6 +138,17 @@ class definitions {
                     ['label' => "\u{03C6}", 'cmd' => '\\phi'],
                     ['label' => "\u{03C8}", 'cmd' => '\\psi'],
                     ['label' => "\u{03C9}", 'cmd' => '\\omega'],
+                    // Uppercase.
+                    ['label' => "\u{0393}", 'cmd' => '\\Gamma'],
+                    ['label' => "\u{0394}", 'cmd' => '\\Delta'],
+                    ['label' => "\u{0398}", 'cmd' => '\\Theta'],
+                    ['label' => "\u{039B}", 'cmd' => '\\Lambda'],
+                    ['label' => "\u{039E}", 'cmd' => '\\Xi'],
+                    ['label' => "\u{03A0}", 'cmd' => '\\Pi'],
+                    ['label' => "\u{03A3}", 'cmd' => '\\Sigma'],
+                    ['label' => "\u{03A6}", 'cmd' => '\\Phi'],
+                    ['label' => "\u{03A8}", 'cmd' => '\\Psi'],
+                    ['label' => "\u{03A9}", 'cmd' => '\\Omega'],
                 ],
             ],
             'matrices' => [
@@ -144,6 +160,9 @@ class definitions {
     }
 
     /**
+     * Returns function mappings for LaTeX <-> Maxima conversion.
+     * Longest names first to prevent partial matches.
+     *
      * @return array
      */
     public static function get_functions(): array {
@@ -169,6 +188,8 @@ class definitions {
     }
 
     /**
+     * Returns constant mappings for LaTeX <-> Maxima conversion.
+     *
      * @return array
      */
     public static function get_constants(): array {
@@ -181,6 +202,8 @@ class definitions {
     }
 
     /**
+     * Returns operator mappings.
+     *
      * @return array
      */
     public static function get_operators(): array {
@@ -192,6 +215,8 @@ class definitions {
     }
 
     /**
+     * Returns comparison operator mappings.
+     *
      * @return array
      */
     public static function get_comparison(): array {
@@ -203,17 +228,50 @@ class definitions {
     }
 
     /**
+     * Returns Greek letter names — lowercase AND uppercase.
+     *
      * @return string[]
      */
     public static function get_greek(): array {
         return [
+            // Lowercase.
             'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta',
             'theta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi',
             'rho', 'sigma', 'tau', 'upsilon', 'phi', 'chi', 'psi', 'omega',
+            // Uppercase (those with distinct LaTeX commands).
+            'Gamma', 'Delta', 'Theta', 'Lambda', 'Xi', 'Pi',
+            'Sigma', 'Upsilon', 'Phi', 'Psi', 'Omega',
         ];
     }
 
     /**
+     * Returns additional Maxima-reserved words that must never be split
+     * by implicit multiplication in single-char variable mode.
+     *
+     * @return string[]
+     */
+    public static function get_reserved_words(): array {
+        return [
+            'max', 'min', 'abs', 'mod', 'floor', 'ceiling', 'round',
+            'signum', 'factorial', 'binomial',
+            'diff', 'integrate', 'limit', 'sum', 'product',
+            'inf', 'minf',
+            'true', 'false',
+        ];
+    }
+
+    /**
+     * Returns Maxima percent-prefixed constants.
+     *
+     * @return string[]
+     */
+    public static function get_percent_constants(): array {
+        return ['%pi', '%e', '%i', '%phi', '%gamma'];
+    }
+
+    /**
+     * Returns unit definitions.
+     *
      * @return array
      */
     public static function get_units(): array {
@@ -360,15 +418,17 @@ class definitions {
         }
 
         return [
-            'elementGroups' => $exportedgroups,
-            'functions'     => self::get_functions(),
-            'constants'     => self::get_constants(),
-            'operators'     => self::get_operators(),
-            'comparison'    => self::get_comparison(),
-            'greek'         => self::get_greek(),
-            'units'         => $exportedunits,
-            'unitSymbols'   => self::get_unit_symbols(),
-            'functionNames' => self::get_function_names(),
+            'elementGroups'    => $exportedgroups,
+            'functions'        => self::get_functions(),
+            'constants'        => self::get_constants(),
+            'operators'        => self::get_operators(),
+            'comparison'       => self::get_comparison(),
+            'greek'            => self::get_greek(),
+            'units'            => $exportedunits,
+            'unitSymbols'      => self::get_unit_symbols(),
+            'functionNames'    => self::get_function_names(),
+            'reservedWords'    => self::get_reserved_words(),
+            'percentConstants' => self::get_percent_constants(),
         ];
     }
 }
