@@ -9,7 +9,7 @@ use local_stackmatheditor\definitions;
  * Form for configuring MathQuill toolbar per question.
  *
  * @package    local_stackmatheditor
- * @copyright  2026 Your Name
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class configure_form extends \moodleform {

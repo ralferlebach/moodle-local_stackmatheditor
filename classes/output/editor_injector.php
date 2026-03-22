@@ -10,7 +10,7 @@ use local_stackmatheditor\quiz_helper;
  * Injects MathQuill editor runtime data.
  *
  * @package    local_stackmatheditor
- * @copyright  2026 Your Name
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class editor_injector {

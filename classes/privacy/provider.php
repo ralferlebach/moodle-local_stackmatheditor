@@ -10,7 +10,7 @@ use core_privacy\local\metadata\provider as metadata_provider;
  * Privacy subsystem implementation for local_stackmatheditor.
  *
  * @package    local_stackmatheditor
- * @copyright  2026 Your Name
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class provider implements metadata_provider {

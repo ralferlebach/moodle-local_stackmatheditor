@@ -7,7 +7,7 @@ defined('MOODLE_INTERNAL') || die();
  * Central definitions for all math elements, functions, units, and mappings.
  *
  * @package    local_stackmatheditor
- * @copyright  2026 Your Name
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class definitions {

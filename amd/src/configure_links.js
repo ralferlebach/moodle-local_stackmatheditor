@@ -1,8 +1,11 @@
 /**
  * Injects configure links for STACK questions on quiz pages.
  *
+ * Data is read from a JSON script element (#sme-configure-data)
+ * to avoid the 1024-char limit of js_call_amd() arguments.
+ *
  * @module     local_stackmatheditor/configure_links
- * @copyright  2026 Your Name
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 define(['jquery'], function($) {
@@ -19,6 +22,25 @@ define(['jquery'], function($) {
     function dbg(msg) {
         if (DEBUG) {
             window.console.log('[SME-links] ' + msg);
+        }
+    }
+
+    /**
+     * Load configuration data from JSON script element.
+     *
+     * @returns {Object|null} Data or null if not found.
+     */
+    function loadData() {
+        var el = document.getElementById('sme-configure-data');
+        if (!el) {
+            dbg('data element not found, retrying...');
+            return null;
+        }
+        try {
+            return JSON.parse(el.textContent);
+        } catch (e) {
+            dbg('data parse error: ' + e.message);
+            return null;
         }
     }
 
@@ -94,60 +116,51 @@ define(['jquery'], function($) {
     }
 
     // ──────────────────────────────────────────────────
-    //  Attempt/review page injection
+    //  Attempt/review page
     // ──────────────────────────────────────────────────
 
     /**
-     * Find question container for a given slot on attempt page.
-     * Moodle IDs are "question-{usageid}-{slot}", so we
-     * search for elements ending with "-{slot}".
+     * Find question container for a slot on attempt page.
      *
      * @param {string} slotNum Slot number.
-     * @returns {jQuery} Container element or empty jQuery.
+     * @returns {jQuery} Container or empty jQuery.
      */
     function findQuestionContainer(slotNum) {
-        // Strategy 1: ID ending with -slotNum (e.g. question-31-1).
         var $container = $('[id$="-' + slotNum + '"].que');
         if ($container.length) {
-            dbg('  container found via .que[id$=-'
+            dbg('  container via .que[id$=-'
                 + slotNum + ']');
             return $container.first();
         }
 
-        // Strategy 2: Any div with class .que containing
-        // an input with slot number in the name.
         $container = $('input[name*=":' + slotNum + '_"]')
             .closest('.que');
         if ($container.length) {
-            dbg('  container found via input name');
+            dbg('  container via input name');
             return $container.first();
         }
 
-        // Strategy 3: Regex match on all question IDs.
         var regex = new RegExp(
             '^question-\\d+-' + slotNum + '$');
-        var $all = $('[id^="question-"]');
-        var matched = $all.filter(function() {
+        var matched = $('[id^="question-"]').filter(function() {
             return regex.test(this.id);
         });
         if (matched.length) {
-            dbg('  container found via regex on id='
+            dbg('  container via regex id='
                 + matched.first().attr('id'));
             return matched.first();
         }
 
-        // Strategy 4: Dump available containers for debugging.
-        dbg('  available question containers:');
+        dbg('  available containers:');
         $('[id^="question-"]').each(function() {
-            dbg('    id=' + this.id
-                + ' classes=' + this.className);
+            dbg('    id=' + this.id);
         });
 
         return $();
     }
 
     /**
-     * Inject links on quiz attempt/review pages.
+     * Inject links on attempt/review pages.
      *
      * @param {Object} data Configuration data.
      */
@@ -169,7 +182,7 @@ define(['jquery'], function($) {
     }
 
     /**
-     * Inject one configure link on attempt/review page.
+     * Inject one link on attempt/review page.
      *
      * @param {Object} data Configuration data.
      * @param {string} slotNum Slot number.
@@ -199,10 +212,8 @@ define(['jquery'], function($) {
         }
 
         dbg('attempt slot ' + slotNum
-            + ': container id='
-            + $container.attr('id'));
+            + ': id=' + $container.attr('id'));
 
-        // Strategy A: Find .info panel (classic theme).
         var $info = $container.find('.info');
         if ($info.length) {
             var $editLink = $info.find(
@@ -214,7 +225,7 @@ define(['jquery'], function($) {
                     .closest('div, span, p')
                     .after($wrapper);
                 dbg('attempt slot ' + slotNum
-                    + ': injected after edit link');
+                    + ': after edit link');
                 return true;
             }
             $info.append($wrapper);
@@ -223,26 +234,23 @@ define(['jquery'], function($) {
             return true;
         }
 
-        // Strategy B: Find .formulation area and prepend.
         var $formulation = $container.find('.formulation');
         if ($formulation.length) {
             $formulation.before($wrapper);
             dbg('attempt slot ' + slotNum
-                + ': injected before formulation');
+                + ': before formulation');
             return true;
         }
 
-        // Strategy C: Find any edit-question link in container.
         var $anyEdit = $container.find(
             'a[href*="editquestion"]');
         if ($anyEdit.length) {
             $anyEdit.first().after($wrapper);
             dbg('attempt slot ' + slotNum
-                + ': injected after editquestion link');
+                + ': after editquestion');
             return true;
         }
 
-        // Strategy D: Prepend to the container itself.
         $container.prepend($wrapper);
         dbg('attempt slot ' + slotNum
             + ': prepended to container');
@@ -250,7 +258,7 @@ define(['jquery'], function($) {
     }
 
     // ──────────────────────────────────────────────────
-    //  Edit page injection
+    //  Edit page
     // ──────────────────────────────────────────────────
 
     /**
@@ -263,9 +271,7 @@ define(['jquery'], function($) {
         var i;
         var count = 0;
 
-        dbg('edit: trying to inject '
-            + questions.length + ' links');
-        dumpEditPageStructure();
+        dbg('edit: injecting ' + questions.length + ' links');
 
         for (i = 0; i < questions.length; i++) {
             if (injectSingleEditLink(data, questions[i])) {
@@ -273,36 +279,11 @@ define(['jquery'], function($) {
             }
         }
         dbg('edit: injected ' + count + '/'
-            + questions.length + ' links');
+            + questions.length);
     }
 
     /**
-     * Dump the edit page structure for debugging.
-     */
-    function dumpEditPageStructure() {
-        var selectors = [
-            '[data-for="cmitem"]',
-            '[data-for="slot"]',
-            '[data-slotid]',
-            '[data-slot-id]',
-            '.activity-wrapper',
-            '.slot',
-            '.activity',
-            'li.activity',
-            'a[href*="editquestion"]'
-        ];
-        var j;
-        for (j = 0; j < selectors.length; j++) {
-            var $found = $(selectors[j]);
-            if ($found.length > 0) {
-                dbg('  found ' + $found.length
-                    + ' x "' + selectors[j] + '"');
-            }
-        }
-    }
-
-    /**
-     * Inject one configure icon on quiz edit page.
+     * Inject one icon on quiz edit page.
      *
      * @param {Object} data Configuration data.
      * @param {Object} q Question data.
@@ -332,7 +313,7 @@ define(['jquery'], function($) {
             return true;
         }
 
-        dbg('  FAILED: no injection point found');
+        dbg('  FAILED: no injection point');
         return false;
     }
 
@@ -355,7 +336,7 @@ define(['jquery'], function($) {
             );
         }
         if (!$editLinks.length) {
-            dbg('  strategy1: no edit link found');
+            dbg('  strategy1: no edit link');
             return false;
         }
 
@@ -379,13 +360,13 @@ define(['jquery'], function($) {
             if ($actions.length) {
                 $actions.first().prepend(
                     $iconLink.clone(true));
-                dbg('  strategy1: injected in actions area');
+                dbg('  strategy1: in actions area');
                 return true;
             }
         }
 
         $link.after($iconLink.clone(true));
-        dbg('  strategy1: injected after edit link');
+        dbg('  strategy1: after edit link');
         return true;
     }
 
@@ -405,7 +386,7 @@ define(['jquery'], function($) {
         });
 
         if (!$matchedLinks.length) {
-            dbg('  strategy2: no name match for "'
+            dbg('  strategy2: no name match "'
                 + questionName + '"');
             return false;
         }
@@ -430,13 +411,13 @@ define(['jquery'], function($) {
             if ($actions.length) {
                 $actions.first().prepend(
                     $iconLink.clone(true));
-                dbg('  strategy2: injected in actions');
+                dbg('  strategy2: in actions');
                 return true;
             }
         }
 
         $link.after($iconLink.clone(true));
-        dbg('  strategy2: injected after name link');
+        dbg('  strategy2: after name link');
         return true;
     }
 
@@ -460,7 +441,7 @@ define(['jquery'], function($) {
         for (i = 0; i < selectors.length; i++) {
             $container = $(selectors[i]);
             if ($container.length) {
-                dbg('  strategy3: found via "'
+                dbg('  strategy3: via "'
                     + selectors[i] + '"');
                 var $actions = $container.find(
                     '.activity-actions,'
@@ -470,45 +451,69 @@ define(['jquery'], function($) {
                 if ($actions.length) {
                     $actions.first().prepend(
                         $iconLink.clone(true));
-                    dbg('  strategy3: injected in actions');
+                    dbg('  strategy3: in actions');
                     return true;
                 }
-                $container.append($iconLink.clone(true));
-                dbg('  strategy3: appended to container');
+                $container.append(
+                    $iconLink.clone(true));
+                dbg('  strategy3: appended');
                 return true;
             }
         }
 
-        dbg('  strategy3: no container found');
+        dbg('  strategy3: no container');
         return false;
+    }
+
+    /**
+     * Run injection with data.
+     *
+     * @param {Object} data Configuration data.
+     */
+    function run(data) {
+        dbg('run: mode=' + data.mode);
+        if (data.mode === 'attempt') {
+            injectAttemptLinks(data);
+        } else if (data.mode === 'edit') {
+            injectEditLinks(data);
+        }
     }
 
     return /** @alias module:local_stackmatheditor/configure_links */ {
         /**
          * Initialize configure link injection.
-         *
-         * @param {Object} data Configuration data from PHP.
+         * Reads data from #sme-configure-data JSON element.
          */
-        init: function(data) {
-            dbg('init: mode=' + data.mode);
-
-            if (data.mode === 'attempt') {
-                dbg('init: '
-                    + Object.keys(data.slots || {}).length
-                    + ' slots');
-            } else if (data.mode === 'edit') {
-                dbg('init: '
-                    + (data.questions || []).length
-                    + ' questions');
-            }
+        init: function() {
+            dbg('init called');
 
             $(document).ready(function() {
-                dbg('DOM ready, injecting...');
-                if (data.mode === 'attempt') {
-                    injectAttemptLinks(data);
-                } else if (data.mode === 'edit') {
-                    injectEditLinks(data);
+                dbg('DOM ready');
+
+                // Data element may not exist yet if
+                // js_amd_inline runs after this module.
+                var data = loadData();
+                if (data) {
+                    run(data);
+                    return;
                 }
+
+                // Retry with short delay.
+                var retries = 0;
+                var maxRetries = 20;
+                var interval = setInterval(function() {
+                    retries++;
+                    data = loadData();
+                    if (data) {
+                        clearInterval(interval);
+                        run(data);
+                        return;
+                    }
+                    if (retries >= maxRetries) {
+                        clearInterval(interval);
+                        dbg('gave up waiting for data');
+                    }
+                }, 100);
             });
         }
     };

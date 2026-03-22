@@ -7,7 +7,7 @@ defined('MOODLE_INTERNAL') || die();
  * Multiselect admin setting that auto-sizes to the number of choices.
  *
  * @package    local_stackmatheditor
- * @copyright  2026 Your Name
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class admin_setting_multiselect_sized extends \admin_setting_configmultiselect {

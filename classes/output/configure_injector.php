@@ -9,8 +9,11 @@ use local_stackmatheditor\quiz_helper;
 /**
  * Injects configure links for STACK questions on quiz pages.
  *
+ * Data is passed via a JSON script element to avoid the 1024-char
+ * limit of js_call_amd() arguments.
+ *
  * @package    local_stackmatheditor
- * @copyright  2026 Your Name
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class configure_injector {
@@ -40,21 +43,40 @@ class configure_injector {
         $linkdata = self::build_link_data(
             $cmid, $configureurl, $returnurl, $linktext);
 
-        if (!empty($linkdata)) {
-            quiz_helper::dbg(
-                'configure_injector: calling js_call_amd, mode='
-                . $linkdata['mode']
-            );
-
-            $PAGE->requires->js_call_amd(
-                'local_stackmatheditor/configure_links',
-                'init',
-                [$linkdata]
-            );
-        } else {
+        if (empty($linkdata)) {
             quiz_helper::dbg(
                 'configure_injector: no data, skipping');
+            return;
         }
+
+        quiz_helper::dbg(
+            'configure_injector: injecting data, mode='
+            . $linkdata['mode']
+        );
+
+        // Pass data via JSON script element (no size limit).
+        $json = json_encode(
+            $linkdata,
+            JSON_UNESCAPED_UNICODE | JSON_HEX_TAG
+        );
+
+        $PAGE->requires->js_amd_inline("
+            (function() {
+                var el = document.createElement('script');
+                el.type = 'application/json';
+                el.id = 'sme-configure-data';
+                el.textContent = "
+            . json_encode($json) . ";
+                document.body.appendChild(el);
+            })();
+        ");
+
+        // Init call with no data arguments.
+        $PAGE->requires->js_call_amd(
+            'local_stackmatheditor/configure_links',
+            'init',
+            []
+        );
     }
 
     /**
@@ -112,7 +134,6 @@ class configure_injector {
             return [];
         }
 
-        // Build slot → {questionid, qbeid}.
         $slots = [];
         foreach ($stackdata['slotmap'] as $slot => $qid) {
             $slots[$slot] = [

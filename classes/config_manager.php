@@ -11,7 +11,7 @@ defined('MOODLE_INTERNAL') || die();
  * All versions of a question share the same configuration.
  *
  * @package    local_stackmatheditor
- * @copyright  2026 Your Name
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class config_manager {
