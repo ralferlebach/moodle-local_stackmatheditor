@@ -6,8 +6,8 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * Shared helper for quiz/question DB lookups.
  *
- * Provides reusable methods used by both the editor injector
- * and the configure link injector.
+ * Handles Moodle 4.x schema where quiz_slots links to questions
+ * via question_references table.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Your Name
@@ -63,12 +63,168 @@ class quiz_helper {
     }
 
     /**
-     * Load question_attempts for a quiz attempt, filtered to STACK questions.
+     * Check if quiz_slots has questionbankentryid column directly.
+     * Moodle 4.0-4.1 uses question_references table instead.
+     * Moodle 4.2+ may have it directly on quiz_slots.
      *
-     * Returns a structured array with:
-     *  - slotmap:  slot => questionid
-     *  - qbeids:   slot => questionbankentryid
-     *  - qbeidmap: questionbankentryid => questionid
+     * @return bool True if quiz_slots has questionbankentryid.
+     */
+    private static function slots_have_qbeid(): bool {
+        global $DB;
+        static $result = null;
+        if ($result !== null) {
+            return $result;
+        }
+        try {
+            $cols = $DB->get_columns('quiz_slots');
+            $result = isset($cols['questionbankentryid']);
+        } catch (\Throwable $e) {
+            $result = false;
+        }
+        self::dbg('slots_have_qbeid=' . ($result ? 'true' : 'false'));
+        return $result;
+    }
+
+    /**
+     * Load STACK question data from quiz slots for the edit page.
+     *
+     * Handles both Moodle 4.0-4.1 (question_references table)
+     * and Moodle 4.2+ (direct column on quiz_slots).
+     *
+     * @param int $quizinstanceid Quiz instance ID.
+     * @return array List of {questionid, qbeid, name, slot}.
+     */
+    public static function load_quiz_stack_questions(
+        int $quizinstanceid): array {
+        global $DB;
+        $data = [];
+
+        try {
+            if (self::slots_have_qbeid()) {
+                $data = self::load_quiz_stack_questions_direct(
+                    $quizinstanceid);
+            } else {
+                $data = self::load_quiz_stack_questions_via_refs(
+                    $quizinstanceid);
+            }
+        } catch (\Throwable $e) {
+            self::dbg('load_quiz_stack_questions: '
+                . $e->getMessage());
+        }
+
+        self::dbg('load_quiz_stack_questions: '
+            . count($data) . ' STACK questions');
+        return $data;
+    }
+
+    /**
+     * Load via direct questionbankentryid on quiz_slots (Moodle 4.2+).
+     *
+     * @param int $quizid Quiz instance ID.
+     * @return array List of {questionid, qbeid, name, slot}.
+     */
+    private static function load_quiz_stack_questions_direct(
+        int $quizid): array {
+        global $DB;
+        $data = [];
+
+        $slots = $DB->get_records(
+            'quiz_slots', ['quizid' => $quizid], 'slot ASC');
+        self::dbg('load_direct: ' . count($slots) . ' total slots');
+
+        foreach ($slots as $slot) {
+            $qbeid = (int) ($slot->questionbankentryid ?? 0);
+            if (!$qbeid) {
+                continue;
+            }
+
+            $qref = $DB->get_record_sql(
+                "SELECT qv.questionid, q.qtype, q.name
+                   FROM {question_versions} qv
+                   JOIN {question} q ON q.id = qv.questionid
+                  WHERE qv.questionbankentryid = :qbeid
+               ORDER BY qv.version DESC",
+                ['qbeid' => $qbeid],
+                IGNORE_MULTIPLE
+            );
+
+            if (!$qref || $qref->qtype !== 'stack') {
+                continue;
+            }
+
+            $data[] = [
+                'questionid' => (int) $qref->questionid,
+                'qbeid' => $qbeid,
+                'name' => $qref->name,
+                'slot' => (int) $slot->slot,
+            ];
+        }
+
+        return $data;
+    }
+
+    /**
+     * Load via question_references table (Moodle 4.0-4.1).
+     *
+     * @param int $quizid Quiz instance ID.
+     * @return array List of {questionid, qbeid, name, slot}.
+     */
+    private static function load_quiz_stack_questions_via_refs(
+        int $quizid): array {
+        global $DB;
+        $data = [];
+
+        // question_references links to quiz_slots via
+        // component='mod_quiz', questionarea='slot', itemid=slot.id
+        $sql = "
+            SELECT qs.slot AS slotnum,
+                   qs.id AS slotid,
+                   qr.questionbankentryid AS qbeid
+              FROM {quiz_slots} qs
+              JOIN {question_references} qr
+                   ON qr.itemid = qs.id
+                   AND qr.component = 'mod_quiz'
+                   AND qr.questionarea = 'slot'
+             WHERE qs.quizid = :quizid
+          ORDER BY qs.slot ASC";
+
+        $rows = $DB->get_records_sql($sql, ['quizid' => $quizid]);
+        self::dbg('load_via_refs: '
+            . count($rows) . ' slot-ref pairs');
+
+        foreach ($rows as $row) {
+            $qbeid = (int) $row->qbeid;
+            if (!$qbeid) {
+                continue;
+            }
+
+            $qref = $DB->get_record_sql(
+                "SELECT qv.questionid, q.qtype, q.name
+                   FROM {question_versions} qv
+                   JOIN {question} q ON q.id = qv.questionid
+                  WHERE qv.questionbankentryid = :qbeid
+               ORDER BY qv.version DESC",
+                ['qbeid' => $qbeid],
+                IGNORE_MULTIPLE
+            );
+
+            if (!$qref || $qref->qtype !== 'stack') {
+                continue;
+            }
+
+            $data[] = [
+                'questionid' => (int) $qref->questionid,
+                'qbeid' => $qbeid,
+                'name' => $qref->name,
+                'slot' => (int) $row->slotnum,
+            ];
+        }
+
+        return $data;
+    }
+
+    /**
+     * Load question_attempts for a quiz attempt, filtered to STACK.
      *
      * @param int $attemptid Quiz attempt ID.
      * @return array{slotmap: array, qbeids: array, qbeidmap: array}
@@ -101,7 +257,6 @@ class quiz_helper {
                 return $result;
             }
 
-            // Build slot → questionid and collect all question IDs.
             $rawslotmap = [];
             $questionids = [];
             foreach ($qas as $qa) {
@@ -116,7 +271,6 @@ class quiz_helper {
                 return $result;
             }
 
-            // Filter to STACK questions only.
             list($insql, $params) = $DB->get_in_or_equal(
                 $questionids, SQL_PARAMS_NAMED, 'qid');
             $questions = $DB->get_records_select(
@@ -149,62 +303,6 @@ class quiz_helper {
         }
 
         return $result;
-    }
-
-    /**
-     * Load STACK question data from quiz_slots for the edit page.
-     *
-     * @param int $quizinstanceid Quiz instance ID.
-     * @return array List of {questionid, qbeid, name, slot}.
-     */
-    public static function load_quiz_stack_questions(
-        int $quizinstanceid): array {
-        global $DB;
-        $data = [];
-
-        try {
-            $slots = $DB->get_records(
-                'quiz_slots',
-                ['quizid' => $quizinstanceid],
-                'slot ASC'
-            );
-            self::dbg('load_quiz_stack_questions: '
-                . count($slots) . ' total slots');
-
-            foreach ($slots as $slot) {
-                $qref = $DB->get_record_sql(
-                    "SELECT qv.questionid,
-                            qv.questionbankentryid,
-                            q.qtype, q.name
-                       FROM {question_versions} qv
-                       JOIN {question} q
-                            ON q.id = qv.questionid
-                      WHERE qv.questionbankentryid = :qbeid
-                   ORDER BY qv.version DESC",
-                    ['qbeid' => $slot->questionbankentryid],
-                    IGNORE_MULTIPLE
-                );
-
-                if (!$qref || $qref->qtype !== 'stack') {
-                    continue;
-                }
-
-                $data[] = [
-                    'questionid' => (int) $qref->questionid,
-                    'qbeid' => (int) $qref->questionbankentryid,
-                    'name' => $qref->name,
-                    'slot' => (int) $slot->slot,
-                ];
-            }
-
-            self::dbg('load_quiz_stack_questions: '
-                . count($data) . ' STACK questions');
-        } catch (\Throwable $e) {
-            self::dbg('load_quiz_stack_questions: '
-                . $e->getMessage());
-        }
-
-        return $data;
     }
 
     /**
