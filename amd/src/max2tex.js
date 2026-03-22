@@ -1,6 +1,9 @@
 /**
  * Converts Maxima CAS notation back to LaTeX for MathQuill display.
  *
+ * Uses non-greedy regex in fixpoint loops (same strategy as tex2max.js)
+ * to correctly handle arbitrary nesting depth.
+ *
  * Used when pre-filling MathQuill fields with existing answers
  * (e.g., when navigating back to a question).
  *
@@ -12,9 +15,29 @@ define([], function() {
     'use strict';
 
     /**
+     * Apply a regex replacement in a fixpoint loop until stable.
+     *
+     * @param {string} s Input string.
+     * @param {RegExp} regex Regular expression (should use lazy quantifiers).
+     * @param {string|Function} replacement Replacement string or function.
+     * @param {number} [maxIter=50] Maximum iterations.
+     * @returns {string} Transformed string.
+     */
+    function fixpoint(s, regex, replacement, maxIter) {
+        var max = maxIter || 50;
+        var prev = '';
+        while (s !== prev && max > 0) {
+            prev = s;
+            s = s.replace(regex, replacement);
+            max--;
+        }
+        return s;
+    }
+
+    /**
      * Find position of matching closing parenthesis.
      *
-     * @param {string} s The string to search.
+     * @param {string} s The string.
      * @param {number} openPos Position of the opening '('.
      * @returns {number} Position of matching ')' or -1.
      */
@@ -36,7 +59,7 @@ define([], function() {
     /**
      * Find position of matching opening parenthesis (searching backwards).
      *
-     * @param {string} s The string to search.
+     * @param {string} s The string.
      * @param {number} closePos Position of the closing ')'.
      * @returns {number} Position of matching '(' or -1.
      */
@@ -56,118 +79,35 @@ define([], function() {
     }
 
     /**
-     * Replace function calls with LaTeX brace notation.
-     * e.g., sqrt(x+1) → \\sqrt{x+1}
+     * Convert Maxima fractions (a)/(b) → \frac{a}{b}.
+     * Uses paren-matching to correctly handle nested fractions.
+     * Processes from left to right.
      *
      * @param {string} s Input string.
-     * @param {string} funcName Function name to find (e.g., 'sqrt').
-     * @param {string} latexCmd LaTeX command (e.g., '\\sqrt').
-     * @returns {string} Transformed string.
+     * @returns {string} Converted string.
      */
-    function replaceFuncBraces(s, funcName, latexCmd) {
-        var searchStr = funcName + '(';
-        var result = '';
-        var i = 0;
+    function processFractions(s) {
+        var prev = '';
         var safety = 50;
 
-        while (i < s.length && safety > 0) {
+        while (s !== prev && safety > 0) {
             safety--;
-            var idx = s.indexOf(searchStr, i);
-            if (idx === -1) {
-                result += s.substring(i);
-                break;
-            }
-            // Ensure not part of a longer word.
-            if (idx > 0 && /[a-zA-Z0-9_]/.test(s[idx - 1])) {
-                result += s.substring(i, idx + 1);
-                i = idx + 1;
-                continue;
-            }
+            prev = s;
 
-            result += s.substring(i, idx);
-            var parenOpen = idx + funcName.length;
-            var parenClose = findCloseParen(s, parenOpen);
-
-            if (parenClose === -1) {
-                result += s.substring(idx);
-                break;
-            }
-
-            var arg = s.substring(parenOpen + 1, parenClose);
-            result += latexCmd + '{' + arg + '}';
-            i = parenClose + 1;
-        }
-
-        return result;
-    }
-
-    /**
-     * Replace function calls with LaTeX parenthesis notation.
-     * e.g., sin(x) → \\sin\\left(x\\right)
-     *
-     * @param {string} s Input string.
-     * @param {string} funcName Function name to find.
-     * @param {string} latexCmd LaTeX command.
-     * @returns {string} Transformed string.
-     */
-    function replaceFuncParens(s, funcName, latexCmd) {
-        var searchStr = funcName + '(';
-        var result = '';
-        var i = 0;
-        var safety = 50;
-
-        while (i < s.length && safety > 0) {
-            safety--;
-            var idx = s.indexOf(searchStr, i);
-            if (idx === -1) {
-                result += s.substring(i);
-                break;
-            }
-            if (idx > 0 && /[a-zA-Z0-9_]/.test(s[idx - 1])) {
-                result += s.substring(i, idx + 1);
-                i = idx + 1;
-                continue;
-            }
-
-            result += s.substring(i, idx);
-            var parenOpen = idx + funcName.length;
-            var parenClose = findCloseParen(s, parenOpen);
-
-            if (parenClose === -1) {
-                result += s.substring(idx);
-                break;
-            }
-
-            var arg = s.substring(parenOpen + 1, parenClose);
-            result += latexCmd + '\\left(' + arg + '\\right)';
-            i = parenClose + 1;
-        }
-
-        return result;
-    }
-
-    /**
-     * Replace (num)/(den) fraction patterns with \\frac{num}{den}.
-     * Uses balanced parenthesis matching.
-     *
-     * @param {string} s Input string.
-     * @returns {string} Transformed string.
-     */
-    function replaceFractions(s) {
-        var safety = 30;
-        while (safety > 0) {
-            safety--;
+            // Find the pattern )/(
             var divIdx = s.indexOf(')/(');
             if (divIdx === -1) {
                 break;
             }
 
+            // Find matching ( for the numerator's closing )
             var numClose = divIdx;
             var numOpen = findOpenParen(s, numClose);
             if (numOpen === -1) {
                 break;
             }
 
+            // Find matching ) for the denominator's opening (
             var denOpen = divIdx + 2;
             var denClose = findCloseParen(s, denOpen);
             if (denClose === -1) {
@@ -181,14 +121,135 @@ define([], function() {
                 '\\frac{' + num + '}{' + den + '}' +
                 s.substring(denClose + 1);
         }
+
         return s;
     }
 
     /**
-     * Replace decimal dots with commas for locales using comma as decimal separator.
+     * Convert Maxima function calls funcname(arg) to LaTeX.
+     * Uses paren-matching for correct nesting.
      *
      * @param {string} s Input string.
-     * @returns {string} Transformed string.
+     * @param {string} funcName Maxima function name (e.g., 'sqrt').
+     * @param {string} latexCmd LaTeX command (e.g., '\\sqrt').
+     * @param {string} wrapType 'brace' for \sqrt{...}, 'paren' for \sin\left(...\right).
+     * @returns {string} Converted string.
+     */
+    function processFunc(s, funcName, latexCmd, wrapType) {
+        var searchStr = funcName + '(';
+        var result = '';
+        var i = 0;
+        var safety = 50;
+
+        while (i < s.length && safety > 0) {
+            safety--;
+            var idx = s.indexOf(searchStr, i);
+
+            if (idx === -1) {
+                result += s.substring(i);
+                break;
+            }
+
+            // Ensure not part of a longer word.
+            if (idx > 0 && /[a-zA-Z0-9_]/.test(s[idx - 1])) {
+                result += s.substring(i, idx + 1);
+                i = idx + 1;
+                continue;
+            }
+
+            result += s.substring(i, idx);
+
+            var parenOpen = idx + funcName.length;
+            var parenClose = findCloseParen(s, parenOpen);
+
+            if (parenClose === -1) {
+                result += s.substring(idx);
+                i = s.length;
+                break;
+            }
+
+            var arg = s.substring(parenOpen + 1, parenClose);
+
+            if (wrapType === 'brace') {
+                result += latexCmd + '{' + arg + '}';
+            } else {
+                result += latexCmd + '\\left(' + arg + '\\right)';
+            }
+
+            i = parenClose + 1;
+        }
+
+        return result;
+    }
+
+    /**
+     * Convert n-th root patterns: (expr)^(1/(n)) → \sqrt[n]{expr}
+     * Must run BEFORE exponent processing.
+     *
+     * @param {string} s Input string.
+     * @returns {string} Converted string.
+     */
+    function processNthRoots(s) {
+        // Pattern: (expr)^(1/(n))
+        // Use fixpoint with lazy match for inner groups.
+        return fixpoint(s,
+            /\(([^()]*?)\)\^\(1\/\(([^()]*?)\)\)/,
+            '\\sqrt[$2]{$1}'
+        );
+    }
+
+    /**
+     * Convert exponents: ^(expr) → ^{expr}
+     * Uses fixpoint loop for nested exponents.
+     *
+     * @param {string} s Input string.
+     * @returns {string} Converted string.
+     */
+    function processExponents(s) {
+        // ^(expr) where expr contains no unmatched parens.
+        return fixpoint(s,
+            /\^\(([^()]*?)\)/,
+            '^{$1}'
+        );
+    }
+
+    /**
+     * Convert subscripts: _x → _{x} (single char) and _xy → _{xy}
+     *
+     * @param {string} s Input string.
+     * @returns {string} Converted string.
+     */
+    function processSubscripts(s) {
+        // _alphanumeric (not already in braces).
+        s = s.replace(/_([a-zA-Z0-9]+)(?!\{)/g, '_{$1}');
+        return s;
+    }
+
+    /**
+     * Remove implicit multiplication signs where LaTeX doesn't need them.
+     * 2*x → 2x, a*b → a\cdot b, etc.
+     *
+     * @param {string} s Input string.
+     * @returns {string} Cleaned string.
+     */
+    function cleanMultiplication(s) {
+        // digit * letter/backslash → juxtaposition (cleaner LaTeX).
+        s = s.replace(/(\d)\s*\*\s*([a-zA-Z\\])/g, '$1$2');
+
+        // letter/paren * letter/paren → \cdot
+        s = s.replace(/([a-zA-Z)\]])\s*\*\s*([a-zA-Z\\(])/g, '$1\\cdot $2');
+
+        // Remaining * → \cdot
+        s = s.replace(/\*/g, '\\cdot ');
+
+        return s;
+    }
+
+    /**
+     * Replace decimal dots with commas for display in comma-decimal locales.
+     *
+     * @param {string} s Input string.
+     * @returns {string} Converted string.
      */
     function dotsToCommas(s) {
         return s.replace(/(\d)\.(\d)/g, '$1,$2');
@@ -206,13 +267,13 @@ define([], function() {
         var opts = options || {};
         var commaDecimal = opts.commaDecimal || false;
         var s = maxima.trim();
-        var k;
+        var prev;
 
         if (!s) {
             return s;
         }
 
-        // 1. Constants (before Greek letters to avoid conflicts).
+        // 1. Constants (before function processing to avoid conflicts).
         s = s.replace(/%pi/g, '\\pi ');
         s = s.replace(/%e(?![a-zA-Z])/g, 'e');
         s = s.replace(/\binf\b/g, '\\infty ');
@@ -222,38 +283,58 @@ define([], function() {
         s = s.replace(/>=/g, '\\ge ');
         s = s.replace(/#/g, '\\ne ');
 
-        // 3. sqrt(expr) → \sqrt{expr}
-        s = replaceFuncBraces(s, 'sqrt', '\\sqrt');
+        // 3. Functions — sqrt first (brace-wrapped).
+        s = processFunc(s, 'sqrt', '\\sqrt', 'brace');
 
-        // 4. Trig / hyperbolic functions (longer names first to avoid partial matches).
+        // 4. Trig functions (longer names first to avoid partial matches).
         var trigFuncs = [
-            'arcsin', 'arccos', 'arctan',
-            'sinh', 'cosh', 'tanh',
-            'sin', 'cos', 'tan', 'cot', 'sec', 'csc'
+            {name: 'arcsin', latex: '\\arcsin'},
+            {name: 'arccos', latex: '\\arccos'},
+            {name: 'arctan', latex: '\\arctan'},
+            {name: 'sinh', latex: '\\sinh'},
+            {name: 'cosh', latex: '\\cosh'},
+            {name: 'tanh', latex: '\\tanh'},
+            {name: 'sin', latex: '\\sin'},
+            {name: 'cos', latex: '\\cos'},
+            {name: 'tan', latex: '\\tan'},
+            {name: 'cot', latex: '\\cot'},
+            {name: 'sec', latex: '\\sec'},
+            {name: 'csc', latex: '\\csc'}
         ];
+        var k;
         for (k = 0; k < trigFuncs.length; k++) {
-            s = replaceFuncParens(s, trigFuncs[k], '\\' + trigFuncs[k]);
+            s = processFunc(s, trigFuncs[k].name, trigFuncs[k].latex, 'paren');
         }
 
-        // 5. log → \ln, exp → \exp
-        s = replaceFuncParens(s, 'log', '\\ln');
-        s = replaceFuncParens(s, 'exp', '\\exp');
+        // 5. Log/exp functions.
+        s = processFunc(s, 'log', '\\ln', 'paren');
+        s = processFunc(s, 'exp', '\\exp', 'paren');
 
         // 6. Fractions: (a)/(b) → \frac{a}{b}
-        s = replaceFractions(s);
+        //    Use fixpoint: inner fractions convert first, then outer ones.
+        prev = '';
+        while (s !== prev) {
+            prev = s;
+            s = processFractions(s);
+        }
 
         // 7. N-th roots: (expr)^(1/(n)) → \sqrt[n]{expr}
-        s = s.replace(
-            /\(([^()]+)\)\^\(1\/\(([^()]+)\)\)/g,
-            '\\sqrt[$2]{$1}'
-        );
+        //    Must run BEFORE exponent processing.
+        prev = '';
+        while (s !== prev) {
+            prev = s;
+            s = processNthRoots(s);
+        }
 
-        // 8. Exponents: ^(expr) → ^{expr}, then ^x → ^{x}
-        s = s.replace(/\^\(([^()]*)\)/g, '^{$1}');
-        s = s.replace(/\^([a-zA-Z0-9])/g, '^{$1}');
+        // 8. Exponents: ^(expr) → ^{expr}
+        prev = '';
+        while (s !== prev) {
+            prev = s;
+            s = processExponents(s);
+        }
 
-        // 9. Subscripts: _n → _{n}
-        s = s.replace(/_([a-zA-Z0-9])/g, '_{$1}');
+        // 9. Subscripts: _x → _{x}
+        s = processSubscripts(s);
 
         // 10. Greek letters.
         var greek = [
@@ -268,15 +349,10 @@ define([], function() {
             );
         }
 
-        // 11. Multiplication sign cleanup.
-        // Between digit and letter/backslash: remove * (cleaner LaTeX).
-        s = s.replace(/(\d)\s*\*\s*([a-zA-Z\\])/g, '$1$2');
-        // Between letter/paren and letter/paren: use \cdot.
-        s = s.replace(/([a-zA-Z)])\s*\*\s*([a-zA-Z\\(])/g, '$1\\cdot $2');
-        // Remaining * → \cdot.
-        s = s.replace(/\*/g, '\\cdot ');
+        // 11. Multiplication signs.
+        s = cleanMultiplication(s);
 
-        // 12. Decimal separator: dot → comma for display (if locale requires it).
+        // 12. Decimal separator.
         if (commaDecimal) {
             s = dotsToCommas(s);
         }
