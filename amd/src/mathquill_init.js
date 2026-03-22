@@ -1,18 +1,23 @@
 /**
  * Initialises MathQuill editors on STACK answer fields.
  *
+ * Architecture:
+ * - Slot configs are resolved server-side and passed as params.slotConfigs
+ * - Slot numbers are extracted from input names (format: q{usage}:{slot}_ans{n})
+ * - No AJAX calls needed — faster and more reliable
+ * - Correctly handles multiple questions per page
+ *
  * @module     local_stackmatheditor/mathquill_init
  * @copyright  2026 Your Name
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 define([
     'jquery',
-    'core/ajax',
     'core/notification',
     'local_stackmatheditor/tex2max',
     'local_stackmatheditor/max2tex',
     'local_stackmatheditor/mathjax_compat'
-], function($, Ajax, Notification, Tex2Max, Max2Tex, MathJaxCompat) {
+], function($, Notification, Tex2Max, Max2Tex, MathJaxCompat) {
     'use strict';
 
     /** @type {Object|null} MathQuill interface (v2). */
@@ -63,20 +68,16 @@ define([
 
     /**
      * Detect whether the current Moodle locale uses comma as decimal separator.
-     * Checks the HTML lang attribute and falls back to browser locale.
      *
      * @returns {boolean} True if comma should be used as decimal separator.
      */
     function detectCommaDecimal() {
         var lang = '';
-
-        // Try HTML lang attribute (Moodle sets this).
         var htmlEl = document.documentElement;
         if (htmlEl) {
             lang = (htmlEl.getAttribute('lang') || '').toLowerCase();
         }
 
-        // Comma-decimal locales (non-exhaustive but covers major ones).
         var commaLocales = [
             'de', 'fr', 'es', 'it', 'pt', 'nl', 'da', 'fi', 'sv', 'nb', 'nn',
             'no', 'pl', 'cs', 'sk', 'hu', 'ro', 'bg', 'hr', 'sl', 'sr', 'el',
@@ -91,17 +92,37 @@ define([
             }
         }
 
-        // Fallback: use Intl API if available.
         if (window.Intl && window.Intl.NumberFormat) {
             var formatted = new Intl.NumberFormat(lang || undefined).format(1.1);
             if (formatted.indexOf(',') !== -1) {
-                log('Intl API detected comma-decimal for:', lang || 'browser default');
                 return true;
             }
         }
 
-        log('Using dot as decimal separator for locale:', lang || 'unknown');
         return false;
+    }
+
+    /**
+     * Extract the slot number from a STACK input field's name attribute.
+     *
+     * Input name format: q{questionusageid}:{slotnumber}_{inputname}
+     * Examples:
+     *   q29:1_ans1  → slot 1
+     *   q29:3_ans1  → slot 3
+     *   q29:5_ans2  → slot 5
+     *
+     * @param {string} name The input's name attribute.
+     * @returns {number|null} The slot number or null.
+     */
+    function extractSlotFromName(name) {
+        if (!name) {
+            return null;
+        }
+        var match = name.match(/^q\d+:(\d+)_/);
+        if (match) {
+            return parseInt(match[1], 10);
+        }
+        return null;
     }
 
     /** @type {Object} Toolbar button definitions per category. */
@@ -333,8 +354,6 @@ define([
 
     /**
      * Converts a pre-filled value to LaTeX for MathQuill display.
-     * Detects whether the value is Maxima notation and converts if needed.
-     * Handles navigation back to a question with existing answers.
      *
      * @param {string} value The current input field value.
      * @returns {string} LaTeX suitable for MathQuill, or empty string.
@@ -343,13 +362,11 @@ define([
         if (!value || !value.trim()) {
             return '';
         }
-
         if (Max2Tex.isMaxima(value)) {
             var latex = Max2Tex.convert(value, {commaDecimal: COMMA_DECIMAL});
             log('Pre-fill: Maxima="' + value + '" -> LaTeX="' + latex + '"');
             return latex;
         }
-
         log('Pre-fill: Using value as-is: "' + value + '"');
         return value;
     }
@@ -367,9 +384,10 @@ define([
         }
         $input.data('sme-initialized', true);
 
-        log('Initialising MathQuill on input:', $input.attr('name'));
+        var inputName = $input.attr('name') || 'unknown';
+        var slot = extractSlotFromName(inputName);
+        log('Initialising MathQuill on input:', inputName, '(slot ' + slot + ')');
 
-        // Store original value BEFORE hiding the input.
         var existingValue = $input.val();
 
         $input.css({
@@ -386,7 +404,6 @@ define([
         $container.append($mqSpan);
         $input.after($container);
 
-        // Flag to suppress sync during pre-fill.
         var suppressSync = true;
 
         var debouncedSync = debounce(function() {
@@ -404,7 +421,6 @@ define([
             }
         });
 
-        // Pre-fill: convert existing Maxima value to LaTeX.
         if (existingValue) {
             var latex = maximaToLatex(existingValue);
             if (latex) {
@@ -412,14 +428,12 @@ define([
                     mathField.latex(latex);
                     log('Pre-fill successful.');
                 } catch (e) {
-                    log('Pre-fill LaTeX failed, trying as text:', e.message);
-                    // Fallback: write raw text into the field.
+                    log('Pre-fill LaTeX failed:', e.message);
                     mathField.write(existingValue);
                 }
             }
         }
 
-        // Enable sync after pre-fill is complete.
         suppressSync = false;
 
         $container.prepend(buildToolbar(config, mathField));
@@ -472,22 +486,6 @@ define([
         return $();
     }
 
-    /**
-     * Applies MathQuill editors to all found STACK inputs.
-     *
-     * @param {jQuery} $inputs Matched input elements.
-     * @param {Object} configMap Question ID to config mapping.
-     */
-    function applyEditors($inputs, configMap) {
-        $inputs.each(function() {
-            var $input = $(this);
-            var $que = $input.closest('.que');
-            var qid = $que.data('questionid');
-            var cfg = (qid && configMap[qid]) ? configMap[qid] : getDefaultConfig();
-            initMathQuillField($input, cfg);
-        });
-    }
-
     return /** @alias module:local_stackmatheditor/mathquill_init */ {
 
         /**
@@ -496,6 +494,8 @@ define([
          * @param {Object} params Configuration parameters.
          * @param {string} params.mathquillJsUrl URL to MathQuill JS file.
          * @param {string} params.mathquillCssUrl URL to MathQuill CSS file.
+         * @param {number} params.cmid Course module ID.
+         * @param {Object} params.slotConfigs Map of slot number to toolbar config.
          */
         init: function(params) {
             log('init() called.');
@@ -506,9 +506,15 @@ define([
             // Detect locale-based decimal separator.
             COMMA_DECIMAL = detectCommaDecimal();
             log('Comma decimal:', COMMA_DECIMAL);
+            log('cmid:', params.cmid);
 
-            log('JS URL:', params.mathquillJsUrl);
-            log('CSS URL:', params.mathquillCssUrl);
+            // Parse slot configs from server.
+            var slotConfigs = params.slotConfigs || {};
+            var slotKeys = Object.keys(slotConfigs);
+            log('Slot configs received from server:', slotKeys.length, 'slots');
+            slotKeys.forEach(function(slot) {
+                log('  Slot', slot, ':', JSON.stringify(slotConfigs[slot]));
+            });
 
             var cssReady = loadCss(params.mathquillCssUrl);
             var jsReady = loadMathQuillScript(params.mathquillJsUrl);
@@ -526,38 +532,23 @@ define([
                         return;
                     }
 
-                    // Collect question IDs.
-                    var questionIds = [];
-                    $inputs.closest('.que').each(function() {
-                        var rawId = $(this).data('questionid') || $(this).attr('id');
-                        if (rawId) {
-                            var match = String(rawId).match(/(\d+)/);
-                            if (match) {
-                                questionIds.push(parseInt(match[1], 10));
-                            }
-                        }
-                    });
-                    log('Question IDs:', questionIds);
+                    // Apply editors with slot-based config lookup.
+                    $inputs.each(function() {
+                        var $input = $(this);
+                        var inputName = $input.attr('name') || '';
+                        var slot = extractSlotFromName(inputName);
 
-                    if (questionIds.length) {
-                        Ajax.call([{
-                            methodname: 'local_stackmatheditor_get_config',
-                            args: {questionids: questionIds}
-                        }])[0].done(function(configResults) {
-                            log('Config loaded for', configResults.length, 'questions');
-                            var configMap = {};
-                            configResults.forEach(function(r) {
-                                configMap[r.questionid] = JSON.parse(r.config);
-                            });
-                            applyEditors($inputs, configMap);
-                        }).fail(function(err) {
-                            log('Config AJAX failed:', err);
-                            applyEditors($inputs, {});
-                        });
-                    } else {
-                        log('No question IDs, using defaults.');
-                        applyEditors($inputs, {});
-                    }
+                        var config;
+                        if (slot !== null && slotConfigs[slot]) {
+                            config = slotConfigs[slot];
+                            log('Input', inputName, '-> slot', slot, '-> custom config');
+                        } else {
+                            config = getDefaultConfig();
+                            log('Input', inputName, '-> slot', slot, '-> default config');
+                        }
+
+                        initMathQuillField($input, config);
+                    });
                 })
                 .catch(function(err) {
                     log('FATAL:', err.message);

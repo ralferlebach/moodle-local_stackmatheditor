@@ -1,24 +1,32 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <XMLDB PATH="local/stackmatheditor/db"
-       VERSION="20260322"
+       VERSION="20260324"
        COMMENT="local_stackmatheditor tables">
   <TABLES>
     <TABLE NAME="local_stackmatheditor"
-           COMMENT="Per-question MathQuill toolbar configuration">
+           COMMENT="Per-quiz per-question MathQuill toolbar configuration">
       <FIELDS>
-        <FIELD NAME="id"               TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
-        <FIELD NAME="questionid"       TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="false"/>
-        <FIELD NAME="allowed_elements" TYPE="text"             NOTNULL="false" SEQUENCE="false"
+        <FIELD NAME="id"                  TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
+        <FIELD NAME="cmid"                TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"
+               COMMENT="Course module ID of the quiz (0 = global/legacy)"/>
+        <FIELD NAME="questionbankentryid" TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"
+               COMMENT="Version-independent question bank entry ID"/>
+        <FIELD NAME="questionid"          TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"
+               COMMENT="Legacy: version-specific question ID (kept for backward compat)"/>
+        <FIELD NAME="allowed_elements"    TYPE="text"             NOTNULL="false" SEQUENCE="false"
                COMMENT="JSON object with allowed toolbar categories"/>
-        <FIELD NAME="usermodified"     TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
-        <FIELD NAME="timecreated"      TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
-        <FIELD NAME="timemodified"     TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="usermodified"        TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timecreated"         TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="timemodified"        TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
       </KEYS>
       <INDEXES>
-        <INDEX NAME="questionid_uix" UNIQUE="true" FIELDS="questionid"/>
+        <INDEX NAME="cmid_qbeid_ix" UNIQUE="false" FIELDS="cmid,questionbankentryid"
+               COMMENT="Lookup by quiz + question bank entry"/>
+        <INDEX NAME="questionid_ix" UNIQUE="false" FIELDS="questionid"
+               COMMENT="Legacy lookup by question ID"/>
       </INDEXES>
     </TABLE>
   </TABLES>
