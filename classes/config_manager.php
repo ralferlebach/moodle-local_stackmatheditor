@@ -25,7 +25,7 @@ class config_manager {
      */
     public static function get_config(int $questionid): array {
         global $DB;
-        $rec = $DB->get_record('local_sme_config', ['questionid' => $questionid]);
+        $rec = $DB->get_record('local_stackmatheditor', ['questionid' => $questionid]);
         if ($rec && !empty($rec->allowed_elements)) {
             $decoded = json_decode($rec->allowed_elements, true);
             if (is_array($decoded)) {
@@ -45,7 +45,7 @@ class config_manager {
             return $configs;
         }
         list($insql, $params) = $DB->get_in_or_equal($questionids, SQL_PARAMS_NAMED);
-        $records = $DB->get_records_select('local_sme_config', "questionid {$insql}", $params);
+        $records = $DB->get_records_select('local_stackmatheditor', "questionid {$insql}", $params);
 
         foreach ($questionids as $qid) {
             $configs[$qid] = self::DEFAULT_ELEMENTS;
@@ -69,12 +69,12 @@ class config_manager {
         $now  = time();
         $json = json_encode($elements, JSON_THROW_ON_ERROR);
 
-        $existing = $DB->get_record('local_sme_config', ['questionid' => $questionid]);
+        $existing = $DB->get_record('local_stackmatheditor', ['questionid' => $questionid]);
         if ($existing) {
             $existing->allowed_elements = $json;
             $existing->usermodified     = $USER->id;
             $existing->timemodified     = $now;
-            $DB->update_record('local_sme_config', $existing);
+            $DB->update_record('local_stackmatheditor', $existing);
         } else {
             $record = (object) [
                 'questionid'       => $questionid,
@@ -83,7 +83,7 @@ class config_manager {
                 'timecreated'      => $now,
                 'timemodified'     => $now,
             ];
-            $DB->insert_record('local_sme_config', $record);
+            $DB->insert_record('local_stackmatheditor', $record);
         }
     }
 }

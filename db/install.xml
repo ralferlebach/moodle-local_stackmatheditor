@@ -3,7 +3,7 @@
        VERSION="20260321"
        COMMENT="local_stackmatheditor tables">
   <TABLES>
-    <TABLE NAME="local_sme_config"
+    <TABLE NAME="local_stackmatheditor"
            COMMENT="Per-question MathQuill toolbar configuration">
       <FIELDS>
         <FIELD NAME="id"               TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>

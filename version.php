@@ -1,11 +1,11 @@
 <?php
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version      = 2026032100;
-$plugin->requires     = 2022112800; // Moodle 4.1+
+$plugin->version      = 2026032103;
+$plugin->requires     = 2022112800;
 $plugin->component    = 'local_stackmatheditor';
 $plugin->maturity     = MATURITY_ALPHA;
-$plugin->release      = '0.1.0';
+$plugin->release      = '0.1.3';
 $plugin->dependencies = [
     'qtype_stack' => ANY_VERSION,
 ];

@@ -9,8 +9,10 @@ define([
     'jquery',
     'core/ajax',
     'core/notification',
-    'local_stackmatheditor/tex2max'
-], function($, Ajax, Notification, Tex2Max) {
+    'local_stackmatheditor/tex2max',
+    'local_stackmatheditor/max2tex',
+    'local_stackmatheditor/mathjax_compat'
+], function($, Ajax, Notification, Tex2Max, Max2Tex, MathJaxCompat) {
     'use strict';
 
     /** @type {Object|null} MathQuill interface (v2). */
@@ -21,6 +23,9 @@ define([
 
     /** @type {number} Debounce delay for syncing to STACK input (ms). */
     var SYNC_DELAY = 500;
+
+    /** @type {boolean} Whether the current locale uses comma as decimal separator. */
+    var COMMA_DECIMAL = false;
 
     /**
      * Log a debug message to the browser console.
@@ -54,6 +59,49 @@ define([
                 func.apply(context, args);
             }, wait);
         };
+    }
+
+    /**
+     * Detect whether the current Moodle locale uses comma as decimal separator.
+     * Checks the HTML lang attribute and falls back to browser locale.
+     *
+     * @returns {boolean} True if comma should be used as decimal separator.
+     */
+    function detectCommaDecimal() {
+        var lang = '';
+
+        // Try HTML lang attribute (Moodle sets this).
+        var htmlEl = document.documentElement;
+        if (htmlEl) {
+            lang = (htmlEl.getAttribute('lang') || '').toLowerCase();
+        }
+
+        // Comma-decimal locales (non-exhaustive but covers major ones).
+        var commaLocales = [
+            'de', 'fr', 'es', 'it', 'pt', 'nl', 'da', 'fi', 'sv', 'nb', 'nn',
+            'no', 'pl', 'cs', 'sk', 'hu', 'ro', 'bg', 'hr', 'sl', 'sr', 'el',
+            'tr', 'ru', 'uk', 'id', 'vi', 'ca', 'gl', 'eu'
+        ];
+
+        var i;
+        for (i = 0; i < commaLocales.length; i++) {
+            if (lang === commaLocales[i] || lang.indexOf(commaLocales[i] + '-') === 0) {
+                log('Detected comma-decimal locale:', lang);
+                return true;
+            }
+        }
+
+        // Fallback: use Intl API if available.
+        if (window.Intl && window.Intl.NumberFormat) {
+            var formatted = new Intl.NumberFormat(lang || undefined).format(1.1);
+            if (formatted.indexOf(',') !== -1) {
+                log('Intl API detected comma-decimal for:', lang || 'browser default');
+                return true;
+            }
+        }
+
+        log('Using dot as decimal separator for locale:', lang || 'unknown');
+        return false;
     }
 
     /** @type {Object} Toolbar button definitions per category. */
@@ -143,7 +191,6 @@ define([
     function loadCss(url) {
         return new Promise(function(resolve) {
             if (document.querySelector('link[href="' + url + '"]')) {
-                log('CSS already loaded:', url);
                 resolve();
                 return;
             }
@@ -152,7 +199,7 @@ define([
             link.type = 'text/css';
             link.href = url;
             link.onload = function() {
-                log('CSS loaded:', url);
+                log('CSS loaded.');
                 resolve();
             };
             link.onerror = function() {
@@ -164,12 +211,11 @@ define([
     }
 
     /**
-     * Ensures jQuery is available globally, which MathQuill requires.
+     * Ensures jQuery is available globally for MathQuill.
      */
     function ensureGlobalJquery() {
         if (!window.jQuery) {
             window.jQuery = $;
-            log('Exposed jQuery as window.jQuery for MathQuill.');
         }
     }
 
@@ -182,13 +228,11 @@ define([
     function loadMathQuillScript(url) {
         return new Promise(function(resolve, reject) {
             if (window.MathQuill) {
-                log('MathQuill already loaded.');
                 resolve(window.MathQuill);
                 return;
             }
 
             ensureGlobalJquery();
-
             log('Loading MathQuill from:', url);
 
             fetch(url)
@@ -199,9 +243,6 @@ define([
                     return response.text();
                 })
                 .then(function(scriptText) {
-                    log('MathQuill source fetched, length:', scriptText.length);
-
-                    // Temporarily hide AMD define so MathQuill uses global path.
                     var originalDefine = window.define;
                     window.define = undefined;
 
@@ -214,18 +255,16 @@ define([
                         log('Error executing MathQuill script:', e.message);
                     }
 
-                    // Restore AMD define immediately.
                     window.define = originalDefine;
 
                     if (window.MathQuill) {
-                        log('MathQuill global is set. Success!');
+                        log('MathQuill loaded successfully.');
                         resolve(window.MathQuill);
                     } else {
                         reject(new Error('MathQuill executed but window.MathQuill not set.'));
                     }
                 })
                 .catch(function(err) {
-                    log('FETCH FAILED:', err.message);
                     reject(new Error('Failed to load MathQuill: ' + err.message));
                 });
         });
@@ -273,27 +312,46 @@ define([
 
     /**
      * Performs the actual sync of MathQuill value to the hidden STACK input.
-     * Dispatches native events so STACK's JS picks up the change.
-     * Wraps event dispatch in try/catch to guard against MathJax errors in STACK.
      *
      * @param {jQuery} $input The original STACK input element.
      * @param {Object} mathField MathQuill MathField instance.
      */
     function doSync($input, mathField) {
         var latex = mathField.latex();
-        var maxima = Tex2Max.convert(latex);
+        var maxima = Tex2Max.convert(latex, {commaDecimal: COMMA_DECIMAL});
         log('Sync: LaTeX="' + latex + '" Maxima="' + maxima + '"');
         $input.val(maxima);
 
         var el = $input[0];
-
         try {
             el.dispatchEvent(new Event('input', {bubbles: true}));
             el.dispatchEvent(new Event('change', {bubbles: true}));
         } catch (e) {
-            // Guard against STACK/MathJax errors triggered by the event.
-            log('Event dispatch caused error (non-fatal):', e.message);
+            log('Event dispatch error (non-fatal):', e.message);
         }
+    }
+
+    /**
+     * Converts a pre-filled value to LaTeX for MathQuill display.
+     * Detects whether the value is Maxima notation and converts if needed.
+     * Handles navigation back to a question with existing answers.
+     *
+     * @param {string} value The current input field value.
+     * @returns {string} LaTeX suitable for MathQuill, or empty string.
+     */
+    function maximaToLatex(value) {
+        if (!value || !value.trim()) {
+            return '';
+        }
+
+        if (Max2Tex.isMaxima(value)) {
+            var latex = Max2Tex.convert(value, {commaDecimal: COMMA_DECIMAL});
+            log('Pre-fill: Maxima="' + value + '" -> LaTeX="' + latex + '"');
+            return latex;
+        }
+
+        log('Pre-fill: Using value as-is: "' + value + '"');
+        return value;
     }
 
     /**
@@ -311,6 +369,9 @@ define([
 
         log('Initialising MathQuill on input:', $input.attr('name'));
 
+        // Store original value BEFORE hiding the input.
+        var existingValue = $input.val();
+
         $input.css({
             position: 'absolute',
             left: '-9999px',
@@ -325,7 +386,9 @@ define([
         $container.append($mqSpan);
         $input.after($container);
 
-        // Create a debounced sync function for this specific field.
+        // Flag to suppress sync during pre-fill.
+        var suppressSync = true;
+
         var debouncedSync = debounce(function() {
             doSync($input, mathField);
         }, SYNC_DELAY);
@@ -334,17 +397,30 @@ define([
             spaceBehavesLikeTab: true,
             handlers: {
                 edit: function() {
-                    // Debounced: waits until user pauses typing.
-                    debouncedSync();
+                    if (!suppressSync) {
+                        debouncedSync();
+                    }
                 }
             }
         });
 
-        var existing = $input.val();
-        if (existing) {
-            log('Pre-filling with existing value:', existing);
-            mathField.latex(existing);
+        // Pre-fill: convert existing Maxima value to LaTeX.
+        if (existingValue) {
+            var latex = maximaToLatex(existingValue);
+            if (latex) {
+                try {
+                    mathField.latex(latex);
+                    log('Pre-fill successful.');
+                } catch (e) {
+                    log('Pre-fill LaTeX failed, trying as text:', e.message);
+                    // Fallback: write raw text into the field.
+                    mathField.write(existingValue);
+                }
+            }
         }
+
+        // Enable sync after pre-fill is complete.
+        suppressSync = false;
 
         $container.prepend(buildToolbar(config, mathField));
         return mathField;
@@ -392,14 +468,7 @@ define([
             return $inputs;
         }
 
-        log('No STACK inputs found. Dumping page info:');
-        $('input[type="text"]').each(function() {
-            log('  input: name="' + this.name + '" id="' + this.id + '"');
-        });
-        $('.que').each(function() {
-            log('  que: class="' + this.className + '" id="' + this.id + '"');
-        });
-
+        log('No STACK inputs found.');
         return $();
     }
 
@@ -430,6 +499,14 @@ define([
          */
         init: function(params) {
             log('init() called.');
+
+            // Install MathJax v2 compatibility shim.
+            MathJaxCompat.install();
+
+            // Detect locale-based decimal separator.
+            COMMA_DECIMAL = detectCommaDecimal();
+            log('Comma decimal:', COMMA_DECIMAL);
+
             log('JS URL:', params.mathquillJsUrl);
             log('CSS URL:', params.mathquillCssUrl);
 
@@ -441,11 +518,15 @@ define([
                     MQ = results[1].getInterface(2);
                     log('MathQuill interface ready.');
 
+                    // Re-install shim in case MathJax loaded after first call.
+                    MathJaxCompat.install();
+
                     var $inputs = findStackInputs();
                     if (!$inputs.length) {
                         return;
                     }
 
+                    // Collect question IDs.
                     var questionIds = [];
                     $inputs.closest('.que').each(function() {
                         var rawId = $(this).data('questionid') || $(this).attr('id');
