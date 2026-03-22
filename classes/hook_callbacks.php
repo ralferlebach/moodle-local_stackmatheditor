@@ -112,6 +112,7 @@ class hook_callbacks {
             );
 
             // 5. For STACK questions, resolve questionbankentryid.
+            //    ALL versions of the same question → same qbeid → same config.
             $slotqbeids = [];
             $slotquestionids = [];
             $qbeidToQid = [];
@@ -120,13 +121,20 @@ class hook_callbacks {
                 if ($question->qtype !== 'stack') {
                     continue;
                 }
+
+                // Resolve to qbeid — this is the canonical identifier.
                 $qbeid = config_manager::resolve_qbeid((int) $question->id);
                 $slots = $qamap[$question->id] ?? [];
+
                 foreach ($slots as $slot) {
                     $slotquestionids[$slot] = (int) $question->id;
                     if ($qbeid) {
                         $slotqbeids[$slot] = $qbeid;
-                        $qbeidToQid[$qbeid] = (int) $question->id;
+                        // Store for legacy fallback. If multiple questionids
+                        // map to the same qbeid, that's fine — they share config.
+                        if (!isset($qbeidToQid[$qbeid])) {
+                            $qbeidToQid[$qbeid] = (int) $question->id;
+                        }
                     }
                 }
             }
