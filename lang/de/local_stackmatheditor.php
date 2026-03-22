@@ -11,6 +11,7 @@ $string['variablemode_single'] = 'Einzelzeichen-Variablen (ab → a·b)';
 $string['variablemode_multi'] = 'Mehrzeichen-Variablen (ab → ab)';
 $string['setting_defaultgroups'] = 'Standard-Toolbar-Gruppen';
 $string['setting_defaultgroups_desc'] = 'Wählen Sie die standardmäßig aktivierten Toolbar-Gruppen. Strg/Cmd gedrückt halten für Mehrfachauswahl. Kann pro Frage überschrieben werden.';
+$string['setting_defaultgroups_help'] = 'Wählen Sie, welche Toolbar-Elementgruppen im MathQuill-Editor für diese Frage verfügbar sein sollen. Halten Sie Strg (Cmd auf Mac) gedrückt, um mehrere Gruppen auszuwählen. Abgewählte Gruppen erscheinen nicht in der Studierenden-Toolbar.';
 
 $string['group_fractions'] = 'Brüche';
 $string['group_powers'] = 'Potenzen';
@@ -22,7 +23,8 @@ $string['group_constants'] = 'Konstanten';
 $string['group_comparison'] = 'Vergleichsoperatoren';
 $string['group_parentheses'] = 'Klammern';
 $string['group_calculus'] = 'Analysis';
-$string['group_greek'] = 'Griechische Buchstaben';
+$string['group_greek_lower'] = 'Griechisch, Kleinbuchstaben';
+$string['group_greek_upper'] = 'Griechisch, Großbuchstaben';
 $string['group_matrices'] = 'Matrizen';
 
 $string['configure'] = 'MathQuill-Toolbar konfigurieren';
@@ -30,6 +32,7 @@ $string['configure_heading'] = 'MathQuill-Toolbar für: {$a}';
 $string['config_saved'] = 'Toolbar-Konfiguration gespeichert.';
 $string['save'] = 'Konfiguration speichern';
 $string['label_variablemode'] = 'Variablenmodus für diese Frage';
+$string['questionpreview'] = 'Fragenvorschau';
 $string['notstackquestion'] = 'Diese Frage ist keine STACK-Frage.';
 $string['cannotresolveqbeid'] = 'Der Fragenbank-Eintrag konnte nicht aufgelöst werden.';
 
@@ -91,9 +94,3 @@ $string['privacy:metadata:cmid'] = 'Die Kursmodul-ID des Quiz.';
 $string['privacy:metadata:questionbankentryid'] = 'Die Fragenbank-Eintrags-ID (versionsunabhängig).';
 $string['privacy:metadata:allowed_elements'] = 'JSON-Toolbar-Konfiguration.';
 $string['privacy:metadata:usermodified'] = 'Die Person, die die Konfiguration zuletzt geändert hat.';
-
-$string['stackmatheditor:configure'] = 'STACK MathQuill Editor Toolbar konfigurieren';
-
-$string['questionpreview'] = 'Fragenvorschau';
-
-$string['setting_defaultgroups_help'] = 'Wählen Sie, welche Toolbar-Elementgruppen im MathQuill-Editor für diese Frage verfügbar sein sollen. Halten Sie Strg (Cmd auf Mac) gedrückt, um mehrere Gruppen auszuwählen. Abgewählte Gruppen erscheinen nicht in der Studierenden-Toolbar.';

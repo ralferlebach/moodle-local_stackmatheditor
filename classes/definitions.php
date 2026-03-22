@@ -6,20 +6,13 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * Central definitions for all math elements, functions, units, and mappings.
  *
- * SINGLE SOURCE OF TRUTH for toolbar groups, LaTeX/Maxima mappings,
- * constants, operators, Greek letters (lower+upper), units,
- * reserved words, and percent-constants.
- *
  * @package    local_stackmatheditor
  * @copyright  2026 Your Name
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class definitions {
 
-    /** @var string Variable mode: each letter is a separate variable. */
     const VAR_SINGLE = 'single';
-
-    /** @var string Variable mode: consecutive letters form one variable. */
     const VAR_MULTI = 'multi';
 
     /**
@@ -89,7 +82,7 @@ class definitions {
                     ['label' => "\u{03C0}", 'cmd' => '\\pi'],
                     ['label' => 'e', 'write' => 'e'],
                     ['label' => "\u{221E}", 'cmd' => '\\infty'],
-                    ['label' => 'i', 'write' => 'i'],
+                    ['label' => "\u{00EE}", 'write' => '\\hat{\\imath}', 'display' => "\u{00EE}"],
                 ],
             ],
             'comparison' => [
@@ -121,24 +114,35 @@ class definitions {
                     ['label' => 'lim', 'write' => '\\lim_{}'],
                 ],
             ],
-            'greek' => [
-                'langkey' => 'group_greek',
+            'greek_lower' => [
+                'langkey' => 'group_greek_lower',
                 'default_enabled' => true,
                 'elements' => [
-                    // Lowercase.
                     ['label' => "\u{03B1}", 'cmd' => '\\alpha'],
                     ['label' => "\u{03B2}", 'cmd' => '\\beta'],
                     ['label' => "\u{03B3}", 'cmd' => '\\gamma'],
                     ['label' => "\u{03B4}", 'cmd' => '\\delta'],
                     ['label' => "\u{03B5}", 'cmd' => '\\epsilon'],
+                    ['label' => "\u{03B6}", 'cmd' => '\\zeta'],
+                    ['label' => "\u{03B7}", 'cmd' => '\\eta'],
                     ['label' => "\u{03B8}", 'cmd' => '\\theta'],
                     ['label' => "\u{03BB}", 'cmd' => '\\lambda'],
                     ['label' => "\u{03BC}", 'cmd' => '\\mu'],
+                    ['label' => "\u{03BD}", 'cmd' => '\\nu'],
+                    ['label' => "\u{03BE}", 'cmd' => '\\xi'],
+                    ['label' => "\u{03C1}", 'cmd' => '\\rho'],
                     ['label' => "\u{03C3}", 'cmd' => '\\sigma'],
+                    ['label' => "\u{03C4}", 'cmd' => '\\tau'],
                     ['label' => "\u{03C6}", 'cmd' => '\\phi'],
+                    ['label' => "\u{03C7}", 'cmd' => '\\chi'],
                     ['label' => "\u{03C8}", 'cmd' => '\\psi'],
                     ['label' => "\u{03C9}", 'cmd' => '\\omega'],
-                    // Uppercase.
+                ],
+            ],
+            'greek_upper' => [
+                'langkey' => 'group_greek_upper',
+                'default_enabled' => true,
+                'elements' => [
                     ['label' => "\u{0393}", 'cmd' => '\\Gamma'],
                     ['label' => "\u{0394}", 'cmd' => '\\Delta'],
                     ['label' => "\u{0398}", 'cmd' => '\\Theta'],
@@ -146,6 +150,7 @@ class definitions {
                     ['label' => "\u{039E}", 'cmd' => '\\Xi'],
                     ['label' => "\u{03A0}", 'cmd' => '\\Pi'],
                     ['label' => "\u{03A3}", 'cmd' => '\\Sigma'],
+                    ['label' => "\u{03A5}", 'cmd' => '\\Upsilon'],
                     ['label' => "\u{03A6}", 'cmd' => '\\Phi'],
                     ['label' => "\u{03A8}", 'cmd' => '\\Psi'],
                     ['label' => "\u{03A9}", 'cmd' => '\\Omega'],
@@ -161,7 +166,6 @@ class definitions {
 
     /**
      * Returns function mappings for LaTeX <-> Maxima conversion.
-     * Longest names first to prevent partial matches.
      *
      * @return array
      */
@@ -198,6 +202,8 @@ class definitions {
             ['latex' => '\\infty', 'maxima' => 'inf',  'display' => "\u{221E}"],
             ['latex' => '\\e',     'maxima' => '%e',   'display' => 'e',
                 'latex_regex' => '\\\\e(?![a-zA-Z])'],
+            ['latex' => '\\hat{\\imath}', 'maxima' => '%i', 'display' => "\u{00EE}",
+                'latex_regex' => '\\\\hat\\s*\\{\\s*(?:\\\\imath|i)\\s*\\}'],
         ];
     }
 
@@ -238,15 +244,14 @@ class definitions {
             'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta',
             'theta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi',
             'rho', 'sigma', 'tau', 'upsilon', 'phi', 'chi', 'psi', 'omega',
-            // Uppercase (those with distinct LaTeX commands).
+            // Uppercase.
             'Gamma', 'Delta', 'Theta', 'Lambda', 'Xi', 'Pi',
             'Sigma', 'Upsilon', 'Phi', 'Psi', 'Omega',
         ];
     }
 
     /**
-     * Returns additional Maxima-reserved words that must never be split
-     * by implicit multiplication in single-char variable mode.
+     * Returns Maxima-reserved words that must never be split.
      *
      * @return string[]
      */
@@ -392,7 +397,7 @@ class definitions {
     }
 
     /**
-     * Export all definitions as JSON-serializable array for JavaScript.
+     * Export all definitions as JSON for JavaScript.
      *
      * @return array
      */
