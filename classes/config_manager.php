@@ -7,9 +7,8 @@ defined('MOODLE_INTERNAL') || die();
  * Manages per-quiz per-question toolbar configuration.
  *
  * All operations use cmid + questionbankentryid as the canonical key.
- * If a questionid is provided anywhere, it is FIRST resolved to a qbeid
- * before any DB lookup. This ensures all versions of a question share
- * the same configuration.
+ * If a questionid is provided, it is first resolved to a qbeid.
+ * All versions of a question share the same configuration.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Your Name
@@ -23,20 +22,45 @@ class config_manager {
     /**
      * Returns instance-wide default enabled state for all element groups.
      *
+     * Reads from:
+     * 1. New format: 'default_groups' (comma-separated enabled keys)
+     * 2. Old format: individual 'default_X' settings (backward compat)
+     * 3. Fallback: hardcoded defaults from definitions.php
+     *
      * @return array Group key => bool.
      */
     public static function get_instance_defaults(): array {
         $groups = definitions::get_element_groups();
+
+        // 1. New format: single comma-separated setting.
+        $enabledstr = get_config('local_stackmatheditor', 'default_groups');
+        if ($enabledstr !== false && $enabledstr !== '') {
+            $enabled = array_map('trim', explode(',', $enabledstr));
+            $result = [];
+            foreach ($groups as $key => $group) {
+                $result[$key] = in_array($key, $enabled);
+            }
+            return $result;
+        }
+
+        // 2. Old format: individual settings.
+        $hasoldformat = false;
         $result = [];
         foreach ($groups as $key => $group) {
             $setting = get_config('local_stackmatheditor', 'default_' . $key);
             if ($setting !== false) {
+                $hasoldformat = true;
                 $result[$key] = (bool) $setting;
             } else {
                 $result[$key] = $group['default_enabled'];
             }
         }
-        return $result;
+        if ($hasoldformat) {
+            return $result;
+        }
+
+        // 3. Fallback: hardcoded defaults.
+        return definitions::get_default_enabled();
     }
 
     /**
@@ -75,8 +99,17 @@ class config_manager {
     }
 
     /**
+     * Public accessor for the config column name (for debug display).
+     *
+     * @return string Column name.
+     */
+    public static function get_config_column_public(): string {
+        return self::get_config_column();
+    }
+
+    /**
      * Safe single-record fetch: returns newest matching record.
-     * Prevents "found more than one record" errors from duplicate data.
+     * Prevents "found more than one record" errors from duplicates.
      *
      * @param string $where SQL WHERE clause.
      * @param array $params Query parameters.
@@ -110,8 +143,7 @@ class config_manager {
     }
 
     /**
-     * Ensure we have a qbeid. If a questionid is provided and qbeid is 0,
-     * resolve it. Returns the qbeid or null.
+     * Ensure we have a qbeid. Resolves from questionid if needed.
      *
      * @param int $qbeid Question bank entry ID (may be 0).
      * @param int $questionid Question ID (fallback, may be 0).
@@ -148,18 +180,19 @@ class config_manager {
     /**
      * Load config for a quiz + question.
      *
-     * Accepts EITHER qbeid OR questionid (or both). If only questionid
-     * is given, it is resolved to qbeid first.
+     * Accepts EITHER qbeid OR questionid (or both).
+     * If only questionid is given, it is resolved to qbeid first.
      *
      * Lookup order:
      * 1. Exact: cmid + qbeid
      * 2. Global: cmid=0 + qbeid
-     * 3. Legacy: questionid field in DB (old records before migration)
-     * 4. Defaults from instance settings
+     * 3. Any record with matching qbeid
+     * 4. Legacy: questionid field in DB
+     * 5. Instance defaults
      *
      * @param int $cmid Course module ID (0 for global).
-     * @param int $qbeid Question bank entry ID (0 to auto-resolve from questionid).
-     * @param int $questionid Question ID (used to resolve qbeid and for legacy lookup).
+     * @param int $qbeid Question bank entry ID (0 to auto-resolve).
+     * @param int $questionid Question ID (for resolving qbeid and legacy lookup).
      * @return array Merged config array.
      */
     public static function get_config(int $cmid, int $qbeid = 0,
@@ -198,7 +231,7 @@ class config_manager {
             }
         }
 
-        // 3. Legacy: any record with this qbeid (regardless of cmid).
+        // 3. Any record with matching qbeid.
         if ($qbeid > 0) {
             $rec = self::get_one(
                 "questionbankentryid = :qbeid",
@@ -212,7 +245,7 @@ class config_manager {
             }
         }
 
-        // 4. Legacy: old records stored with questionid.
+        // 4. Legacy: questionid.
         if ($questionid > 0) {
             global $DB;
             $columns = $DB->get_columns(self::TABLE);
@@ -236,12 +269,10 @@ class config_manager {
     /**
      * Batch-load configs for multiple questions in one quiz.
      *
-     * All questionids are resolved to qbeids first.
-     *
      * @param int $cmid Course module ID.
      * @param array $qbeids Question bank entry IDs.
-     * @param array $questionids Optional map qbeid => questionid for legacy fallback.
-     * @return array Map of qbeid => config array.
+     * @param array $questionids Optional qbeid => questionid map for legacy.
+     * @return array Map of qbeid => config.
      */
     public static function get_configs(int $cmid, array $qbeids,
                                        array $questionids = []): array {
@@ -250,13 +281,10 @@ class config_manager {
         $defaults = self::get_instance_defaults();
         $configs = [];
 
-        // Deduplicate qbeids.
         $qbeids = array_values(array_unique(array_filter($qbeids)));
-
         foreach ($qbeids as $qbeid) {
             $configs[$qbeid] = $defaults;
         }
-
         if (empty($qbeids)) {
             return $configs;
         }
@@ -278,7 +306,7 @@ class config_manager {
             }
         }
 
-        // 2. Global fallback for still-default.
+        // 2. Global fallback.
         $stilldefault = [];
         foreach ($configs as $qbeid => $cfg) {
             if ($cfg === $defaults) {
@@ -301,7 +329,7 @@ class config_manager {
             }
         }
 
-        // 3. Any record with matching qbeid (regardless of cmid).
+        // 3. Any qbeid match.
         $stilldefault = [];
         foreach ($configs as $qbeid => $cfg) {
             if ($cfg === $defaults) {
@@ -317,7 +345,8 @@ class config_manager {
             );
             foreach ($records as $rec) {
                 $result = self::decode_config($rec->$col, $defaults);
-                if ($result !== null && ($configs[$rec->questionbankentryid] ?? null) === $defaults) {
+                if ($result !== null &&
+                    ($configs[$rec->questionbankentryid] ?? null) === $defaults) {
                     $configs[$rec->questionbankentryid] = $result;
                 }
             }
@@ -348,22 +377,18 @@ class config_manager {
     }
 
     /**
-     * Save config. Always uses cmid + qbeid as key.
-     * Cleans up duplicates. Sets questionid=0 (not needed anymore).
-     *
-     * Accepts either qbeid directly or questionid (resolved to qbeid).
+     * Save config. Always uses cmid + qbeid. Cleans duplicates.
      *
      * @param int $cmid Course module ID.
      * @param int $qbeid Question bank entry ID (0 to auto-resolve).
      * @param array $elements Config array.
-     * @param int $questionid Optional questionid to resolve qbeid from.
+     * @param int $questionid Optional questionid to resolve qbeid.
      * @throws \moodle_exception If qbeid cannot be determined.
      */
     public static function save_config(int $cmid, int $qbeid, array $elements,
                                        int $questionid = 0): void {
         global $DB, $USER;
 
-        // Ensure we have a qbeid.
         $qbeid = self::ensure_qbeid($qbeid, $questionid);
         if (!$qbeid) {
             throw new \moodle_exception('cannotresolveqbeid', 'local_stackmatheditor');
@@ -385,7 +410,7 @@ class config_manager {
             // Update newest, delete rest.
             $keeprecord = array_shift($records);
             $keeprecord->$col = $json;
-            $keeprecord->questionid = 0; // No longer needed.
+            $keeprecord->questionid = 0;
             $keeprecord->usermodified = $USER->id;
             $keeprecord->timemodified = $now;
             $DB->update_record(self::TABLE, $keeprecord);
@@ -404,14 +429,5 @@ class config_manager {
             $record->timemodified = $now;
             $DB->insert_record(self::TABLE, $record);
         }
-    }
-
-    /**
-     * Public accessor for the config column name (for debug display).
-     *
-     * @return string Column name.
-     */
-    public static function get_config_column_public(): string {
-        return self::get_config_column();
     }
 }

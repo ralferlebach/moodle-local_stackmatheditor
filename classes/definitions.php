@@ -6,17 +6,8 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * Central definitions for all math elements, functions, units, and mappings.
  *
- * This is the SINGLE SOURCE OF TRUTH for:
- * - Toolbar element groups and their buttons
- * - LaTeX <-> Maxima function mappings
- * - Constants, operators, comparison operators
- * - Greek letters
- * - Units (with localized descriptions)
- * - Variable mode (single-char vs multi-char)
- *
- * Consumed by:
- * - PHP: config_manager, settings, configure.php, hook_callbacks
- * - JS:  mathquill_init, tex2max, max2tex (via JSON in init params)
+ * SINGLE SOURCE OF TRUTH for toolbar groups, LaTeX/Maxima mappings,
+ * constants, operators, Greek letters, and units.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Your Name
@@ -24,23 +15,11 @@ defined('MOODLE_INTERNAL') || die();
  */
 class definitions {
 
-    /** @var string Variable mode: each letter is a separate variable. */
     const VAR_SINGLE = 'single';
-
-    /** @var string Variable mode: consecutive letters form one variable. */
     const VAR_MULTI = 'multi';
 
     /**
      * Returns all element groups with their toolbar buttons.
-     *
-     * Each group contains:
-     * - langkey: language string key for the group name
-     * - default_enabled: whether the group is on by default
-     * - elements: array of button definitions with:
-     *   - label: tooltip/title text
-     *   - display: visible button text (optional, defaults to label)
-     *   - cmd: MathQuill cmd() call (for named commands like \sin)
-     *   - write: MathQuill write() call (for templates like \frac{}{})
      *
      * @return array
      */
@@ -165,43 +144,31 @@ class definitions {
     }
 
     /**
-     * Returns function mappings for LaTeX <-> Maxima conversion.
-     *
-     * Order matters: longer names first to prevent partial matches.
-     *
      * @return array
      */
     public static function get_functions(): array {
         return [
-            // Inverse trig (longest first).
             ['latex_cmd' => '\\arcsin', 'maxima_name' => 'arcsin', 'type' => 'paren'],
             ['latex_cmd' => '\\arccos', 'maxima_name' => 'arccos', 'type' => 'paren'],
             ['latex_cmd' => '\\arctan', 'maxima_name' => 'arctan', 'type' => 'paren'],
-            // Hyperbolic.
             ['latex_cmd' => '\\sinh', 'maxima_name' => 'sinh', 'type' => 'paren'],
             ['latex_cmd' => '\\cosh', 'maxima_name' => 'cosh', 'type' => 'paren'],
             ['latex_cmd' => '\\tanh', 'maxima_name' => 'tanh', 'type' => 'paren'],
-            // Trig.
             ['latex_cmd' => '\\sin', 'maxima_name' => 'sin', 'type' => 'paren'],
             ['latex_cmd' => '\\cos', 'maxima_name' => 'cos', 'type' => 'paren'],
             ['latex_cmd' => '\\tan', 'maxima_name' => 'tan', 'type' => 'paren'],
             ['latex_cmd' => '\\cot', 'maxima_name' => 'cot', 'type' => 'paren'],
             ['latex_cmd' => '\\sec', 'maxima_name' => 'sec', 'type' => 'paren'],
             ['latex_cmd' => '\\csc', 'maxima_name' => 'csc', 'type' => 'paren'],
-            // Log / exp.
             ['latex_cmd' => '\\ln',  'maxima_name' => 'log', 'type' => 'paren'],
             ['latex_cmd' => '\\log', 'maxima_name' => 'log', 'type' => 'paren'],
             ['latex_cmd' => '\\exp', 'maxima_name' => 'exp', 'type' => 'paren'],
-            // Sqrt (brace-wrapped).
             ['latex_cmd' => '\\sqrt', 'maxima_name' => 'sqrt', 'type' => 'brace'],
-            // Abs.
             ['latex_cmd' => '\\abs', 'maxima_name' => 'abs', 'type' => 'paren'],
         ];
     }
 
     /**
-     * Returns constant mappings for LaTeX <-> Maxima conversion.
-     *
      * @return array
      */
     public static function get_constants(): array {
@@ -214,8 +181,6 @@ class definitions {
     }
 
     /**
-     * Returns operator mappings for LaTeX <-> Maxima conversion.
-     *
      * @return array
      */
     public static function get_operators(): array {
@@ -227,8 +192,6 @@ class definitions {
     }
 
     /**
-     * Returns comparison operator mappings.
-     *
      * @return array
      */
     public static function get_comparison(): array {
@@ -240,8 +203,6 @@ class definitions {
     }
 
     /**
-     * Returns Greek letter names for LaTeX <-> Maxima conversion.
-     *
      * @return string[]
      */
     public static function get_greek(): array {
@@ -253,25 +214,19 @@ class definitions {
     }
 
     /**
-     * Returns unit definitions for implicit multiplication detection.
-     * Sorted by length descending (longer matches checked first).
-     *
      * @return array
      */
     public static function get_units(): array {
         return [
-            // Frequency.
             ['symbol' => 'kHz',  'langkey' => 'unit_khz'],
             ['symbol' => 'MHz',  'langkey' => 'unit_mhz'],
             ['symbol' => 'GHz',  'langkey' => 'unit_ghz'],
             ['symbol' => 'Hz',   'langkey' => 'unit_hz'],
-            // Pressure.
             ['symbol' => 'kPa',  'langkey' => 'unit_kpa'],
             ['symbol' => 'MPa',  'langkey' => 'unit_mpa'],
             ['symbol' => 'Pa',   'langkey' => 'unit_pa'],
             ['symbol' => 'bar',  'langkey' => 'unit_bar'],
             ['symbol' => 'atm',  'langkey' => 'unit_atm'],
-            // Energy.
             ['symbol' => 'kcal', 'langkey' => 'unit_kcal'],
             ['symbol' => 'cal',  'langkey' => 'unit_cal'],
             ['symbol' => 'kJ',   'langkey' => 'unit_kj'],
@@ -281,10 +236,8 @@ class definitions {
             ['symbol' => 'MW',   'langkey' => 'unit_mw'],
             ['symbol' => 'J',    'langkey' => 'unit_j'],
             ['symbol' => 'W',    'langkey' => 'unit_w'],
-            // Force.
             ['symbol' => 'kN',   'langkey' => 'unit_kn'],
             ['symbol' => 'N',    'langkey' => 'unit_n'],
-            // Electrical.
             ['symbol' => 'kV',   'langkey' => 'unit_kv'],
             ['symbol' => 'mA',   'langkey' => 'unit_ma'],
             ['symbol' => 'Ohm',  'langkey' => 'unit_ohm'],
@@ -293,14 +246,12 @@ class definitions {
             ['symbol' => 'A',    'langkey' => 'unit_a'],
             ['symbol' => 'F',    'langkey' => 'unit_f'],
             ['symbol' => 'C',    'langkey' => 'unit_c_coulomb'],
-            // Mass.
             ['symbol' => 'kg',   'langkey' => 'unit_kg'],
             ['symbol' => 'mg',   'langkey' => 'unit_mg'],
             ['symbol' => 'g',    'langkey' => 'unit_g'],
             ['symbol' => 't',    'langkey' => 'unit_t'],
             ['symbol' => 'lb',   'langkey' => 'unit_lb'],
             ['symbol' => 'oz',   'langkey' => 'unit_oz'],
-            // Length.
             ['symbol' => 'km',   'langkey' => 'unit_km'],
             ['symbol' => 'cm',   'langkey' => 'unit_cm'],
             ['symbol' => 'mm',   'langkey' => 'unit_mm'],
@@ -310,26 +261,20 @@ class definitions {
             ['symbol' => 'yd',   'langkey' => 'unit_yd'],
             ['symbol' => 'mi',   'langkey' => 'unit_mi'],
             ['symbol' => 'm',    'langkey' => 'unit_m'],
-            // Time.
             ['symbol' => 'min',  'langkey' => 'unit_min'],
             ['symbol' => 'ms',   'langkey' => 'unit_ms'],
             ['symbol' => 'hr',   'langkey' => 'unit_hr'],
             ['symbol' => 'h',    'langkey' => 'unit_h'],
             ['symbol' => 's',    'langkey' => 'unit_s'],
-            // Volume.
             ['symbol' => 'mL',   'langkey' => 'unit_ml'],
             ['symbol' => 'dL',   'langkey' => 'unit_dl'],
             ['symbol' => 'L',    'langkey' => 'unit_l'],
-            // Chemistry.
             ['symbol' => 'mol',  'langkey' => 'unit_mol'],
-            // Temperature.
             ['symbol' => 'K',    'langkey' => 'unit_k'],
         ];
     }
 
     /**
-     * Returns just the unit symbol strings (for JS).
-     *
      * @return string[]
      */
     public static function get_unit_symbols(): array {
@@ -337,8 +282,6 @@ class definitions {
     }
 
     /**
-     * Returns the default enabled state for all element groups.
-     *
      * @return array Group key => bool.
      */
     public static function get_default_enabled(): array {
@@ -350,16 +293,48 @@ class definitions {
     }
 
     /**
-     * Returns the list of known Maxima function names (for JS).
-     *
      * @return string[]
      */
     public static function get_function_names(): array {
-        return array_values(array_unique(array_column(self::get_functions(), 'maxima_name')));
+        return array_values(array_unique(
+            array_column(self::get_functions(), 'maxima_name')
+        ));
     }
 
     /**
-     * Export all definitions as a JSON-serializable array for JavaScript.
+     * Returns group labels with up to 3 example elements.
+     *
+     * @return array Group key => display label.
+     */
+    public static function get_group_labels_with_examples(): array {
+        $groups = self::get_element_groups();
+        $result = [];
+
+        foreach ($groups as $key => $group) {
+            $label = get_string($group['langkey'], 'local_stackmatheditor');
+            $elements = $group['elements'];
+
+            if (!empty($elements)) {
+                $examples = [];
+                $maxshow = min(3, count($elements));
+                for ($i = 0; $i < $maxshow; $i++) {
+                    $examples[] = $elements[$i]['display'] ?? $elements[$i]['label'];
+                }
+                $label .= ' (' . implode(', ', $examples);
+                if (count($elements) > 3) {
+                    $label .= ', …';
+                }
+                $label .= ')';
+            }
+
+            $result[$key] = $label;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Export all definitions as JSON-serializable array for JavaScript.
      *
      * @return array
      */

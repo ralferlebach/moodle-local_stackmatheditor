@@ -29,23 +29,24 @@ if ($hassiteconfig) {
         ]
     ));
 
-    // Default element groups heading.
-    $settings->add(new admin_setting_heading(
-        'local_stackmatheditor/defaultgroups_heading',
-        get_string('setting_defaultgroups', 'local_stackmatheditor'),
-        get_string('setting_defaultgroups_desc', 'local_stackmatheditor')
-    ));
+    // Default element groups multiselect.
+    $grouplabels = \local_stackmatheditor\definitions::get_group_labels_with_examples();
 
-    // One toggle per element group.
     $groups = \local_stackmatheditor\definitions::get_element_groups();
+    $defaultselected = [];
     foreach ($groups as $key => $group) {
-        $settings->add(new admin_setting_configcheckbox(
-            'local_stackmatheditor/default_' . $key,
-            get_string($group['langkey'], 'local_stackmatheditor'),
-            '',
-            $group['default_enabled'] ? 1 : 0
-        ));
+        if ($group['default_enabled']) {
+            $defaultselected[] = $key;
+        }
     }
+
+    $settings->add(new \local_stackmatheditor\admin_setting_multiselect_sized(
+        'local_stackmatheditor/default_groups',
+        get_string('setting_defaultgroups', 'local_stackmatheditor'),
+        get_string('setting_defaultgroups_desc', 'local_stackmatheditor'),
+        $defaultselected,
+        $grouplabels
+    ));
 
     $ADMIN->add('localplugins', $settings);
 }

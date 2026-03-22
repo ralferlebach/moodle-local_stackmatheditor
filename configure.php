@@ -4,16 +4,12 @@ require_once(__DIR__ . '/../../config.php');
 use local_stackmatheditor\config_manager;
 use local_stackmatheditor\definitions;
 
-// ---------- Parameters ----------
-// cmid is required (identifies the quiz).
-$cmid = required_param('cmid', PARAM_INT);
-
-// Accept EITHER questionid OR qbeid (or both).
+// Parameters.
+$cmid       = required_param('cmid', PARAM_INT);
 $questionid = optional_param('questionid', 0, PARAM_INT);
 $qbeid      = optional_param('qbeid', 0, PARAM_INT);
 
-// ---------- Resolve qbeid ----------
-// Always work with qbeid. If questionid is given, resolve it.
+// Resolve qbeid.
 if ($qbeid <= 0 && $questionid > 0) {
     $qbeid = config_manager::resolve_qbeid($questionid);
 }
@@ -21,13 +17,12 @@ if (!$qbeid) {
     throw new \moodle_exception('cannotresolveqbeid', 'local_stackmatheditor');
 }
 
-// ---------- Load quiz ----------
+// Load quiz.
 $cm     = get_coursemodule_from_id('quiz', $cmid, 0, false, MUST_EXIST);
 $course = get_course($cm->course);
 $quiz   = $DB->get_record('quiz', ['id' => $cm->instance], '*', MUST_EXIST);
 
-// ---------- Load question info for display ----------
-// Find the latest question version for this qbeid (for name/title display).
+// Load latest question version.
 $questionsql = "SELECT q.id, q.name, q.qtype, qv.version
                   FROM {question} q
                   JOIN {question_versions} qv ON qv.questionid = q.id
@@ -43,16 +38,14 @@ if ($questionrecord->qtype !== 'stack') {
     throw new \moodle_exception('notstackquestion', 'local_stackmatheditor');
 }
 
-// For legacy compatibility: store the resolved questionid.
 $questionid = (int) $questionrecord->id;
 
-// ---------- Context and permissions ----------
+// Context and permissions.
 $context = \context_module::instance($cmid);
 require_login($course, false, $cm);
 require_capability('local/stackmatheditor:configure', $context);
 
-// ---------- Page setup ----------
-// URL always uses qbeid as canonical identifier.
+// Page setup — URL always uses qbeid.
 $pageurl = new \moodle_url('/local/stackmatheditor/configure.php', [
     'cmid'  => $cmid,
     'qbeid' => $qbeid,
@@ -62,30 +55,29 @@ $PAGE->set_context($context);
 $PAGE->set_title(get_string('configure', 'local_stackmatheditor'));
 $PAGE->set_heading(get_string('configure_heading', 'local_stackmatheditor',
     $questionrecord->name));
-
-// Breadcrumb.
 $PAGE->navbar->add($quiz->name,
     new \moodle_url('/mod/quiz/view.php', ['id' => $cmid]));
 $PAGE->navbar->add(get_string('configure', 'local_stackmatheditor'));
 
-// ---------- Element group definitions ----------
+// Definitions.
 $groups = definitions::get_element_groups();
+$grouplabels = definitions::get_group_labels_with_examples();
 
-// ---------- Process form submission ----------
+// Process form.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
+    $selectedgroups = optional_param_array('groups', [], PARAM_ALPHA);
+
     $elements = [];
     foreach (array_keys($groups) as $key) {
-        $elements[$key] = !empty(optional_param($key, 0, PARAM_BOOL));
+        $elements[$key] = in_array($key, $selectedgroups);
     }
 
-    // Variable mode.
     $varmode = optional_param('variablemode', definitions::VAR_SINGLE, PARAM_ALPHA);
     if ($varmode !== definitions::VAR_SINGLE && $varmode !== definitions::VAR_MULTI) {
         $varmode = definitions::VAR_SINGLE;
     }
     $elements['_variableMode'] = $varmode;
 
-    // Save: always uses cmid + qbeid.
     config_manager::save_config($cmid, $qbeid, $elements);
 
     redirect(
@@ -96,10 +88,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && confirm_sesskey()) {
     );
 }
 
-// ---------- Load current configuration ----------
+// Load current config.
 $config = config_manager::get_config($cmid, $qbeid, $questionid);
 
-// ---------- Output ----------
+// Build selected keys list.
+$selectedkeys = [];
+foreach (array_keys($groups) as $key) {
+    if (!empty($config[$key])) {
+        $selectedkeys[] = $key;
+    }
+}
+
+// Output.
 echo $OUTPUT->header();
 echo $OUTPUT->heading(get_string('configure_heading', 'local_stackmatheditor',
     $questionrecord->name));
@@ -111,44 +111,39 @@ echo format_string($quiz->name);
 echo html_writer::empty_tag('br');
 echo html_writer::tag('strong', get_string('question') . ': ');
 echo format_string($questionrecord->name);
-echo html_writer::tag('span',
-    ' (v' . $questionrecord->version . ')',
+echo html_writer::tag('span', ' (v' . $questionrecord->version . ')',
     ['class' => 'text-muted']);
 echo html_writer::end_div();
 
-// Debug info for admins.
-if (is_siteadmin()) {
+// Debug for admins.
+if (is_siteadmin() && false) {
     $col = config_manager::get_config_column_public();
-    $rawrecord = $DB->get_records_select(
-        config_manager::TABLE,
-        "cmid = :cmid AND questionbankentryid = :qbeid",
-        ['cmid' => $cmid, 'qbeid' => $qbeid],
-        'timemodified DESC',
-        '*', 0, 1
-    );
-    $rawrecord = $rawrecord ? reset($rawrecord) : null;
-
-    // Also check for any legacy/global records.
     $anyrecords = $DB->get_records_select(
         config_manager::TABLE,
         "questionbankentryid = :qbeid",
         ['qbeid' => $qbeid],
         'timemodified DESC'
     );
+    $exactrecord = $DB->get_records_select(
+        config_manager::TABLE,
+        "cmid = :cmid AND questionbankentryid = :qbeid",
+        ['cmid' => $cmid, 'qbeid' => $qbeid],
+        'timemodified DESC', '*', 0, 1
+    );
+    $exactrecord = $exactrecord ? reset($exactrecord) : null;
 
-    echo html_writer::start_div('alert alert-info');
-    echo html_writer::tag('strong', 'Debug Info:');
-    echo html_writer::empty_tag('br');
-    echo "cmid: {$cmid} | qbeid: {$qbeid} | questionid (latest version): {$questionid}";
-    echo html_writer::empty_tag('br');
-
-    // List all question versions for this qbeid.
     $allversions = $DB->get_records_sql(
         "SELECT qv.questionid, qv.version FROM {question_versions} qv
           WHERE qv.questionbankentryid = :qbeid ORDER BY qv.version DESC",
         ['qbeid' => $qbeid]
     );
-    echo 'Question versions: ';
+
+    echo html_writer::start_div('alert alert-info');
+    echo html_writer::tag('strong', 'Debug Info:');
+    echo html_writer::empty_tag('br');
+    echo "cmid: {$cmid} | qbeid: {$qbeid} | questionid (latest): {$questionid}";
+    echo html_writer::empty_tag('br');
+    echo 'Versions: ';
     $vstrings = [];
     foreach ($allversions as $v) {
         $vstrings[] = "v{$v->version} (qid={$v->questionid})";
@@ -156,31 +151,22 @@ if (is_siteadmin()) {
     echo implode(', ', $vstrings);
     echo html_writer::empty_tag('br');
 
-    if ($rawrecord) {
-        echo html_writer::tag('strong', 'Exact DB record (cmid+qbeid):');
-        echo html_writer::empty_tag('br');
-        echo "  id={$rawrecord->id}, modified=" . userdate($rawrecord->timemodified);
+    if ($exactrecord) {
+        echo "Exact record: id={$exactrecord->id}, modified="
+            . userdate($exactrecord->timemodified);
     } else {
-        echo html_writer::tag('strong', 'No exact DB record for cmid+qbeid.');
+        echo 'No exact record for cmid+qbeid.';
     }
     echo html_writer::empty_tag('br');
-
-    echo 'All records for qbeid=' . $qbeid . ': ' . count($anyrecords);
-    foreach ($anyrecords as $ar) {
-        $arcol = $ar->$col ?? 'NULL';
-        echo html_writer::empty_tag('br');
-        echo "  id={$ar->id} cmid={$ar->cmid} qid={$ar->questionid} " .
-            "config=" . s(mb_substr($arcol, 0, 80)) . '...';
-    }
+    echo 'All records for qbeid: ' . count($anyrecords);
     echo html_writer::empty_tag('br');
-
-    echo html_writer::tag('strong', 'Active config (merged):');
-    echo '<pre style="font-size:0.8em;max-height:200px;overflow:auto;">'
+    echo html_writer::tag('strong', 'Active config:');
+    echo '<pre style="font-size:0.8em;max-height:150px;overflow:auto;">'
         . s(json_encode($config, JSON_PRETTY_PRINT)) . '</pre>';
     echo html_writer::end_div();
 }
 
-// ---------- Form ----------
+// Form.
 echo html_writer::start_tag('form', [
     'method' => 'post',
     'action' => $pageurl->out(false),
@@ -190,35 +176,27 @@ echo html_writer::empty_tag('input', [
     'type' => 'hidden', 'name' => 'sesskey', 'value' => sesskey(),
 ]);
 
-// Element group toggles.
+// Element groups multiselect.
 echo html_writer::tag('h4',
     get_string('setting_defaultgroups', 'local_stackmatheditor'),
     ['class' => 'mt-3']);
+echo html_writer::tag('p',
+    get_string('setting_defaultgroups_desc', 'local_stackmatheditor'),
+    ['class' => 'text-muted small']);
 
-echo html_writer::start_div('container-fluid mt-2');
-foreach ($groups as $key => $group) {
-    $checked = isset($config[$key]) ? (bool) $config[$key] : $group['default_enabled'];
-
-    echo html_writer::start_div('form-check form-switch mb-2');
-    $attrs = [
-        'type'  => 'checkbox',
-        'name'  => $key,
-        'value' => '1',
-        'id'    => 'sme_' . $key,
-        'class' => 'form-check-input',
-    ];
-    if ($checked) {
-        $attrs['checked'] = 'checked';
-    }
-    echo html_writer::empty_tag('input', $attrs);
-    echo html_writer::tag('label',
-        get_string($group['langkey'], 'local_stackmatheditor'),
-        ['class' => 'form-check-label', 'for' => 'sme_' . $key]);
-    echo html_writer::end_div();
+$selectsize = count($grouplabels);
+echo html_writer::start_div('mb-3');
+echo '<select name="groups[]" id="sme_groups" class="form-select"'
+    . ' multiple="multiple" size="' . $selectsize . '">';
+foreach ($grouplabels as $key => $label) {
+    $selected = in_array($key, $selectedkeys) ? ' selected="selected"' : '';
+    echo '<option value="' . s($key) . '"' . $selected . '>'
+        . s($label) . '</option>';
 }
+echo '</select>';
 echo html_writer::end_div();
 
-// Variable mode selector.
+// Variable mode.
 echo html_writer::tag('h4',
     get_string('label_variablemode', 'local_stackmatheditor'),
     ['class' => 'mt-4']);
