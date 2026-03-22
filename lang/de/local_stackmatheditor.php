@@ -93,3 +93,7 @@ $string['privacy:metadata:allowed_elements'] = 'JSON-Toolbar-Konfiguration.';
 $string['privacy:metadata:usermodified'] = 'Die Person, die die Konfiguration zuletzt geändert hat.';
 
 $string['stackmatheditor:configure'] = 'STACK MathQuill Editor Toolbar konfigurieren';
+
+$string['questionpreview'] = 'Fragenvorschau';
+
+$string['setting_defaultgroups_help'] = 'Wählen Sie, welche Toolbar-Elementgruppen im MathQuill-Editor für diese Frage verfügbar sein sollen. Halten Sie Strg (Cmd auf Mac) gedrückt, um mehrere Gruppen auszuwählen. Abgewählte Gruppen erscheinen nicht in der Studierenden-Toolbar.';
