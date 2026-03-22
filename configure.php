@@ -184,16 +184,4 @@ echo $OUTPUT->heading(get_string('configure_heading',
 
 $mform->display();
 
-// Back button.
-echo html_writer::start_div('mt-3');
-echo html_writer::link(
-    new \moodle_url($returnurl),
-    html_writer::tag('i', '', [
-        'class' => 'fa fa-arrow-left',
-        'aria-hidden' => 'true',
-    ]) . ' ' . get_string('back', 'local_stackmatheditor'),
-    ['class' => 'btn btn-secondary']
-);
-echo html_writer::end_div();
-
 echo $OUTPUT->footer();

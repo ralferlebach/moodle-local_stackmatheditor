@@ -29,15 +29,12 @@ define([], function() {
     }
 
     /**
-     * Process derivative fractions before regular fractions.
-     * Converts \frac{\mathrm{d}f}{\mathrm{d}x} to diff(f,x).
-     * Converts \frac{\partial f}{\partial x} to diff(f,x).
+     * Process derivative fractions.
      *
      * @param {string} s Input.
      * @returns {string} Converted.
      */
     function processDerivatives(s) {
-        // \frac{\mathrm{d}EXPR}{\mathrm{d}VAR}
         var dRegex = new RegExp(
             '\\\\frac\\s*\\{\\s*\\\\mathrm\\s*\\{\\s*d\\s*\\}'
             + '\\s*((?:[^{}]|\\{[^{}]*?\\})*?)\\}'
@@ -46,7 +43,6 @@ define([], function() {
             'g'
         );
         s = fixpoint(s, dRegex, 'diff($1,$2)');
-        // \frac{\partial EXPR}{\partial VAR}
         var pRegex = new RegExp(
             '\\\\frac\\s*\\{\\s*\\\\partial'
             + '\\s*((?:[^{}]|\\{[^{}]*?\\})*?)\\}'
@@ -59,8 +55,7 @@ define([], function() {
     }
 
     /**
-     * Process \mathrm{} wrappers.
-     * Specific constants first (%e, %i), then strip remaining.
+     * Process \mathrm wrappers.
      *
      * @param {string} s Input.
      * @returns {string} Converted.
@@ -73,7 +68,7 @@ define([], function() {
     }
 
     /**
-     * Process \frac{...}{...}.
+     * Process fractions.
      *
      * @param {string} s Input.
      * @returns {string} Converted.
@@ -86,7 +81,7 @@ define([], function() {
     }
 
     /**
-     * Process \sqrt[n]{...} and \sqrt{...}.
+     * Process square roots.
      *
      * @param {string} s Input.
      * @returns {string} Converted.
@@ -104,7 +99,7 @@ define([], function() {
     }
 
     /**
-     * Process ^{...} exponents.
+     * Process exponents.
      *
      * @param {string} s Input.
      * @returns {string} Converted.
@@ -117,7 +112,7 @@ define([], function() {
     }
 
     /**
-     * Process _{...} subscripts. Preserves multi-char subscripts.
+     * Process subscripts.
      *
      * @param {string} s Input.
      * @returns {string} Converted.
@@ -130,7 +125,7 @@ define([], function() {
     }
 
     /**
-     * Process a single LaTeX function command to Maxima.
+     * Process a single LaTeX function command.
      *
      * @param {string} s Input.
      * @param {string} latexCmd LaTeX command.
@@ -149,27 +144,32 @@ define([], function() {
                 break;
             }
             var afterCmd = idx + latexCmd.length;
-            if (afterCmd < s.length && /[a-zA-Z]/.test(s[afterCmd])) {
+            if (afterCmd < s.length &&
+                /[a-zA-Z]/.test(s[afterCmd])) {
                 result += s.substring(i, idx + 1);
                 i = idx + 1;
                 continue;
             }
             result += s.substring(i, idx);
             var argStart = afterCmd;
-            while (argStart < s.length && s[argStart] === ' ') {
+            while (argStart < s.length &&
+            s[argStart] === ' ') {
                 argStart++;
             }
-            if (argStart < s.length && s[argStart] === '{') {
+            if (argStart < s.length &&
+                s[argStart] === '{') {
                 var braceMatch = s.substring(argStart).match(
                     /^\{((?:[^{}]|\{[^{}]*?\})*?)\}/
                 );
                 if (braceMatch) {
-                    result += maximaName + '(' + braceMatch[1] + ')';
+                    result += maximaName + '('
+                        + braceMatch[1] + ')';
                     i = argStart + braceMatch[0].length;
                     continue;
                 }
             }
-            if (argStart < s.length && s[argStart] === '(') {
+            if (argStart < s.length &&
+                s[argStart] === '(') {
                 result += maximaName;
                 i = afterCmd;
                 continue;
@@ -188,7 +188,8 @@ define([], function() {
                         }
                         depth--;
                     }
-                    if (depth === 0 && /[+\-=<>]/.test(ch)) {
+                    if (depth === 0 &&
+                        /[+\-=<>]/.test(ch)) {
                         break;
                     }
                     if (depth === 0 && ch === '/' &&
@@ -198,7 +199,8 @@ define([], function() {
                     }
                     argEnd++;
                 }
-                var arg = s.substring(argStart, argEnd).trim();
+                var arg = s.substring(
+                    argStart, argEnd).trim();
                 if (arg.length > 0) {
                     result += maximaName + '(' + arg + ')';
                     i = argEnd;
@@ -240,7 +242,7 @@ define([], function() {
     }
 
     /**
-     * Replace decimal commas with dots outside square brackets.
+     * Replace decimal commas with dots.
      *
      * @param {string} s Input.
      * @returns {string} Converted.
@@ -258,7 +260,8 @@ define([], function() {
             }
             if (s[i] === ',' && bracketDepth === 0 &&
                 i > 0 && i < s.length - 1 &&
-                /\d/.test(s[i - 1]) && /\d/.test(s[i + 1])) {
+                /\d/.test(s[i - 1]) &&
+                /\d/.test(s[i + 1])) {
                 result += '.';
                 continue;
             }
@@ -268,11 +271,63 @@ define([], function() {
     }
 
     /**
-     * Build sorted list of all protected multi-char tokens.
-     * Sorted longest-first for greedy matching.
+     * Replace all Greek letter commands in a single pass.
      *
-     * @param {Object} defs Definitions from PHP.
-     * @returns {string[]} Sorted protected tokens.
+     * A combined regex avoids ordering bugs where replacing
+     * \Lambda before \Phi causes \PhiLambda to prevent \Phi
+     * from matching (lookahead sees 'L' from 'Lambda').
+     *
+     * @param {string} s Input string.
+     * @param {Object} defs Definitions.
+     * @returns {string} With Greek commands replaced.
+     */
+    function processGreekLetters(s, defs) {
+        // 1. Variants (\varepsilon → epsilon, etc.)
+        var greekVariants = defs.greekVariants || {};
+        var variantNames = Object.keys(greekVariants);
+        if (variantNames.length > 0) {
+            variantNames.sort(function(a, b) {
+                return b.length - a.length;
+            });
+            var variantPattern = variantNames.join('|');
+            s = s.replace(
+                new RegExp(
+                    '\\\\(' + variantPattern
+                    + ')(?![a-zA-Z])',
+                    'g'
+                ),
+                function(match, name) {
+                    return greekVariants[name];
+                }
+            );
+        }
+
+        // 2. Standard (\alpha → alpha, \Phi → Phi, etc.)
+        var greek = defs.greek || [];
+        if (greek.length > 0) {
+            var sorted = greek.slice().sort(function(a, b) {
+                return b.length - a.length;
+            });
+            var pattern = sorted.join('|');
+            s = s.replace(
+                new RegExp(
+                    '\\\\(' + pattern + ')(?![a-zA-Z])',
+                    'g'
+                ),
+                '$1'
+            );
+        }
+
+        return s;
+    }
+
+    // ── Implicit multiplication ──
+
+    /**
+     * Build sorted protected tokens list.
+     *
+     * @param {Object} defs Definitions.
+     * @returns {string[]} Sorted longest-first.
      */
     function buildProtectedTokens(defs) {
         var tokens = [];
@@ -281,7 +336,7 @@ define([], function() {
         var li;
 
         /**
-         * Add a token if multi-char and not yet seen.
+         * Add token if multi-char and unseen.
          *
          * @param {string} t Token.
          */
@@ -312,11 +367,10 @@ define([], function() {
     }
 
     /**
-     * Greedy token matching: return the longest protected token
-     * starting at position pos.
+     * Greedy token matching at position.
      *
-     * @param {string} str Full string.
-     * @param {number} pos Start position.
+     * @param {string} str String.
+     * @param {number} pos Position.
      * @param {string[]} tokens Sorted longest-first.
      * @returns {string|null} Matched token or null.
      */
@@ -332,11 +386,11 @@ define([], function() {
     }
 
     /**
-     * Check if position is inside a subscript group _(abc).
+     * Check if inside subscript.
      *
-     * @param {string} str The string.
+     * @param {string} str String.
      * @param {number} pos Position.
-     * @returns {boolean} True if inside _(...).
+     * @returns {boolean} True if inside _().
      */
     function insideSubscript(str, pos) {
         var j = pos - 1;
@@ -358,25 +412,31 @@ define([], function() {
     }
 
     /**
-     * Check if position is inside a %-constant.
+     * Check if inside percent constant.
      *
-     * @param {string} str The string.
+     * @param {string} str String.
      * @param {number} pos Position.
      * @returns {boolean} True if inside %constant.
      */
     function insidePercentConstant(str, pos) {
         var start = Math.max(0, pos - 6);
         var chunk = str.substring(start, pos + 7);
-        var pattern = /%pi|%phi|%gamma|%e(?![a-zA-Z])|%i(?![a-zA-Z])/;
-        return pattern.test(chunk);
+        var pat =
+            /%pi|%phi|%gamma|%e(?![a-zA-Z])|%i(?![a-zA-Z])/;
+        return pat.test(chunk);
     }
 
     /**
      * Insert implicit multiplication.
      *
-     * @param {string} s Input in Maxima notation.
-     * @param {Object} opts Options with defs and variableMode.
-     * @returns {string} With explicit * inserted.
+     * Handles three cases in single-char mode:
+     * 1. Protected token → protected token: * via token code
+     * 2. Single letter → single letter: * via bottom code
+     * 3. Protected token → single letter: * via boundary check
+     *
+     * @param {string} s Input.
+     * @param {Object} opts Options.
+     * @returns {string} With * inserted.
      */
     function insertImplicitMultiplication(s, opts) {
         var defs = opts.defs || {};
@@ -386,7 +446,6 @@ define([], function() {
         var pctPattern =
             /(%pi|%e|%i|%phi|%gamma)\s*([a-zA-Z(])/g;
 
-        // Basic structural patterns.
         s = s.replace(/\)\s*\(/g, ')*(');
         s = s.replace(/\)\s*([a-zA-Z%])/g, ')*$1');
         s = s.replace(/\)\s*(\d)/g, ')*$1');
@@ -394,7 +453,6 @@ define([], function() {
         s = s.replace(/(\d)\s*(%)/g, '$1*$2');
         s = s.replace(pctPattern, '$1*$2');
 
-        // Digit followed by letters.
         s = s.replace(
             /(\d)\s*([a-zA-Z]+)/g,
             function(match, digit, letters) {
@@ -405,7 +463,6 @@ define([], function() {
             }
         );
 
-        // Single-char mode: greedy token matching.
         if (varMode === 'single') {
             var result = '';
             var idx = 0;
@@ -415,14 +472,20 @@ define([], function() {
             var nextToken;
 
             while (idx < s.length) {
+                // Try protected token at current position.
                 if (/[a-zA-Z%]/.test(s[idx])) {
                     token = matchProtectedToken(
                         s, idx, protectedTokens
                     );
                     if (token) {
+                        // Case 1: Insert * before token
+                        // if previous output ends with
+                        // letter/digit/paren.
                         if (result.length > 0) {
-                            lastChar = result[result.length - 1];
-                            if (/[a-zA-Z0-9)]/.test(lastChar)) {
+                            lastChar =
+                                result[result.length - 1];
+                            if (/[a-zA-Z0-9)]/.test(
+                                lastChar)) {
                                 result += '*';
                             }
                         }
@@ -433,8 +496,23 @@ define([], function() {
                 }
 
                 ch = s[idx];
+
+                // Case 3: Boundary check —
+                // protected token end → single letter.
+                // If result ends with a letter and current
+                // char is also a letter, insert *.
+                if (/[a-zA-Z]/.test(ch) &&
+                    result.length > 0 &&
+                    /[a-zA-Z]/.test(
+                        result[result.length - 1]) &&
+                    !insideSubscript(s, idx) &&
+                    !insidePercentConstant(s, idx)) {
+                    result += '*';
+                }
+
                 result += ch;
 
+                // Case 2: Two adjacent single letters.
                 if (/[a-zA-Z]/.test(ch) &&
                     idx + 1 < s.length &&
                     /[a-zA-Z]/.test(s[idx + 1])) {
@@ -446,7 +524,8 @@ define([], function() {
                     }
 
                     if (insidePercentConstant(s, idx) ||
-                        insidePercentConstant(s, idx + 1)) {
+                        insidePercentConstant(
+                            s, idx + 1)) {
                         idx++;
                         continue;
                     }
@@ -455,7 +534,9 @@ define([], function() {
                         s, idx + 1, protectedTokens
                     );
                     if (nextToken) {
-                        result += '*';
+                        // Next is a token — * will be
+                        // inserted by Case 1 on next
+                        // iteration. Don't double-insert.
                         idx++;
                         continue;
                     }
@@ -470,6 +551,8 @@ define([], function() {
         s = s.replace(/\*\s*\*/g, '*');
         return s;
     }
+
+    // ── Main convert ──
 
     /**
      * Main LaTeX to Maxima conversion.
@@ -495,10 +578,10 @@ define([], function() {
         s = s.replace(/\\left/g, '');
         s = s.replace(/\\right/g, '');
 
-        // 1. Derivatives BEFORE regular fractions.
+        // 1. Derivatives.
         s = processDerivatives(s);
 
-        // 2. \mathrm{} constants and general stripping.
+        // 2. \mathrm{} constants.
         s = processMathrm(s);
 
         // 3. Structural fixpoint.
@@ -526,7 +609,8 @@ define([], function() {
             } else {
                 s = s.replace(
                     new RegExp(
-                        con.latex.replace(/\\/g, '\\\\'), 'g'
+                        con.latex.replace(/\\/g, '\\\\'),
+                        'g'
                     ),
                     con.maxima
                 );
@@ -544,7 +628,8 @@ define([], function() {
         for (k = 0; k < operators.length; k++) {
             s = s.replace(
                 new RegExp(
-                    operators[k].latex.replace(/\\/g, '\\\\'),
+                    operators[k].latex.replace(
+                        /\\/g, '\\\\'),
                     'g'
                 ),
                 operators[k].maxima
@@ -556,7 +641,9 @@ define([], function() {
         for (k = 0; k < comparison.length; k++) {
             if (comparison[k].latex_regex) {
                 s = s.replace(
-                    new RegExp(comparison[k].latex_regex, 'g'),
+                    new RegExp(
+                        comparison[k].latex_regex, 'g'
+                    ),
                     comparison[k].maxima
                 );
             }
@@ -567,7 +654,9 @@ define([], function() {
         for (k = 0; k < setLogicOps.length; k++) {
             if (setLogicOps[k].latex_regex) {
                 s = s.replace(
-                    new RegExp(setLogicOps[k].latex_regex, 'g'),
+                    new RegExp(
+                        setLogicOps[k].latex_regex, 'g'
+                    ),
                     setLogicOps[k].maxima
                 );
             }
@@ -585,31 +674,8 @@ define([], function() {
         s = s.replace(/\\notin/g, ' notin ');
         s = s.replace(/\\subset(?:eq)?/g, ' subset ');
 
-        // 13. Greek variants.
-        var greekVariants = defs.greekVariants || {};
-        var variantName;
-        for (variantName in greekVariants) {
-            if (greekVariants.hasOwnProperty(variantName)) {
-                s = s.replace(
-                    new RegExp(
-                        '\\\\' + variantName + '(?![a-zA-Z])',
-                        'g'
-                    ),
-                    greekVariants[variantName]
-                );
-            }
-        }
-
-        // 14. Greek letters.
-        var greek = defs.greek || [];
-        for (k = 0; k < greek.length; k++) {
-            s = s.replace(
-                new RegExp(
-                    '\\\\' + greek[k] + '(?![a-zA-Z])', 'g'
-                ),
-                greek[k]
-            );
-        }
+        // 13+14. Greek letters (single-pass).
+        s = processGreekLetters(s, defs);
 
         // 15. Cleanup.
         s = s.replace(/\\ /g, '');
@@ -619,7 +685,14 @@ define([], function() {
             s = replaceDecimalCommas(s);
         }
 
-        // 16. Implicit multiplication (LAST).
+        // 15.5. Strip remaining whitespace before
+        //       implicit multiplication. After all other
+        //       processing, remaining spaces are just
+        //       formatting artifacts that would prevent
+        //       correct token boundary detection.
+        s = s.replace(/\s+/g, '');
+
+        // 16. Implicit multiplication.
         s = insertImplicitMultiplication(s, opts);
 
         s = s.replace(/\*\s*\*/g, '*');
