@@ -94,3 +94,6 @@ $string['privacy:metadata:cmid'] = 'Die Kursmodul-ID des Quiz.';
 $string['privacy:metadata:questionbankentryid'] = 'Die Fragenbank-Eintrags-ID (versionsunabhängig).';
 $string['privacy:metadata:allowed_elements'] = 'JSON-Toolbar-Konfiguration.';
 $string['privacy:metadata:usermodified'] = 'Die Person, die die Konfiguration zuletzt geändert hat.';
+
+$string['configure_editor'] = 'Editor einrichten';
+$string['back'] = 'Zurück';

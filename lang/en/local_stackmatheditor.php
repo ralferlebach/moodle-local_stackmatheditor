@@ -94,3 +94,6 @@ $string['privacy:metadata:cmid'] = 'The course module ID of the quiz.';
 $string['privacy:metadata:questionbankentryid'] = 'The question bank entry ID (version-independent).';
 $string['privacy:metadata:allowed_elements'] = 'JSON toolbar configuration.';
 $string['privacy:metadata:usermodified'] = 'The user who last modified the configuration.';
+
+$string['configure_editor'] = 'Configure editor';
+$string['back'] = 'Back';
