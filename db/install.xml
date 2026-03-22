@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <XMLDB PATH="local/stackmatheditor/db"
-       VERSION="20260321"
+       VERSION="20260322"
        COMMENT="local_stackmatheditor tables">
   <TABLES>
     <TABLE NAME="local_stackmatheditor"
