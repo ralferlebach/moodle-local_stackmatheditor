@@ -1,13 +1,5 @@
 /**
- * Converts MathQuill LaTeX output to Maxima CAS notation.
- *
- * Protected tokens that are NOT split by implicit multiplication:
- * - Function names: sin, cos, sqrt, log, exp, arcsin, ...
- * - Unit symbols: kg, Hz, kW, mol, ...
- * - Greek letter names: alpha, beta, Gamma, Delta, ...
- * - Percent-constants: %pi, %e, %i, %phi, %gamma
- * - Reserved words: max, min, inf, minf, diff, integrate, ...
- * - Subscript groups: _(abc)
+ * Converts MathQuill LaTeX to Maxima CAS notation.
  *
  * @module     local_stackmatheditor/tex2max
  * @copyright  2026 Your Name
@@ -33,6 +25,50 @@ define([], function() {
             s = s.replace(regex, replacement);
             max--;
         }
+        return s;
+    }
+
+    /**
+     * Process derivative fractions before regular fractions.
+     * Converts \frac{\mathrm{d}f}{\mathrm{d}x} to diff(f,x).
+     * Converts \frac{\partial f}{\partial x} to diff(f,x).
+     *
+     * @param {string} s Input.
+     * @returns {string} Converted.
+     */
+    function processDerivatives(s) {
+        // \frac{\mathrm{d}EXPR}{\mathrm{d}VAR}
+        var dRegex = new RegExp(
+            '\\\\frac\\s*\\{\\s*\\\\mathrm\\s*\\{\\s*d\\s*\\}'
+            + '\\s*((?:[^{}]|\\{[^{}]*?\\})*?)\\}'
+            + '\\s*\\{\\s*\\\\mathrm\\s*\\{\\s*d\\s*\\}'
+            + '\\s*((?:[^{}]|\\{[^{}]*?\\})*?)\\}',
+            'g'
+        );
+        s = fixpoint(s, dRegex, 'diff($1,$2)');
+        // \frac{\partial EXPR}{\partial VAR}
+        var pRegex = new RegExp(
+            '\\\\frac\\s*\\{\\s*\\\\partial'
+            + '\\s*((?:[^{}]|\\{[^{}]*?\\})*?)\\}'
+            + '\\s*\\{\\s*\\\\partial'
+            + '\\s*((?:[^{}]|\\{[^{}]*?\\})*?)\\}',
+            'g'
+        );
+        s = fixpoint(s, pRegex, 'diff($1,$2)');
+        return s;
+    }
+
+    /**
+     * Process \mathrm{} wrappers.
+     * Specific constants first (%e, %i), then strip remaining.
+     *
+     * @param {string} s Input.
+     * @returns {string} Converted.
+     */
+    function processMathrm(s) {
+        s = s.replace(/\\mathrm\s*\{\s*e\s*\}/g, '%e');
+        s = s.replace(/\\mathrm\s*\{\s*i\s*\}/g, '%i');
+        s = s.replace(/\\mathrm\s*\{([^}]*)\}/g, '$1');
         return s;
     }
 
@@ -82,7 +118,6 @@ define([], function() {
 
     /**
      * Process _{...} subscripts. Preserves multi-char subscripts.
-     * _{abc} -> _(abc)
      *
      * @param {string} s Input.
      * @returns {string} Converted.
@@ -95,7 +130,7 @@ define([], function() {
     }
 
     /**
-     * Process a LaTeX function command to Maxima.
+     * Process a single LaTeX function command to Maxima.
      *
      * @param {string} s Input.
      * @param {string} latexCmd LaTeX command.
@@ -106,7 +141,6 @@ define([], function() {
         var result = '';
         var i = 0;
         var safety = 100;
-
         while (i < s.length && safety > 0) {
             safety--;
             var idx = s.indexOf(latexCmd, i);
@@ -114,22 +148,17 @@ define([], function() {
                 result += s.substring(i);
                 break;
             }
-
             var afterCmd = idx + latexCmd.length;
-            // Ensure not a prefix of a longer command.
             if (afterCmd < s.length && /[a-zA-Z]/.test(s[afterCmd])) {
                 result += s.substring(i, idx + 1);
                 i = idx + 1;
                 continue;
             }
-
             result += s.substring(i, idx);
             var argStart = afterCmd;
             while (argStart < s.length && s[argStart] === ' ') {
                 argStart++;
             }
-
-            // Case 1: {braces}.
             if (argStart < s.length && s[argStart] === '{') {
                 var braceMatch = s.substring(argStart).match(
                     /^\{((?:[^{}]|\{[^{}]*?\})*?)\}/
@@ -140,15 +169,11 @@ define([], function() {
                     continue;
                 }
             }
-
-            // Case 2: already parenthesized.
             if (argStart < s.length && s[argStart] === '(') {
                 result += maximaName;
                 i = afterCmd;
                 continue;
             }
-
-            // Case 3: bare argument.
             if (argStart < s.length) {
                 var argEnd = argStart;
                 var depth = 0;
@@ -163,12 +188,12 @@ define([], function() {
                         }
                         depth--;
                     }
-                    if (depth === 0 && (ch === '+' || ch === '-' || ch === '=' ||
-                        ch === '<' || ch === '>')) {
+                    if (depth === 0 && /[+\-=<>]/.test(ch)) {
                         break;
                     }
                     if (depth === 0 && ch === '/' &&
-                        argEnd + 1 < s.length && s[argEnd + 1] !== '(') {
+                        argEnd + 1 < s.length &&
+                        s[argEnd + 1] !== '(') {
                         break;
                     }
                     argEnd++;
@@ -186,7 +211,6 @@ define([], function() {
                 i = afterCmd;
             }
         }
-
         return result;
     }
 
@@ -203,11 +227,14 @@ define([], function() {
         }
         var k;
         for (k = 0; k < funcDefs.length; k++) {
-            var def = funcDefs[k];
-            if (def.type === 'brace') {
+            if (funcDefs[k].type === 'brace') {
                 continue;
             }
-            s = processFunction(s, def.latex_cmd, def.maxima_name);
+            s = processFunction(
+                s,
+                funcDefs[k].latex_cmd,
+                funcDefs[k].maxima_name
+            );
         }
         return s;
     }
@@ -241,88 +268,64 @@ define([], function() {
     }
 
     /**
-     * Build sorted (longest-first) list of all protected multi-char tokens.
-     * These are NEVER split by implicit multiplication in single-char mode.
+     * Build sorted list of all protected multi-char tokens.
+     * Sorted longest-first for greedy matching.
      *
      * @param {Object} defs Definitions from PHP.
      * @returns {string[]} Sorted protected tokens.
      */
     function buildProtectedTokens(defs) {
         var tokens = [];
-        var i;
         var seen = {};
+        var i;
+        var li;
 
         /**
-         * Add a token to the protected tokens list if it is multi-char
-         * and has not already been added.
+         * Add a token if multi-char and not yet seen.
          *
-         * @param {string} t The token to add.
+         * @param {string} t Token.
          */
-        function addToken(t) {
+        function add(t) {
             if (t && t.length > 1 && !seen[t]) {
                 seen[t] = true;
                 tokens.push(t);
             }
         }
 
-        // Function names.
-        var funcNames = (defs && defs.functionNames) ? defs.functionNames : [];
-        for (i = 0; i < funcNames.length; i++) {
-            addToken(funcNames[i]);
+        var lists = [
+            defs.functionNames,
+            defs.unitSymbols,
+            defs.greek,
+            defs.reservedWords,
+            defs.percentConstants
+        ];
+        for (li = 0; li < lists.length; li++) {
+            var list = lists[li] || [];
+            for (i = 0; i < list.length; i++) {
+                add(list[i]);
+            }
         }
-
-        // Unit symbols.
-        var unitSymbols = (defs && defs.unitSymbols) ? defs.unitSymbols : [];
-        for (i = 0; i < unitSymbols.length; i++) {
-            addToken(unitSymbols[i]);
-        }
-
-        // Greek letter names (lower + upper).
-        var greek = (defs && defs.greek) ? defs.greek : [];
-        for (i = 0; i < greek.length; i++) {
-            addToken(greek[i]);
-        }
-
-        // Reserved words: max, min, inf, minf, diff, integrate, ...
-        var reserved = (defs && defs.reservedWords) ? defs.reservedWords : [];
-        for (i = 0; i < reserved.length; i++) {
-            addToken(reserved[i]);
-        }
-
-        // Percent-constants: %pi, %e, %i, %phi, %gamma.
-        var pctConst = (defs && defs.percentConstants) ? defs.percentConstants : [];
-        for (i = 0; i < pctConst.length; i++) {
-            addToken(pctConst[i]);
-        }
-
-        // Sort longest first: "arcsin" before "sin", "Gamma" before "am".
         tokens.sort(function(a, b) {
             return b.length - a.length;
         });
-
         return tokens;
     }
 
     /**
-     * Check if str at position pos matches a protected token.
-     * Returns the matched token or null.
+     * Greedy token matching: return the longest protected token
+     * starting at position pos.
      *
      * @param {string} str Full string.
      * @param {number} pos Start position.
-     * @param {string[]} tokens Protected tokens (sorted longest-first).
+     * @param {string[]} tokens Sorted longest-first.
      * @returns {string|null} Matched token or null.
      */
     function matchProtectedToken(str, pos, tokens) {
         var remaining = str.substring(pos);
         var i;
         for (i = 0; i < tokens.length; i++) {
-            var token = tokens[i];
-            if (remaining.indexOf(token) === 0) {
-                // Ensure not a prefix of a longer identifier.
-                var afterToken = remaining.charAt(token.length);
-                if (!afterToken || !/[a-zA-Z]/.test(afterToken)) {
-                    return token;
-                }
+            if (remaining.indexOf(tokens[i]) === 0) {
+                return tokens[i];
             }
         }
         return null;
@@ -355,30 +358,33 @@ define([], function() {
     }
 
     /**
-     * Check if position is inside or adjacent to a %-constant.
+     * Check if position is inside a %-constant.
      *
      * @param {string} str The string.
      * @param {number} pos Position.
-     * @returns {boolean} True if inside a %-constant.
+     * @returns {boolean} True if inside %constant.
      */
     function insidePercentConstant(str, pos) {
         var start = Math.max(0, pos - 6);
         var chunk = str.substring(start, pos + 7);
-        return /%pi|%phi|%gamma|%e(?![a-zA-Z])|%i(?![a-zA-Z])/.test(chunk);
+        var pattern = /%pi|%phi|%gamma|%e(?![a-zA-Z])|%i(?![a-zA-Z])/;
+        return pattern.test(chunk);
     }
 
     /**
      * Insert implicit multiplication.
      *
-     * @param {string} s Input (Maxima notation).
-     * @param {Object} opts Options.
+     * @param {string} s Input in Maxima notation.
+     * @param {Object} opts Options with defs and variableMode.
      * @returns {string} With explicit * inserted.
      */
     function insertImplicitMultiplication(s, opts) {
         var defs = opts.defs || {};
         var varMode = opts.variableMode || 'single';
         var protectedTokens = buildProtectedTokens(defs);
-        var unitSymbols = (defs && defs.unitSymbols) ? defs.unitSymbols : [];
+        var unitSymbols = defs.unitSymbols || [];
+        var pctPattern =
+            /(%pi|%e|%i|%phi|%gamma)\s*([a-zA-Z(])/g;
 
         // Basic structural patterns.
         s = s.replace(/\)\s*\(/g, ')*(');
@@ -386,30 +392,37 @@ define([], function() {
         s = s.replace(/\)\s*(\d)/g, ')*$1');
         s = s.replace(/(\d)\s*\(/g, '$1*(');
         s = s.replace(/(\d)\s*(%)/g, '$1*$2');
-        s = s.replace(/(%pi|%e|%i|%phi|%gamma)\s*([a-zA-Z(])/g, '$1*$2');
+        s = s.replace(pctPattern, '$1*$2');
 
-        // Digit followed by letters: check for units.
-        s = s.replace(/(\d)\s*([a-zA-Z]+)/g, function(match, digit, letters) {
-            if (unitSymbols.indexOf(letters) !== -1) {
-                return digit + letters;
+        // Digit followed by letters.
+        s = s.replace(
+            /(\d)\s*([a-zA-Z]+)/g,
+            function(match, digit, letters) {
+                if (unitSymbols.indexOf(letters) !== -1) {
+                    return digit + letters;
+                }
+                return digit + '*' + letters;
             }
-            return digit + '*' + letters;
-        });
+        );
 
-        // Single-char mode: split consecutive letters unless protected.
+        // Single-char mode: greedy token matching.
         if (varMode === 'single') {
             var result = '';
             var idx = 0;
+            var ch;
+            var lastChar;
+            var token;
+            var nextToken;
 
             while (idx < s.length) {
-                // Check if current position starts a protected token.
                 if (/[a-zA-Z%]/.test(s[idx])) {
-                    var token = matchProtectedToken(s, idx, protectedTokens);
+                    token = matchProtectedToken(
+                        s, idx, protectedTokens
+                    );
                     if (token) {
-                        // Insert * before the token if preceding char is a letter.
                         if (result.length > 0) {
-                            var lastChar = result[result.length - 1];
-                            if (/[a-zA-Z]/.test(lastChar)) {
+                            lastChar = result[result.length - 1];
+                            if (/[a-zA-Z0-9)]/.test(lastChar)) {
                                 result += '*';
                             }
                         }
@@ -419,35 +432,34 @@ define([], function() {
                     }
                 }
 
-                var ch = s[idx];
+                ch = s[idx];
                 result += ch;
 
-                // Check if we should insert * between two adjacent letters.
-                if (/[a-zA-Z]/.test(ch) && idx + 1 < s.length &&
+                if (/[a-zA-Z]/.test(ch) &&
+                    idx + 1 < s.length &&
                     /[a-zA-Z]/.test(s[idx + 1])) {
 
-                    // Don't split inside subscript groups _(abc).
-                    if (insideSubscript(s, idx) || insideSubscript(s, idx + 1)) {
+                    if (insideSubscript(s, idx) ||
+                        insideSubscript(s, idx + 1)) {
                         idx++;
                         continue;
                     }
 
-                    // Don't split inside %-constants.
                     if (insidePercentConstant(s, idx) ||
                         insidePercentConstant(s, idx + 1)) {
                         idx++;
                         continue;
                     }
 
-                    // Check if NEXT position starts a protected token.
-                    var nextToken = matchProtectedToken(s, idx + 1, protectedTokens);
+                    nextToken = matchProtectedToken(
+                        s, idx + 1, protectedTokens
+                    );
                     if (nextToken) {
                         result += '*';
                         idx++;
                         continue;
                     }
 
-                    // Default: insert *.
                     result += '*';
                 }
                 idx++;
@@ -455,13 +467,12 @@ define([], function() {
             s = result;
         }
 
-        // Clean double *.
         s = s.replace(/\*\s*\*/g, '*');
         return s;
     }
 
     /**
-     * Main LaTeX -> Maxima conversion.
+     * Main LaTeX to Maxima conversion.
      *
      * @param {string} latex LaTeX input.
      * @param {Object} [options] Options.
@@ -473,17 +484,24 @@ define([], function() {
         var defs = opts.defs || {};
         var s = latex;
         var prev;
+        var k;
+        var con;
 
         s = s.replace(/\s+/g, ' ').trim();
         if (!s) {
             return s;
         }
 
-        // Remove \left / \right.
         s = s.replace(/\\left/g, '');
         s = s.replace(/\\right/g, '');
 
-        // Structural: fixpoint loop.
+        // 1. Derivatives BEFORE regular fractions.
+        s = processDerivatives(s);
+
+        // 2. \mathrm{} constants and general stripping.
+        s = processMathrm(s);
+
+        // 3. Structural fixpoint.
         prev = '';
         while (s !== prev) {
             prev = s;
@@ -493,57 +511,107 @@ define([], function() {
             s = processSubscripts(s);
         }
 
-        // Functions.
+        // 4. Functions.
         s = processAllFunctions(s, defs.functions);
 
-        // Constants.
+        // 5. Constants.
         var constants = defs.constants || [];
-        var c;
-        for (c = 0; c < constants.length; c++) {
-            var con = constants[c];
+        for (k = 0; k < constants.length; k++) {
+            con = constants[k];
             if (con.latex_regex) {
-                s = s.replace(new RegExp(con.latex_regex, 'g'), con.maxima);
+                s = s.replace(
+                    new RegExp(con.latex_regex, 'g'),
+                    con.maxima
+                );
             } else {
                 s = s.replace(
-                    new RegExp(con.latex.replace(/\\/g, '\\\\'), 'g'),
+                    new RegExp(
+                        con.latex.replace(/\\/g, '\\\\'), 'g'
+                    ),
                     con.maxima
                 );
             }
         }
 
-        // Operators.
+        // 6. \hbar.
+        s = s.replace(/\\hbar(?![a-zA-Z])/g, 'hbar');
+
+        // 7. \partial.
+        s = s.replace(/\\partial\s*/g, '');
+
+        // 8. Operators.
         var operators = defs.operators || [];
-        var o;
-        for (o = 0; o < operators.length; o++) {
+        for (k = 0; k < operators.length; k++) {
             s = s.replace(
-                new RegExp(operators[o].latex.replace(/\\/g, '\\\\'), 'g'),
-                operators[o].maxima
+                new RegExp(
+                    operators[k].latex.replace(/\\/g, '\\\\'),
+                    'g'
+                ),
+                operators[k].maxima
             );
         }
 
-        // Comparison.
+        // 9. Comparison.
         var comparison = defs.comparison || [];
-        var cmp;
-        for (cmp = 0; cmp < comparison.length; cmp++) {
-            if (comparison[cmp].latex_regex) {
+        for (k = 0; k < comparison.length; k++) {
+            if (comparison[k].latex_regex) {
                 s = s.replace(
-                    new RegExp(comparison[cmp].latex_regex, 'g'),
-                    comparison[cmp].maxima
+                    new RegExp(comparison[k].latex_regex, 'g'),
+                    comparison[k].maxima
                 );
             }
         }
 
-        // Greek letters: \alpha -> alpha, \Gamma -> Gamma.
+        // 10. Set/logic operators.
+        var setLogicOps = defs.setLogicOps || [];
+        for (k = 0; k < setLogicOps.length; k++) {
+            if (setLogicOps[k].latex_regex) {
+                s = s.replace(
+                    new RegExp(setLogicOps[k].latex_regex, 'g'),
+                    setLogicOps[k].maxima
+                );
+            }
+        }
+
+        // 11. Bra-ket.
+        s = s.replace(/\\langle\s*/g, '<');
+        s = s.replace(/\\rangle\s*/g, '>');
+        s = s.replace(/\\middle\s*\|/g, '|');
+
+        // 12. Display-only symbols.
+        s = s.replace(/\\forall\s*/g, '');
+        s = s.replace(/\\exists\s*/g, '');
+        s = s.replace(/\\emptyset/g, '{}');
+        s = s.replace(/\\notin/g, ' notin ');
+        s = s.replace(/\\subset(?:eq)?/g, ' subset ');
+
+        // 13. Greek variants.
+        var greekVariants = defs.greekVariants || {};
+        var variantName;
+        for (variantName in greekVariants) {
+            if (greekVariants.hasOwnProperty(variantName)) {
+                s = s.replace(
+                    new RegExp(
+                        '\\\\' + variantName + '(?![a-zA-Z])',
+                        'g'
+                    ),
+                    greekVariants[variantName]
+                );
+            }
+        }
+
+        // 14. Greek letters.
         var greek = defs.greek || [];
-        var g;
-        for (g = 0; g < greek.length; g++) {
+        for (k = 0; k < greek.length; k++) {
             s = s.replace(
-                new RegExp('\\\\' + greek[g] + '(?![a-zA-Z])', 'g'),
-                greek[g]
+                new RegExp(
+                    '\\\\' + greek[k] + '(?![a-zA-Z])', 'g'
+                ),
+                greek[k]
             );
         }
 
-        // Cleanup.
+        // 15. Cleanup.
         s = s.replace(/\\ /g, '');
         s = s.replace(/[{}]/g, '');
 
@@ -551,13 +619,11 @@ define([], function() {
             s = replaceDecimalCommas(s);
         }
 
-        // Implicit multiplication (LAST step).
+        // 16. Implicit multiplication (LAST).
         s = insertImplicitMultiplication(s, opts);
 
-        // Final cleanup.
         s = s.replace(/\*\s*\*/g, '*');
         s = s.replace(/\s+/g, ' ').trim();
-
         return s;
     }
 
