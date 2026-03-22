@@ -6,7 +6,7 @@
  * This shim provides a minimal MathJax.Hub wrapper around MathJax v3.
  *
  * @module     local_stackmatheditor/mathjax_compat
- * @copyright  2026 Your Name
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 define([], function() {

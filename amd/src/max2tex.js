@@ -2,7 +2,7 @@
  * Converts Maxima CAS notation back to LaTeX for MathQuill display.
  *
  * @module     local_stackmatheditor/max2tex
- * @copyright  2026 Your Name
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 define([], function() {

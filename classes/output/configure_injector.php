@@ -50,7 +50,7 @@ class configure_injector {
         }
 
         quiz_helper::dbg(
-            'configure_injector: injecting data, mode='
+            'configure_injector: injecting, mode='
             . $linkdata['mode']
         );
 

@@ -1,256 +1,78 @@
 /**
- * Converts MathQuill LaTeX to Maxima CAS notation.
+ * Converts MathQuill LaTeX output to Maxima CAS notation.
+ *
+ * Features:
+ * - Standard LaTeX → Maxima conversion
+ * - Locale-aware decimal separator (comma → dot)
+ * - Implicit multiplication (2x → 2*x, with units exception)
  *
  * @module     local_stackmatheditor/tex2max
- * @copyright  2026 Your Name
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 define([], function() {
     'use strict';
 
     /**
-     * Apply regex in fixpoint loop.
+     * Known unit abbreviations.
+     * Sorted by length descending so longer matches are checked first.
      *
-     * @param {string} s Input.
-     * @param {RegExp} regex Pattern.
-     * @param {string|Function} replacement Replacement.
-     * @param {number} [maxIter=50] Safety limit.
-     * @returns {string} Result.
+     * @type {string[]}
      */
-    function fixpoint(s, regex, replacement, maxIter) {
-        var max = maxIter || 50;
-        var prev = '';
-        while (s !== prev && max > 0) {
-            prev = s;
-            s = s.replace(regex, replacement);
-            max--;
-        }
-        return s;
-    }
+    var UNITS = [
+        // Multi-char units first (longer).
+        'kHz', 'MHz', 'GHz',
+        'kPa', 'MPa',
+        'kcal',
+        'kW', 'MW',
+        'kJ', 'MJ', 'eV',
+        'kN',
+        'kV', 'mA',
+        'kg', 'mg',
+        'km', 'cm', 'mm', 'nm', 'um',
+        'ms', 'mL', 'dL',
+        'min',
+        'mol',
+        'Ohm', 'ohm',
+        'bar', 'atm',
+        'cal',
+        'Hz',
+        'Pa',
+        'lb', 'oz', 'ft', 'yd', 'mi',
+        'hr',
+        // Single-char units last.
+        'm', 'g', 's', 'h', 't',
+        'N', 'J', 'W', 'V', 'A', 'K', 'L', 'F', 'C'
+    ];
 
     /**
-     * Process derivative fractions.
+     * Check whether a string is a known measurement unit.
      *
-     * @param {string} s Input.
-     * @returns {string} Converted.
+     * @param {string} str The string to check.
+     * @returns {boolean} True if it matches a known unit exactly.
      */
-    function processDerivatives(s) {
-        var dRegex = new RegExp(
-            '\\\\frac\\s*\\{\\s*\\\\mathrm\\s*\\{\\s*d\\s*\\}'
-            + '\\s*((?:[^{}]|\\{[^{}]*?\\})*?)\\}'
-            + '\\s*\\{\\s*\\\\mathrm\\s*\\{\\s*d\\s*\\}'
-            + '\\s*((?:[^{}]|\\{[^{}]*?\\})*?)\\}',
-            'g'
-        );
-        s = fixpoint(s, dRegex, 'diff($1,$2)');
-        var pRegex = new RegExp(
-            '\\\\frac\\s*\\{\\s*\\\\partial'
-            + '\\s*((?:[^{}]|\\{[^{}]*?\\})*?)\\}'
-            + '\\s*\\{\\s*\\\\partial'
-            + '\\s*((?:[^{}]|\\{[^{}]*?\\})*?)\\}',
-            'g'
-        );
-        s = fixpoint(s, pRegex, 'diff($1,$2)');
-        return s;
-    }
-
-    /**
-     * Process \mathrm wrappers.
-     *
-     * @param {string} s Input.
-     * @returns {string} Converted.
-     */
-    function processMathrm(s) {
-        s = s.replace(/\\mathrm\s*\{\s*e\s*\}/g, '%e');
-        s = s.replace(/\\mathrm\s*\{\s*i\s*\}/g, '%i');
-        s = s.replace(/\\mathrm\s*\{([^}]*)\}/g, '$1');
-        return s;
-    }
-
-    /**
-     * Process fractions.
-     *
-     * @param {string} s Input.
-     * @returns {string} Converted.
-     */
-    function processFractions(s) {
-        return fixpoint(s,
-            /\\frac\s*\{((?:[^{}]|\{[^{}]*?\})*?)\}\s*\{((?:[^{}]|\{[^{}]*?\})*?)\}/,
-            '($1)/($2)'
-        );
-    }
-
-    /**
-     * Process square roots.
-     *
-     * @param {string} s Input.
-     * @returns {string} Converted.
-     */
-    function processSqrt(s) {
-        s = fixpoint(s,
-            /\\sqrt\[([^\]]+?)\]\s*\{((?:[^{}]|\{[^{}]*?\})*?)\}/,
-            '($2)^(1/($1))'
-        );
-        s = fixpoint(s,
-            /\\sqrt\s*\{((?:[^{}]|\{[^{}]*?\})*?)\}/,
-            'sqrt($1)'
-        );
-        return s;
-    }
-
-    /**
-     * Process exponents.
-     *
-     * @param {string} s Input.
-     * @returns {string} Converted.
-     */
-    function processExponents(s) {
-        return fixpoint(s,
-            /\^\{((?:[^{}]|\{[^{}]*?\})*?)\}/,
-            '^($1)'
-        );
-    }
-
-    /**
-     * Process subscripts.
-     *
-     * @param {string} s Input.
-     * @returns {string} Converted.
-     */
-    function processSubscripts(s) {
-        return fixpoint(s,
-            /_\{((?:[^{}]|\{[^{}]*?\})*?)\}/,
-            '_($1)'
-        );
-    }
-
-    /**
-     * Process a single LaTeX function command.
-     *
-     * @param {string} s Input.
-     * @param {string} latexCmd LaTeX command.
-     * @param {string} maximaName Maxima name.
-     * @returns {string} Converted.
-     */
-    function processFunction(s, latexCmd, maximaName) {
-        var result = '';
-        var i = 0;
-        var safety = 100;
-        while (i < s.length && safety > 0) {
-            safety--;
-            var idx = s.indexOf(latexCmd, i);
-            if (idx === -1) {
-                result += s.substring(i);
-                break;
-            }
-            var afterCmd = idx + latexCmd.length;
-            if (afterCmd < s.length &&
-                /[a-zA-Z]/.test(s[afterCmd])) {
-                result += s.substring(i, idx + 1);
-                i = idx + 1;
-                continue;
-            }
-            result += s.substring(i, idx);
-            var argStart = afterCmd;
-            while (argStart < s.length &&
-            s[argStart] === ' ') {
-                argStart++;
-            }
-            if (argStart < s.length &&
-                s[argStart] === '{') {
-                var braceMatch = s.substring(argStart).match(
-                    /^\{((?:[^{}]|\{[^{}]*?\})*?)\}/
-                );
-                if (braceMatch) {
-                    result += maximaName + '('
-                        + braceMatch[1] + ')';
-                    i = argStart + braceMatch[0].length;
-                    continue;
-                }
-            }
-            if (argStart < s.length &&
-                s[argStart] === '(') {
-                result += maximaName;
-                i = afterCmd;
-                continue;
-            }
-            if (argStart < s.length) {
-                var argEnd = argStart;
-                var depth = 0;
-                while (argEnd < s.length) {
-                    var ch = s[argEnd];
-                    if (ch === '(' || ch === '[') {
-                        depth++;
-                    }
-                    if (ch === ')' || ch === ']') {
-                        if (depth <= 0) {
-                            break;
-                        }
-                        depth--;
-                    }
-                    if (depth === 0 &&
-                        /[+\-=<>]/.test(ch)) {
-                        break;
-                    }
-                    if (depth === 0 && ch === '/' &&
-                        argEnd + 1 < s.length &&
-                        s[argEnd + 1] !== '(') {
-                        break;
-                    }
-                    argEnd++;
-                }
-                var arg = s.substring(
-                    argStart, argEnd).trim();
-                if (arg.length > 0) {
-                    result += maximaName + '(' + arg + ')';
-                    i = argEnd;
-                } else {
-                    result += maximaName;
-                    i = afterCmd;
-                }
-            } else {
-                result += maximaName;
-                i = afterCmd;
+    function isUnit(str) {
+        var i;
+        for (i = 0; i < UNITS.length; i++) {
+            if (str === UNITS[i]) {
+                return true;
             }
         }
-        return result;
+        return false;
     }
 
     /**
-     * Process all functions from definitions.
+     * Replace decimal commas with dots (for locales using comma as decimal separator).
+     * Only replaces commas between digits that are NOT inside square brackets (lists).
      *
-     * @param {string} s Input.
-     * @param {Array} funcDefs Definitions.
-     * @returns {string} Converted.
-     */
-    function processAllFunctions(s, funcDefs) {
-        if (!funcDefs || !funcDefs.length) {
-            return s;
-        }
-        var k;
-        for (k = 0; k < funcDefs.length; k++) {
-            if (funcDefs[k].type === 'brace') {
-                continue;
-            }
-            s = processFunction(
-                s,
-                funcDefs[k].latex_cmd,
-                funcDefs[k].maxima_name
-            );
-        }
-        return s;
-    }
-
-    /**
-     * Replace decimal commas with dots.
-     *
-     * @param {string} s Input.
-     * @returns {string} Converted.
+     * @param {string} s Input string.
+     * @returns {string} String with decimal commas replaced by dots.
      */
     function replaceDecimalCommas(s) {
         var result = '';
         var bracketDepth = 0;
         var i;
+
         for (i = 0; i < s.length; i++) {
             if (s[i] === '[') {
                 bracketDepth++;
@@ -258,445 +80,176 @@ define([], function() {
             if (s[i] === ']' && bracketDepth > 0) {
                 bracketDepth--;
             }
-            if (s[i] === ',' && bracketDepth === 0 &&
-                i > 0 && i < s.length - 1 &&
-                /\d/.test(s[i - 1]) &&
-                /\d/.test(s[i + 1])) {
-                result += '.';
-                continue;
+
+            // Comma between digits, outside brackets → decimal separator.
+            if (s[i] === ',' && bracketDepth === 0) {
+                if (i > 0 && i < s.length - 1 &&
+                    /\d/.test(s[i - 1]) && /\d/.test(s[i + 1])) {
+                    result += '.';
+                    continue;
+                }
             }
             result += s[i];
         }
+
         return result;
     }
 
     /**
-     * Replace all Greek letter commands in a single pass.
+     * Insert implicit multiplication where mathematically expected.
      *
-     * A combined regex avoids ordering bugs where replacing
-     * \Lambda before \Phi causes \PhiLambda to prevent \Phi
-     * from matching (lookahead sees 'L' from 'Lambda').
+     * Rules:
+     * - digit followed by letter: 2x → 2*x (unless letters form a known unit)
+     * - digit followed by (: 2( → 2*(
+     * - ) followed by (: )( → )*(
+     * - ) followed by letter: )x → )*x
+     * - ) followed by digit: )2 → )*2
+     * - %pi/%e followed by variable/paren: %pi x → %pi*x
      *
-     * @param {string} s Input string.
-     * @param {Object} defs Definitions.
-     * @returns {string} With Greek commands replaced.
+     * @param {string} s Input string (already in Maxima notation).
+     * @returns {string} String with explicit multiplication signs inserted.
      */
-    function processGreekLetters(s, defs) {
-        // 1. Variants (\varepsilon → epsilon, etc.)
-        var greekVariants = defs.greekVariants || {};
-        var variantNames = Object.keys(greekVariants);
-        if (variantNames.length > 0) {
-            variantNames.sort(function(a, b) {
-                return b.length - a.length;
-            });
-            var variantPattern = variantNames.join('|');
-            s = s.replace(
-                new RegExp(
-                    '\\\\(' + variantPattern
-                    + ')(?![a-zA-Z])',
-                    'g'
-                ),
-                function(match, name) {
-                    return greekVariants[name];
-                }
-            );
-        }
-
-        // 2. Standard (\alpha → alpha, \Phi → Phi, etc.)
-        var greek = defs.greek || [];
-        if (greek.length > 0) {
-            var sorted = greek.slice().sort(function(a, b) {
-                return b.length - a.length;
-            });
-            var pattern = sorted.join('|');
-            s = s.replace(
-                new RegExp(
-                    '\\\\(' + pattern + ')(?![a-zA-Z])',
-                    'g'
-                ),
-                '$1'
-            );
-        }
-
-        return s;
-    }
-
-    // ── Implicit multiplication ──
-
-    /**
-     * Build sorted protected tokens list.
-     *
-     * @param {Object} defs Definitions.
-     * @returns {string[]} Sorted longest-first.
-     */
-    function buildProtectedTokens(defs) {
-        var tokens = [];
-        var seen = {};
-        var i;
-        var li;
-
-        /**
-         * Add token if multi-char and unseen.
-         *
-         * @param {string} t Token.
-         */
-        function add(t) {
-            if (t && t.length > 1 && !seen[t]) {
-                seen[t] = true;
-                tokens.push(t);
-            }
-        }
-
-        var lists = [
-            defs.functionNames,
-            defs.unitSymbols,
-            defs.greek,
-            defs.reservedWords,
-            defs.percentConstants
-        ];
-        for (li = 0; li < lists.length; li++) {
-            var list = lists[li] || [];
-            for (i = 0; i < list.length; i++) {
-                add(list[i]);
-            }
-        }
-        tokens.sort(function(a, b) {
-            return b.length - a.length;
-        });
-        return tokens;
-    }
-
-    /**
-     * Greedy token matching at position.
-     *
-     * @param {string} str String.
-     * @param {number} pos Position.
-     * @param {string[]} tokens Sorted longest-first.
-     * @returns {string|null} Matched token or null.
-     */
-    function matchProtectedToken(str, pos, tokens) {
-        var remaining = str.substring(pos);
-        var i;
-        for (i = 0; i < tokens.length; i++) {
-            if (remaining.indexOf(tokens[i]) === 0) {
-                return tokens[i];
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Check if inside subscript.
-     *
-     * @param {string} str String.
-     * @param {number} pos Position.
-     * @returns {boolean} True if inside _().
-     */
-    function insideSubscript(str, pos) {
-        var j = pos - 1;
-        var depth = 0;
-        while (j >= 0) {
-            if (str[j] === ')') {
-                depth++;
-            }
-            if (str[j] === '(') {
-                if (depth > 0) {
-                    depth--;
-                } else {
-                    return j >= 1 && str[j - 1] === '_';
-                }
-            }
-            j--;
-        }
-        return false;
-    }
-
-    /**
-     * Check if inside percent constant.
-     *
-     * @param {string} str String.
-     * @param {number} pos Position.
-     * @returns {boolean} True if inside %constant.
-     */
-    function insidePercentConstant(str, pos) {
-        var start = Math.max(0, pos - 6);
-        var chunk = str.substring(start, pos + 7);
-        var pat =
-            /%pi|%phi|%gamma|%e(?![a-zA-Z])|%i(?![a-zA-Z])/;
-        return pat.test(chunk);
-    }
-
-    /**
-     * Insert implicit multiplication.
-     *
-     * Handles three cases in single-char mode:
-     * 1. Protected token → protected token: * via token code
-     * 2. Single letter → single letter: * via bottom code
-     * 3. Protected token → single letter: * via boundary check
-     *
-     * @param {string} s Input.
-     * @param {Object} opts Options.
-     * @returns {string} With * inserted.
-     */
-    function insertImplicitMultiplication(s, opts) {
-        var defs = opts.defs || {};
-        var varMode = opts.variableMode || 'single';
-        var protectedTokens = buildProtectedTokens(defs);
-        var unitSymbols = defs.unitSymbols || [];
-        var pctPattern =
-            /(%pi|%e|%i|%phi|%gamma)\s*([a-zA-Z(])/g;
-
+    function insertImplicitMultiplication(s) {
+        // 1. ) followed by ( → )*(
         s = s.replace(/\)\s*\(/g, ')*(');
+
+        // 2. ) followed by letter → )*letter
         s = s.replace(/\)\s*([a-zA-Z%])/g, ')*$1');
+
+        // 3. ) followed by digit → )*digit
         s = s.replace(/\)\s*(\d)/g, ')*$1');
+
+        // 4. digit followed by ( → digit*(
         s = s.replace(/(\d)\s*\(/g, '$1*(');
-        s = s.replace(/(\d)\s*(%)/g, '$1*$2');
-        s = s.replace(pctPattern, '$1*$2');
 
-        s = s.replace(
-            /(\d)\s*([a-zA-Z]+)/g,
-            function(match, digit, letters) {
-                if (unitSymbols.indexOf(letters) !== -1) {
-                    return digit + letters;
-                }
-                return digit + '*' + letters;
+        // 5. digit followed by letter(s) → digit*letters (with units exception).
+        s = s.replace(/(\d)\s*([a-zA-Z]+)/g, function(match, digit, letters) {
+            // Remove any whitespace in the match.
+            var clean = digit + letters;
+            if (isUnit(letters)) {
+                // Known unit: keep together without *.
+                return clean;
             }
-        );
+            // Not a unit: insert *.
+            return digit + '*' + letters;
+        });
 
-        if (varMode === 'single') {
-            var result = '';
-            var idx = 0;
-            var ch;
-            var lastChar;
-            var token;
-            var nextToken;
-
-            while (idx < s.length) {
-                // Try protected token at current position.
-                if (/[a-zA-Z%]/.test(s[idx])) {
-                    token = matchProtectedToken(
-                        s, idx, protectedTokens
-                    );
-                    if (token) {
-                        // Case 1: Insert * before token
-                        // if previous output ends with
-                        // letter/digit/paren.
-                        if (result.length > 0) {
-                            lastChar =
-                                result[result.length - 1];
-                            if (/[a-zA-Z0-9)]/.test(
-                                lastChar)) {
-                                result += '*';
-                            }
-                        }
-                        result += token;
-                        idx += token.length;
-                        continue;
-                    }
-                }
-
-                ch = s[idx];
-
-                // Case 3: Boundary check —
-                // protected token end → single letter.
-                // If result ends with a letter and current
-                // char is also a letter, insert *.
-                if (/[a-zA-Z]/.test(ch) &&
-                    result.length > 0 &&
-                    /[a-zA-Z]/.test(
-                        result[result.length - 1]) &&
-                    !insideSubscript(s, idx) &&
-                    !insidePercentConstant(s, idx)) {
-                    result += '*';
-                }
-
-                result += ch;
-
-                // Case 2: Two adjacent single letters.
-                if (/[a-zA-Z]/.test(ch) &&
-                    idx + 1 < s.length &&
-                    /[a-zA-Z]/.test(s[idx + 1])) {
-
-                    if (insideSubscript(s, idx) ||
-                        insideSubscript(s, idx + 1)) {
-                        idx++;
-                        continue;
-                    }
-
-                    if (insidePercentConstant(s, idx) ||
-                        insidePercentConstant(
-                            s, idx + 1)) {
-                        idx++;
-                        continue;
-                    }
-
-                    nextToken = matchProtectedToken(
-                        s, idx + 1, protectedTokens
-                    );
-                    if (nextToken) {
-                        // Next is a token — * will be
-                        // inserted by Case 1 on next
-                        // iteration. Don't double-insert.
-                        idx++;
-                        continue;
-                    }
-
-                    result += '*';
-                }
-                idx++;
+        // 6. Constants followed by variable/digit/paren: %pi x → %pi*x
+        s = s.replace(/(%pi|%e)(\s*)([a-zA-Z0-9(])/g, function(match, constant, space, next) {
+            // Don't double up on *.
+            if (next === '*') {
+                return match;
             }
-            s = result;
-        }
+            return constant + '*' + next;
+        });
 
-        s = s.replace(/\*\s*\*/g, '*');
         return s;
     }
 
-    // ── Main convert ──
-
     /**
-     * Main LaTeX to Maxima conversion.
+     * Main LaTeX → Maxima conversion function.
      *
-     * @param {string} latex LaTeX input.
-     * @param {Object} [options] Options.
+     * @param {string} latex LaTeX string from MathQuill.
+     * @param {Object} [options] Conversion options.
+     * @param {boolean} [options.commaDecimal=false] Treat commas as decimal separators.
      * @returns {string} Maxima expression.
      */
     function convert(latex, options) {
         var opts = options || {};
         var commaDecimal = opts.commaDecimal || false;
-        var defs = opts.defs || {};
         var s = latex;
-        var prev;
-        var k;
-        var con;
+        var maxIter = 20;
 
+        // Normalise whitespace.
         s = s.replace(/\s+/g, ' ').trim();
-        if (!s) {
-            return s;
-        }
 
+        // Remove \left / \right.
         s = s.replace(/\\left/g, '');
         s = s.replace(/\\right/g, '');
 
-        // 1. Derivatives.
-        s = processDerivatives(s);
+        // N-th root: \sqrt[n]{expr} -> (expr)^(1/(n)).
+        s = s.replace(
+            /\\sqrt\[([^\]]+)\]\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
+            '($2)^(1/($1))'
+        );
 
-        // 2. \mathrm{} constants.
-        s = processMathrm(s);
-
-        // 3. Structural fixpoint.
-        prev = '';
-        while (s !== prev) {
-            prev = s;
-            s = processSqrt(s);
-            s = processFractions(s);
-            s = processExponents(s);
-            s = processSubscripts(s);
-        }
-
-        // 4. Functions.
-        s = processAllFunctions(s, defs.functions);
-
-        // 5. Constants.
-        var constants = defs.constants || [];
-        for (k = 0; k < constants.length; k++) {
-            con = constants[k];
-            if (con.latex_regex) {
-                s = s.replace(
-                    new RegExp(con.latex_regex, 'g'),
-                    con.maxima
-                );
-            } else {
-                s = s.replace(
-                    new RegExp(
-                        con.latex.replace(/\\/g, '\\\\'),
-                        'g'
-                    ),
-                    con.maxima
-                );
-            }
-        }
-
-        // 6. \hbar.
-        s = s.replace(/\\hbar(?![a-zA-Z])/g, 'hbar');
-
-        // 7. \partial.
-        s = s.replace(/\\partial\s*/g, '');
-
-        // 8. Operators.
-        var operators = defs.operators || [];
-        for (k = 0; k < operators.length; k++) {
+        // Fractions (loop for nesting).
+        while (s.indexOf('\\frac') !== -1 && maxIter > 0) {
+            maxIter--;
             s = s.replace(
-                new RegExp(
-                    operators[k].latex.replace(
-                        /\\/g, '\\\\'),
-                    'g'
-                ),
-                operators[k].maxima
+                /\\frac\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/,
+                '($1)/($2)'
             );
         }
 
-        // 9. Comparison.
-        var comparison = defs.comparison || [];
-        for (k = 0; k < comparison.length; k++) {
-            if (comparison[k].latex_regex) {
-                s = s.replace(
-                    new RegExp(
-                        comparison[k].latex_regex, 'g'
-                    ),
-                    comparison[k].maxima
-                );
-            }
-        }
+        // Square root.
+        s = s.replace(
+            /\\sqrt\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
+            'sqrt($1)'
+        );
 
-        // 10. Set/logic operators.
-        var setLogicOps = defs.setLogicOps || [];
-        for (k = 0; k < setLogicOps.length; k++) {
-            if (setLogicOps[k].latex_regex) {
-                s = s.replace(
-                    new RegExp(
-                        setLogicOps[k].latex_regex, 'g'
-                    ),
-                    setLogicOps[k].maxima
-                );
-            }
-        }
+        // Exponents.
+        s = s.replace(/\^\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g, '^($1)');
 
-        // 11. Bra-ket.
-        s = s.replace(/\\langle\s*/g, '<');
-        s = s.replace(/\\rangle\s*/g, '>');
-        s = s.replace(/\\middle\s*\|/g, '|');
+        // Subscripts.
+        s = s.replace(/_\{([^{}]*)\}/g, '_$1');
 
-        // 12. Display-only symbols.
-        s = s.replace(/\\forall\s*/g, '');
-        s = s.replace(/\\exists\s*/g, '');
-        s = s.replace(/\\emptyset/g, '{}');
-        s = s.replace(/\\notin/g, ' notin ');
-        s = s.replace(/\\subset(?:eq)?/g, ' subset ');
+        // Trig & hyperbolic functions.
+        var funcs = [
+            'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
+            'arcsin', 'arccos', 'arctan',
+            'sinh', 'cosh', 'tanh'
+        ];
+        funcs.forEach(function(fn) {
+            s = s.replace(new RegExp('\\\\' + fn + '(?![a-zA-Z])', 'g'), fn);
+        });
 
-        // 13+14. Greek letters (single-pass).
-        s = processGreekLetters(s, defs);
+        // Logarithms.
+        s = s.replace(/\\ln(?![a-zA-Z])/g, 'log');
+        s = s.replace(/\\log(?![a-zA-Z])/g, 'log');
+        s = s.replace(/\\exp(?![a-zA-Z])/g, 'exp');
 
-        // 15. Cleanup.
+        // Constants.
+        s = s.replace(/\\pi/g, '%pi');
+        s = s.replace(/\\infty/g, 'inf');
+        s = s.replace(/\\e(?![a-zA-Z])/g, '%e');
+
+        // Operators.
+        s = s.replace(/\\cdot/g, '*');
+        s = s.replace(/\\times/g, '*');
+        s = s.replace(/\\div/g, '/');
+
+        // Comparison.
+        s = s.replace(/\\leq?/g, '<=');
+        s = s.replace(/\\geq?/g, '>=');
+        s = s.replace(/\\neq?/g, '#');
+        s = s.replace(/\\ne(?![a-zA-Z])/g, '#');
+
+        // Greek letters.
+        var greek = [
+            'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta',
+            'theta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi',
+            'rho', 'sigma', 'tau', 'upsilon', 'phi', 'chi', 'psi', 'omega'
+        ];
+        greek.forEach(function(letter) {
+            s = s.replace(new RegExp('\\\\' + letter + '(?![a-zA-Z])', 'g'), letter);
+        });
+
+        // Cleanup LaTeX artifacts.
         s = s.replace(/\\ /g, '');
         s = s.replace(/[{}]/g, '');
 
+        // Decimal separator: comma → dot (locale-aware, outside lists).
         if (commaDecimal) {
             s = replaceDecimalCommas(s);
         }
 
-        // 15.5. Strip remaining whitespace before
-        //       implicit multiplication. After all other
-        //       processing, remaining spaces are just
-        //       formatting artifacts that would prevent
-        //       correct token boundary detection.
-        s = s.replace(/\s+/g, '');
+        // Implicit multiplication: 2x → 2*x (with units exception).
+        s = insertImplicitMultiplication(s);
 
-        // 16. Implicit multiplication.
-        s = insertImplicitMultiplication(s, opts);
-
-        s = s.replace(/\*\s*\*/g, '*');
+        // Final cleanup.
         s = s.replace(/\s+/g, ' ').trim();
+
         return s;
     }
 

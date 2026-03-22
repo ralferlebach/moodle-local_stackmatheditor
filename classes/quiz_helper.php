@@ -6,8 +6,8 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * Shared helper for quiz/question DB lookups.
  *
- * Handles Moodle 4.x schema where quiz_slots links to questions
- * via question_references table.
+ * Results are cached per-request to avoid duplicate queries
+ * when multiple injectors need the same data.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
@@ -17,6 +17,12 @@ class quiz_helper {
 
     /** @var bool Enable debug logging. */
     private const DEBUG = true;
+
+    /** @var array Per-request cache for attempt slot data. */
+    private static array $attemptcache = [];
+
+    /** @var array Per-request cache for quiz question data. */
+    private static array $quizcache = [];
 
     /**
      * Debug log helper.
@@ -63,11 +69,9 @@ class quiz_helper {
     }
 
     /**
-     * Check if quiz_slots has questionbankentryid column directly.
-     * Moodle 4.0-4.1 uses question_references table instead.
-     * Moodle 4.2+ may have it directly on quiz_slots.
+     * Check if quiz_slots has questionbankentryid column.
      *
-     * @return bool True if quiz_slots has questionbankentryid.
+     * @return bool True if direct column exists.
      */
     private static function slots_have_qbeid(): bool {
         global $DB;
@@ -81,30 +85,31 @@ class quiz_helper {
         } catch (\Throwable $e) {
             $result = false;
         }
-        self::dbg('slots_have_qbeid=' . ($result ? 'true' : 'false'));
         return $result;
     }
 
     /**
-     * Load STACK question data from quiz slots for the edit page.
-     *
-     * Handles both Moodle 4.0-4.1 (question_references table)
-     * and Moodle 4.2+ (direct column on quiz_slots).
+     * Load STACK question data from quiz slots.
+     * Results are cached per quiz instance ID.
      *
      * @param int $quizinstanceid Quiz instance ID.
      * @return array List of {questionid, qbeid, name, slot}.
      */
     public static function load_quiz_stack_questions(
         int $quizinstanceid): array {
-        global $DB;
-        $data = [];
+        if (isset(self::$quizcache[$quizinstanceid])) {
+            self::dbg('load_quiz_stack_questions: '
+                . 'cache hit quiz=' . $quizinstanceid);
+            return self::$quizcache[$quizinstanceid];
+        }
 
+        $data = [];
         try {
             if (self::slots_have_qbeid()) {
-                $data = self::load_quiz_stack_questions_direct(
+                $data = self::load_questions_direct(
                     $quizinstanceid);
             } else {
-                $data = self::load_quiz_stack_questions_via_refs(
+                $data = self::load_questions_via_refs(
                     $quizinstanceid);
             }
         } catch (\Throwable $e) {
@@ -114,23 +119,27 @@ class quiz_helper {
 
         self::dbg('load_quiz_stack_questions: '
             . count($data) . ' STACK questions');
+
+        self::$quizcache[$quizinstanceid] = $data;
         return $data;
     }
 
     /**
-     * Load via direct questionbankentryid on quiz_slots (Moodle 4.2+).
+     * Load via direct column (Moodle 4.2+).
      *
      * @param int $quizid Quiz instance ID.
-     * @return array List of {questionid, qbeid, name, slot}.
+     * @return array Question data.
      */
-    private static function load_quiz_stack_questions_direct(
+    private static function load_questions_direct(
         int $quizid): array {
         global $DB;
         $data = [];
 
         $slots = $DB->get_records(
-            'quiz_slots', ['quizid' => $quizid], 'slot ASC');
-        self::dbg('load_direct: ' . count($slots) . ' total slots');
+            'quiz_slots',
+            ['quizid' => $quizid],
+            'slot ASC'
+        );
 
         foreach ($slots as $slot) {
             $qbeid = (int) ($slot->questionbankentryid ?? 0);
@@ -167,15 +176,13 @@ class quiz_helper {
      * Load via question_references table (Moodle 4.0-4.1).
      *
      * @param int $quizid Quiz instance ID.
-     * @return array List of {questionid, qbeid, name, slot}.
+     * @return array Question data.
      */
-    private static function load_quiz_stack_questions_via_refs(
+    private static function load_questions_via_refs(
         int $quizid): array {
         global $DB;
         $data = [];
 
-        // question_references links to quiz_slots via
-        // component='mod_quiz', questionarea='slot', itemid=slot.id
         $sql = "
             SELECT qs.slot AS slotnum,
                    qs.id AS slotid,
@@ -188,9 +195,8 @@ class quiz_helper {
              WHERE qs.quizid = :quizid
           ORDER BY qs.slot ASC";
 
-        $rows = $DB->get_records_sql($sql, ['quizid' => $quizid]);
-        self::dbg('load_via_refs: '
-            . count($rows) . ' slot-ref pairs');
+        $rows = $DB->get_records_sql(
+            $sql, ['quizid' => $quizid]);
 
         foreach ($rows as $row) {
             $qbeid = (int) $row->qbeid;
@@ -224,12 +230,44 @@ class quiz_helper {
     }
 
     /**
-     * Load question_attempts for a quiz attempt, filtered to STACK.
+     * Load STACK slots for a quiz attempt.
+     * Results are cached per attempt ID.
      *
      * @param int $attemptid Quiz attempt ID.
      * @return array{slotmap: array, qbeids: array, qbeidmap: array}
      */
     public static function load_attempt_stack_slots(
+        int $attemptid): array {
+        if (isset(self::$attemptcache[$attemptid])) {
+            self::dbg('load_attempt_stack_slots: '
+                . 'cache hit attempt=' . $attemptid);
+            return self::$attemptcache[$attemptid];
+        }
+
+        $result = [
+            'slotmap'  => [],
+            'qbeids'   => [],
+            'qbeidmap' => [],
+        ];
+
+        try {
+            $result = self::do_load_attempt_slots($attemptid);
+        } catch (\Throwable $e) {
+            self::dbg('load_attempt_stack_slots: '
+                . $e->getMessage());
+        }
+
+        self::$attemptcache[$attemptid] = $result;
+        return $result;
+    }
+
+    /**
+     * Internal: Load attempt slots from DB.
+     *
+     * @param int $attemptid Attempt ID.
+     * @return array Slot data.
+     */
+    private static function do_load_attempt_slots(
         int $attemptid): array {
         global $DB;
 
@@ -239,74 +277,69 @@ class quiz_helper {
             'qbeidmap' => [],
         ];
 
-        try {
-            $attempt = $DB->get_record(
-                'quiz_attempts', ['id' => $attemptid]);
-            if (!$attempt) {
-                self::dbg('load_attempt_stack_slots: '
-                    . 'attempt not found id=' . $attemptid);
-                return $result;
-            }
-
-            $qas = $DB->get_records(
-                'question_attempts',
-                ['questionusageid' => $attempt->uniqueid],
-                'slot ASC'
-            );
-            if (empty($qas)) {
-                return $result;
-            }
-
-            $rawslotmap = [];
-            $questionids = [];
-            foreach ($qas as $qa) {
-                $qid = (int) $qa->questionid;
-                $slot = (int) $qa->slot;
-                $rawslotmap[$slot] = $qid;
-                if (!in_array($qid, $questionids)) {
-                    $questionids[] = $qid;
-                }
-            }
-            if (empty($questionids)) {
-                return $result;
-            }
-
-            list($insql, $params) = $DB->get_in_or_equal(
-                $questionids, SQL_PARAMS_NAMED, 'qid');
-            $questions = $DB->get_records_select(
-                'question',
-                "id {$insql}", $params, '', 'id, qtype'
-            );
-
-            foreach ($rawslotmap as $slot => $qid) {
-                if (!isset($questions[$qid])) {
-                    continue;
-                }
-                if ($questions[$qid]->qtype !== 'stack') {
-                    continue;
-                }
-                $result['slotmap'][$slot] = $qid;
-                $qbeid = config_manager::resolve_qbeid($qid);
-                if ($qbeid) {
-                    $result['qbeids'][$slot] = $qbeid;
-                    if (!isset($result['qbeidmap'][$qbeid])) {
-                        $result['qbeidmap'][$qbeid] = $qid;
-                    }
-                }
-            }
-
-            self::dbg('load_attempt_stack_slots: '
-                . count($result['slotmap']) . ' STACK slots');
-        } catch (\Throwable $e) {
-            self::dbg('load_attempt_stack_slots: '
-                . $e->getMessage());
+        $attempt = $DB->get_record(
+            'quiz_attempts', ['id' => $attemptid]);
+        if (!$attempt) {
+            self::dbg('do_load_attempt_slots: '
+                . 'not found id=' . $attemptid);
+            return $result;
         }
+
+        $qas = $DB->get_records(
+            'question_attempts',
+            ['questionusageid' => $attempt->uniqueid],
+            'slot ASC'
+        );
+        if (empty($qas)) {
+            return $result;
+        }
+
+        $rawslotmap = [];
+        $questionids = [];
+        foreach ($qas as $qa) {
+            $qid = (int) $qa->questionid;
+            $slot = (int) $qa->slot;
+            $rawslotmap[$slot] = $qid;
+            if (!in_array($qid, $questionids)) {
+                $questionids[] = $qid;
+            }
+        }
+        if (empty($questionids)) {
+            return $result;
+        }
+
+        list($insql, $params) = $DB->get_in_or_equal(
+            $questionids, SQL_PARAMS_NAMED, 'qid');
+        $questions = $DB->get_records_select(
+            'question',
+            "id {$insql}", $params, '', 'id, qtype'
+        );
+
+        foreach ($rawslotmap as $slot => $qid) {
+            if (!isset($questions[$qid])) {
+                continue;
+            }
+            if ($questions[$qid]->qtype !== 'stack') {
+                continue;
+            }
+            $result['slotmap'][$slot] = $qid;
+            $qbeid = config_manager::resolve_qbeid($qid);
+            if ($qbeid) {
+                $result['qbeids'][$slot] = $qbeid;
+                if (!isset($result['qbeidmap'][$qbeid])) {
+                    $result['qbeidmap'][$qbeid] = $qid;
+                }
+            }
+        }
+
+        self::dbg('do_load_attempt_slots: '
+            . count($result['slotmap']) . ' STACK slots');
 
         return $result;
     }
 
     /**
-     * Check if current user has mod/quiz:manage for a given cmid.
+     * Check if current user has mod/quiz:manage.
      *
      * @param int $cmid Course module ID.
      * @return bool True if user can manage.
@@ -321,7 +354,7 @@ class quiz_helper {
     }
 
     /**
-     * Build a safe return URL from PAGE or fallback.
+     * Build a safe return URL.
      *
      * @param int $cmid Course module ID for fallback.
      * @return string URL string.

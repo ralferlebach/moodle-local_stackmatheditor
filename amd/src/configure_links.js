@@ -2,7 +2,7 @@
  * Injects configure links for STACK questions on quiz pages.
  *
  * Data is read from a JSON script element (#sme-configure-data)
- * to avoid the 1024-char limit of js_call_amd() arguments.
+ * to avoid the 1024-char limit of js_call_amd().
  *
  * @module     local_stackmatheditor/configure_links
  * @copyright  2026 Ralf Erlebach
@@ -26,47 +26,47 @@ define(['jquery'], function($) {
     }
 
     /**
-     * Load configuration data from JSON script element.
+     * Load data from JSON script element.
      *
-     * @returns {Object|null} Data or null if not found.
+     * @returns {Object|null} Data or null.
      */
     function loadData() {
-        var el = document.getElementById('sme-configure-data');
+        var el = document.getElementById(
+            'sme-configure-data');
         if (!el) {
-            dbg('data element not found, retrying...');
             return null;
         }
         try {
             return JSON.parse(el.textContent);
         } catch (e) {
-            dbg('data parse error: ' + e.message);
+            dbg('parse error: ' + e.message);
             return null;
         }
     }
 
     /**
-     * Build a configure URL with return parameter.
+     * Build a configure URL.
      *
-     * @param {string} baseUrl Configure page base URL.
+     * @param {string} base Base URL.
      * @param {number} cmid Course module ID.
      * @param {number} qbeid Question bank entry ID.
-     * @param {number} questionid Question ID.
-     * @param {string} returnUrl Return URL.
+     * @param {number} qid Question ID.
+     * @param {string} ret Return URL.
      * @returns {string} Full URL.
      */
-    function buildUrl(baseUrl, cmid, qbeid, questionid, returnUrl) {
-        var url = baseUrl
+    function buildUrl(base, cmid, qbeid, qid, ret) {
+        var url = base
             + '?cmid=' + encodeURIComponent(cmid);
         if (qbeid) {
             url += '&qbeid=' + encodeURIComponent(qbeid);
         }
-        if (questionid) {
+        if (qid) {
             url += '&questionid='
-                + encodeURIComponent(questionid);
+                + encodeURIComponent(qid);
         }
-        if (returnUrl) {
+        if (ret) {
             url += '&returnurl='
-                + encodeURIComponent(returnUrl);
+                + encodeURIComponent(ret);
         }
         return url;
     }
@@ -79,30 +79,26 @@ define(['jquery'], function($) {
      * @returns {jQuery} Link element.
      */
     function createTextLink(href, text) {
-        var $icon = $('<i>')
-            .addClass('fa fa-calculator')
-            .attr('aria-hidden', 'true');
-        var $link = $('<a>')
+        return $('<a>')
             .attr('href', href)
             .attr('title', text)
             .addClass('sme-configure-link')
-            .append($icon)
+            .append(
+                $('<i>').addClass('fa fa-calculator')
+                    .attr('aria-hidden', 'true')
+            )
             .append(' ' + text);
-        return $link;
     }
 
     /**
      * Create a small icon-only link.
      *
      * @param {string} href URL.
-     * @param {string} title Tooltip text.
-     * @returns {jQuery} Icon link element.
+     * @param {string} title Tooltip.
+     * @returns {jQuery} Icon link.
      */
     function createIconLink(href, title) {
-        var $icon = $('<i>')
-            .addClass('fa fa-calculator fa-fw')
-            .attr('aria-hidden', 'true');
-        var $link = $('<a>')
+        return $('<a>')
             .attr('href', href)
             .attr('title', title)
             .addClass('sme-configure-edit-link ml-1 mr-1')
@@ -111,52 +107,33 @@ define(['jquery'], function($) {
                 'font-size': '1em',
                 'text-decoration': 'none'
             })
-            .append($icon);
-        return $link;
+            .append(
+                $('<i>').addClass('fa fa-calculator fa-fw')
+                    .attr('aria-hidden', 'true')
+            );
     }
 
-    // ──────────────────────────────────────────────────
-    //  Attempt/review page
-    // ──────────────────────────────────────────────────
+    // ─── Attempt page ────────────────────────────────
 
     /**
-     * Find question container for a slot on attempt page.
+     * Find question container for a slot.
      *
-     * @param {string} slotNum Slot number.
-     * @returns {jQuery} Container or empty jQuery.
+     * @param {string} slot Slot number.
+     * @returns {jQuery} Container or empty.
      */
-    function findQuestionContainer(slotNum) {
-        var $container = $('[id$="-' + slotNum + '"].que');
-        if ($container.length) {
-            dbg('  container via .que[id$=-'
-                + slotNum + ']');
-            return $container.first();
+    function findContainer(slot) {
+        // Fast: CSS selector for .que ending with -slot.
+        var $c = $('[id$="-' + slot + '"].que');
+        if ($c.length) {
+            return $c.first();
         }
-
-        $container = $('input[name*=":' + slotNum + '_"]')
-            .closest('.que');
-        if ($container.length) {
-            dbg('  container via input name');
-            return $container.first();
-        }
-
-        var regex = new RegExp(
-            '^question-\\d+-' + slotNum + '$');
-        var matched = $('[id^="question-"]').filter(function() {
-            return regex.test(this.id);
+        // Fallback: regex on question-*-slot.
+        var re = new RegExp(
+            '^question-\\d+-' + slot + '$');
+        var $m = $('[id^="question-"]').filter(function() {
+            return re.test(this.id);
         });
-        if (matched.length) {
-            dbg('  container via regex id='
-                + matched.first().attr('id'));
-            return matched.first();
-        }
-
-        dbg('  available containers:');
-        $('[id^="question-"]').each(function() {
-            dbg('    id=' + this.id);
-        });
-
-        return $();
+        return $m.length ? $m.first() : $();
     }
 
     /**
@@ -166,100 +143,68 @@ define(['jquery'], function($) {
      */
     function injectAttemptLinks(data) {
         var slots = data.slots || {};
-        var slotNum;
+        var slot;
         var count = 0;
 
-        for (slotNum in slots) {
-            if (!slots.hasOwnProperty(slotNum)) {
+        for (slot in slots) {
+            if (!slots.hasOwnProperty(slot)) {
                 continue;
             }
-            if (injectSingleAttemptLink(
-                data, slotNum, slots[slotNum])) {
+            if (doAttemptSlot(data, slot, slots[slot])) {
                 count++;
             }
         }
-        dbg('attempt: injected ' + count + ' links');
+        dbg('attempt: ' + count + ' injected');
     }
 
     /**
-     * Inject one link on attempt/review page.
+     * Inject one link on attempt page.
      *
-     * @param {Object} data Configuration data.
-     * @param {string} slotNum Slot number.
-     * @param {Object} slotData Question data.
+     * @param {Object} data Config data.
+     * @param {string} slot Slot number.
+     * @param {Object} sd Slot data.
      * @returns {boolean} True if injected.
      */
-    function injectSingleAttemptLink(data, slotNum, slotData) {
+    function doAttemptSlot(data, slot, sd) {
         var url = buildUrl(
-            data.configureUrl,
-            data.cmid,
-            slotData.qbeid,
-            slotData.questionid,
-            data.returnUrl
-        );
-
-        var $link = createTextLink(url, data.linkText);
-        var $wrapper = $('<div>')
+            data.configureUrl, data.cmid,
+            sd.qbeid, sd.questionid, data.returnUrl);
+        var $w = $('<div>')
             .addClass('sme-configure-wrapper mt-1')
-            .append($link);
+            .append(createTextLink(url, data.linkText));
 
-        var $container = findQuestionContainer(slotNum);
-
-        if (!$container.length) {
-            dbg('attempt slot ' + slotNum
-                + ': container not found');
+        var $c = findContainer(slot);
+        if (!$c.length) {
+            dbg('slot ' + slot + ': not found');
             return false;
         }
 
-        dbg('attempt slot ' + slotNum
-            + ': id=' + $container.attr('id'));
-
-        var $info = $container.find('.info');
+        // Try info panel first.
+        var $info = $c.find('.info');
         if ($info.length) {
-            var $editLink = $info.find(
-                'a[href*="editquestion"],'
-                + ' a[href*="question.php"]'
-            );
-            if ($editLink.length) {
-                $editLink.first()
-                    .closest('div, span, p')
-                    .after($wrapper);
-                dbg('attempt slot ' + slotNum
-                    + ': after edit link');
+            var $edit = $info.find(
+                'a[href*="editquestion"]');
+            if ($edit.length) {
+                $edit.first().closest('div, span, p')
+                    .after($w);
                 return true;
             }
-            $info.append($wrapper);
-            dbg('attempt slot ' + slotNum
-                + ': appended to info');
+            $info.append($w);
             return true;
         }
 
-        var $formulation = $container.find('.formulation');
-        if ($formulation.length) {
-            $formulation.before($wrapper);
-            dbg('attempt slot ' + slotNum
-                + ': before formulation');
+        // Before formulation.
+        var $f = $c.find('.formulation');
+        if ($f.length) {
+            $f.before($w);
             return true;
         }
 
-        var $anyEdit = $container.find(
-            'a[href*="editquestion"]');
-        if ($anyEdit.length) {
-            $anyEdit.first().after($wrapper);
-            dbg('attempt slot ' + slotNum
-                + ': after editquestion');
-            return true;
-        }
-
-        $container.prepend($wrapper);
-        dbg('attempt slot ' + slotNum
-            + ': prepended to container');
+        $c.prepend($w);
         return true;
     }
 
-    // ──────────────────────────────────────────────────
-    //  Edit page
-    // ──────────────────────────────────────────────────
+    // ─── Edit page ───────────────────────────────────
 
     /**
      * Inject links on quiz edit page.
@@ -268,205 +213,76 @@ define(['jquery'], function($) {
      */
     function injectEditLinks(data) {
         var questions = data.questions || [];
-        var i;
         var count = 0;
-
-        dbg('edit: injecting ' + questions.length + ' links');
+        var i;
 
         for (i = 0; i < questions.length; i++) {
-            if (injectSingleEditLink(data, questions[i])) {
+            if (doEditQuestion(data, questions[i])) {
                 count++;
             }
         }
-        dbg('edit: injected ' + count + '/'
-            + questions.length);
+        dbg('edit: ' + count + '/' + questions.length);
     }
 
     /**
-     * Inject one icon on quiz edit page.
+     * Inject one icon on edit page.
      *
-     * @param {Object} data Configuration data.
+     * @param {Object} data Config data.
      * @param {Object} q Question data.
      * @returns {boolean} True if injected.
      */
-    function injectSingleEditLink(data, q) {
+    function doEditQuestion(data, q) {
         var url = buildUrl(
-            data.configureUrl,
-            data.cmid,
-            q.qbeid,
-            q.questionid,
-            data.returnUrl
-        );
-        var $iconLink = createIconLink(url, data.linkText);
+            data.configureUrl, data.cmid,
+            q.qbeid, q.questionid, data.returnUrl);
+        var $icon = createIconLink(url, data.linkText);
 
-        dbg('edit q=' + q.questionid
-            + ' name="' + q.name
-            + '" slot=' + q.slot);
-
-        if (strategyEditLink(q, $iconLink)) {
-            return true;
-        }
-        if (strategyQuestionName(q, $iconLink)) {
-            return true;
-        }
-        if (strategySlotContainer(q, $iconLink)) {
-            return true;
-        }
-
-        dbg('  FAILED: no injection point');
-        return false;
-    }
-
-    /**
-     * Strategy 1: Find edit-question link by question ID.
-     *
-     * @param {Object} q Question data.
-     * @param {jQuery} $iconLink Icon link.
-     * @returns {boolean} True if injected.
-     */
-    function strategyEditLink(q, $iconLink) {
-        var $editLinks = $(
+        // Find edit link for this question.
+        var $edit = $(
             'a[href*="editquestion"][href*="id='
-            + q.questionid + '"]'
-        );
-        if (!$editLinks.length) {
-            $editLinks = $(
+            + q.questionid + '"]');
+        if (!$edit.length) {
+            $edit = $(
                 'a[href*="editquestion"][href*="id='
-                + q.qbeid + '"]'
-            );
-        }
-        if (!$editLinks.length) {
-            dbg('  strategy1: no edit link');
-            return false;
+                + q.qbeid + '"]');
         }
 
-        var $link = $editLinks.first();
-        var $row = $link.closest(
-            '[data-for="cmitem"],'
-            + ' [data-for="slot"],'
-            + ' .activity-wrapper,'
-            + ' .slot,'
-            + ' .activity,'
-            + ' li'
-        );
-
-        if ($row.length) {
-            var $actions = $row.find(
-                '.activity-actions,'
-                + ' .actions,'
-                + ' .mod-quiz-edit-actions,'
-                + ' .ml-auto'
-            );
-            if ($actions.length) {
-                $actions.first().prepend(
-                    $iconLink.clone(true));
-                dbg('  strategy1: in actions area');
-                return true;
-            }
-        }
-
-        $link.after($iconLink.clone(true));
-        dbg('  strategy1: after edit link');
-        return true;
-    }
-
-    /**
-     * Strategy 2: Find by question name text.
-     *
-     * @param {Object} q Question data.
-     * @param {jQuery} $iconLink Icon link.
-     * @returns {boolean} True if injected.
-     */
-    function strategyQuestionName(q, $iconLink) {
-        var questionName = q.name;
-        var $matchedLinks = $('a').filter(function() {
-            var text = $(this).text().trim();
-            return text === questionName
-                || text.indexOf(questionName) === 0;
-        });
-
-        if (!$matchedLinks.length) {
-            dbg('  strategy2: no name match "'
-                + questionName + '"');
-            return false;
-        }
-
-        var $link = $matchedLinks.first();
-        var $row = $link.closest(
-            '[data-for="cmitem"],'
-            + ' [data-for="slot"],'
-            + ' .activity-wrapper,'
-            + ' .slot,'
-            + ' .activity,'
-            + ' li,'
-            + ' div.d-flex'
-        );
-
-        if ($row.length) {
-            var $actions = $row.find(
-                '.activity-actions,'
-                + ' .actions,'
-                + ' .ml-auto'
-            );
-            if ($actions.length) {
-                $actions.first().prepend(
-                    $iconLink.clone(true));
-                dbg('  strategy2: in actions');
-                return true;
-            }
-        }
-
-        $link.after($iconLink.clone(true));
-        dbg('  strategy2: after name link');
-        return true;
-    }
-
-    /**
-     * Strategy 3: Find slot container by data attributes.
-     *
-     * @param {Object} q Question data.
-     * @param {jQuery} $iconLink Icon link.
-     * @returns {boolean} True if injected.
-     */
-    function strategySlotContainer(q, $iconLink) {
-        var selectors = [
-            '[data-slot-number="' + q.slot + '"]',
-            '[data-slotid="' + q.slot + '"]',
-            '[data-slot="' + q.slot + '"]',
-            '#slot-' + q.slot
-        ];
-        var i;
-        var $container;
-
-        for (i = 0; i < selectors.length; i++) {
-            $container = $(selectors[i]);
-            if ($container.length) {
-                dbg('  strategy3: via "'
-                    + selectors[i] + '"');
-                var $actions = $container.find(
-                    '.activity-actions,'
-                    + ' .actions,'
-                    + ' .ml-auto'
-                );
+        if ($edit.length) {
+            var $row = $edit.first().closest(
+                '.activity-wrapper, .activity,'
+                + ' .slot, li, [data-for="cmitem"]');
+            if ($row.length) {
+                var $actions = $row.find(
+                    '.activity-actions, .actions,'
+                    + ' .ml-auto');
                 if ($actions.length) {
                     $actions.first().prepend(
-                        $iconLink.clone(true));
-                    dbg('  strategy3: in actions');
+                        $icon.clone(true));
                     return true;
                 }
-                $container.append(
-                    $iconLink.clone(true));
-                dbg('  strategy3: appended');
-                return true;
             }
+            $edit.first().after($icon.clone(true));
+            return true;
         }
 
-        dbg('  strategy3: no container');
+        // Fallback: find by name.
+        var name = q.name;
+        var $nameLink = $('a').filter(function() {
+            return $(this).text().trim() === name;
+        });
+        if ($nameLink.length) {
+            $nameLink.first().after($icon.clone(true));
+            return true;
+        }
+
+        dbg('edit q=' + q.questionid + ': not found');
         return false;
     }
 
+    // ─── Run ─────────────────────────────────────────
+
     /**
-     * Run injection with data.
+     * Execute injection with loaded data.
      *
      * @param {Object} data Configuration data.
      */
@@ -481,39 +297,26 @@ define(['jquery'], function($) {
 
     return /** @alias module:local_stackmatheditor/configure_links */ {
         /**
-         * Initialize configure link injection.
-         * Reads data from #sme-configure-data JSON element.
+         * Initialize. Reads data from DOM element.
          */
         init: function() {
-            dbg('init called');
-
+            dbg('init');
             $(document).ready(function() {
-                dbg('DOM ready');
-
-                // Data element may not exist yet if
-                // js_amd_inline runs after this module.
                 var data = loadData();
                 if (data) {
                     run(data);
                     return;
                 }
-
-                // Retry with short delay.
-                var retries = 0;
-                var maxRetries = 20;
-                var interval = setInterval(function() {
-                    retries++;
+                // Single retry for race condition
+                // with inline JS element creation.
+                setTimeout(function() {
                     data = loadData();
                     if (data) {
-                        clearInterval(interval);
                         run(data);
-                        return;
+                    } else {
+                        dbg('no data found');
                     }
-                    if (retries >= maxRetries) {
-                        clearInterval(interval);
-                        dbg('gave up waiting for data');
-                    }
-                }, 100);
+                }, 50);
             });
         }
     };
