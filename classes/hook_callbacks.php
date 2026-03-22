@@ -6,6 +6,12 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * Hook callbacks for local_stackmatheditor.
  *
+ * Injects:
+ * 1. MathJax v2 shim (synchronous inline script at top of body)
+ * 2. Definitions JSON (application/json script tag, read by JS from DOM)
+ * 3. Runtime data JSON (slot configs, var modes — via js_amd_inline)
+ * 4. MathQuill AMD module call (only small params via js_call_amd)
+ *
  * @package    local_stackmatheditor
  * @copyright  2026 Your Name
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -21,7 +27,7 @@ class hook_callbacks {
     ];
 
     /**
-     * Check whether the plugin is enabled and the current page is relevant.
+     * Check whether the plugin should inject on this page.
      *
      * @return bool
      */
@@ -38,7 +44,8 @@ class hook_callbacks {
     }
 
     /**
-     * Resolves per-slot toolbar configurations for the current quiz attempt.
+     * Resolve per-slot toolbar configs for the current quiz attempt.
+     * Uses direct DB queries. No debugging() calls.
      *
      * @return array Map of slot number => toolbar config array.
      */
@@ -61,21 +68,23 @@ class hook_callbacks {
         }
 
         try {
+            // 1. Load attempt.
             $attempt = $DB->get_record('quiz_attempts', ['id' => $attemptid]);
             if (!$attempt) {
                 return $slotconfigs;
             }
 
+            // 2. Load question attempts for this usage.
             $qas = $DB->get_records(
                 'question_attempts',
                 ['questionusageid' => $attempt->uniqueid],
                 'slot ASC'
             );
-
             if (empty($qas)) {
                 return $slotconfigs;
             }
 
+            // 3. Map question IDs to slots.
             $qamap = [];
             $questionids = [];
             foreach ($qas as $qa) {
@@ -86,11 +95,11 @@ class hook_callbacks {
                     $questionids[] = $qid;
                 }
             }
-
             if (empty($questionids)) {
                 return $slotconfigs;
             }
 
+            // 4. Load question records to filter by qtype.
             list($qidinsql, $qidparams) = $DB->get_in_or_equal(
                 $questionids, SQL_PARAMS_NAMED, 'qid'
             );
@@ -102,19 +111,17 @@ class hook_callbacks {
                 'id, qtype'
             );
 
-            // Resolve qbeids and build lookup maps.
-            $slotqbeids = [];      // slot => qbeid
-            $slotquestionids = []; // slot => questionid (for legacy fallback)
-            $qbeidToQid = [];      // qbeid => questionid
+            // 5. For STACK questions, resolve questionbankentryid.
+            $slotqbeids = [];
+            $slotquestionids = [];
+            $qbeidToQid = [];
 
             foreach ($questions as $question) {
                 if ($question->qtype !== 'stack') {
                     continue;
                 }
-
                 $qbeid = config_manager::resolve_qbeid((int) $question->id);
                 $slots = $qamap[$question->id] ?? [];
-
                 foreach ($slots as $slot) {
                     $slotquestionids[$slot] = (int) $question->id;
                     if ($qbeid) {
@@ -124,27 +131,24 @@ class hook_callbacks {
                 }
             }
 
-            // If no STACK questions at all, return empty.
             if (empty($slotquestionids)) {
                 return $slotconfigs;
             }
 
-            // Load configs — pass questionid map for legacy fallback.
+            // 6. Batch-load configs.
             if (!empty($slotqbeids)) {
                 $qbeids = array_values(array_unique($slotqbeids));
                 $configs = config_manager::get_configs($cmid, $qbeids, $qbeidToQid);
-
                 foreach ($slotqbeids as $slot => $qbeid) {
-                    $slotconfigs[$slot] = $configs[$qbeid] ?? config_manager::DEFAULT_ELEMENTS;
+                    $slotconfigs[$slot] = $configs[$qbeid]
+                        ?? config_manager::get_instance_defaults();
                 }
             }
 
-            // For slots without qbeid, try direct legacy lookup by questionid.
+            // 7. Legacy fallback for slots without qbeid.
             foreach ($slotquestionids as $slot => $qid) {
                 if (!isset($slotconfigs[$slot])) {
-                    $slotconfigs[$slot] = config_manager::get_config(
-                        $cmid, 0, $qid
-                    );
+                    $slotconfigs[$slot] = config_manager::get_config($cmid, 0, $qid);
                 }
             }
 
@@ -156,7 +160,7 @@ class hook_callbacks {
     }
 
     /**
-     * Resolves per-slot toolbar config for question preview mode.
+     * Resolve per-slot toolbar config for question preview mode.
      *
      * @return array Map of slot number => toolbar config array.
      */
@@ -183,7 +187,26 @@ class hook_callbacks {
     }
 
     /**
-     * Injects MathJax v2 Hub compatibility shim at the top of body.
+     * Extract variable mode per slot from configs.
+     *
+     * @param array $slotconfigs Existing slot configs.
+     * @return array Map of slot => variable mode string.
+     */
+    private static function resolve_slot_variable_modes(array $slotconfigs): array {
+        $modes = [];
+        $instancemode = config_manager::get_instance_variable_mode();
+        foreach ($slotconfigs as $slot => $config) {
+            $modes[$slot] = $config['_variableMode'] ?? $instancemode;
+        }
+        return $modes;
+    }
+
+    /**
+     * Injects MathJax v2 compatibility shim AND definitions JSON.
+     *
+     * Definitions are placed in a script type="application/json" tag
+     * so that JS can read them from the DOM without hitting the
+     * 1024 character limit of js_call_amd arguments.
      *
      * @param \core\hook\output\before_standard_top_of_body_html_generation $hook
      */
@@ -194,6 +217,7 @@ class hook_callbacks {
             return;
         }
 
+        // --- MathJax v2 shim ---
         $shimjs = <<<'JSEOF'
 <script type="text/javascript">
 (function(){
@@ -271,11 +295,20 @@ class hook_callbacks {
 </script>
 JSEOF;
 
-        $hook->add_html($shimjs);
+        // --- Definitions JSON ---
+        $defsdata = definitions::export_for_js();
+        $defsjson = json_encode($defsdata, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
+        $defstag = '<script type="application/json" id="sme-definitions">'
+            . $defsjson . '</script>';
+
+        $hook->add_html($shimjs . "\n" . $defstag);
     }
 
     /**
-     * Injects MathQuill AMD module with pre-resolved slot configurations.
+     * Injects MathQuill AMD module call and runtime data.
+     *
+     * Only small params go via js_call_amd (under 1024 chars).
+     * Slot configs and instance defaults go via a DOM JSON element.
      *
      * @param \core\hook\output\before_footer_html_generation $hook
      */
@@ -288,6 +321,7 @@ JSEOF;
             return;
         }
 
+        // Detect MathQuill JS file.
         $plugindir = __DIR__ . '/../thirdparty/mathquill/';
         $jsfile = file_exists($plugindir . 'mathquill.min.js')
             ? 'mathquill.min.js'
@@ -303,15 +337,23 @@ JSEOF;
 
         $cmid = $PAGE->cm ? (int) $PAGE->cm->id : 0;
 
-        // Resolve slot configs server-side.
+        // Resolve slot configs and variable modes.
         $slotconfigs = [];
+        $slotvarmodes = [];
+
         if (in_array($PAGE->pagetype, ['mod-quiz-attempt', 'mod-quiz-review'])) {
             $slotconfigs = self::resolve_slot_configs();
+            $slotvarmodes = self::resolve_slot_variable_modes($slotconfigs);
         } else if (in_array($PAGE->pagetype,
             ['question-preview', 'question-bank-previewquestion'])) {
             $slotconfigs = self::resolve_preview_configs();
+            $slotvarmodes = self::resolve_slot_variable_modes($slotconfigs);
         }
 
+        $instancedefaults = config_manager::get_instance_defaults();
+        $instancevarmode = config_manager::get_instance_variable_mode();
+
+        // Small params via js_call_amd (well under 1024 chars).
         $PAGE->requires->js_call_amd(
             'local_stackmatheditor/mathquill_init',
             'init',
@@ -319,10 +361,27 @@ JSEOF;
                 'mathquillJsUrl'  => $mqjsurl,
                 'mathquillCssUrl' => $mqcssurl,
                 'cmid'            => $cmid,
-                'slotConfigs'     => !empty($slotconfigs)
-                    ? (object) $slotconfigs
-                    : new \stdClass(),
+                'variableMode'    => $instancevarmode,
             ]]
         );
+
+        // Larger runtime data via DOM JSON element.
+        $runtimedata = json_encode([
+            'slotConfigs'      => !empty($slotconfigs)
+                ? $slotconfigs : new \stdClass(),
+            'slotVarModes'     => !empty($slotvarmodes)
+                ? $slotvarmodes : new \stdClass(),
+            'instanceDefaults' => $instancedefaults,
+        ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
+
+        $PAGE->requires->js_amd_inline("
+            (function() {
+                var el = document.createElement('script');
+                el.type = 'application/json';
+                el.id = 'sme-runtime';
+                el.textContent = " . json_encode($runtimedata) . ";
+                document.body.appendChild(el);
+            })();
+        ");
     }
 }

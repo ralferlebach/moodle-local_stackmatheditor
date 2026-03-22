@@ -30,7 +30,7 @@ function xmldb_local_stackmatheditor_upgrade($oldversion) {
     // STEP 1: Migrate data from any old alternative table names into the
     //         target table. Then drop the old tables.
     // =========================================================================
-    if ($oldversion < 2026032400) {
+    if ($oldversion < 2026032200) {
 
         $oldtablenames = ['local_sme_config', 'local_stackmatheditor_cfg',
             'local_stackmatheditor_quid'];
@@ -122,7 +122,7 @@ function xmldb_local_stackmatheditor_upgrade($oldversion) {
     // =========================================================================
     // STEP 2: Ensure the target table has all required columns.
     // =========================================================================
-    if ($oldversion < 2026032400) {
+    if ($oldversion < 2026032200) {
 
         if (!$dbman->table_exists($targettable)) {
             // Table doesn't exist at all — should not happen (install.xml
@@ -242,7 +242,7 @@ function xmldb_local_stackmatheditor_upgrade($oldversion) {
     // STEP 3: Migrate legacy data — fill in questionbankentryid from questionid
     //         for any records that have questionid but no questionbankentryid.
     // =========================================================================
-    if ($oldversion < 2026032400) {
+    if ($oldversion < 2026032200) {
 
         $legacyrecords = $DB->get_records_select(
             'local_stackmatheditor',
@@ -270,8 +270,8 @@ function xmldb_local_stackmatheditor_upgrade($oldversion) {
     // =========================================================================
     // STEP 4: Save upgrade point.
     // =========================================================================
-    if ($oldversion < 2026032400) {
-        upgrade_plugin_savepoint(true, 2026032400, 'local', 'stackmatheditor');
+    if ($oldversion < 2026032200) {
+        upgrade_plugin_savepoint(true, 2026032200, 'local', 'stackmatheditor');
     }
 
     return true;

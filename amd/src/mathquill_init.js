@@ -1,11 +1,11 @@
 /**
  * Initialises MathQuill editors on STACK answer fields.
  *
- * Architecture:
- * - Slot configs are resolved server-side and passed as params.slotConfigs
- * - Slot numbers are extracted from input names (format: q{usage}:{slot}_ans{n})
- * - No AJAX calls needed — faster and more reliable
- * - Correctly handles multiple questions per page
+ * Reads large data from DOM JSON elements:
+ * - #sme-definitions: element groups, functions, units, constants, greek
+ * - #sme-runtime: slotConfigs, slotVarModes, instanceDefaults
+ *
+ * Only small params come via js_call_amd: URLs, cmid, variableMode.
  *
  * @module     local_stackmatheditor/mathquill_init
  * @copyright  2026 Your Name
@@ -26,14 +26,20 @@ define([
     /** @type {boolean} Enable console debug logging. */
     var DEBUG = true;
 
-    /** @type {number} Debounce delay for syncing to STACK input (ms). */
+    /** @type {number} Debounce delay in ms. */
     var SYNC_DELAY = 500;
 
-    /** @type {boolean} Whether the current locale uses comma as decimal separator. */
+    /** @type {boolean} Whether locale uses comma as decimal separator. */
     var COMMA_DECIMAL = false;
 
+    /** @type {Object} Definitions from PHP (read from DOM). */
+    var DEFS = {};
+
+    /** @type {string} Instance-wide variable mode. */
+    var INSTANCE_VAR_MODE = 'single';
+
     /**
-     * Log a debug message to the browser console.
+     * Log debug message.
      *
      * @param {...*} varArgs Values to log.
      */
@@ -45,10 +51,10 @@ define([
     }
 
     /**
-     * Creates a debounced version of a function.
+     * Create a debounced function.
      *
-     * @param {Function} func The function to debounce.
-     * @param {number} wait Delay in milliseconds.
+     * @param {Function} func Function to debounce.
+     * @param {number} wait Delay in ms.
      * @returns {Function} Debounced function.
      */
     function debounce(func, wait) {
@@ -67,9 +73,9 @@ define([
     }
 
     /**
-     * Detect whether the current Moodle locale uses comma as decimal separator.
+     * Detect comma-decimal locale.
      *
-     * @returns {boolean} True if comma should be used as decimal separator.
+     * @returns {boolean} True if comma decimal.
      */
     function detectCommaDecimal() {
         var lang = '';
@@ -77,42 +83,31 @@ define([
         if (htmlEl) {
             lang = (htmlEl.getAttribute('lang') || '').toLowerCase();
         }
-
         var commaLocales = [
             'de', 'fr', 'es', 'it', 'pt', 'nl', 'da', 'fi', 'sv', 'nb', 'nn',
             'no', 'pl', 'cs', 'sk', 'hu', 'ro', 'bg', 'hr', 'sl', 'sr', 'el',
             'tr', 'ru', 'uk', 'id', 'vi', 'ca', 'gl', 'eu'
         ];
-
         var i;
         for (i = 0; i < commaLocales.length; i++) {
             if (lang === commaLocales[i] || lang.indexOf(commaLocales[i] + '-') === 0) {
-                log('Detected comma-decimal locale:', lang);
                 return true;
             }
         }
-
         if (window.Intl && window.Intl.NumberFormat) {
             var formatted = new Intl.NumberFormat(lang || undefined).format(1.1);
             if (formatted.indexOf(',') !== -1) {
                 return true;
             }
         }
-
         return false;
     }
 
     /**
-     * Extract the slot number from a STACK input field's name attribute.
+     * Extract slot number from STACK input name.
      *
-     * Input name format: q{questionusageid}:{slotnumber}_{inputname}
-     * Examples:
-     *   q29:1_ans1  → slot 1
-     *   q29:3_ans1  → slot 3
-     *   q29:5_ans2  → slot 5
-     *
-     * @param {string} name The input's name attribute.
-     * @returns {number|null} The slot number or null.
+     * @param {string} name Input name attribute.
+     * @returns {number|null} Slot number or null.
      */
     function extractSlotFromName(name) {
         if (!name) {
@@ -125,88 +120,136 @@ define([
         return null;
     }
 
-    /** @type {Object} Toolbar button definitions per category. */
-    var TOOLBAR_DEFS = {
-        fractions: [
-            {label: '\\frac{a}{b}', write: '\\frac{}{}', display: 'a/b'}
-        ],
-        powers: [
-            {label: 'x^n', write: '^{}', display: 'x\u207F'}
-        ],
-        roots: [
-            {label: '\u221Ax', write: '\\sqrt{}', display: '\u221A'},
-            {label: '\u221Bx', write: '\\sqrt[3]{}', display: '\u221B'}
-        ],
-        trigonometry: [
-            {label: 'sin', cmd: '\\sin'},
-            {label: 'cos', cmd: '\\cos'},
-            {label: 'tan', cmd: '\\tan'},
-            {label: 'asin', cmd: '\\arcsin'},
-            {label: 'acos', cmd: '\\arccos'},
-            {label: 'atan', cmd: '\\arctan'}
-        ],
-        logarithms: [
-            {label: 'ln', cmd: '\\ln'},
-            {label: 'log', cmd: '\\log'},
-            {label: 'exp', cmd: '\\exp'}
-        ],
-        constants: [
-            {label: '\u03C0', cmd: '\\pi'},
-            {label: 'e', write: 'e'},
-            {label: '\u221E', cmd: '\\infty'}
-        ],
-        comparison: [
-            {label: '\u2264', cmd: '\\le'},
-            {label: '\u2265', cmd: '\\ge'},
-            {label: '\u2260', cmd: '\\ne'},
-            {label: '=', write: '='}
-        ],
-        parentheses: [
-            {label: '( )', write: '\\left(\\right)'},
-            {label: '[ ]', write: '\\left[\\right]'}
-        ],
-        calculus: [
-            {label: '\u222B', write: '\\int_{}^{}'},
-            {label: '\u03A3', write: '\\sum_{}^{}'}
-        ],
-        greek: [
-            {label: '\u03B1', cmd: '\\alpha'},
-            {label: '\u03B2', cmd: '\\beta'},
-            {label: '\u03B3', cmd: '\\gamma'},
-            {label: '\u03B8', cmd: '\\theta'},
-            {label: '\u03BB', cmd: '\\lambda'},
-            {label: '\u03C3', cmd: '\\sigma'},
-            {label: '\u03C9', cmd: '\\omega'},
-            {label: '\u03C6', cmd: '\\phi'}
-        ],
-        matrices: []
-    };
+    /**
+     * Read and parse a JSON script tag from the DOM.
+     *
+     * @param {string} id Element ID.
+     * @returns {Object} Parsed JSON or empty object.
+     */
+    function readJsonFromDom(id) {
+        var el = document.getElementById(id);
+        if (!el) {
+            log('JSON element #' + id + ' not found in DOM.');
+            return {};
+        }
+        try {
+            var text = el.textContent || el.innerText || '{}';
+            return JSON.parse(text);
+        } catch (e) {
+            log('Failed to parse #' + id + ':', e.message);
+            return {};
+        }
+    }
 
     /**
-     * Returns the default toolbar configuration.
+     * Build options for tex2max/max2tex converters.
      *
-     * @returns {Object} Category name to boolean map.
+     * @param {string} varMode Variable mode.
+     * @returns {Object} Converter options.
      */
-    function getDefaultConfig() {
+    function buildConvertOptions(varMode) {
         return {
-            fractions: true,
-            powers: true,
-            roots: true,
-            trigonometry: true,
-            logarithms: true,
-            constants: true,
-            comparison: true,
-            parentheses: true,
-            calculus: false,
-            greek: false,
-            matrices: false
+            commaDecimal: COMMA_DECIMAL,
+            variableMode: varMode || INSTANCE_VAR_MODE,
+            defs: DEFS
         };
     }
 
     /**
-     * Dynamically loads a CSS file by injecting a link element into head.
+     * Build toolbar from definitions and per-slot config.
      *
-     * @param {string} url CSS file URL.
+     * @param {Object} config Category-to-boolean map.
+     * @param {Object} mathField MathQuill MathField instance.
+     * @returns {jQuery} Toolbar element.
+     */
+    function buildToolbar(config, mathField) {
+        var $toolbar = $(
+            '<div class="sme-toolbar" role="toolbar" aria-label="Math Editor Toolbar"></div>'
+        );
+
+        if (!DEFS || !DEFS.elementGroups) {
+            return $toolbar;
+        }
+
+        var groupKeys = Object.keys(DEFS.elementGroups);
+        groupKeys.forEach(function(category) {
+            if (!config[category]) {
+                return;
+            }
+            var group = DEFS.elementGroups[category];
+            var buttons = group.elements;
+            if (!buttons || !buttons.length) {
+                return;
+            }
+            var $group = $('<div class="sme-toolbar-group" role="group" title="'
+                + (group.label || category) + '"></div>');
+
+            buttons.forEach(function(btn) {
+                var $button = $('<button type="button" class="sme-toolbar-btn"></button>');
+                $button.attr('title', btn.label).text(btn.display || btn.label);
+                $button.on('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (btn.cmd) {
+                        mathField.cmd(btn.cmd);
+                    } else if (btn.write) {
+                        mathField.write(btn.write);
+                    }
+                    mathField.focus();
+                });
+                $group.append($button);
+            });
+            $toolbar.append($group);
+        });
+
+        return $toolbar;
+    }
+
+    /**
+     * Sync MathQuill value to hidden STACK input.
+     *
+     * @param {jQuery} $input STACK input element.
+     * @param {Object} mathField MathQuill instance.
+     * @param {string} varMode Variable mode.
+     */
+    function doSync($input, mathField, varMode) {
+        var latex = mathField.latex();
+        var maxima = Tex2Max.convert(latex, buildConvertOptions(varMode));
+        log('Sync: LaTeX="' + latex + '" Maxima="' + maxima + '"');
+        $input.val(maxima);
+        var el = $input[0];
+        try {
+            el.dispatchEvent(new Event('input', {bubbles: true}));
+            el.dispatchEvent(new Event('change', {bubbles: true}));
+        } catch (e) {
+            log('Event dispatch error (non-fatal):', e.message);
+        }
+    }
+
+    /**
+     * Convert Maxima pre-fill value to LaTeX.
+     *
+     * @param {string} value Current input value.
+     * @param {string} varMode Variable mode.
+     * @returns {string} LaTeX for MathQuill.
+     */
+    function maximaToLatex(value, varMode) {
+        if (!value || !value.trim()) {
+            return '';
+        }
+        if (Max2Tex.isMaxima(value)) {
+            var latex = Max2Tex.convert(value, buildConvertOptions(varMode));
+            log('Pre-fill: Maxima="' + value + '" -> LaTeX="' + latex + '"');
+            return latex;
+        }
+        log('Pre-fill: as-is: "' + value + '"');
+        return value;
+    }
+
+    /**
+     * Load a CSS file dynamically.
+     *
+     * @param {string} url CSS URL.
      * @returns {Promise} Resolves when loaded.
      */
     function loadCss(url) {
@@ -232,7 +275,7 @@ define([
     }
 
     /**
-     * Ensures jQuery is available globally for MathQuill.
+     * Ensure jQuery is global for MathQuill.
      */
     function ensureGlobalJquery() {
         if (!window.jQuery) {
@@ -241,10 +284,10 @@ define([
     }
 
     /**
-     * Dynamically loads MathQuill JS while preventing AMD detection.
+     * Load MathQuill JS, hiding AMD define temporarily.
      *
-     * @param {string} url JS file URL.
-     * @returns {Promise} Resolves with MathQuill global object.
+     * @param {string} url JS URL.
+     * @returns {Promise} Resolves with MathQuill global.
      */
     function loadMathQuillScript(url) {
         return new Promise(function(resolve, reject) {
@@ -252,10 +295,8 @@ define([
                 resolve(window.MathQuill);
                 return;
             }
-
             ensureGlobalJquery();
             log('Loading MathQuill from:', url);
-
             fetch(url)
                 .then(function(response) {
                     if (!response.ok) {
@@ -266,23 +307,20 @@ define([
                 .then(function(scriptText) {
                     var originalDefine = window.define;
                     window.define = undefined;
-
                     try {
                         var scriptEl = document.createElement('script');
                         scriptEl.type = 'text/javascript';
                         scriptEl.text = scriptText;
                         document.head.appendChild(scriptEl);
                     } catch (e) {
-                        log('Error executing MathQuill script:', e.message);
+                        log('Error executing MathQuill:', e.message);
                     }
-
                     window.define = originalDefine;
-
                     if (window.MathQuill) {
                         log('MathQuill loaded successfully.');
                         resolve(window.MathQuill);
                     } else {
-                        reject(new Error('MathQuill executed but window.MathQuill not set.'));
+                        reject(new Error('MathQuill not set after execution.'));
                     }
                 })
                 .catch(function(err) {
@@ -292,93 +330,14 @@ define([
     }
 
     /**
-     * Builds the toolbar element for a MathQuill field.
+     * Replace a STACK input with a MathQuill editor.
      *
-     * @param {Object} config Category-to-boolean configuration map.
-     * @param {Object} mathField MathQuill MathField instance.
-     * @returns {jQuery} Toolbar element.
-     */
-    function buildToolbar(config, mathField) {
-        var $toolbar = $('<div class="sme-toolbar" role="toolbar" aria-label="Math Editor Toolbar"></div>');
-
-        Object.keys(TOOLBAR_DEFS).forEach(function(category) {
-            if (!config[category]) {
-                return;
-            }
-            var buttons = TOOLBAR_DEFS[category];
-            if (!buttons || !buttons.length) {
-                return;
-            }
-            var $group = $('<div class="sme-toolbar-group" role="group"></div>');
-            buttons.forEach(function(btn) {
-                var $button = $('<button type="button" class="sme-toolbar-btn"></button>');
-                $button.attr('title', btn.label).text(btn.display || btn.label);
-                $button.on('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (btn.cmd) {
-                        mathField.cmd(btn.cmd);
-                    } else if (btn.write) {
-                        mathField.write(btn.write);
-                    }
-                    mathField.focus();
-                });
-                $group.append($button);
-            });
-            $toolbar.append($group);
-        });
-
-        return $toolbar;
-    }
-
-    /**
-     * Performs the actual sync of MathQuill value to the hidden STACK input.
-     *
-     * @param {jQuery} $input The original STACK input element.
-     * @param {Object} mathField MathQuill MathField instance.
-     */
-    function doSync($input, mathField) {
-        var latex = mathField.latex();
-        var maxima = Tex2Max.convert(latex, {commaDecimal: COMMA_DECIMAL});
-        log('Sync: LaTeX="' + latex + '" Maxima="' + maxima + '"');
-        $input.val(maxima);
-
-        var el = $input[0];
-        try {
-            el.dispatchEvent(new Event('input', {bubbles: true}));
-            el.dispatchEvent(new Event('change', {bubbles: true}));
-        } catch (e) {
-            log('Event dispatch error (non-fatal):', e.message);
-        }
-    }
-
-    /**
-     * Converts a pre-filled value to LaTeX for MathQuill display.
-     *
-     * @param {string} value The current input field value.
-     * @returns {string} LaTeX suitable for MathQuill, or empty string.
-     */
-    function maximaToLatex(value) {
-        if (!value || !value.trim()) {
-            return '';
-        }
-        if (Max2Tex.isMaxima(value)) {
-            var latex = Max2Tex.convert(value, {commaDecimal: COMMA_DECIMAL});
-            log('Pre-fill: Maxima="' + value + '" -> LaTeX="' + latex + '"');
-            return latex;
-        }
-        log('Pre-fill: Using value as-is: "' + value + '"');
-        return value;
-    }
-
-    /**
-     * Replaces a single STACK input field with a MathQuill editor.
-     *
-     * @param {jQuery} $input The STACK input element to replace.
-     * @param {Object} config Toolbar configuration.
+     * @param {jQuery} $input STACK input element.
+     * @param {Object} config Toolbar category booleans.
+     * @param {string} varMode Variable mode.
      * @returns {Object|undefined} MathQuill MathField or undefined.
      */
-    function initMathQuillField($input, config) {
+    function initMathQuillField($input, config, varMode) {
         if ($input.data('sme-initialized')) {
             return undefined;
         }
@@ -386,7 +345,7 @@ define([
 
         var inputName = $input.attr('name') || 'unknown';
         var slot = extractSlotFromName(inputName);
-        log('Initialising MathQuill on input:', inputName, '(slot ' + slot + ')');
+        log('Init:', inputName, '(slot ' + slot + ', varMode=' + varMode + ')');
 
         var existingValue = $input.val();
 
@@ -407,7 +366,7 @@ define([
         var suppressSync = true;
 
         var debouncedSync = debounce(function() {
-            doSync($input, mathField);
+            doSync($input, mathField, varMode);
         }, SYNC_DELAY);
 
         var mathField = MQ.MathField($mqSpan[0], {
@@ -422,33 +381,32 @@ define([
         });
 
         if (existingValue) {
-            var latex = maximaToLatex(existingValue);
+            var latex = maximaToLatex(existingValue, varMode);
             if (latex) {
                 try {
                     mathField.latex(latex);
                     log('Pre-fill successful.');
                 } catch (e) {
-                    log('Pre-fill LaTeX failed:', e.message);
+                    log('Pre-fill failed:', e.message);
                     mathField.write(existingValue);
                 }
             }
         }
 
         suppressSync = false;
-
         $container.prepend(buildToolbar(config, mathField));
         return mathField;
     }
 
     /**
-     * Finds STACK input fields using multiple selector strategies.
+     * Find STACK input fields using multiple strategies.
      *
      * @returns {jQuery} Matched input elements.
      */
     function findStackInputs() {
         var $inputs;
 
-        // Strategy 1: Classic .que.stack container.
+        // Strategy 1: .que.stack container.
         $inputs = $('.que.stack').find('input[type="text"]').filter(function() {
             return this.name && /_ans\d*$/.test(this.name);
         });
@@ -466,7 +424,8 @@ define([
 
         // Strategy 3: Container with "stack" in class.
         $inputs = $('[class*="stack"]').find('input[type="text"]').filter(function() {
-            return (this.id && /ans\d/.test(this.id)) || (this.name && /ans\d/.test(this.name));
+            return (this.id && /ans\d/.test(this.id)) ||
+                (this.name && /ans\d/.test(this.name));
         });
         if ($inputs.length) {
             log('Strategy 3 matched:', $inputs.length, 'fields');
@@ -489,33 +448,39 @@ define([
     return /** @alias module:local_stackmatheditor/mathquill_init */ {
 
         /**
-         * Entry point called from hook_callbacks.php via js_call_amd.
+         * Entry point called from hook_callbacks.php.
          *
-         * @param {Object} params Configuration parameters.
-         * @param {string} params.mathquillJsUrl URL to MathQuill JS file.
-         * @param {string} params.mathquillCssUrl URL to MathQuill CSS file.
+         * @param {Object} params Small params from js_call_amd.
+         * @param {string} params.mathquillJsUrl MathQuill JS URL.
+         * @param {string} params.mathquillCssUrl MathQuill CSS URL.
          * @param {number} params.cmid Course module ID.
-         * @param {Object} params.slotConfigs Map of slot number to toolbar config.
+         * @param {string} params.variableMode Instance variable mode.
          */
         init: function(params) {
             log('init() called.');
 
-            // Install MathJax v2 compatibility shim.
+            // Install MathJax v2 compat shim.
             MathJaxCompat.install();
 
-            // Detect locale-based decimal separator.
+            // Detect locale.
             COMMA_DECIMAL = detectCommaDecimal();
             log('Comma decimal:', COMMA_DECIMAL);
-            log('cmid:', params.cmid);
 
-            // Parse slot configs from server.
-            var slotConfigs = params.slotConfigs || {};
-            var slotKeys = Object.keys(slotConfigs);
-            log('Slot configs received from server:', slotKeys.length, 'slots');
-            slotKeys.forEach(function(slot) {
-                log('  Slot', slot, ':', JSON.stringify(slotConfigs[slot]));
-            });
+            // Store instance variable mode.
+            INSTANCE_VAR_MODE = params.variableMode || 'single';
+            log('Variable mode:', INSTANCE_VAR_MODE);
 
+            // Read definitions from DOM JSON (injected by before_top_of_body).
+            DEFS = readJsonFromDom('sme-definitions');
+            log('Definitions:',
+                Object.keys(DEFS.elementGroups || {}).length, 'groups,',
+                (DEFS.functions || []).length, 'functions,',
+                (DEFS.unitSymbols || []).length, 'units');
+
+            var cmid = params.cmid || 0;
+            log('cmid:', cmid);
+
+            // Load MathQuill CSS and JS.
             var cssReady = loadCss(params.mathquillCssUrl);
             var jsReady = loadMathQuillScript(params.mathquillJsUrl);
 
@@ -524,30 +489,52 @@ define([
                     MQ = results[1].getInterface(2);
                     log('MathQuill interface ready.');
 
-                    // Re-install shim in case MathJax loaded after first call.
+                    // Re-install MathJax shim.
                     MathJaxCompat.install();
 
+                    // Read runtime data from DOM (injected by before_footer).
+                    var runtime = readJsonFromDom('sme-runtime');
+                    var slotConfigs = runtime.slotConfigs || {};
+                    var slotVarModes = runtime.slotVarModes || {};
+                    var instanceDefaults = runtime.instanceDefaults || {};
+
+                    var slotKeys = Object.keys(slotConfigs);
+                    log('Slot configs:', slotKeys.length, 'slots');
+                    slotKeys.forEach(function(slot) {
+                        log('  Slot', slot, ':', JSON.stringify(slotConfigs[slot]));
+                    });
+
+                    // Find STACK inputs.
                     var $inputs = findStackInputs();
                     if (!$inputs.length) {
                         return;
                     }
 
-                    // Apply editors with slot-based config lookup.
+                    // Init each input with its config and variable mode.
                     $inputs.each(function() {
                         var $input = $(this);
                         var inputName = $input.attr('name') || '';
                         var slot = extractSlotFromName(inputName);
 
+                        // Determine config for this slot.
                         var config;
                         if (slot !== null && slotConfigs[slot]) {
                             config = slotConfigs[slot];
                             log('Input', inputName, '-> slot', slot, '-> custom config');
                         } else {
-                            config = getDefaultConfig();
-                            log('Input', inputName, '-> slot', slot, '-> default config');
+                            config = instanceDefaults;
+                            log('Input', inputName, '-> slot', slot, '-> instance defaults');
                         }
 
-                        initMathQuillField($input, config);
+                        // Determine variable mode for this slot.
+                        var varMode;
+                        if (slot !== null && slotVarModes[slot]) {
+                            varMode = slotVarModes[slot];
+                        } else {
+                            varMode = INSTANCE_VAR_MODE;
+                        }
+
+                        initMathQuillField($input, config, varMode);
                     });
                 })
                 .catch(function(err) {
