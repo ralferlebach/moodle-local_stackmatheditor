@@ -117,6 +117,7 @@ The per-question configuration page itself requires a quiz module context and th
 
 - works at the moment only with input fields, not with text area
 - no option for quiz-wide preferences at the moment
+- no automated testing (CI still to be implemented)
 
 ## Privacy ##
 
