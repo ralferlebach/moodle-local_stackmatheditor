@@ -7,13 +7,11 @@ The plugin injects a configurable toolbar for mathematical input, supports **LaT
 ## Key features ##
 
 - Adds a visual MathQuill editor to STACK answer inputs in supported quiz and preview pages.
-- Uses Moodle hooks and AMD modules to inject the editor without modifying STACK core files.
 - Supports **automatic LaTeX-to-Maxima conversion** for common mathematical notation.
 - Provides configurable toolbar groups such as fractions, powers, roots, trigonometry, logarithms, constants, comparison operators, parentheses, calculus symbols, Greek letters, and matrices.
 - Supports configurable **variable modes** with instance defaults and question-specific overrides.
 - Adds a dedicated configuration UI for individual STACK questions inside a quiz context.
-- Exposes an AJAX-capable external service for retrieving toolbar configuration for question IDs.
-- Ships with English and German language packs.
+- English and German language packs at the moment
 
 ## Requirements ##
 
