@@ -6,7 +6,16 @@ defined('MOODLE_INTERNAL') || die();
 /**
  * Manages per-quiz per-question toolbar configuration.
  *
- * Cascade: instance defaults -> quiz-level (qbeid=0) -> question-level.
+ * Lookup priority for get_config():
+ *   1. Exact:      cmid + qbeid          (question-level)
+ *   2. Quiz-def.:  cmid + qbeid IS NULL  (quiz-level default)  ← NEW
+ *   3. Global:     cmid=0 + qbeid        (cross-quiz question default)
+ *   4. Any qbeid   match                 (legacy fallback)
+ *   5. Legacy:     questionid field      (very old records)
+ *   6. Instance defaults                 (settings.php)
+ *
+ * Quiz-level defaults are stored with questionbankentryid = NULL.
+ * Question-level configs use a concrete questionbankentryid integer.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
@@ -17,6 +26,10 @@ class config_manager {
     /** @var string Database table name. */
     const TABLE = 'local_stackmatheditor';
 
+    // ------------------------------------------------------------------
+    // Instance-level helpers
+    // ------------------------------------------------------------------
+
     /**
      * Returns instance-wide default enabled state for all element groups.
      *
@@ -25,34 +38,31 @@ class config_manager {
     public static function get_instance_defaults(): array {
         $groups = definitions::get_element_groups();
 
-        // 1. New format: single comma-separated setting.
         $enabledstr = get_config('local_stackmatheditor', 'default_groups');
         if ($enabledstr !== false && $enabledstr !== '') {
             $enabled = array_map('trim', explode(',', $enabledstr));
-            $result = [];
+            $result  = [];
             foreach ($groups as $key => $group) {
                 $result[$key] = in_array($key, $enabled);
             }
             return $result;
         }
 
-        // 2. Old format: individual settings.
         $hasoldformat = false;
-        $result = [];
+        $result       = [];
         foreach ($groups as $key => $group) {
             $setting = get_config('local_stackmatheditor', 'default_' . $key);
             if ($setting !== false) {
-                $hasoldformat = true;
-                $result[$key] = (bool) $setting;
+                $hasoldformat  = true;
+                $result[$key]  = (bool) $setting;
             } else {
-                $result[$key] = $group['default_enabled'];
+                $result[$key]  = $group['default_enabled'];
             }
         }
         if ($hasoldformat) {
             return $result;
         }
 
-        // 3. Fallback: hardcoded defaults.
         return definitions::get_default_enabled();
     }
 
@@ -109,7 +119,7 @@ class config_manager {
     }
 
     /**
-     * Public accessor for the config column name.
+     * Public accessor for the config column name (for debug display).
      *
      * @return string Column name.
      */
@@ -117,45 +127,53 @@ class config_manager {
         return self::get_config_column();
     }
 
+    // ------------------------------------------------------------------
+    // Low-level DB fetch
+    // ------------------------------------------------------------------
+
     /**
      * Safe single-record fetch: returns newest matching record.
      *
      * @param string $where SQL WHERE clause.
-     * @param array $params Query parameters.
-     * @return \stdClass|null Record or null.
+     * @param array  $params Query parameters.
+     * @return \stdClass|null
      */
     private static function get_one(string $where, array $params): ?\stdClass {
         global $DB;
-        $sql = "SELECT * FROM {" . self::TABLE . "} WHERE {$where}"
-            . " ORDER BY timemodified DESC";
+        $sql     = "SELECT * FROM {" . self::TABLE . "} WHERE {$where}"
+                 . " ORDER BY timemodified DESC";
         $records = $DB->get_records_sql($sql, $params, 0, 1);
         return $records ? reset($records) : null;
     }
 
+    // ------------------------------------------------------------------
+    // qbeid resolution
+    // ------------------------------------------------------------------
+
     /**
      * Resolve any question ID to its question bank entry ID.
      *
-     * @param int $questionid Any version-specific question ID.
-     * @return int|null The question bank entry ID, or null.
+     * @param int $questionid
+     * @return int|null
      */
     public static function resolve_qbeid(int $questionid): ?int {
         global $DB;
-        $sql = "SELECT qbe.id
-                  FROM {question_bank_entries} qbe
-                  JOIN {question_versions} qv ON qv.questionbankentryid = qbe.id
-                 WHERE qv.questionid = :questionid
-              ORDER BY qv.version DESC";
+        $sql     = "SELECT qbe.id
+                      FROM {question_bank_entries} qbe
+                      JOIN {question_versions} qv ON qv.questionbankentryid = qbe.id
+                     WHERE qv.questionid = :questionid
+                  ORDER BY qv.version DESC";
         $records = $DB->get_records_sql($sql, ['questionid' => $questionid], 0, 1);
-        $record = reset($records);
+        $record  = reset($records);
         return $record ? (int) $record->id : null;
     }
 
     /**
-     * Ensure we have a qbeid. Resolves from questionid if needed.
+     * Ensure we have a qbeid.
      *
-     * @param int $qbeid Question bank entry ID (may be 0).
-     * @param int $questionid Question ID (fallback, may be 0).
-     * @return int|null Resolved qbeid or null.
+     * @param int $qbeid
+     * @param int $questionid
+     * @return int|null
      */
     public static function ensure_qbeid(int $qbeid, int $questionid = 0): ?int {
         if ($qbeid > 0) {
@@ -189,46 +207,32 @@ class config_manager {
         return array_merge($defaults, $decoded);
     }
 
+    // ------------------------------------------------------------------
+    // Public read API
+    // ------------------------------------------------------------------
+
     /**
-     * Load config for a quiz + question with cascade.
+     * Load effective config for a quiz + question.
      *
-     * Cascade: instance defaults -> quiz-level (qbeid=0) -> question-level.
+     * Lookup order:
+     *   1. cmid + qbeid          (question-level)
+     *   2. cmid + NULL           (quiz-level default)
+     *   3. cmid=0 + qbeid        (global question default)
+     *   4. any qbeid match       (legacy)
+     *   5. questionid field      (very old records)
+     *   6. instance defaults     (settings.php)
      *
-     * @param int $cmid Course module ID (0 for global).
-     * @param int $qbeid Question bank entry ID (0 for quiz-level).
-     * @param int $questionid Question ID (for resolving qbeid and legacy).
+     * @param int $cmid       Course module ID (0 for global).
+     * @param int $qbeid      Question bank entry ID (0 to auto-resolve).
+     * @param int $questionid Question ID (for resolving qbeid and legacy lookup).
      * @return array Merged config array.
      */
     public static function get_config(int $cmid, int $qbeid = 0,
                                       int $questionid = 0): array {
-        $col = self::get_config_column();
+        $col      = self::get_config_column();
         $defaults = self::get_instance_defaults();
 
-        // Always resolve to qbeid.
         $qbeid = self::ensure_qbeid($qbeid, $questionid) ?? 0;
-
-        // 0. Quiz-level defaults (cmid + qbeid=0).
-        $quizdefaults = $defaults;
-        if ($cmid > 0) {
-            $quizrec = self::get_one(
-                "cmid = :cmid AND questionbankentryid = 0",
-                ['cmid' => $cmid]
-            );
-            if ($quizrec) {
-                $qd = self::decode_config($quizrec->$col, $defaults);
-                if ($qd !== null) {
-                    $quizdefaults = $qd;
-                }
-            }
-        }
-
-        // Quiz-level request: return quiz defaults directly.
-        if ($qbeid <= 0) {
-            return $quizdefaults;
-        }
-
-        // Question-level: use quiz defaults as base.
-        $defaults = $quizdefaults;
 
         // 1. Exact: cmid + qbeid.
         if ($cmid > 0 && $qbeid > 0) {
@@ -308,35 +312,41 @@ class config_manager {
     }
 
     /**
-     * Batch-load configs for multiple questions in one quiz.
-     * Includes quiz-level cascade.
+     * Load the quiz-level default config for a given cmid.
+     * Returns null if no quiz-level record exists yet.
      *
-     * @param int $cmid Course module ID.
-     * @param array $qbeids Question bank entry IDs.
+     * @param int $cmid
+     * @return array|null Decoded config or null.
+     */
+    public static function get_quiz_default(int $cmid): ?array {
+        $col      = self::get_config_column();
+        $defaults = self::get_instance_defaults();
+
+        $rec = self::get_one(
+            "cmid = :cmid AND questionbankentryid IS NULL",
+            ['cmid' => $cmid]
+        );
+        if (!$rec) {
+            return null;
+        }
+        return self::decode_config($rec->$col, $defaults);
+    }
+
+    /**
+     * Batch-load configs for multiple questions in one quiz.
+     *
+     * @param int   $cmid
+     * @param array $qbeids
      * @param array $questionids Optional qbeid => questionid map for legacy.
      * @return array Map of qbeid => config.
      */
     public static function get_configs(int $cmid, array $qbeids,
                                        array $questionids = []): array {
         global $DB;
-        $col = self::get_config_column();
+        $col      = self::get_config_column();
         $defaults = self::get_instance_defaults();
+        $configs  = [];
 
-        // Quiz-level cascade: use quiz defaults as base if available.
-        if ($cmid > 0) {
-            $quizrec = self::get_one(
-                "cmid = :cmid AND questionbankentryid = 0",
-                ['cmid' => $cmid]
-            );
-            if ($quizrec) {
-                $qd = self::decode_config($quizrec->$col, $defaults);
-                if ($qd !== null) {
-                    $defaults = $qd;
-                }
-            }
-        }
-
-        $configs = [];
         $qbeids = array_values(array_unique(array_filter($qbeids)));
         foreach ($qbeids as $qbeid) {
             $configs[$qbeid] = $defaults;
@@ -447,86 +457,116 @@ class config_manager {
         return $configs;
     }
 
+    // ------------------------------------------------------------------
+    // Public write API
+    // ------------------------------------------------------------------
+
     /**
-     * Save config. Uses cmid + qbeid. Cleans duplicates.
-     * For quiz-level config, pass qbeid=0 and questionid=0.
+     * Save question-level config (cmid + qbeid).
      *
-     * @param int $cmid Course module ID.
-     * @param int $qbeid Question bank entry ID (0 for quiz-level).
-     * @param array $elements Config array.
-     * @param int $questionid Optional questionid to resolve qbeid.
-     * @throws \moodle_exception If qbeid cannot be determined for question-level.
+     * @param int   $cmid
+     * @param int   $qbeid      Question bank entry ID (>0).
+     * @param array $elements   Config array.
+     * @param int   $questionid Optional questionid to resolve qbeid.
+     * @throws \moodle_exception If qbeid cannot be determined.
      */
     public static function save_config(int $cmid, int $qbeid, array $elements,
                                        int $questionid = 0): void {
         global $DB, $USER;
 
-        // For quiz-level (qbeid=0, questionid=0): allow saving with qbeid=0.
-        if ($qbeid <= 0 && $questionid > 0) {
-            $qbeid = self::resolve_qbeid($questionid);
-            if (!$qbeid) {
-                throw new \moodle_exception('cannotresolveqbeid', 'local_stackmatheditor');
-            }
-        } else if ($qbeid <= 0 && $questionid <= 0) {
-            $qbeid = 0; // Quiz-level config.
+        $qbeid = self::ensure_qbeid($qbeid, $questionid);
+        if (!$qbeid) {
+            throw new \moodle_exception('cannotresolveqbeid', 'local_stackmatheditor');
         }
 
-        $col = self::get_config_column();
-        $now = time();
+        self::upsert_record($cmid, $qbeid, $elements, $USER->id);
+    }
+
+    /**
+     * Save quiz-level default config (cmid, questionbankentryid IS NULL).
+     *
+     * @param int   $cmid
+     * @param array $elements Config array.
+     */
+    public static function save_quiz_default(int $cmid, array $elements): void {
+        global $USER;
+        self::upsert_record($cmid, null, $elements, $USER->id);
+    }
+
+    /**
+     * Internal upsert. Handles both question-level (qbeid int) and
+     * quiz-level (qbeid null) records. Removes duplicates on update.
+     *
+     * @param int      $cmid
+     * @param int|null $qbeid  null for quiz-level default.
+     * @param array    $elements
+     * @param int      $userid
+     */
+    private static function upsert_record(int $cmid, ?int $qbeid,
+                                          array $elements, int $userid): void {
+        global $DB;
+
+        $col  = self::get_config_column();
+        $now  = time();
         $json = json_encode($elements, JSON_THROW_ON_ERROR);
 
-        // Find ALL matching records (may be duplicates).
+        if ($qbeid === null) {
+            $where  = "cmid = :cmid AND questionbankentryid IS NULL";
+            $params = ['cmid' => $cmid];
+        } else {
+            $where  = "cmid = :cmid AND questionbankentryid = :qbeid";
+            $params = ['cmid' => $cmid, 'qbeid' => $qbeid];
+        }
+
         $records = $DB->get_records_select(
-            self::TABLE,
-            "cmid = :cmid AND questionbankentryid = :qbeid",
-            ['cmid' => $cmid, 'qbeid' => $qbeid],
-            'timemodified DESC'
+            self::TABLE, $where, $params, 'timemodified DESC'
         );
 
         if (!empty($records)) {
-            // Update newest, delete rest.
-            $keeprecord = array_shift($records);
-            $keeprecord->$col = $json;
-            if (isset($keeprecord->questionid)) {
-                $keeprecord->questionid = 0;
-            }
-            $keeprecord->usermodified = $USER->id;
-            $keeprecord->timemodified = $now;
-            $DB->update_record(self::TABLE, $keeprecord);
+            $keep               = array_shift($records);
+            $keep->$col         = $json;
+            $keep->usermodified = $userid;
+            $keep->timemodified = $now;
+            $DB->update_record(self::TABLE, $keep);
 
             foreach ($records as $dupe) {
                 $DB->delete_records(self::TABLE, ['id' => $dupe->id]);
             }
         } else {
-            $record = new \stdClass();
-            $record->cmid = $cmid;
-            $record->questionbankentryid = $qbeid;
-            $record->$col = $json;
-            $record->usermodified = $USER->id;
-            $record->timecreated = $now;
-            $record->timemodified = $now;
+            $record                      = new \stdClass();
+            $record->cmid                = $cmid;
+            $record->questionbankentryid = $qbeid; // null for quiz-level
+            $record->$col                = $json;
+            $record->usermodified        = $userid;
+            $record->timecreated         = $now;
+            $record->timemodified        = $now;
             $DB->insert_record(self::TABLE, $record);
         }
     }
 
-    /**
-     * Get admin mode (0=off, 1=on, 2=default-off, 3=default-on).
-     *
-     * @return int
-     */
-    public static function get_admin_mode(): int {
-        return (int) get_config('local_stackmatheditor', 'enabled');
-    }
+    // ------------------------------------------------------------------
+    // Enabled-flag helpers
+    // ------------------------------------------------------------------
 
     /**
-     * Check if editor is enabled for a given quiz/question (cascade).
+     * Determine whether the editor is effectively enabled for a given context.
      *
-     * @param int $cmid Course module ID.
-     * @param int $qbeid Question bank entry ID (0 = quiz-level).
+     * Mode semantics:
+     *   0 = always off,  no override possible
+     *   1 = always on,   no override possible
+     *   2 = default off, quiz/question _enabled=true activates it
+     *   3 = default on,  quiz/question _enabled=false deactivates it
+     *
+     * When $cmid=0 and $qbeid=0, only the instance mode is considered.
+     *
+     * @param int $cmid   Course module ID (0 = ignore quiz/question level).
+     * @param int $qbeid  Question bank entry ID (0 = ignore question level).
      * @return bool
      */
-    public static function is_enabled_for(int $cmid, int $qbeid = 0): bool {
-        $mode = self::get_admin_mode();
+    public static function get_effective_enabled(int $cmid = 0,
+                                                 int $qbeid = 0): bool {
+        $mode = self::get_instance_enabled_mode();
+
         if ($mode === 0) {
             return false;
         }
@@ -534,75 +574,22 @@ class config_manager {
             return true;
         }
 
-        // Mode 2 (default off) or 3 (default on).
-        $default = ($mode === 3);
+        // mode 2 or 3 – check quiz then question level.
+        $defaultEnabled = ($mode === 3);
 
-        // Quiz-level override.
-        $quizraw = self::get_raw_config($cmid, 0);
-        $effective = $default;
-        if ($quizraw !== null && array_key_exists('_enabled', $quizraw)) {
-            $effective = (bool) $quizraw['_enabled'];
+        // Load the most specific applicable config.
+        if ($cmid > 0 && $qbeid > 0) {
+            $cfg = self::get_config($cmid, $qbeid);
+        } elseif ($cmid > 0) {
+            $cfg = self::get_quiz_default($cmid) ?? [];
+        } else {
+            return $defaultEnabled;
         }
 
-        if ($qbeid <= 0) {
-            return $effective;
+        if (isset($cfg['_enabled'])) {
+            return (bool) $cfg['_enabled'];
         }
 
-        // Question-level override.
-        $qraw = self::get_raw_config($cmid, $qbeid);
-        if ($qraw !== null && array_key_exists('_enabled', $qraw)) {
-            return (bool) $qraw['_enabled'];
-        }
-
-        return $effective;
-    }
-
-    /**
-     * Get raw config at exactly one level (no cascade).
-     *
-     * @param int $cmid Course module ID.
-     * @param int $qbeid Question bank entry ID (0 = quiz-level).
-     * @return array|null Null if no record exists.
-     */
-    public static function get_raw_config(int $cmid, int $qbeid): ?array {
-        $col = self::get_config_column();
-        $rec = self::get_one(
-            "cmid = :cmid AND questionbankentryid = :qbeid",
-            ['cmid' => $cmid, 'qbeid' => $qbeid]
-        );
-        if (!$rec) {
-            return null;
-        }
-        $json = $rec->$col ?? null;
-        if (empty($json)) {
-            return null;
-        }
-        $decoded = json_decode($json, true);
-        return is_array($decoded) ? $decoded : null;
-    }
-
-    /**
-     * Check if a quiz contains STACK questions.
-     *
-     * @param int $quizid Quiz instance ID.
-     * @return bool
-     */
-    public static function quiz_has_stack_questions(int $quizid): bool {
-        global $DB;
-        $sql = "SELECT 1
-                  FROM {quiz_slots} qs
-                  JOIN {question_references} qr
-                       ON qr.itemid = qs.id
-                       AND qr.component = 'mod_quiz'
-                       AND qr.questionarea = 'slot'
-                  JOIN {question_bank_entries} qbe
-                       ON qbe.id = qr.questionbankentryid
-                  JOIN {question_versions} qv
-                       ON qv.questionbankentryid = qbe.id
-                  JOIN {question} q
-                       ON q.id = qv.questionid
-                 WHERE qs.quizid = :quizid
-                   AND q.qtype = 'stack'";
-        return $DB->record_exists_sql($sql, ['quizid' => $quizid]);
+        return $defaultEnabled;
     }
 }

@@ -7,7 +7,7 @@
  * On mod-quiz-edit, also inserts a "STACK MathQuill-Editor einrichten"
  * option into the quiz navigation <select> (Anforderung B).
  * The STACK check already happened in PHP — if quizConfigureUrl is
- * present in the data, we know STACK questions exist.
+ * present in the data object, STACK questions exist in this quiz.
  *
  * @module     local_stackmatheditor/configure_links
  * @copyright  2026 Ralf Erlebach
@@ -131,49 +131,55 @@ define(['jquery'], function($) {
     // ── Edit page ─────────────────────────────────────────────────────────────
 
     /**
-     * Insert a quiz-level configure option into the navigation <select>.
+     * Insert the quiz-level configure option into the navigation <select>.
      *
-     * Selector: form[action*="jumpto.php"] select[name="jump"]
-     * This targets the "Fragen / Bewertungselemente" dropdown in quiz/edit.php.
-     * Only inserts if quizConfigureUrl is set (= PHP confirmed STACK questions exist).
+     * Moodle's YUI urlselect module redirects to window.location.href = value,
+     * so a full URL as option value works. We also bind our own handler with
+     * stopImmediatePropagation to ensure reliable navigation regardless of
+     * which Moodle version's handler fires first.
      *
-     * @param {Object} data Configuration data.
+     * @param {Object} data Configuration data from PHP.
      */
     function injectQuizNavOption(data) {
         if (!data.quizConfigureUrl || !data.quizLinkText) {
+            dbg('quiz nav: no quizConfigureUrl, skipping');
             return;
         }
 
-        // Stable selector independent of YUI-generated IDs.
+        // Stable selector — the YUI-generated id is not reliable.
         var $select = $('form[action*="jumpto.php"] select[name="jump"]');
         if (!$select.length) {
             dbg('quiz nav select not found');
             return;
         }
 
-        // Avoid double-injection on re-runs.
+        // Avoid double-injection.
         if ($select.find('option[data-sme="quiz"]').length) {
             dbg('quiz nav option already present');
             return;
         }
 
+        var fullUrl = data.quizConfigureUrl;
+
         var $option = $('<option>')
-            .val(data.quizConfigureUrl)
+            .val(fullUrl)
             .attr('data-sme', 'quiz')
             .text(data.quizLinkText);
 
         $select.append($option);
 
-        // Wire up navigation: when selected, redirect immediately.
-        $select.off('change.sme').on('change.sme', function() {
-            var val = $(this).val();
-            var $selected = $(this).find('option:selected');
-            if ($selected.attr('data-sme') === 'quiz') {
-                window.location.href = val;
+        // Intercept change on the select. We use stopImmediatePropagation so
+        // Moodle's YUI handler cannot interfere when our option is chosen.
+        // For other options we do nothing and let the existing handler work.
+        $select.on('change.sme', function(e) {
+            var $sel = $(this).find('option:selected');
+            if ($sel.attr('data-sme') === 'quiz') {
+                e.stopImmediatePropagation();
+                window.location.href = fullUrl;
             }
         });
 
-        dbg('quiz nav option injected: ' + data.quizConfigureUrl);
+        dbg('quiz nav option injected: ' + fullUrl);
     }
 
     function injectEditLinks(data) {
@@ -186,9 +192,9 @@ define(['jquery'], function($) {
                 count++;
             }
         }
-        dbg('edit: ' + count + '/' + questions.length);
+        dbg('edit: ' + count + '/' + questions.length + ' question links injected');
 
-        // 2. Quiz-level option in nav selector (Anforderung B).
+        // 2. Quiz-level option in navigation selector (Anforderung B).
         injectQuizNavOption(data);
     }
 
@@ -216,6 +222,7 @@ define(['jquery'], function($) {
             return true;
         }
 
+        // Fallback: match by question name text.
         var name = q.name;
         var $nameLink = $('a').filter(function() {
             return $(this).text().trim() === name;
@@ -225,7 +232,7 @@ define(['jquery'], function($) {
             return true;
         }
 
-        dbg('edit q=' + q.questionid + ': not found');
+        dbg('edit q=' + q.questionid + ': DOM element not found');
         return false;
     }
 
@@ -249,6 +256,7 @@ define(['jquery'], function($) {
                     run(data);
                     return;
                 }
+                // Single retry for race condition with inline JS element creation.
                 setTimeout(function() {
                     data = loadData();
                     if (data) {
