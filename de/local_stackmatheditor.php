@@ -122,11 +122,8 @@ $string['privacy:metadata:allowed_elements']          = 'JSON-Toolbar-Konfigurat
 $string['privacy:metadata:usermodified']              = 'Die Person, die die Konfiguration zuletzt geändert hat.';
 
 // ── Enabled-Schalter – neue Strings ──────────────────────────────────────────
-// replaced
+$string['configure_enabled_checkboxlabel']  = 'MathQuill-Editor für diesen Test / diese Frage einschalten';
 $string['configure_enabled_locked_on']      = 'Global aktiviert – diese Einstellung kann hier nicht überschrieben werden.';
 $string['configure_enabled_locked_off']     = 'Global deaktiviert – diese Einstellung kann hier nicht überschrieben werden.';
 $string['configure_enabled_parenthint_on']  = 'Übergeordnete Voreinstellung: aktiviert. Die Checkbox deaktiviert den Editor nur für diesen Test / diese Frage.';
 $string['configure_enabled_parenthint_off'] = 'Übergeordnete Voreinstellung: deaktiviert. Die Checkbox aktiviert den Editor für diesen Test / diese Frage.';
-
-$string['configure_enabled_checkboxlabel_quiz']     = 'MathQuill-Editor für diesen Test einschalten';
-$string['configure_enabled_checkboxlabel_question'] = 'MathQuill-Editor für diese Frage einschalten';

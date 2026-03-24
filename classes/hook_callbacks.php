@@ -32,46 +32,39 @@ class hook_callbacks {
     ];
 
     /**
-     * Check if the plugin is enabled.
+     * Coarse check: is the plugin potentially active at all?
+     * Mode 0 = always off, no need to do anything.
+     * Modes 1/2/3 require further context-aware checks.
      *
-     * @return bool True if enabled.
+     * @return bool
      */
-    private static function is_enabled(): bool {
-        return (bool) get_config(
-            'local_stackmatheditor', 'enabled');
+    private static function plugin_could_be_active(): bool {
+        return config_manager::get_instance_enabled_mode() !== 0;
     }
 
-    /**
-     * Check if current page is an editor page.
-     *
-     * @return bool True if editor should be injected.
-     */
     private static function is_editor_page(): bool {
         global $PAGE;
-        return in_array(
-            $PAGE->pagetype, self::EDITOR_PAGES);
+        return in_array($PAGE->pagetype, self::EDITOR_PAGES);
     }
 
-    /**
-     * Check if current page is a configure page.
-     *
-     * @return bool True if configure links appear.
-     */
     private static function is_configure_page(): bool {
         global $PAGE;
-        return in_array(
-            $PAGE->pagetype, self::CONFIGURE_PAGES);
+        return in_array($PAGE->pagetype, self::CONFIGURE_PAGES);
     }
 
     /**
      * Inject MathJax v2 shim at top of body.
+     * No context-aware enabled check here – the shim is lightweight and
+     * needed for any page that *might* render math (configure links pages
+     * can also have questions). The editor_injector does the fine-grained
+     * check via get_effective_enabled().
      *
      * @param \core\hook\output\before_standard_top_of_body_html_generation $hook
      */
     public static function before_top_of_body(
         \core\hook\output\before_standard_top_of_body_html_generation $hook
     ): void {
-        if (!self::is_enabled()) {
+        if (!self::plugin_could_be_active()) {
             return;
         }
 
@@ -79,8 +72,7 @@ class hook_callbacks {
             return;
         }
 
-        quiz_helper::dbg(
-            'before_top_of_body: injecting MathJax shim');
+        quiz_helper::dbg('before_top_of_body: injecting MathJax shim');
 
         $shimjs = <<<'JSEOF'
 <script type="text/javascript">
@@ -182,11 +174,11 @@ JSEOF;
     ): void {
         global $PAGE;
 
-        if (!self::is_enabled()) {
+        if (!self::plugin_could_be_active()) {
             return;
         }
 
-        $isEditor = self::is_editor_page();
+        $isEditor    = self::is_editor_page();
         $isConfigure = self::is_configure_page();
 
         quiz_helper::dbg(
@@ -199,48 +191,45 @@ JSEOF;
             return;
         }
 
-        // ── Editor injection ──
+        $cmid = quiz_helper::get_cmid();
+
+        // ── Editor injection ──────────────────────────────────────────────────
         if ($isEditor) {
-            try {
-                $cmid = quiz_helper::get_cmid();
-
-                // 1. Definitions (#sme-definitions).
-                mathjax_injector::inject();
-
-                // 2. Runtime + MathQuill init.
-                editor_injector::inject($cmid);
-
-                quiz_helper::dbg(
-                    'editor injected: cmid=' . $cmid);
-            } catch (\Throwable $e) {
-                quiz_helper::dbg(
-                    'editor injection error: '
-                    . $e->getMessage());
+            // Context-aware enabled check for modes 2/3.
+            // For modes 0/1 this is already handled by plugin_could_be_active().
+            if (!config_manager::get_effective_enabled($cmid)) {
+                quiz_helper::dbg('editor: disabled for cmid=' . $cmid . ', skipping');
+            } else {
+                try {
+                    mathjax_injector::inject();
+                    editor_injector::inject($cmid);
+                    quiz_helper::dbg('editor injected: cmid=' . $cmid);
+                } catch (\Throwable $e) {
+                    quiz_helper::dbg('editor injection error: ' . $e->getMessage());
+                }
             }
         }
 
-        // ── Configure links injection ──
+        // ── Configure links injection ─────────────────────────────────────────
+        // Always inject configure links when user can manage, regardless of
+        // enabled mode — the configure page itself controls the editor toggle.
         if ($isConfigure) {
             try {
-                $cmid = quiz_helper::get_cmid();
                 if ($cmid <= 0) {
-                    quiz_helper::dbg(
-                        'configure: no cmid, skipping');
+                    quiz_helper::dbg('configure: no cmid, skipping');
                     return;
                 }
 
                 quiz_helper::dbg(
                     'configure guard: can_manage='
-                    . (quiz_helper::can_manage_quiz($cmid)
-                        ? 'true' : 'false'));
+                    . (quiz_helper::can_manage_quiz($cmid) ? 'true' : 'false')
+                );
 
                 if (quiz_helper::can_manage_quiz($cmid)) {
                     configure_injector::inject($cmid);
                 }
             } catch (\Throwable $e) {
-                quiz_helper::dbg(
-                    'configure injection error: '
-                    . $e->getMessage());
+                quiz_helper::dbg('configure injection error: ' . $e->getMessage());
             }
         }
     }

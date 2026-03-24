@@ -7,12 +7,18 @@ if ($hassiteconfig) {
         get_string('pluginname', 'local_stackmatheditor')
     );
 
-    // Global enable/disable.
-    $settings->add(new admin_setting_configcheckbox(
+    // Global enabled mode (0-3).
+    $settings->add(new admin_setting_configselect(
         'local_stackmatheditor/enabled',
         get_string('setting_enabled', 'local_stackmatheditor'),
         get_string('setting_enabled_desc', 'local_stackmatheditor'),
-        1
+        1,
+        [
+            0 => get_string('enabled_mode_0', 'local_stackmatheditor'),
+            1 => get_string('enabled_mode_1', 'local_stackmatheditor'),
+            2 => get_string('enabled_mode_2', 'local_stackmatheditor'),
+            3 => get_string('enabled_mode_3', 'local_stackmatheditor'),
+        ]
     ));
 
     // Variable mode default.
@@ -31,8 +37,8 @@ if ($hassiteconfig) {
 
     // Default element groups multiselect.
     $grouplabels = \local_stackmatheditor\definitions::get_group_labels_with_examples();
+    $groups      = \local_stackmatheditor\definitions::get_element_groups();
 
-    $groups = \local_stackmatheditor\definitions::get_element_groups();
     $defaultselected = [];
     foreach ($groups as $key => $group) {
         if ($group['default_enabled']) {

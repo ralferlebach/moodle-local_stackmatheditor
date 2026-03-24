@@ -512,6 +512,17 @@ define([
                     === '1') {
                     return;
                 }
+                // Check per-slot enabled map before activating.
+                var aname = $(this).attr('name') || '';
+                var aslot = ctx.extractSlot(aname);
+                if (ctx.slotEnabled
+                        && ctx.slotEnabled.hasOwnProperty(aslot)
+                        && !ctx.slotEnabled[aslot]) {
+                    ctx.dbg('Textarea ' + aname
+                        + ' -> slot ' + aslot
+                        + ' disabled, skipping');
+                    return;
+                }
                 new EquivEditor(this, ctx);
             });
         }

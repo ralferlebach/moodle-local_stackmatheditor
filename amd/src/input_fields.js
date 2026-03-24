@@ -158,6 +158,19 @@ define([
 
         var name = $input.attr('name') || '';
         var slot = ctx.extractSlot(name);
+
+        // Check per-slot enabled map.
+        // If slotEnabled is present and the slot is explicitly disabled,
+        // skip activation for this input entirely.
+        if (ctx.slotEnabled
+                && ctx.slotEnabled.hasOwnProperty(slot)
+                && !ctx.slotEnabled[slot]) {
+            ctx.dbg('Input ' + name
+                + ' -> slot ' + slot
+                + ' disabled, skipping');
+            return;
+        }
+
         var config = ctx.slotConfigs[slot]
             || ctx.instanceDefaults;
         var varMode = ctx.slotVarModes[slot]

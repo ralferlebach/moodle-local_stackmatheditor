@@ -220,12 +220,18 @@ define([
             }
         }
 
+        // Per-slot enabled map: true = activate MathQuill, false = skip.
+        var slotEnabled = runtime.slotEnabled || {};
+        var slotEnabledCount = Object.keys(slotEnabled).length;
+        dbg('Slot enabled map: ' + slotEnabledCount + ' entries');
+
         // Shared context for sub-modules.
         var ctx = {
             MQ: MQ,
             defs: defs,
             slotConfigs: slotConfigs,
             slotVarModes: slotVarModes,
+            slotEnabled: slotEnabled,
             instanceDefaults: instanceDefaults,
             instanceVarMode: instanceVarMode,
             localeComma: localeComma,

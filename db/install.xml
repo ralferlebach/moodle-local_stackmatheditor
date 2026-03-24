@@ -9,10 +9,10 @@
         <FIELD NAME="id"                  TYPE="int"  LENGTH="10" NOTNULL="true"  SEQUENCE="true"/>
         <FIELD NAME="cmid"                TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"
                COMMENT="Course module ID of the quiz (0 = global/legacy)"/>
-        <FIELD NAME="questionbankentryid" TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"
-               COMMENT="Version-independent question bank entry ID"/>
+        <FIELD NAME="questionbankentryid" TYPE="int"  LENGTH="10" NOTNULL="false" SEQUENCE="false"
+               COMMENT="Version-independent question bank entry ID; NULL = quiz-level default"/>
         <FIELD NAME="allowed_elements"    TYPE="text"             NOTNULL="false" SEQUENCE="false"
-               COMMENT="JSON object with allowed toolbar categories"/>
+               COMMENT="JSON object with allowed toolbar categories and _enabled/_variableMode flags"/>
         <FIELD NAME="usermodified"        TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
         <FIELD NAME="timecreated"         TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
         <FIELD NAME="timemodified"        TYPE="int"  LENGTH="10" NOTNULL="true"  DEFAULT="0" SEQUENCE="false"/>
@@ -22,8 +22,7 @@
       </KEYS>
       <INDEXES>
         <INDEX NAME="cmid_qbeid_ix" UNIQUE="false" FIELDS="cmid,questionbankentryid"
-               COMMENT="Lookup by quiz + question bank entry"/>
-
+               COMMENT="Lookup by quiz + question bank entry (NULL qbeid = quiz-level default)"/>
       </INDEXES>
     </TABLE>
   </TABLES>
