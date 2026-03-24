@@ -167,24 +167,10 @@ define([], function() {
         s = s.replace(/\\left/g, '');
         s = s.replace(/\\right/g, '');
 
-        // ── Structures with braces (before {} cleanup) ──
-
         // N-th root: \sqrt[n]{expr} -> (expr)^(1/(n)).
         s = s.replace(
             /\\sqrt\[([^\]]+)\]\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
             '($2)^(1/($1))'
-        );
-
-        // N-th root (MathQuill): \nthroot{n}{expr} -> (expr)^(1/(n)).
-        s = s.replace(
-            /\\nthroot\{([^{}]*)\}\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
-            '($2)^(1/($1))'
-        );
-
-        // Binomial: \binom{n}{k} -> binomial(n,k).
-        s = s.replace(
-            /\\binom\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
-            'binomial($1,$2)'
         );
 
         // Fractions (loop for nesting).
@@ -202,154 +188,63 @@ define([], function() {
             'sqrt($1)'
         );
 
-        // Decorative commands: strip to content (before {} cleanup).
-        s = s.replace(/\\vec\{([^{}]*)\}/g, '$1');
-        s = s.replace(/\\overline\{([^{}]*)\}/g, '$1');
-        s = s.replace(/\\mathbb\{([^{}]*)\}/g, '$1');
-        s = s.replace(/\\mathrm\{([^{}]*)\}/g, '$1');
-        s = s.replace(/\\operatorname\{([^{}]*)\}/g, '$1');
-
         // Exponents.
         s = s.replace(/\^\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g, '^($1)');
 
         // Subscripts.
         s = s.replace(/_\{([^{}]*)\}/g, '_$1');
 
-        // ── Functions ───────────────────────────────
-
-        // Trig & hyperbolic.
+        // Trig & hyperbolic functions.
         var funcs = [
             'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
             'arcsin', 'arccos', 'arctan',
             'sinh', 'cosh', 'tanh'
         ];
         funcs.forEach(function(fn) {
-            s = s.replace(
-                new RegExp('\\\\' + fn + '(?![a-zA-Z])', 'g'),
-                fn
-            );
+            s = s.replace(new RegExp('\\\\' + fn + '(?![a-zA-Z])', 'g'), fn);
         });
 
-        // Logarithms / exp.
+        // Logarithms.
         s = s.replace(/\\ln(?![a-zA-Z])/g, 'log');
         s = s.replace(/\\log(?![a-zA-Z])/g, 'log');
         s = s.replace(/\\exp(?![a-zA-Z])/g, 'exp');
 
-        // ── Constants ───────────────────────────────
-
-        s = s.replace(/\\pi(?![a-zA-Z])/g, '%pi');
+        // Constants.
+        s = s.replace(/\\pi/g, '%pi');
         s = s.replace(/\\infty/g, 'inf');
         s = s.replace(/\\e(?![a-zA-Z])/g, '%e');
 
-        // ── Operators ───────────────────────────────
-
+        // Operators.
         s = s.replace(/\\cdot/g, '*');
         s = s.replace(/\\times/g, '*');
         s = s.replace(/\\div/g, '/');
-        s = s.replace(/\\%/g, '%');
-        s = s.replace(/\\&/g, '&');
 
-        // ── Comparison ──────────────────────────────
-
+        // Comparison.
         s = s.replace(/\\leq?/g, '<=');
         s = s.replace(/\\geq?/g, '>=');
         s = s.replace(/\\neq?/g, '#');
         s = s.replace(/\\ne(?![a-zA-Z])/g, '#');
-        s = s.replace(/\\approx(?![a-zA-Z])/g, '~=');
 
-        // ── Integral / sum / product operators ──────
-
-        s = s.replace(/\\oint(?![a-zA-Z])/g, 'oint');
-        s = s.replace(/\\int(?![a-zA-Z])/g, 'int');
-        s = s.replace(/\\sum(?![a-zA-Z])/g, 'sum');
-        s = s.replace(/\\prod(?![a-zA-Z])/g, 'product');
-
-        // ── Norms ───────────────────────────────────
-
-        s = s.replace(/\\\|/g, '|');
-
-        // ── Greek letters (lower) ───────────────────
-        // Longer variants first to prevent partial match.
-
+        // Greek letters.
         var greek = [
-            'varepsilon', 'vartheta', 'varphi',
-            'alpha', 'beta', 'gamma', 'delta',
-            'epsilon', 'zeta', 'eta', 'theta',
-            'iota', 'kappa', 'lambda', 'mu',
-            'nu', 'xi', 'rho', 'sigma',
-            'tau', 'upsilon', 'phi', 'chi',
-            'psi', 'omega'
+            'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta',
+            'theta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi',
+            'rho', 'sigma', 'tau', 'upsilon', 'phi', 'chi', 'psi', 'omega'
         ];
         greek.forEach(function(letter) {
-            s = s.replace(
-                new RegExp('\\\\' + letter + '(?![a-zA-Z])', 'g'),
-                letter
-            );
+            s = s.replace(new RegExp('\\\\' + letter + '(?![a-zA-Z])', 'g'), letter);
         });
 
-        // ── Greek letters (upper) ───────────────────
-
-        var greekUpper = [
-            'Gamma', 'Delta', 'Theta', 'Lambda',
-            'Xi', 'Pi', 'Sigma', 'Upsilon',
-            'Phi', 'Psi', 'Omega'
-        ];
-        greekUpper.forEach(function(letter) {
-            s = s.replace(
-                new RegExp('\\\\' + letter + '(?![a-zA-Z])', 'g'),
-                letter
-            );
-        });
-
-        // ── Set theory ──────────────────────────────
-
-        s = s.replace(/\\notin(?![a-zA-Z])/g, ' notin ');
-        s = s.replace(/\\in(?![a-zA-Z])/g, ' in ');
-        s = s.replace(/\\cup(?![a-zA-Z])/g, ' union ');
-        s = s.replace(/\\cap(?![a-zA-Z])/g, ' intersect ');
-        s = s.replace(/\\setminus(?![a-zA-Z])/g, ' setdiff ');
-        s = s.replace(/\\subset(?![a-zA-Z])/g, ' subset ');
-        s = s.replace(/\\supset(?![a-zA-Z])/g, ' superset ');
-
-        // ── Logic (\not\exists before \exists) ──────
-
-        s = s.replace(/\\nexists/g, ' nexists ');
-        s = s.replace(/\\not\\exists/g, ' nexists ');
-        s = s.replace(/\\forall(?![a-zA-Z])/g, ' forall ');
-        s = s.replace(/\\exists(?![a-zA-Z])/g, ' exists ');
-        s = s.replace(/\\neg(?![a-zA-Z])/g, ' not ');
-        s = s.replace(/\\land(?![a-zA-Z])/g, ' and ');
-        s = s.replace(/\\lor(?![a-zA-Z])/g, ' or ');
-        s = s.replace(/\\Rightarrow(?![a-zA-Z])/g, ' implies ');
-        s = s.replace(/\\Leftarrow(?![a-zA-Z])/g, ' impliedby ');
-        s = s.replace(/\\Leftrightarrow(?![a-zA-Z])/g, ' iff ');
-
-        // ── Geometry / physics ──────────────────────
-
-        s = s.replace(/\\angle(?![a-zA-Z])/g, 'angle');
-        s = s.replace(/\\perp(?![a-zA-Z])/g, 'perp');
-        s = s.replace(/\\circ(?![a-zA-Z])/g, 'circ');
-        s = s.replace(/\\nabla(?![a-zA-Z])/g, 'nabla');
-        s = s.replace(/\\partial(?![a-zA-Z])/g, 'del');
-        s = s.replace(/\\hbar(?![a-zA-Z])/g, 'hbar');
-
-        // ── Matrix decorators ───────────────────────
-
-        s = s.replace(/\\dagger(?![a-zA-Z])/g, 'dagger');
-        s = s.replace(/\\intercal(?![a-zA-Z])/g, 'T');
-
-        // ── Cleanup ─────────────────────────────────
-
-        // Remove remaining LaTeX artifacts.
+        // Cleanup LaTeX artifacts.
         s = s.replace(/\\ /g, '');
         s = s.replace(/[{}]/g, '');
 
-        // Decimal separator: comma -> dot.
+        // Decimal separator: comma → dot (locale-aware, outside lists).
         if (commaDecimal) {
             s = replaceDecimalCommas(s);
         }
 
-        // Implicit multiplication: 2x -> 2*x.
+        // Implicit multiplication: 2x → 2*x (with units exception).
         s = insertImplicitMultiplication(s);
 
         // Final cleanup.
