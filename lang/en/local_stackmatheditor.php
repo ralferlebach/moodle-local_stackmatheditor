@@ -122,8 +122,11 @@ $string['privacy:metadata:allowed_elements']          = 'JSON toolbar configurat
 $string['privacy:metadata:usermodified']              = 'The person who last modified the configuration.';
 
 // ── Enabled toggle – new strings ─────────────────────────────────────────────
-$string['configure_enabled_checkboxlabel']  = 'Enable MathQuill editor for this quiz / question';
+// replaced
 $string['configure_enabled_locked_on']      = 'Globally enabled – this setting cannot be overridden here.';
 $string['configure_enabled_locked_off']     = 'Globally disabled – this setting cannot be overridden here.';
 $string['configure_enabled_parenthint_on']  = 'Parent default: enabled. The checkbox disables the editor for this quiz / question only.';
 $string['configure_enabled_parenthint_off'] = 'Parent default: disabled. The checkbox enables the editor for this quiz / question.';
+
+$string['configure_enabled_checkboxlabel_quiz']     = 'Enable MathQuill editor for this quiz';
+$string['configure_enabled_checkboxlabel_question'] = 'Enable MathQuill editor for this question';

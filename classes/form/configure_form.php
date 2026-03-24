@@ -106,9 +106,13 @@ class configure_form extends \moodleform {
 
         } else {
             // Modes 2 and 3: override allowed – show editable checkbox.
+            $checkboxlabel = ($mode === 'quiz')
+                ? get_string('configure_enabled_checkboxlabel_quiz',     'local_stackmatheditor')
+                : get_string('configure_enabled_checkboxlabel_question', 'local_stackmatheditor');
+
             $mform->addElement('advcheckbox', 'enabled',
                 get_string('configure_enabled_label', 'local_stackmatheditor'),
-                get_string('configure_enabled_checkboxlabel', 'local_stackmatheditor'),
+                $checkboxlabel,
                 ['id' => 'id_sme_enabled'],
                 [0, 1]);
             $mform->setType('enabled', PARAM_INT);
