@@ -4,7 +4,21 @@ namespace local_stackmatheditor;
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * Central definitions for all math elements, functions, units, and mappings.
+ * Toolbar element definitions for STACK MathEditor.
+ *
+ * Each group has:
+ *   - label:           Human-readable name.
+ *   - default_enabled: Whether enabled by default.
+ *   - elements:        Array of button definitions.
+ *
+ * Each element has:
+ *   - label:   Button tooltip / fallback text.
+ *   - write:   MathQuill write() command (template with placeholders).
+ *   - cmd:     MathQuill cmd() command (single symbol/command).
+ *   - display: Plain-text button label (if no LaTeX rendering).
+ *
+ * "write" inserts a template (e.g. \frac{}{} with cursor placement).
+ * "cmd" inserts a single command (e.g. \pi).
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
@@ -12,428 +26,805 @@ defined('MOODLE_INTERNAL') || die();
  */
 class definitions {
 
+    /** Single-character variable mode. */
     const VAR_SINGLE = 'single';
+
+    /** Multi-character variable mode. */
     const VAR_MULTI = 'multi';
 
     /**
-     * Returns all element groups with their toolbar buttons.
+     * Return all element group definitions.
      *
-     * @return array
+     * @return array Associative array of groups.
      */
     public static function get_element_groups(): array {
         return [
-            'fractions' => [
-                'langkey' => 'group_fractions',
+
+            // ── 1. Grundrechenarten ─────────────────
+            'basic_operators' => [
+                'label' => 'Grundrechenarten',
                 'default_enabled' => true,
                 'elements' => [
-                    ['label' => '\\frac{a}{b}', 'write' => '\\frac{}{}', 'display' => 'a/b'],
+                    ['label' => '+',
+                        'write' => '+',
+                        'display' => '+'],
+                    ['label' => '−',
+                        'write' => '-',
+                        'display' => '−'],
+                    ['label' => '·',
+                        'cmd' => '\\cdot',
+                        'display' => '·'],
+                    ['label' => '÷',
+                        'cmd' => '\\div',
+                        'display' => '÷'],
+                    ['label' => '\\frac{a}{b}',
+                        'write' => '\\frac{}{}',
+                        'display' => 'a/b'],
+                    ['label' => '%',
+                        'write' => '\\%',
+                        'display' => '%'],
                 ],
             ],
-            'powers' => [
-                'langkey' => 'group_powers',
+
+            // ── 2. Potenzen und Wurzeln ─────────────
+            'power_root' => [
+                'label' => 'Potenzen und Wurzeln',
                 'default_enabled' => true,
                 'elements' => [
-                    ['label' => 'x^n', 'write' => '^{}', 'display' => "x\u{207F}"],
+                    ['label' => 'x^n',
+                        'write' => '^{}',
+                        'display' => "x\u{207F}"],
+                    ['label' => "\u{221A}x",
+                        'write' => '\\sqrt{}',
+                        'display' => "\u{221A}"],
+                    ['label' => "\u{207F}\u{221A}x",
+                        'write' => '\\nthroot{}{}',
+                        'display' => "ⁿ\u{221A}"],
                 ],
             ],
-            'roots' => [
-                'langkey' => 'group_roots',
+
+            // ── 3. Exponential und Logarithmus ──────
+            'exponential_log' => [
+                'label' => 'Exponential / Logarithmus',
                 'default_enabled' => true,
                 'elements' => [
-                    ['label' => "\u{221A}x", 'write' => '\\sqrt{}', 'display' => "\u{221A}"],
-                    ['label' => "\u{221B}x", 'write' => '\\sqrt[3]{}', 'display' => "\u{221B}"],
-                    ['label' => "n\u{221A}x", 'write' => '\\sqrt[]{}', 'display' => "n\u{221A}"],
+                    ['label' => 'exp',
+                        'write' => '\\exp\\left(\\right)',
+                        'display' => 'exp'],
+                    ['label' => 'log',
+                        'write' => '\\log\\left(\\right)',
+                        'display' => 'log'],
+                    ['label' => 'ln',
+                        'write' => '\\ln\\left(\\right)',
+                        'display' => 'ln'],
                 ],
             ],
+
+            // ── 4. Vergleichsoperatoren ─────────────
+            'comparators' => [
+                'label' => 'Vergleichsoperatoren',
+                'default_enabled' => true,
+                'elements' => [
+                    ['label' => '=',
+                        'write' => '=',
+                        'display' => '='],
+                    ['label' => '≠',
+                        'cmd' => '\\neq',
+                        'display' => '≠'],
+                    ['label' => '≈',
+                        'cmd' => '\\approx',
+                        'display' => '≈'],
+                    ['label' => '<',
+                        'write' => '<',
+                        'display' => '<'],
+                    ['label' => '>',
+                        'write' => '>',
+                        'display' => '>'],
+                    ['label' => '≤',
+                        'cmd' => '\\leq',
+                        'display' => '≤'],
+                    ['label' => '≥',
+                        'cmd' => '\\geq',
+                        'display' => '≥'],
+                ],
+            ],
+
+            // ── 5. Betrag ───────────────────────────
+            'absolute' => [
+                'label' => 'Betrag',
+                'default_enabled' => true,
+                'elements' => [
+                    ['label' => '|x|',
+                        'write' => '\\left|\\right|',
+                        'display' => '|x|'],
+                ],
+            ],
+
+            // ── 6. Mengenlehre ──────────────────────
+            'set_theory' => [
+                'label' => 'Mengenlehre',
+                'default_enabled' => false,
+                'elements' => [
+                    ['label' => '∈',
+                        'cmd' => '\\in',
+                        'display' => '∈'],
+                    ['label' => '∉',
+                        'cmd' => '\\notin',
+                        'display' => '∉'],
+                    ['label' => '∪',
+                        'cmd' => '\\cup',
+                        'display' => '∪'],
+                    ['label' => '∩',
+                        'cmd' => '\\cap',
+                        'display' => '∩'],
+                    ['label' => '∖',
+                        'cmd' => '\\setminus',
+                        'display' => '∖'],
+                    ['label' => '⊂',
+                        'cmd' => '\\subset',
+                        'display' => '⊂'],
+                    ['label' => '⊃',
+                        'cmd' => '\\supset',
+                        'display' => '⊃'],
+                    ['label' => 'ℕ',
+                        'write' => '\\mathbb{N}',
+                        'display' => 'ℕ'],
+                    ['label' => 'ℤ',
+                        'write' => '\\mathbb{Z}',
+                        'display' => 'ℤ'],
+                    ['label' => 'ℚ',
+                        'write' => '\\mathbb{Q}',
+                        'display' => 'ℚ'],
+                    ['label' => 'ℝ',
+                        'write' => '\\mathbb{R}',
+                        'display' => 'ℝ'],
+                    ['label' => 'ℂ',
+                        'write' => '\\mathbb{C}',
+                        'display' => 'ℂ'],
+                ],
+            ],
+
+            // ── 7. Logik ────────────────────────────
+            'logic' => [
+                'label' => 'Logik',
+                'default_enabled' => false,
+                'elements' => [
+                    ['label' => '∀',
+                        'cmd' => '\\forall',
+                        'display' => '∀'],
+                    ['label' => '∃',
+                        'cmd' => '\\exists',
+                        'display' => '∃'],
+                    ['label' => '∄',
+                        'cmd' => '\\nexists',
+                        'display' => '∄'],
+                    ['label' => '¬',
+                        'cmd' => '\\neg',
+                        'display' => '¬'],
+                    ['label' => '∧',
+                        'cmd' => '\\land',
+                        'display' => '∧'],
+                    ['label' => '∨',
+                        'cmd' => '\\lor',
+                        'display' => '∨'],
+                    ['label' => '⇒',
+                        'cmd' => '\\Rightarrow',
+                        'display' => '⇒'],
+                    ['label' => '⇐',
+                        'cmd' => '\\Leftarrow',
+                        'display' => '⇐'],
+                    ['label' => '⇔',
+                        'cmd' => '\\Leftrightarrow',
+                        'display' => '⇔'],
+                ],
+            ],
+
+            // ── 8. Klammern ─────────────────────────
+            'brackets' => [
+                'label' => 'Klammern',
+                'default_enabled' => true,
+                'elements' => [
+                    ['label' => '( )',
+                        'write' => '\\left(\\right)',
+                        'display' => '( )'],
+                    ['label' => '[ ]',
+                        'write' => '\\left[\\right]',
+                        'display' => '[ ]'],
+                    ['label' => '{ }',
+                        'write' => '\\left\\{\\right\\}',
+                        'display' => '{ }'],
+                ],
+            ],
+
+            // ── 9. Mathematische Konstanten ─────────
+            'constants_math' => [
+                'label' => 'Konstanten (Mathematik)',
+                'default_enabled' => true,
+                'elements' => [
+                    ['label' => 'π',
+                        'cmd' => '\\pi',
+                        'display' => 'π'],
+                    ['label' => '∞',
+                        'cmd' => '\\infty',
+                        'display' => '∞'],
+                    ['label' => 'e',
+                        'write' => '\\mathrm{e}',
+                        'display' => 'e'],
+                    ['label' => 'i',
+                        'write' => '\\mathrm{i}',
+                        'display' => 'i'],
+                ],
+            ],
+
+            // ── 10. Naturkonstanten ─────────────────
+            'constants_nature' => [
+                'label' => 'Konstanten (Natur)',
+                'default_enabled' => false,
+                'elements' => [
+                    ['label' => 'c₀',
+                        'write' => 'c_0',
+                        'display' => 'c₀'],
+                    ['label' => 'ℏ',
+                        'cmd' => '\\hbar',
+                        'display' => 'ℏ'],
+                    ['label' => 'G',
+                        'cmd' => '\\mathrm{G}',
+                        'display' => 'G'],
+                    ['label' => 'e⁻',
+                        'write' => '\\mathrm{e^{-}}',
+                        'display' => 'e⁻'],
+                    ['label' => 'k_B',
+                        'write' => '\\mathrm{k_B}',
+                        'display' => 'k'],
+                    ['label' => 'ε₀',
+                        'write' => '\\varepsilon_0',
+                        'display' => 'ε₀'],
+                    ['label' => 'μ₀',
+                        'write' => '\\mu_0',
+                        'display' => 'μ₀'],
+                ],
+            ],
+
+            // ── 11. Geometrie ───────────────────────
+            'geometry' => [
+                'label' => 'Geometrie',
+                'default_enabled' => false,
+                'elements' => [
+                    ['label' => '\\overline{AB}',
+                        'write' => '\\overline{}',
+                        'display' => 'AB̅'],
+                    ['label' => '°',
+                        'cmd' => '\\circ',
+                        'display' => '°'],
+                    ['label' => '∠',
+                        'cmd' => '\\angle',
+                        'display' => '∠'],
+                    ['label' => '⊥',
+                        'cmd' => '\\perp',
+                        'display' => '⊥'],
+                ],
+            ],
+
+            // ── 12. Trigonometrie ────────────────────
             'trigonometry' => [
-                'langkey' => 'group_trigonometry',
+                'label' => 'Trigonometrie',
                 'default_enabled' => true,
                 'elements' => [
-                    ['label' => 'sin', 'cmd' => '\\sin'],
-                    ['label' => 'cos', 'cmd' => '\\cos'],
-                    ['label' => 'tan', 'cmd' => '\\tan'],
-                    ['label' => 'asin', 'cmd' => '\\arcsin'],
-                    ['label' => 'acos', 'cmd' => '\\arccos'],
-                    ['label' => 'atan', 'cmd' => '\\arctan'],
+                    ['label' => 'sin',
+                        'write' => '\\sin\\left(\\right)',
+                        'display' => 'sin'],
+                    ['label' => 'cos',
+                        'write' => '\\cos\\left(\\right)',
+                        'display' => 'cos'],
+                    ['label' => 'tan',
+                        'write' => '\\tan\\left(\\right)',
+                        'display' => 'tan'],
+                    ['label' => 'asin',
+                        'write' => '\\arcsin\\left(\\right)',
+                        'display' => 'asin'],
+                    ['label' => 'acos',
+                        'write' => '\\arccos\\left(\\right)',
+                        'display' => 'acos'],
+                    ['label' => 'atan',
+                        'write' => '\\arctan\\left(\\right)',
+                        'display' => 'atan'],
                 ],
             ],
+
+            // ── 13. Hyperbolische Funktionen ────────
             'hyperbolic' => [
-                'langkey' => 'group_hyperbolic',
-                'default_enabled' => true,
+                'label' => 'Hyperbelfunktionen',
+                'default_enabled' => false,
                 'elements' => [
-                    ['label' => 'sinh', 'cmd' => '\\sinh'],
-                    ['label' => 'cosh', 'cmd' => '\\cosh'],
-                    ['label' => 'tanh', 'cmd' => '\\tanh'],
+                    ['label' => 'sinh',
+                        'write' => '\\sinh\\left(\\right)',
+                        'display' => 'sinh'],
+                    ['label' => 'cosh',
+                        'write' => '\\cosh\\left(\\right)',
+                        'display' => 'cosh'],
+                    ['label' => 'tanh',
+                        'write' => '\\tanh\\left(\\right)',
+                        'display' => 'tanh'],
                 ],
             ],
-            'logarithms' => [
-                'langkey' => 'group_logarithms',
-                'default_enabled' => true,
+
+            // ── 14. Analysis-Operatoren ─────────────
+            'analysis_operators' => [
+                'label' => 'Analysis-Operatoren',
+                'default_enabled' => false,
                 'elements' => [
-                    ['label' => 'ln', 'cmd' => '\\ln'],
-                    ['label' => 'log', 'cmd' => '\\log'],
-                    ['label' => 'exp', 'cmd' => '\\exp'],
+                    ['label' => '|x|',
+                        'write' => '\\left|\\right|',
+                        'display' => '|x|'],
+                    ['label' => '∑',
+                        'write' => '\\sum_{}^{}',
+                        'display' => '∑'],
+                    ['label' => '∏',
+                        'write' => '\\prod_{}^{}',
+                        'display' => '∏'],
                 ],
             ],
-            'constants' => [
-                'langkey' => 'group_constants',
-                'default_enabled' => true,
+
+            // ── 15. Vektor-Operatoren ───────────────
+            'vector_operators' => [
+                'label' => 'Vektoren',
+                'default_enabled' => false,
                 'elements' => [
-                    ['label' => "\u{03C0}", 'cmd' => '\\pi'],
-                    ['label' => 'e', 'write' => 'e'],
-                    ['label' => "\u{221E}", 'cmd' => '\\infty'],
-                    ['label' => "\u{00EE}", 'write' => '\\hat{\\imath}', 'display' => "\u{00EE}"],
+                    ['label' => '\\vec{v}',
+                        'write' => '\\vec{}',
+                        'display' => 'v⃗'],
+                    ['label' => '||v||',
+                        'write' => '\\left\\|\\right\\|',
+                        'display' => '‖v‖'],
+                    ['label' => '·',
+                        'cmd' => '\\cdot',
+                        'display' => '·'],
+                    ['label' => '×',
+                        'cmd' => '\\times',
+                        'display' => '×'],
                 ],
             ],
-            'comparison' => [
-                'langkey' => 'group_comparison',
-                'default_enabled' => true,
+
+            // ── 16. Differential-Operatoren ─────────
+            'differential_operators' => [
+                'label' => 'Differentialrechnung',
+                'default_enabled' => false,
                 'elements' => [
-                    ['label' => "\u{2264}", 'cmd' => '\\le'],
-                    ['label' => "\u{2265}", 'cmd' => '\\ge'],
-                    ['label' => "\u{2260}", 'cmd' => '\\ne'],
-                    ['label' => '=', 'write' => '='],
+                    ['label' => 'd/dx',
+                        'write' => '\\frac{d}{dx}',
+                        'display' => 'd/dx'],
+                    ['label' => '∂/∂x',
+                        'write' => '\\frac{\\partial}{\\partial x}',
+                        'display' => '∂/∂x'],
+                    ['label' => '∇',
+                        'cmd' => '\\nabla',
+                        'display' => '∇'],
+                    ['label' => 'Δ',
+                        'cmd' => '\\Delta',
+                        'display' => 'Δ'],
                 ],
             ],
-            'parentheses' => [
-                'langkey' => 'group_parentheses',
-                'default_enabled' => true,
+
+            // ── 17. Vektor-Differentialoperatoren ───
+            'vector_differential' => [
+                'label' => 'Vektordifferential',
+                'default_enabled' => false,
                 'elements' => [
-                    ['label' => '( )', 'write' => '\\left(\\right)'],
-                    ['label' => '[ ]', 'write' => '\\left[\\right]'],
-                    ['label' => '| |', 'write' => '\\left|\\right|'],
+                    ['label' => 'grad',
+                        'write' => '\\mathrm{grad}\\,',
+                        'display' => 'grad'],
+                    ['label' => 'div',
+                        'write' => '\\mathrm{div}\\,',
+                        'display' => 'div'],
+                    ['label' => 'rot',
+                        'write' => '\\mathrm{rot}\\,',
+                        'display' => 'rot'],
                 ],
             ],
-            'calculus' => [
-                'langkey' => 'group_calculus',
-                'default_enabled' => true,
+
+            // ── 18. Matrix-Operatoren ───────────────
+            'matrix_operators' => [
+                'label' => 'Matrizen',
+                'default_enabled' => false,
                 'elements' => [
-                    ['label' => "\u{222B}", 'write' => '\\int_{}^{}'],
-                    ['label' => "\u{03A3}", 'write' => '\\sum_{}^{}'],
-                    ['label' => "\u{03A0}", 'write' => '\\prod_{}^{}'],
-                    ['label' => 'lim', 'write' => '\\lim_{}'],
+                    ['label' => '𝟙',
+                        'write' => '\\mathbb{1}',
+                        'display' => '𝟙'],
+                    ['label' => 'Aᵀ',
+                        'write' => '^{\\intercal}',
+                        'display' => 'Aᵀ'],
+                    ['label' => 'A*',
+                        'write' => '^{*}',
+                        'display' => 'A*'],
+                    ['label' => 'A†',
+                        'write' => '^{\\dagger}',
+                        'display' => 'A†'],
                 ],
             ],
+
+            // ── 19. Integral-Operatoren ─────────────
+            'integral_operators' => [
+                'label' => 'Integralrechnung',
+                'default_enabled' => true,
+                'elements' => [
+                    ['label' => '∫',
+                        'write' => '\\int_{}^{}',
+                        'display' => '∫'],
+                    ['label' => '∮',
+                        'write' => '\\oint_{}^{}',
+                        'display' => '∮'],
+                ],
+            ],
+
+            // ── 20. Stochastik-Operatoren ───────────
+            'statistical_operators' => [
+                'label' => 'Stochastik',
+                'default_enabled' => false,
+                'elements' => [
+                    ['label' => 'n!',
+                        'write' => '!',
+                        'display' => 'n!'],
+                    ['label' => '\\binom{n}{k}',
+                        'write' => '\\binom{}{}',
+                        'display' => 'C(n,k)'],
+                    ['label' => 'E[X]',
+                        'write' => 'E\\left[\\right]',
+                        'display' => 'E[X]'],
+                    ['label' => 'σ',
+                        'cmd' => '\\sigma',
+                        'display' => 'σ'],
+                    ['label' => '∧ (und)',
+                        'cmd' => '\\land',
+                        'display' => '&'],
+                    ['label' => '∨ (oder)',
+                        'cmd' => '\\lor',
+                        'display' => '|'],
+                    ['label' => 'Γ',
+                        'cmd' => '\\Gamma',
+                        'display' => 'Γ'],
+                ],
+            ],
+
+            // ── 21. Griechisch (klein) ──────────────
             'greek_lower' => [
-                'langkey' => 'group_greek_lower',
+                'label' => 'Griechisch (klein)',
                 'default_enabled' => true,
                 'elements' => [
-                    ['label' => "\u{03B1}", 'cmd' => '\\alpha'],
-                    ['label' => "\u{03B2}", 'cmd' => '\\beta'],
-                    ['label' => "\u{03B3}", 'cmd' => '\\gamma'],
-                    ['label' => "\u{03B4}", 'cmd' => '\\delta'],
-                    ['label' => "\u{03B5}", 'cmd' => '\\epsilon'],
-                    ['label' => "\u{03B6}", 'cmd' => '\\zeta'],
-                    ['label' => "\u{03B7}", 'cmd' => '\\eta'],
-                    ['label' => "\u{03B8}", 'cmd' => '\\theta'],
-                    ['label' => "\u{03BB}", 'cmd' => '\\lambda'],
-                    ['label' => "\u{03BC}", 'cmd' => '\\mu'],
-                    ['label' => "\u{03BD}", 'cmd' => '\\nu'],
-                    ['label' => "\u{03BE}", 'cmd' => '\\xi'],
-                    ['label' => "\u{03C1}", 'cmd' => '\\rho'],
-                    ['label' => "\u{03C3}", 'cmd' => '\\sigma'],
-                    ['label' => "\u{03C4}", 'cmd' => '\\tau'],
-                    ['label' => "\u{03C6}", 'cmd' => '\\phi'],
-                    ['label' => "\u{03C7}", 'cmd' => '\\chi'],
-                    ['label' => "\u{03C8}", 'cmd' => '\\psi'],
-                    ['label' => "\u{03C9}", 'cmd' => '\\omega'],
+                    ['label' => 'α', 'cmd' => '\\alpha',
+                        'display' => 'α'],
+                    ['label' => 'β', 'cmd' => '\\beta',
+                        'display' => 'β'],
+                    ['label' => 'γ', 'cmd' => '\\gamma',
+                        'display' => 'γ'],
+                    ['label' => 'δ', 'cmd' => '\\delta',
+                        'display' => 'δ'],
+                    ['label' => 'ε', 'cmd' => '\\epsilon',
+                        'display' => 'ε'],
+                    ['label' => 'ζ', 'cmd' => '\\zeta',
+                        'display' => 'ζ'],
+                    ['label' => 'η', 'cmd' => '\\eta',
+                        'display' => 'η'],
+                    ['label' => 'θ', 'cmd' => '\\theta',
+                        'display' => 'θ'],
+                    ['label' => 'ι', 'cmd' => '\\iota',
+                        'display' => 'ι'],
+                    ['label' => 'κ', 'cmd' => '\\kappa',
+                        'display' => 'κ'],
+                    ['label' => 'λ', 'cmd' => '\\lambda',
+                        'display' => 'λ'],
+                    ['label' => 'μ', 'cmd' => '\\mu',
+                        'display' => 'μ'],
+                    ['label' => 'ν', 'cmd' => '\\nu',
+                        'display' => 'ν'],
+                    ['label' => 'ξ', 'cmd' => '\\xi',
+                        'display' => 'ξ'],
+                    ['label' => 'ο', 'write' => 'o',
+                        'display' => 'ο'],
+                    ['label' => 'π', 'cmd' => '\\pi',
+                        'display' => 'π'],
+                    ['label' => 'ρ', 'cmd' => '\\rho',
+                        'display' => 'ρ'],
+                    ['label' => 'σ', 'cmd' => '\\sigma',
+                        'display' => 'σ'],
+                    ['label' => 'τ', 'cmd' => '\\tau',
+                        'display' => 'τ'],
+                    ['label' => 'υ', 'cmd' => '\\upsilon',
+                        'display' => 'υ'],
+                    ['label' => 'φ', 'cmd' => '\\phi',
+                        'display' => 'φ'],
+                    ['label' => 'χ', 'cmd' => '\\chi',
+                        'display' => 'χ'],
+                    ['label' => 'ψ', 'cmd' => '\\psi',
+                        'display' => 'ψ'],
+                    ['label' => 'ω', 'cmd' => '\\omega',
+                        'display' => 'ω'],
                 ],
             ],
+
+            // ── 22. Griechisch (groß) ───────────────
             'greek_upper' => [
-                'langkey' => 'group_greek_upper',
+                'label' => 'Griechisch (groß)',
                 'default_enabled' => true,
                 'elements' => [
-                    ['label' => "\u{0393}", 'cmd' => '\\Gamma'],
-                    ['label' => "\u{0394}", 'cmd' => '\\Delta'],
-                    ['label' => "\u{0398}", 'cmd' => '\\Theta'],
-                    ['label' => "\u{039B}", 'cmd' => '\\Lambda'],
-                    ['label' => "\u{039E}", 'cmd' => '\\Xi'],
-                    ['label' => "\u{03A0}", 'cmd' => '\\Pi'],
-                    ['label' => "\u{03A3}", 'cmd' => '\\Sigma'],
-                    ['label' => "\u{03A5}", 'cmd' => '\\Upsilon'],
-                    ['label' => "\u{03A6}", 'cmd' => '\\Phi'],
-                    ['label' => "\u{03A8}", 'cmd' => '\\Psi'],
-                    ['label' => "\u{03A9}", 'cmd' => '\\Omega'],
+                    ['label' => 'Α', 'write' => 'A',
+                        'display' => 'Α'],
+                    ['label' => 'Β', 'write' => 'B',
+                        'display' => 'Β'],
+                    ['label' => 'Γ', 'cmd' => '\\Gamma',
+                        'display' => 'Γ'],
+                    ['label' => 'Δ', 'cmd' => '\\Delta',
+                        'display' => 'Δ'],
+                    ['label' => 'Ε', 'write' => 'E',
+                        'display' => 'Ε'],
+                    ['label' => 'Ζ', 'write' => 'Z',
+                        'display' => 'Ζ'],
+                    ['label' => 'Η', 'write' => 'H',
+                        'display' => 'Η'],
+                    ['label' => 'Θ', 'cmd' => '\\Theta',
+                        'display' => 'Θ'],
+                    ['label' => 'Ι', 'write' => 'I',
+                        'display' => 'Ι'],
+                    ['label' => 'Κ', 'write' => 'K',
+                        'display' => 'Κ'],
+                    ['label' => 'Λ', 'cmd' => '\\Lambda',
+                        'display' => 'Λ'],
+                    ['label' => 'Μ', 'write' => 'M',
+                        'display' => 'Μ'],
+                    ['label' => 'Ν', 'write' => 'N',
+                        'display' => 'Ν'],
+                    ['label' => 'Ξ', 'cmd' => '\\Xi',
+                        'display' => 'Ξ'],
+                    ['label' => 'Ο', 'write' => 'O',
+                        'display' => 'Ο'],
+                    ['label' => 'Π', 'cmd' => '\\Pi',
+                        'display' => 'Π'],
+                    ['label' => 'Ρ', 'write' => 'P',
+                        'display' => 'Ρ'],
+                    ['label' => 'Σ', 'cmd' => '\\Sigma',
+                        'display' => 'Σ'],
+                    ['label' => 'Τ', 'write' => 'T',
+                        'display' => 'Τ'],
+                    ['label' => 'Υ', 'cmd' => '\\Upsilon',
+                        'display' => 'Υ'],
+                    ['label' => 'Φ', 'cmd' => '\\Phi',
+                        'display' => 'Φ'],
+                    ['label' => 'Χ', 'write' => 'X',
+                        'display' => 'Χ'],
+                    ['label' => 'Ψ', 'cmd' => '\\Psi',
+                        'display' => 'Ψ'],
+                    ['label' => 'Ω', 'cmd' => '\\Omega',
+                        'display' => 'Ω'],
                 ],
             ],
-            'matrices' => [
-                'langkey' => 'group_matrices',
-                'default_enabled' => true,
-                'elements' => [],
-            ],
+
         ];
     }
 
     /**
-     * Returns function mappings for LaTeX <-> Maxima conversion.
+     * Return the default config for which groups are enabled.
      *
-     * @return array
+     * @return array Group key => bool.
+     */
+    public static function get_default_config(): array {
+        $defaults = [];
+        foreach (self::get_element_groups() as $key => $group) {
+            $defaults[$key] = $group['default_enabled'];
+        }
+        return $defaults;
+    }
+
+    /**
+     * Return all known function names for tex2max/max2tex.
+     *
+     * @return array List of function name strings.
      */
     public static function get_functions(): array {
         return [
-            ['latex_cmd' => '\\arcsin', 'maxima_name' => 'arcsin', 'type' => 'paren'],
-            ['latex_cmd' => '\\arccos', 'maxima_name' => 'arccos', 'type' => 'paren'],
-            ['latex_cmd' => '\\arctan', 'maxima_name' => 'arctan', 'type' => 'paren'],
-            ['latex_cmd' => '\\sinh', 'maxima_name' => 'sinh', 'type' => 'paren'],
-            ['latex_cmd' => '\\cosh', 'maxima_name' => 'cosh', 'type' => 'paren'],
-            ['latex_cmd' => '\\tanh', 'maxima_name' => 'tanh', 'type' => 'paren'],
-            ['latex_cmd' => '\\sin', 'maxima_name' => 'sin', 'type' => 'paren'],
-            ['latex_cmd' => '\\cos', 'maxima_name' => 'cos', 'type' => 'paren'],
-            ['latex_cmd' => '\\tan', 'maxima_name' => 'tan', 'type' => 'paren'],
-            ['latex_cmd' => '\\cot', 'maxima_name' => 'cot', 'type' => 'paren'],
-            ['latex_cmd' => '\\sec', 'maxima_name' => 'sec', 'type' => 'paren'],
-            ['latex_cmd' => '\\csc', 'maxima_name' => 'csc', 'type' => 'paren'],
-            ['latex_cmd' => '\\ln',  'maxima_name' => 'log', 'type' => 'paren'],
-            ['latex_cmd' => '\\log', 'maxima_name' => 'log', 'type' => 'paren'],
-            ['latex_cmd' => '\\exp', 'maxima_name' => 'exp', 'type' => 'paren'],
-            ['latex_cmd' => '\\sqrt', 'maxima_name' => 'sqrt', 'type' => 'brace'],
-            ['latex_cmd' => '\\abs', 'maxima_name' => 'abs', 'type' => 'paren'],
+            'sin', 'cos', 'tan',
+            'arcsin', 'arccos', 'arctan',
+            'asin', 'acos', 'atan',
+            'sinh', 'cosh', 'tanh',
+            'exp', 'log', 'ln',
+            'sqrt', 'abs',
         ];
     }
 
     /**
-     * Returns constant mappings for LaTeX <-> Maxima conversion.
+     * Return all known constant names.
      *
-     * @return array
+     * @return array List of constant strings.
      */
     public static function get_constants(): array {
-        return [
-            ['latex' => '\\pi',    'maxima' => '%pi',  'display' => "\u{03C0}"],
-            ['latex' => '\\infty', 'maxima' => 'inf',  'display' => "\u{221E}"],
-            ['latex' => '\\e',     'maxima' => '%e',   'display' => 'e',
-                'latex_regex' => '\\\\e(?![a-zA-Z])'],
-            ['latex' => '\\hat{\\imath}', 'maxima' => '%i', 'display' => "\u{00EE}",
-                'latex_regex' => '\\\\hat\\s*\\{\\s*(?:\\\\imath|i)\\s*\\}'],
-        ];
+        return ['pi', 'inf', 'minf', 'true', 'false'];
     }
 
     /**
-     * Returns operator mappings.
+     * Return operator symbols for tex2max.
      *
-     * @return array
+     * @return array List of operator strings.
      */
     public static function get_operators(): array {
-        return [
-            ['latex' => '\\cdot',  'maxima' => '*'],
-            ['latex' => '\\times', 'maxima' => '*'],
-            ['latex' => '\\div',   'maxima' => '/'],
-        ];
+        return ['*', '/', '+', '-'];
     }
 
     /**
-     * Returns comparison operator mappings.
+     * Return comparison operator LaTeX commands.
      *
-     * @return array
+     * @return array List of comparison strings.
      */
     public static function get_comparison(): array {
-        return [
-            ['latex_regex' => '\\\\leq?', 'maxima' => '<=', 'latex_write' => '\\le '],
-            ['latex_regex' => '\\\\geq?', 'maxima' => '>=', 'latex_write' => '\\ge '],
-            ['latex_regex' => '\\\\neq?', 'maxima' => '#',  'latex_write' => '\\ne '],
-        ];
+        return ['=', '\\neq', '\\leq', '\\geq',
+            '<', '>', '\\approx'];
     }
 
     /**
-     * Returns Greek letter names — lowercase AND uppercase.
+     * Return Greek letter names for variable detection.
      *
-     * @return string[]
+     * @return array List of Greek letter names.
      */
     public static function get_greek(): array {
         return [
-            // Lowercase.
-            'alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta',
-            'theta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi',
-            'rho', 'sigma', 'tau', 'upsilon', 'phi', 'chi', 'psi', 'omega',
-            // Uppercase.
-            'Gamma', 'Delta', 'Theta', 'Lambda', 'Xi', 'Pi',
-            'Sigma', 'Upsilon', 'Phi', 'Psi', 'Omega',
+            'alpha', 'beta', 'gamma', 'delta',
+            'epsilon', 'zeta', 'eta', 'theta',
+            'iota', 'kappa', 'lambda', 'mu',
+            'nu', 'xi', 'pi', 'rho',
+            'sigma', 'tau', 'upsilon', 'phi',
+            'chi', 'psi', 'omega',
+            'Gamma', 'Delta', 'Theta', 'Lambda',
+            'Xi', 'Pi', 'Sigma', 'Upsilon',
+            'Phi', 'Psi', 'Omega',
         ];
     }
 
     /**
-     * Returns Maxima-reserved words that must never be split.
+     * Return unit names for units input type.
      *
-     * @return string[]
+     * @return array List of unit strings.
+     */
+    public static function get_units(): array {
+        return [
+            'm', 'km', 'cm', 'mm', 'nm', 'um',
+            'kg', 'g', 'mg', 'ug',
+            's', 'ms', 'us', 'ns', 'min', 'hr',
+            'N', 'kN', 'mN',
+            'Pa', 'kPa', 'MPa', 'GPa', 'bar', 'mbar',
+            'J', 'kJ', 'MJ', 'eV', 'keV', 'MeV',
+            'W', 'kW', 'MW',
+            'A', 'mA', 'uA',
+            'V', 'kV', 'mV',
+            'C', 'F', 'uF', 'nF', 'pF',
+            'Ohm', 'kOhm', 'MOhm',
+            'H', 'mH', 'uH',
+            'T', 'mT', 'Hz', 'kHz', 'MHz', 'GHz',
+            'mol', 'K', 'cd', 'lm', 'lx',
+        ];
+    }
+
+    /**
+     * Return unit display symbols.
+     *
+     * @return array Unit name => display symbol.
+     */
+    public static function get_unit_symbols(): array {
+        return [
+            'm' => 'm', 'km' => 'km', 'cm' => 'cm',
+            'mm' => 'mm', 'nm' => 'nm',
+            'um' => 'µm',
+            'kg' => 'kg', 'g' => 'g', 'mg' => 'mg',
+            'ug' => 'µg',
+            's' => 's', 'ms' => 'ms', 'us' => 'µs',
+            'ns' => 'ns', 'min' => 'min', 'hr' => 'h',
+            'N' => 'N', 'kN' => 'kN', 'mN' => 'mN',
+            'Pa' => 'Pa', 'kPa' => 'kPa',
+            'MPa' => 'MPa', 'GPa' => 'GPa',
+            'bar' => 'bar', 'mbar' => 'mbar',
+            'J' => 'J', 'kJ' => 'kJ', 'MJ' => 'MJ',
+            'eV' => 'eV', 'keV' => 'keV',
+            'MeV' => 'MeV',
+            'W' => 'W', 'kW' => 'kW', 'MW' => 'MW',
+            'A' => 'A', 'mA' => 'mA', 'uA' => 'µA',
+            'V' => 'V', 'kV' => 'kV', 'mV' => 'mV',
+            'C' => 'C',
+            'F' => 'F', 'uF' => 'µF', 'nF' => 'nF',
+            'pF' => 'pF',
+            'Ohm' => 'Ω', 'kOhm' => 'kΩ',
+            'MOhm' => 'MΩ',
+            'H' => 'H', 'mH' => 'mH', 'uH' => 'µH',
+            'T' => 'T', 'mT' => 'mT',
+            'Hz' => 'Hz', 'kHz' => 'kHz',
+            'MHz' => 'MHz', 'GHz' => 'GHz',
+            'mol' => 'mol', 'K' => 'K',
+            'cd' => 'cd', 'lm' => 'lm', 'lx' => 'lx',
+        ];
+    }
+
+    /**
+     * Return function names for LaTeX detection.
+     *
+     * @return array List of function name strings.
+     */
+    public static function get_function_names(): array {
+        return [
+            'sin', 'cos', 'tan',
+            'arcsin', 'arccos', 'arctan',
+            'sinh', 'cosh', 'tanh',
+            'exp', 'log', 'ln',
+            'sqrt', 'abs', 'sgn',
+        ];
+    }
+
+    /**
+     * Return reserved Maxima words.
+     *
+     * @return array List of reserved word strings.
      */
     public static function get_reserved_words(): array {
         return [
-            'max', 'min', 'abs', 'mod', 'floor', 'ceiling', 'round',
-            'signum', 'factorial', 'binomial',
-            'diff', 'integrate', 'limit', 'sum', 'product',
-            'inf', 'minf',
+            'if', 'then', 'else', 'elseif',
+            'and', 'or', 'not',
             'true', 'false',
+            'do', 'for', 'while', 'unless',
+            'thru', 'step', 'in',
+            'inf', 'minf',
         ];
     }
 
     /**
-     * Returns Maxima percent-prefixed constants.
+     * Return names treated as % constants in Maxima.
      *
-     * @return string[]
+     * @return array List of percent-prefixed names.
      */
     public static function get_percent_constants(): array {
         return ['%pi', '%e', '%i', '%phi', '%gamma'];
     }
 
     /**
-     * Returns unit definitions.
+     * Export all definitions for JavaScript modules.
      *
-     * @return array
-     */
-    public static function get_units(): array {
-        return [
-            ['symbol' => 'kHz',  'langkey' => 'unit_khz'],
-            ['symbol' => 'MHz',  'langkey' => 'unit_mhz'],
-            ['symbol' => 'GHz',  'langkey' => 'unit_ghz'],
-            ['symbol' => 'Hz',   'langkey' => 'unit_hz'],
-            ['symbol' => 'kPa',  'langkey' => 'unit_kpa'],
-            ['symbol' => 'MPa',  'langkey' => 'unit_mpa'],
-            ['symbol' => 'Pa',   'langkey' => 'unit_pa'],
-            ['symbol' => 'bar',  'langkey' => 'unit_bar'],
-            ['symbol' => 'atm',  'langkey' => 'unit_atm'],
-            ['symbol' => 'kcal', 'langkey' => 'unit_kcal'],
-            ['symbol' => 'cal',  'langkey' => 'unit_cal'],
-            ['symbol' => 'kJ',   'langkey' => 'unit_kj'],
-            ['symbol' => 'MJ',   'langkey' => 'unit_mj'],
-            ['symbol' => 'eV',   'langkey' => 'unit_ev'],
-            ['symbol' => 'kW',   'langkey' => 'unit_kw'],
-            ['symbol' => 'MW',   'langkey' => 'unit_mw'],
-            ['symbol' => 'J',    'langkey' => 'unit_j'],
-            ['symbol' => 'W',    'langkey' => 'unit_w'],
-            ['symbol' => 'kN',   'langkey' => 'unit_kn'],
-            ['symbol' => 'N',    'langkey' => 'unit_n'],
-            ['symbol' => 'kV',   'langkey' => 'unit_kv'],
-            ['symbol' => 'mA',   'langkey' => 'unit_ma'],
-            ['symbol' => 'Ohm',  'langkey' => 'unit_ohm'],
-            ['symbol' => 'ohm',  'langkey' => 'unit_ohm'],
-            ['symbol' => 'V',    'langkey' => 'unit_v'],
-            ['symbol' => 'A',    'langkey' => 'unit_a'],
-            ['symbol' => 'F',    'langkey' => 'unit_f'],
-            ['symbol' => 'C',    'langkey' => 'unit_c_coulomb'],
-            ['symbol' => 'kg',   'langkey' => 'unit_kg'],
-            ['symbol' => 'mg',   'langkey' => 'unit_mg'],
-            ['symbol' => 'g',    'langkey' => 'unit_g'],
-            ['symbol' => 't',    'langkey' => 'unit_t'],
-            ['symbol' => 'lb',   'langkey' => 'unit_lb'],
-            ['symbol' => 'oz',   'langkey' => 'unit_oz'],
-            ['symbol' => 'km',   'langkey' => 'unit_km'],
-            ['symbol' => 'cm',   'langkey' => 'unit_cm'],
-            ['symbol' => 'mm',   'langkey' => 'unit_mm'],
-            ['symbol' => 'nm',   'langkey' => 'unit_nm'],
-            ['symbol' => 'um',   'langkey' => 'unit_um'],
-            ['symbol' => 'ft',   'langkey' => 'unit_ft'],
-            ['symbol' => 'yd',   'langkey' => 'unit_yd'],
-            ['symbol' => 'mi',   'langkey' => 'unit_mi'],
-            ['symbol' => 'm',    'langkey' => 'unit_m'],
-            ['symbol' => 'min',  'langkey' => 'unit_min'],
-            ['symbol' => 'ms',   'langkey' => 'unit_ms'],
-            ['symbol' => 'hr',   'langkey' => 'unit_hr'],
-            ['symbol' => 'h',    'langkey' => 'unit_h'],
-            ['symbol' => 's',    'langkey' => 'unit_s'],
-            ['symbol' => 'mL',   'langkey' => 'unit_ml'],
-            ['symbol' => 'dL',   'langkey' => 'unit_dl'],
-            ['symbol' => 'L',    'langkey' => 'unit_l'],
-            ['symbol' => 'mol',  'langkey' => 'unit_mol'],
-            ['symbol' => 'K',    'langkey' => 'unit_k'],
-        ];
-    }
-
-    /**
-     * @return string[]
-     */
-    public static function get_unit_symbols(): array {
-        return array_column(self::get_units(), 'symbol');
-    }
-
-    /**
-     * @return array Group key => bool.
-     */
-    public static function get_default_enabled(): array {
-        $result = [];
-        foreach (self::get_element_groups() as $key => $group) {
-            $result[$key] = $group['default_enabled'];
-        }
-        return $result;
-    }
-
-    /**
-     * @return string[]
-     */
-    public static function get_function_names(): array {
-        return array_values(array_unique(
-            array_column(self::get_functions(), 'maxima_name')
-        ));
-    }
-
-    /**
-     * Returns group labels with up to 3 example elements.
-     *
-     * @return array Group key => display label.
-     */
-    public static function get_group_labels_with_examples(): array {
-        $groups = self::get_element_groups();
-        $result = [];
-
-        foreach ($groups as $key => $group) {
-            $label = get_string($group['langkey'], 'local_stackmatheditor');
-            $elements = $group['elements'];
-
-            if (!empty($elements)) {
-                $examples = [];
-                $maxshow = min(3, count($elements));
-                for ($i = 0; $i < $maxshow; $i++) {
-                    $examples[] = $elements[$i]['display'] ?? $elements[$i]['label'];
-                }
-                $label .= ' (' . implode(', ', $examples);
-                if (count($elements) > 3) {
-                    $label .= ', …';
-                }
-                $label .= ')';
-            }
-
-            $result[$key] = $label;
-        }
-
-        return $result;
-    }
-
-    /**
-     * Export all definitions as JSON for JavaScript.
-     *
-     * @return array
+     * @return array Data structure for JSON encoding.
      */
     public static function export_for_js(): array {
-        $groups = self::get_element_groups();
-        $exportedgroups = [];
-
-        foreach ($groups as $key => $group) {
-            $exportedgroups[$key] = [
-                'label' => get_string($group['langkey'], 'local_stackmatheditor'),
-                'default_enabled' => $group['default_enabled'],
-                'elements' => $group['elements'],
-            ];
-        }
-
-        $units = self::get_units();
-        $exportedunits = [];
-        foreach ($units as $unit) {
-            $exportedunits[] = [
-                'symbol' => $unit['symbol'],
-                'description' => get_string($unit['langkey'], 'local_stackmatheditor'),
-            ];
-        }
-
         return [
-            'elementGroups'    => $exportedgroups,
+            'elementGroups'    => self::get_element_groups(),
             'functions'        => self::get_functions(),
             'constants'        => self::get_constants(),
             'operators'        => self::get_operators(),
             'comparison'       => self::get_comparison(),
             'greek'            => self::get_greek(),
-            'units'            => $exportedunits,
+            'units'            => self::get_units(),
             'unitSymbols'      => self::get_unit_symbols(),
             'functionNames'    => self::get_function_names(),
             'reservedWords'    => self::get_reserved_words(),
             'percentConstants' => self::get_percent_constants(),
         ];
+    }
+
+    /**
+     * Get group labels with example elements for settings UI.
+     *
+     * @return array key => label string.
+     */
+    public static function get_group_labels_with_examples(): array {
+        $groups = self::get_element_groups();
+        $result = [];
+        foreach ($groups as $key => $group) {
+            $label = $group['label'] ?? $key;
+            $examples = [];
+            $elements = $group['elements'] ?? [];
+            $count = 0;
+            foreach ($elements as $el) {
+                if ($count >= 3) {
+                    $examples[] = '...';
+                    break;
+                }
+                $examples[] = $el['display'] ?? $el['label'] ?? '';
+                $count++;
+            }
+            if (!empty($examples)) {
+                $label .= ' (' . implode(', ', $examples) . ')';
+            }
+            $result[$key] = $label;
+        }
+        return $result;
     }
 }

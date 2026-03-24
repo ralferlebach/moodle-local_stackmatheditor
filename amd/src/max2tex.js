@@ -231,11 +231,31 @@ define([], function() {
             } else if (con.maxima === 'inf') {
                 s = s.replace(/\binf\b/g, '\\infty ');
             } else if (con.maxima === '%e') {
-                s = s.replace(/%e(?![a-zA-Z])/g, 'e');
+                s = s.replace(/%e(?![a-zA-Z])/g, '\\mathrm{e}');
             }
         }
         // Additional %-constants not in the constants list.
-        s = s.replace(/%i(?![a-zA-Z])/g, 'i');
+        s = s.replace(/%i(?![a-zA-Z])/g, '\\mathrm{i}');
+
+        // ── Hardcoded constant fallbacks ────────────
+        // (in case defs.constants is not structured)
+        if (s.indexOf('%pi') >= 0) {
+            s = s.replace(/%pi/g, '\\pi ');
+        }
+        if (s.indexOf('inf') >= 0) {
+            s = s.replace(/\bminf\b/g, '-\\infty ');
+            s = s.replace(/\binf\b/g, '\\infty ');
+        }
+        if (s.indexOf('%e') >= 0) {
+            s = s.replace(/%e(?![a-zA-Z])/g, '\\mathrm{e}');
+        }
+
+        // ── Comparison fallbacks ────────────────────
+        s = s.replace(/<=/g, '\\leq ');
+        s = s.replace(/>=/g, '\\geq ');
+        s = s.replace(/#/g, '\\neq ');
+
+
         s = s.replace(/%phi(?![a-zA-Z])/g, '\\phi ');
         s = s.replace(/%gamma(?![a-zA-Z])/g, '\\gamma ');
         s = s.replace(/\bminf\b/g, '-\\infty ');
@@ -256,6 +276,88 @@ define([], function() {
             var def = funcDefs[k];
             var wrapType = def.type === 'brace' ? 'brace' : 'paren';
             s = processFunc(s, def.maxima_name, def.latex_cmd, wrapType);
+        }
+
+        // Binomial: binomial(n,k) -> \binom{n}{k}.
+        s = s.replace(
+            /\bbinomial\(([^,()]+),([^,()]+)\)/g,
+            '\\binom{$1}{$2}'
+        );
+
+        // Upper Greek fallback (if not handled by defs).
+        var upperGreek = [
+            'Gamma', 'Delta', 'Theta', 'Lambda',
+            'Xi', 'Pi', 'Sigma', 'Upsilon',
+            'Phi', 'Psi', 'Omega'
+        ];
+        for (var ug = 0; ug < upperGreek.length; ug++) {
+            var ugl = upperGreek[ug];
+            s = s.replace(
+                new RegExp('(?<![a-zA-Z\\\\])' + ugl + '(?![a-zA-Z])', 'g'),
+                '\\' + ugl + ' '
+            );
+        }
+
+
+        // ── Absolute value: abs(expr) -> \left|expr\right| ──
+        var absSearch = 'abs(';
+        var absResult = '';
+        var absI = 0;
+        var absSafety = 50;
+        while (absI < s.length && absSafety > 0) {
+            absSafety--;
+            var absIdx = s.indexOf(absSearch, absI);
+            if (absIdx === -1) {
+                absResult += s.substring(absI);
+                break;
+            }
+            if (absIdx > 0 && /[a-zA-Z0-9_]/.test(s[absIdx - 1])) {
+                absResult += s.substring(absI, absIdx + 1);
+                absI = absIdx + 1;
+                continue;
+            }
+            absResult += s.substring(absI, absIdx);
+            var absOpen = absIdx + 3;
+            var absClose = findCloseParen(s, absOpen);
+            if (absClose === -1) {
+                absResult += s.substring(absIdx);
+                absI = s.length;
+                break;
+            }
+            var absArg = s.substring(absOpen + 1, absClose);
+            absResult += '\\left|' + absArg + '\\right|';
+            absI = absClose + 1;
+        }
+        s = absResult;
+
+        // ── Hardcoded function fallbacks ────────────
+        // sqrt(x) -> \sqrt{x}
+        var stdFuncs = [
+            ['sqrt', '\\sqrt', 'brace'],
+            ['sin', '\\sin', 'paren'],
+            ['cos', '\\cos', 'paren'],
+            ['tan', '\\tan', 'paren'],
+            ['arcsin', '\\arcsin', 'paren'],
+            ['arccos', '\\arccos', 'paren'],
+            ['arctan', '\\arctan', 'paren'],
+            ['sinh', '\\sinh', 'paren'],
+            ['cosh', '\\cosh', 'paren'],
+            ['tanh', '\\tanh', 'paren'],
+            ['exp', '\\exp', 'paren'],
+            ['log', '\\ln', 'paren'],
+            ['abs', '\\left|', 'abs']
+        ];
+        for (var fi = 0; fi < stdFuncs.length; fi++) {
+            var sf = stdFuncs[fi];
+            if (s.indexOf(sf[0] + '(') >= 0) {
+                if (sf[2] === 'abs') {
+                    s = processFunc(s, sf[0],
+                        '\\left|', 'abs');
+                } else {
+                    s = processFunc(s, sf[0],
+                        sf[1], sf[2]);
+                }
+            }
         }
 
         // Fractions.
