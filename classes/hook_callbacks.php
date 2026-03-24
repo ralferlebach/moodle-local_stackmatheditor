@@ -3,6 +3,10 @@ namespace local_stackmatheditor;
 
 defined('MOODLE_INTERNAL') || die();
 
+use local_stackmatheditor\output\mathjax_injector;
+use local_stackmatheditor\output\editor_injector;
+use local_stackmatheditor\output\configure_injector;
+
 /**
  * Hook callbacks for local_stackmatheditor.
  *
@@ -12,38 +16,72 @@ defined('MOODLE_INTERNAL') || die();
  */
 class hook_callbacks {
 
-    /** @var string[] Page types where the editor should be active. */
-    private const ALLOWED_PAGES = [
+    /** @var string[] Pages where the editor is active. */
+    private const EDITOR_PAGES = [
         'mod-quiz-attempt',
         'mod-quiz-review',
         'question-preview',
         'question-bank-previewquestion',
     ];
 
+    /** @var string[] Pages where configure links appear. */
+    private const CONFIGURE_PAGES = [
+        'mod-quiz-edit',
+        'mod-quiz-attempt',
+        'mod-quiz-review',
+    ];
+
     /**
-     * Injects a synchronous MathJax v2 compatibility shim at the top of body.
+     * Check if the plugin is enabled.
      *
-     * This runs BEFORE any RequireJS callbacks, ensuring MathJax.Hub exists
-     * when STACK's loader.js accesses it. Uses polling to handle the case
-     * where MathJax is set/overwritten after this script runs.
+     * @return bool True if enabled.
+     */
+    private static function is_enabled(): bool {
+        return (bool) get_config(
+            'local_stackmatheditor', 'enabled');
+    }
+
+    /**
+     * Check if current page is an editor page.
+     *
+     * @return bool True if editor should be injected.
+     */
+    private static function is_editor_page(): bool {
+        global $PAGE;
+        return in_array(
+            $PAGE->pagetype, self::EDITOR_PAGES);
+    }
+
+    /**
+     * Check if current page is a configure page.
+     *
+     * @return bool True if configure links appear.
+     */
+    private static function is_configure_page(): bool {
+        global $PAGE;
+        return in_array(
+            $PAGE->pagetype, self::CONFIGURE_PAGES);
+    }
+
+    /**
+     * Inject MathJax v2 shim at top of body.
      *
      * @param \core\hook\output\before_standard_top_of_body_html_generation $hook
      */
     public static function before_top_of_body(
         \core\hook\output\before_standard_top_of_body_html_generation $hook
     ): void {
-        global $PAGE;
-
-        if (!get_config('local_stackmatheditor', 'enabled')) {
+        if (!self::is_enabled()) {
             return;
         }
 
-        if (!in_array($PAGE->pagetype, self::ALLOWED_PAGES)) {
+        if (!self::is_editor_page()) {
             return;
         }
 
-        // Inline synchronous script — runs before any AMD/RequireJS callbacks.
-        // Uses nowdoc so PHP does not interpret $ signs in the JS code.
+        quiz_helper::dbg(
+            'before_top_of_body: injecting MathJax shim');
+
         $shimjs = <<<'JSEOF'
 <script type="text/javascript">
 (function(){
@@ -71,42 +109,25 @@ class hook_callbacks {
                 }
             }
         }
-
         return{
             Queue:processQueue,
             Typeset:function(el,cb){
                 if(window.MathJax&&window.MathJax.typesetPromise){
                     window.MathJax.typesetPromise(el?[el]:[]).then(cb||noop).catch(noop);
-                }else if(typeof cb==="function"){
-                    cb();
-                }
+                }else if(typeof cb==="function"){cb();}
             },
             Config:noop,
             Register:{
-                StartupHook:function(h,cb){
-                    if(typeof cb==="function"){try{cb();}catch(e){}}
-                },
-                MessageHook:noop,
-                LoadHook:noop
+                StartupHook:function(h,cb){if(typeof cb==="function"){try{cb();}catch(e){}}},
+                MessageHook:noop,LoadHook:noop
             },
             Configured:noop,
-            processSectionDelay:0,
-            processUpdateDelay:0,
-            processUpdateTime:250,
-            config:{
-                showProcessingMessages:false,
-                messageStyle:"none",
-                "HTML-CSS":{},
-                SVG:{},
-                NativeMML:{},
-                TeX:{}
-            },
+            processSectionDelay:0,processUpdateDelay:0,processUpdateTime:250,
+            config:{showProcessingMessages:false,messageStyle:"none","HTML-CSS":{},SVG:{},NativeMML:{},TeX:{}},
             signal:{Interest:noop},
             getAllJax:function(){return[];},
             getJaxFor:function(){return null;},
-            Reprocess:noop,
-            Rerender:noop,
-            setRenderer:noop,
+            Reprocess:noop,Rerender:noop,setRenderer:noop,
             Insert:function(dst,src){
                 if(dst&&src){for(var k in src){if(src.hasOwnProperty(k)){dst[k]=src[k];}}}
                 return dst;
@@ -120,16 +141,9 @@ class hook_callbacks {
             if(!window.MathJax.Callback){
                 window.MathJax.Callback={
                     Queue:function(){
-                        var q={Push:function(){
-                            var i;
-                            for(i=0;i<arguments.length;i++){
-                                if(typeof arguments[i]==="function"){
-                                    try{arguments[i]();}catch(e){}
-                                }
-                            }
-                        }};
-                        q.Push.apply(q,arguments);
-                        return q;
+                        var q={Push:function(){var i;for(i=0;i<arguments.length;i++){
+                            if(typeof arguments[i]==="function"){try{arguments[i]();}catch(e){}}
+                        }}};q.Push.apply(q,arguments);return q;
                     },
                     Signal:function(){return{Interest:noop,Post:noop};}
                 };
@@ -137,9 +151,7 @@ class hook_callbacks {
             if(!window.MathJax.Ajax){
                 window.MathJax.Ajax={
                     Require:function(f,cb){if(typeof cb==="function"){cb();}},
-                    config:{root:""},
-                    STATUS:{OK:1},
-                    loaded:{}
+                    config:{root:""},STATUS:{OK:1},loaded:{}
                 };
             }
             return true;
@@ -147,12 +159,8 @@ class hook_callbacks {
         return(window.MathJax&&window.MathJax.Hub)?true:false;
     }
 
-    /* Try immediately. */
     ensureHub();
-
-    /* Poll every 20ms for up to 10s to catch late loads and overwrites. */
-    var count=0;
-    var maxCount=500;
+    var count=0,maxCount=500;
     var iv=setInterval(function(){
         ensureHub();
         if(++count>=maxCount){clearInterval(iv);}
@@ -165,7 +173,7 @@ JSEOF;
     }
 
     /**
-     * Injects MathQuill AMD module on quiz pages containing STACK questions.
+     * Main injection: definitions, editor runtime, configure links.
      *
      * @param \core\hook\output\before_footer_html_generation $hook
      */
@@ -174,36 +182,66 @@ JSEOF;
     ): void {
         global $PAGE;
 
-        if (!get_config('local_stackmatheditor', 'enabled')) {
+        if (!self::is_enabled()) {
             return;
         }
 
-        if (!in_array($PAGE->pagetype, self::ALLOWED_PAGES)) {
-            return;
-        }
+        $isEditor = self::is_editor_page();
+        $isConfigure = self::is_configure_page();
 
-        $plugindir = __DIR__ . '/../thirdparty/mathquill/';
-        if (file_exists($plugindir . 'mathquill.min.js')) {
-            $jsfile = 'mathquill.min.js';
-        } else {
-            $jsfile = 'mathquill.js';
-        }
-
-        $mqjsurl = (new \moodle_url(
-            '/local/stackmatheditor/thirdparty/mathquill/' . $jsfile
-        ))->out(false);
-
-        $mqcssurl = (new \moodle_url(
-            '/local/stackmatheditor/thirdparty/mathquill/mathquill.css'
-        ))->out(false);
-
-        $PAGE->requires->js_call_amd(
-            'local_stackmatheditor/mathquill_init',
-            'init',
-            [[
-                'mathquillJsUrl'  => $mqjsurl,
-                'mathquillCssUrl' => $mqcssurl,
-            ]]
+        quiz_helper::dbg(
+            'before_footer: page=' . $PAGE->pagetype
+            . ' editor=' . ($isEditor ? 'Y' : 'N')
+            . ' configure=' . ($isConfigure ? 'Y' : 'N')
         );
+
+        if (!$isEditor && !$isConfigure) {
+            return;
+        }
+
+        // ── Editor injection ──
+        if ($isEditor) {
+            try {
+                $cmid = quiz_helper::get_cmid();
+
+                // 1. Definitions (#sme-definitions).
+                mathjax_injector::inject();
+
+                // 2. Runtime + MathQuill init.
+                editor_injector::inject($cmid);
+
+                quiz_helper::dbg(
+                    'editor injected: cmid=' . $cmid);
+            } catch (\Throwable $e) {
+                quiz_helper::dbg(
+                    'editor injection error: '
+                    . $e->getMessage());
+            }
+        }
+
+        // ── Configure links injection ──
+        if ($isConfigure) {
+            try {
+                $cmid = quiz_helper::get_cmid();
+                if ($cmid <= 0) {
+                    quiz_helper::dbg(
+                        'configure: no cmid, skipping');
+                    return;
+                }
+
+                quiz_helper::dbg(
+                    'configure guard: can_manage='
+                    . (quiz_helper::can_manage_quiz($cmid)
+                        ? 'true' : 'false'));
+
+                if (quiz_helper::can_manage_quiz($cmid)) {
+                    configure_injector::inject($cmid);
+                }
+            } catch (\Throwable $e) {
+                quiz_helper::dbg(
+                    'configure injection error: '
+                    . $e->getMessage());
+            }
+        }
     }
 }

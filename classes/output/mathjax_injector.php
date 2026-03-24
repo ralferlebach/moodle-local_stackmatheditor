@@ -6,7 +6,7 @@ defined('MOODLE_INTERNAL') || die();
 use local_stackmatheditor\definitions;
 
 /**
- * Injects MathJax v2 Hub shim and element definitions.
+ * Injects element definitions JSON into the page.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
@@ -15,32 +15,29 @@ use local_stackmatheditor\definitions;
 class mathjax_injector {
 
     /**
-     * Inject shim JS and definitions JSON into page head.
+     * Inject definitions JSON into page via AMD inline.
+     * Creates the #sme-definitions script element.
      *
-     * @param \core\hook\output\before_standard_top_of_body_html_generation $hook
      * @return void
      */
-    public static function inject(
-        \core\hook\output\before_standard_top_of_body_html_generation $hook
-    ): void {
-        // Static shim JS file.
-        $shimurl = (new \moodle_url(
-            '/local/stackmatheditor/js/mathjax_shim.js'
-        ))->out(false);
-        $shimtag = '<script type="text/javascript" src="'
-            . $shimurl . '"></script>';
+    public static function inject(): void {
+        global $PAGE;
 
-        // Definitions JSON for JS modules.
         $defsdata = definitions::export_for_js();
         $defsjson = json_encode(
             $defsdata,
             JSON_UNESCAPED_UNICODE | JSON_HEX_TAG
         );
-        $defstag =
-            '<script type="application/json" id="sme-definitions">'
-            . $defsjson
-            . '</script>';
 
-        $hook->add_html($shimtag . "\n" . $defstag);
+        $PAGE->requires->js_amd_inline("
+            (function() {
+                var el = document.createElement('script');
+                el.type = 'application/json';
+                el.id = 'sme-definitions';
+                el.textContent = "
+            . json_encode($defsjson) . ";
+                document.body.appendChild(el);
+            })();
+        ");
     }
 }
