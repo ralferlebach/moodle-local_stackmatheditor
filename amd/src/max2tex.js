@@ -231,11 +231,11 @@ define([], function() {
             } else if (con.maxima === 'inf') {
                 s = s.replace(/\binf\b/g, '\\infty ');
             } else if (con.maxima === '%e') {
-                s = s.replace(/%e(?![a-zA-Z])/g, 'e');
+                s = s.replace(/%e(?![a-zA-Z])/g, '\\mathrm{e}');
             }
         }
         // Additional %-constants not in the constants list.
-        s = s.replace(/%i(?![a-zA-Z])/g, 'i');
+        s = s.replace(/%i(?![a-zA-Z])/g, '\\mathrm{i}');
 
         // ── Hardcoded constant fallbacks ────────────
         // (in case defs.constants is not structured)
@@ -247,7 +247,7 @@ define([], function() {
             s = s.replace(/\binf\b/g, '\\infty ');
         }
         if (s.indexOf('%e') >= 0) {
-            s = s.replace(/%e(?![a-zA-Z])/g, 'e');
+            s = s.replace(/%e(?![a-zA-Z])/g, '\\mathrm{e}');
         }
 
         // ── Comparison fallbacks ────────────────────
@@ -298,6 +298,37 @@ define([], function() {
             );
         }
 
+
+        // ── Absolute value: abs(expr) -> \left|expr\right| ──
+        var absSearch = 'abs(';
+        var absResult = '';
+        var absI = 0;
+        var absSafety = 50;
+        while (absI < s.length && absSafety > 0) {
+            absSafety--;
+            var absIdx = s.indexOf(absSearch, absI);
+            if (absIdx === -1) {
+                absResult += s.substring(absI);
+                break;
+            }
+            if (absIdx > 0 && /[a-zA-Z0-9_]/.test(s[absIdx - 1])) {
+                absResult += s.substring(absI, absIdx + 1);
+                absI = absIdx + 1;
+                continue;
+            }
+            absResult += s.substring(absI, absIdx);
+            var absOpen = absIdx + 3;
+            var absClose = findCloseParen(s, absOpen);
+            if (absClose === -1) {
+                absResult += s.substring(absIdx);
+                absI = s.length;
+                break;
+            }
+            var absArg = s.substring(absOpen + 1, absClose);
+            absResult += '\\left|' + absArg + '\\right|';
+            absI = absClose + 1;
+        }
+        s = absResult;
 
         // ── Hardcoded function fallbacks ────────────
         // sqrt(x) -> \sqrt{x}

@@ -206,6 +206,9 @@ define([], function() {
         s = s.replace(/\\vec\{([^{}]*)\}/g, '$1');
         s = s.replace(/\\overline\{([^{}]*)\}/g, '$1');
         s = s.replace(/\\mathbb\{([^{}]*)\}/g, '$1');
+        // Constants: \mathrm{e} -> %e, \mathrm{i} -> %i
+        s = s.replace(/\\mathrm\{e\}/g, '%e');
+        s = s.replace(/\\mathrm\{i\}/g, '%i');
         s = s.replace(/\\mathrm\{([^{}]*)\}/g, '$1');
         s = s.replace(/\\operatorname\{([^{}]*)\}/g, '$1');
 
@@ -264,9 +267,10 @@ define([], function() {
         s = s.replace(/\\sum(?![a-zA-Z])/g, 'sum');
         s = s.replace(/\\prod(?![a-zA-Z])/g, 'product');
 
-        // ── Norms ───────────────────────────────────
+        // ── Absolute value: |expr| -> abs(expr) ────────
 
         s = s.replace(/\\\|/g, '|');
+        s = s.replace(/\|([^|]+)\|/g, 'abs($1)');
 
         // ── Greek letters (lower) ───────────────────
         // Longer variants first to prevent partial match.

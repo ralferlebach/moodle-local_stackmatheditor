@@ -103,7 +103,7 @@ class definitions {
             // ── 4. Vergleichsoperatoren ─────────────
             'comparators' => [
                 'label' => 'Vergleichsoperatoren',
-                'default_enabled' => false,
+                'default_enabled' => true,
                 'elements' => [
                     ['label' => '=',
                         'write' => '=',
@@ -132,7 +132,7 @@ class definitions {
             // ── 5. Betrag ───────────────────────────
             'absolute' => [
                 'label' => 'Betrag',
-                'default_enabled' => false,
+                'default_enabled' => true,
                 'elements' => [
                     ['label' => '|x|',
                         'write' => '\\left|\\right|',
@@ -157,7 +157,7 @@ class definitions {
                     ['label' => '∩',
                         'cmd' => '\\cap',
                         'display' => '∩'],
-                    ['label' => '\\',
+                    ['label' => '∖',
                         'cmd' => '\\setminus',
                         'display' => '∖'],
                     ['label' => '⊂',
@@ -222,7 +222,7 @@ class definitions {
             // ── 8. Klammern ─────────────────────────
             'brackets' => [
                 'label' => 'Klammern',
-                'default_enabled' => false,
+                'default_enabled' => true,
                 'elements' => [
                     ['label' => '( )',
                         'write' => '\\left(\\right)',
@@ -248,10 +248,10 @@ class definitions {
                         'cmd' => '\\infty',
                         'display' => '∞'],
                     ['label' => 'e',
-                        'write' => 'e',
+                        'write' => '\\mathrm{e}',
                         'display' => 'e'],
                     ['label' => 'i',
-                        'write' => 'i',
+                        'write' => '\\mathrm{i}',
                         'display' => 'i'],
                 ],
             ],
@@ -267,15 +267,15 @@ class definitions {
                     ['label' => 'ℏ',
                         'cmd' => '\\hbar',
                         'display' => 'ℏ'],
-                    ['label' => 'γ',
-                        'cmd' => '\\gamma',
-                        'display' => 'γ'],
+                    ['label' => 'G',
+                        'cmd' => '\\mathrm{G}',
+                        'display' => 'G'],
                     ['label' => 'e⁻',
-                        'write' => 'e^{-}',
+                        'write' => '\\mathrm{e^{-}}',
                         'display' => 'e⁻'],
                     ['label' => 'k_B',
-                        'write' => 'k_B',
-                        'display' => 'k_B'],
+                        'write' => '\\mathrm{k_B}',
+                        'display' => 'k'],
                     ['label' => 'ε₀',
                         'write' => '\\varepsilon_0',
                         'display' => 'ε₀'],
@@ -308,7 +308,7 @@ class definitions {
             // ── 12. Trigonometrie ────────────────────
             'trigonometry' => [
                 'label' => 'Trigonometrie',
-                'default_enabled' => false,
+                'default_enabled' => true,
                 'elements' => [
                     ['label' => 'sin',
                         'write' => '\\sin\\left(\\right)',
@@ -445,7 +445,7 @@ class definitions {
             // ── 19. Integral-Operatoren ─────────────
             'integral_operators' => [
                 'label' => 'Integralrechnung',
-                'default_enabled' => false,
+                'default_enabled' => true,
                 'elements' => [
                     ['label' => '∫',
                         'write' => '\\int_{}^{}',
@@ -488,7 +488,7 @@ class definitions {
             // ── 21. Griechisch (klein) ──────────────
             'greek_lower' => [
                 'label' => 'Griechisch (klein)',
-                'default_enabled' => false,
+                'default_enabled' => true,
                 'elements' => [
                     ['label' => 'α', 'cmd' => '\\alpha',
                         'display' => 'α'],
@@ -544,7 +544,7 @@ class definitions {
             // ── 22. Griechisch (groß) ───────────────
             'greek_upper' => [
                 'label' => 'Griechisch (groß)',
-                'default_enabled' => false,
+                'default_enabled' => true,
                 'elements' => [
                     ['label' => 'Α', 'write' => 'A',
                         'display' => 'Α'],
