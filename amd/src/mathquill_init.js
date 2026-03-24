@@ -5,7 +5,7 @@
  * input_fields.js and textarea_fields.js.
  *
  * @module     local_stackmatheditor/mathquill_init
- * @copyright  2026 Your Name
+ * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 define([
