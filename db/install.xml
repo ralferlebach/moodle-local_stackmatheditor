@@ -23,8 +23,7 @@
       <INDEXES>
         <INDEX NAME="cmid_qbeid_ix" UNIQUE="false" FIELDS="cmid,questionbankentryid"
                COMMENT="Lookup by quiz + question bank entry"/>
-        <INDEX NAME="questionid_ix" UNIQUE="false" FIELDS="questionid"
-               COMMENT="Legacy lookup by question ID"/>
+
       </INDEXES>
     </TABLE>
   </TABLES>
