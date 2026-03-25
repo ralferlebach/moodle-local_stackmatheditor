@@ -213,10 +213,8 @@ if ($mform->is_cancelled()) {
         $elements[$key] = in_array($key, $selectedgroups);
     }
 
-    $varmode = $data->variablemode ?? definitions::VAR_SINGLE;
-    if ($varmode !== definitions::VAR_SINGLE && $varmode !== definitions::VAR_MULTI) {
-        $varmode = definitions::VAR_SINGLE;
-    }
+    $varmode = $data->variablemode ?? definitions::IMPLICIT_STACK;
+    $varmode = definitions::normalise_implicit_mode((string) $varmode);
     $elements['_variableMode'] = $varmode;
 
     // Store enabled flag when instance mode allows overrides.

@@ -226,19 +226,40 @@ define([], function() {
         var constants = defs.constants || [];
         for (k = 0; k < constants.length; k++) {
             var con = constants[k];
-            if (con.maxima === '%pi') {
+            var conMaxima = null;
+
+            // Support both object-style definitions and plain string exports.
+            if (con && typeof con === 'object') {
+                conMaxima = con.maxima || con.name || null;
+            } else if (typeof con === 'string') {
+                if (con === 'pi') {
+                    conMaxima = '%pi';
+                } else if (con === 'e') {
+                    conMaxima = '%e';
+                } else if (con === 'i') {
+                    conMaxima = '%i';
+                } else {
+                    conMaxima = con;
+                }
+            }
+
+            if (conMaxima === '%pi' || conMaxima === 'pi') {
                 s = s.replace(/%pi/g, '\\pi ');
-            } else if (con.maxima === 'inf') {
+            } else if (conMaxima === 'inf') {
                 s = s.replace(/\binf\b/g, '\\infty ');
-            } else if (con.maxima === '%e') {
+            } else if (conMaxima === 'minf') {
+                s = s.replace(/\bminf\b/g, '-\\infty ');
+            } else if (conMaxima === '%e' || conMaxima === 'e') {
                 s = s.replace(/%e(?![a-zA-Z])/g, '\\mathrm{e}');
+            } else if (conMaxima === '%i' || conMaxima === 'i') {
+                s = s.replace(/%i(?![a-zA-Z])/g, '\\mathrm{i}');
             }
         }
+
         // Additional %-constants not in the constants list.
         s = s.replace(/%i(?![a-zA-Z])/g, '\\mathrm{i}');
 
         // ── Hardcoded constant fallbacks ────────────
-        // (in case defs.constants is not structured)
         if (s.indexOf('%pi') >= 0) {
             s = s.replace(/%pi/g, '\\pi ');
         }
@@ -254,7 +275,7 @@ define([], function() {
         s = s.replace(/<=/g, '\\leq ');
         s = s.replace(/>=/g, '\\geq ');
         s = s.replace(/#/g, '\\neq ');
-
+        s = s.replace(/~=/g, '\\approx ');
 
         s = s.replace(/%phi(?![a-zA-Z])/g, '\\phi ');
         s = s.replace(/%gamma(?![a-zA-Z])/g, '\\gamma ');
@@ -264,6 +285,13 @@ define([], function() {
         var comparison = defs.comparison || [];
         for (k = 0; k < comparison.length; k++) {
             var cmpItem = comparison[k];
+
+            // Support only structured entries here.
+            // Plain string exports are already handled by hardcoded fallbacks above.
+            if (!cmpItem || typeof cmpItem !== 'object' || !cmpItem.maxima) {
+                continue;
+            }
+
             s = s.replace(
                 new RegExp(cmpItem.maxima.replace(/([<>=#])/g, '\\$1'), 'g'),
                 cmpItem.latex_write || cmpItem.maxima
@@ -274,6 +302,13 @@ define([], function() {
         var funcDefs = defs.functions || [];
         for (k = 0; k < funcDefs.length; k++) {
             var def = funcDefs[k];
+
+            // Support only structured entries here.
+            // Plain string exports are handled by hardcoded stdFuncs below.
+            if (!def || typeof def !== 'object' || !def.maxima_name || !def.latex_cmd) {
+                continue;
+            }
+
             var wrapType = def.type === 'brace' ? 'brace' : 'paren';
             s = processFunc(s, def.maxima_name, def.latex_cmd, wrapType);
         }
@@ -297,7 +332,6 @@ define([], function() {
                 '\\' + ugl + ' '
             );
         }
-
 
         // ── Absolute value: abs(expr) -> \left|expr\right| ──
         var absSearch = 'abs(';
@@ -331,7 +365,6 @@ define([], function() {
         s = absResult;
 
         // ── Hardcoded function fallbacks ────────────
-        // sqrt(x) -> \sqrt{x}
         var stdFuncs = [
             ['sqrt', '\\sqrt', 'brace'],
             ['sin', '\\sin', 'paren'],
@@ -351,11 +384,9 @@ define([], function() {
             var sf = stdFuncs[fi];
             if (s.indexOf(sf[0] + '(') >= 0) {
                 if (sf[2] === 'abs') {
-                    s = processFunc(s, sf[0],
-                        '\\left|', 'abs');
+                    s = processFunc(s, sf[0], '\\left|', 'abs');
                 } else {
-                    s = processFunc(s, sf[0],
-                        sf[1], sf[2]);
+                    s = processFunc(s, sf[0], sf[1], sf[2]);
                 }
             }
         }
@@ -391,6 +422,9 @@ define([], function() {
             return b.length - a.length;
         });
         for (k = 0; k < sortedGreek.length; k++) {
+            if (typeof sortedGreek[k] !== 'string' || !sortedGreek[k]) {
+                continue;
+            }
             // Use lookbehind to avoid matching inside longer words or
             // already-converted \commands.
             s = s.replace(

@@ -15,16 +15,18 @@ define([
 ], function($, tex2max, max2tex, toolbar) {
     'use strict';
 
-    var DEBUG = true;
     var TYPES = ['equiv', 'textarea'];
 
     /**
-     * Debug log.
+     * Write a developer-level debug message to the browser console.
      *
-     * @param {string} msg Message.
+     * Only active when Moodle developer debug mode is enabled
+     * (M.cfg.developerdebug is truthy). Silent on production sites.
+     *
+     * @param {string} msg Message to log.
      */
     function dbg(msg) {
-        if (DEBUG) {
+        if (window.M && window.M.cfg && window.M.cfg.developerdebug) {
             window.console.log('[SME-ta] ' + msg);
         }
     }

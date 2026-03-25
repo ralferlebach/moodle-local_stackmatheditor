@@ -4,7 +4,7 @@
  * Features:
  * - Standard LaTeX → Maxima conversion
  * - Locale-aware decimal separator (comma → dot)
- * - Implicit multiplication (2x → 2*x, with units exception)
+ * - Implicit multiplication handling with configurable modes
  *
  * @module     local_stackmatheditor/tex2max
  * @copyright  2026 Ralf Erlebach
@@ -17,10 +17,11 @@ define([], function() {
      * Known unit abbreviations.
      * Sorted by length descending so longer matches are checked first.
      *
+     * Fallback list; runtime defs.units take precedence when available.
+     *
      * @type {string[]}
      */
     var UNITS = [
-        // Multi-char units first (longer).
         'kHz', 'MHz', 'GHz',
         'kPa', 'MPa',
         'kcal',
@@ -40,34 +41,61 @@ define([], function() {
         'Pa',
         'lb', 'oz', 'ft', 'yd', 'mi',
         'hr',
-        // Single-char units last.
         'm', 'g', 's', 'h', 't',
         'N', 'J', 'W', 'V', 'A', 'K', 'L', 'F', 'C'
     ];
 
-    /**
-     * Check whether a string is a known measurement unit.
-     *
-     * @param {string} str The string to check.
-     * @returns {boolean} True if it matches a known unit exactly.
-     */
-    function isUnit(str) {
+    function buildWordSet(list) {
+        var set = Object.create(null);
         var i;
-        for (i = 0; i < UNITS.length; i++) {
-            if (str === UNITS[i]) {
-                return true;
+        var item;
+
+        list = list || [];
+        for (i = 0; i < list.length; i++) {
+            item = list[i];
+            if (typeof item === 'string' && item) {
+                set[item] = true;
             }
         }
-        return false;
+        return set;
     }
 
-    /**
-     * Replace decimal commas with dots (for locales using comma as decimal separator).
-     * Only replaces commas between digits that are NOT inside square brackets (lists).
-     *
-     * @param {string} s Input string.
-     * @returns {string} String with decimal commas replaced by dots.
-     */
+    function getUnitSet(defs) {
+        if (defs && defs.units && defs.units.length) {
+            return buildWordSet(defs.units);
+        }
+        return buildWordSet(UNITS);
+    }
+
+    function normaliseImplicitMode(mode) {
+        switch (mode) {
+            case 'single':
+                return 'explicit_single';
+            case 'multi':
+                return 'explicit_multi';
+            case 'explicit_single':
+            case 'explicit_multi':
+            case 'space_single':
+            case 'space_multi':
+            case 'stack':
+                return mode;
+            default:
+                return 'stack';
+        }
+    }
+
+    function getImplicitSeparator(mode) {
+        mode = normaliseImplicitMode(mode);
+
+        if (mode === 'explicit_single' || mode === 'explicit_multi') {
+            return '*';
+        }
+        if (mode === 'space_single' || mode === 'space_multi') {
+            return ' ';
+        }
+        return '';
+    }
+
     function replaceDecimalCommas(s) {
         var result = '';
         var bracketDepth = 0;
@@ -80,8 +108,6 @@ define([], function() {
             if (s[i] === ']' && bracketDepth > 0) {
                 bracketDepth--;
             }
-
-            // Comma between digits, outside brackets → decimal separator.
             if (s[i] === ',' && bracketDepth === 0) {
                 if (i > 0 && i < s.length - 1 &&
                     /\d/.test(s[i - 1]) && /\d/.test(s[i + 1])) {
@@ -95,99 +121,226 @@ define([], function() {
         return result;
     }
 
-    /**
-     * Insert implicit multiplication where mathematically expected.
-     *
-     * Rules:
-     * - digit followed by letter: 2x → 2*x (unless letters form a known unit)
-     * - digit followed by (: 2( → 2*(
-     * - ) followed by (: )( → )*(
-     * - ) followed by letter: )x → )*x
-     * - ) followed by digit: )2 → )*2
-     * - %pi/%e followed by variable/paren: %pi x → %pi*x
-     *
-     * @param {string} s Input string (already in Maxima notation).
-     * @returns {string} String with explicit multiplication signs inserted.
-     */
-    function insertImplicitMultiplication(s) {
-        // 1. ) followed by ( → )*(
-        s = s.replace(/\)\s*\(/g, ')*(');
+    function tokenizeForImplicitMultiplication(s) {
+        var tokens = [];
+        var i = 0;
+        var ch;
+        var rest;
+        var m;
 
-        // 2. ) followed by letter → )*letter
-        s = s.replace(/\)\s*([a-zA-Z%])/g, ')*$1');
+        while (i < s.length) {
+            ch = s.charAt(i);
 
-        // 3. ) followed by digit → )*digit
-        s = s.replace(/\)\s*(\d)/g, ')*$1');
-
-        // 4. digit followed by ( → digit*(
-        s = s.replace(/(\d)\s*\(/g, '$1*(');
-
-        // 5. digit followed by letter(s) → digit*letters (with units exception).
-        s = s.replace(/(\d)\s*([a-zA-Z]+)/g, function(match, digit, letters) {
-            // Remove any whitespace in the match.
-            var clean = digit + letters;
-            if (isUnit(letters)) {
-                // Known unit: keep together without *.
-                return clean;
+            if (/\s/.test(ch)) {
+                i++;
+                continue;
             }
-            // Not a unit: insert *.
-            return digit + '*' + letters;
-        });
 
-        // 6. Constants followed by variable/digit/paren: %pi x → %pi*x
-        s = s.replace(/(%pi|%e)(\s*)([a-zA-Z0-9(])/g, function(match, constant, space, next) {
-            // Don't double up on *.
-            if (next === '*') {
-                return match;
+            rest = s.substring(i);
+
+            m = rest.match(/^\d+(?:[.,]\d+)?/);
+            if (m) {
+                tokens.push({type: 'number', value: m[0]});
+                i += m[0].length;
+                continue;
             }
-            return constant + '*' + next;
-        });
 
-        return s;
+            m = rest.match(/^%[a-zA-Z]+/);
+            if (m) {
+                tokens.push({type: 'ident', value: m[0]});
+                i += m[0].length;
+                continue;
+            }
+
+            m = rest.match(/^[a-zA-Z]+(?:_[a-zA-Z0-9]+)?/);
+            if (m) {
+                tokens.push({type: 'ident', value: m[0]});
+                i += m[0].length;
+                continue;
+            }
+
+            if (ch === '(') {
+                tokens.push({type: 'open', value: ch});
+                i++;
+                continue;
+            }
+            if (ch === ')') {
+                tokens.push({type: 'close', value: ch});
+                i++;
+                continue;
+            }
+            if (ch === ',') {
+                tokens.push({type: 'comma', value: ch});
+                i++;
+                continue;
+            }
+
+            tokens.push({type: 'other', value: ch});
+            i++;
+        }
+
+        return tokens;
     }
 
-    /**
-     * Main LaTeX → Maxima conversion function.
-     *
-     * @param {string} latex LaTeX string from MathQuill.
-     * @param {Object} [options] Conversion options.
-     * @param {boolean} [options.commaDecimal=false] Treat commas as decimal separators.
-     * @returns {string} Maxima expression.
-     */
+    function expandIdentifiers(tokens, options) {
+        var opts = options || {};
+        var defs = opts.defs || {};
+        var mode = normaliseImplicitMode(opts.variableMode || 'stack');
+        var splitIdentifiers =
+            (mode === 'explicit_single' || mode === 'space_single');
+        var protectedWords = Object.create(null);
+        var out = [];
+        var i;
+        var tok;
+        var value;
+        var parts;
+        var sets = [
+            buildWordSet(defs.functionNames || defs.functions || []),
+            buildWordSet(defs.constants || []),
+            buildWordSet(defs.greek || []),
+            buildWordSet(defs.reservedWords || []),
+            getUnitSet(defs),
+            buildWordSet(defs.percentConstants || [])
+        ];
+        var si;
+        var keys;
+        var ki;
+
+        for (si = 0; si < sets.length; si++) {
+            keys = Object.keys(sets[si]);
+            for (ki = 0; ki < keys.length; ki++) {
+                protectedWords[keys[ki]] = true;
+            }
+        }
+
+        for (i = 0; i < tokens.length; i++) {
+            tok = tokens[i];
+
+            if (tok.type !== 'ident') {
+                out.push(tok);
+                continue;
+            }
+
+            value = tok.value;
+
+            if (!splitIdentifiers) {
+                out.push(tok);
+                continue;
+            }
+
+            if (protectedWords[value]
+                    || value.charAt(0) === '%'
+                    || value.indexOf('_') !== -1
+                    || !/^[a-zA-Z]+$/.test(value)) {
+                out.push(tok);
+                continue;
+            }
+
+            parts = value.split('');
+            parts.forEach(function(part) {
+                out.push({
+                    type: 'ident',
+                    value: part
+                });
+            });
+        }
+
+        return out;
+    }
+
+    function needsImplicitMultiplication(prev, curr, options) {
+        var opts = options || {};
+        var defs = opts.defs || {};
+        var functionNames = buildWordSet(
+            defs.functionNames || defs.functions || []
+        );
+        var unitSet = getUnitSet(defs);
+
+        if (!prev || !curr) {
+            return false;
+        }
+        if (prev.type === 'other' || curr.type === 'other') {
+            return false;
+        }
+        if (prev.type === 'comma' || curr.type === 'comma') {
+            return false;
+        }
+        if (prev.type === 'open' || curr.type === 'close') {
+            return false;
+        }
+
+        if (prev.type === 'number' && curr.type === 'ident') {
+            return !unitSet[curr.value];
+        }
+        if (prev.type === 'number' && curr.type === 'open') {
+            return true;
+        }
+        if (prev.type === 'ident' && curr.type === 'ident') {
+            return true;
+        }
+        if (prev.type === 'ident' && curr.type === 'open') {
+            return !functionNames[prev.value];
+        }
+        if (prev.type === 'close'
+                && (curr.type === 'ident'
+                    || curr.type === 'number'
+                    || curr.type === 'open')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    function insertImplicitMultiplication(s, options) {
+        var opts = options || {};
+        var mode = normaliseImplicitMode(opts.variableMode || 'stack');
+        var separator = getImplicitSeparator(mode);
+        var tokens = tokenizeForImplicitMultiplication(s);
+        var out = '';
+        var i;
+
+        if (mode === 'stack') {
+            return s;
+        }
+
+        tokens = expandIdentifiers(tokens, opts);
+
+        for (i = 0; i < tokens.length; i++) {
+            if (i > 0
+                    && needsImplicitMultiplication(tokens[i - 1], tokens[i], opts)) {
+                out += separator;
+            }
+            out += tokens[i].value;
+        }
+
+        return out;
+    }
+
     function convert(latex, options) {
         var opts = options || {};
         var commaDecimal = opts.commaDecimal || false;
+        var defs = opts.defs || {};
+        var variableMode = opts.variableMode || 'stack';
         var s = latex;
         var maxIter = 20;
 
-        // Normalise whitespace.
         s = s.replace(/\s+/g, ' ').trim();
-
-        // Remove \left / \right.
         s = s.replace(/\\left/g, '');
         s = s.replace(/\\right/g, '');
 
-        // ── Structures with braces (before {} cleanup) ──
-
-        // N-th root: \sqrt[n]{expr} -> (expr)^(1/(n)).
         s = s.replace(
             /\\sqrt\[([^\]]+)\]\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
             '($2)^(1/($1))'
         );
-
-        // N-th root (MathQuill): \nthroot{n}{expr} -> (expr)^(1/(n)).
         s = s.replace(
             /\\nthroot\{([^{}]*)\}\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
             '($2)^(1/($1))'
         );
-
-        // Binomial: \binom{n}{k} -> binomial(n,k).
         s = s.replace(
             /\\binom\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
             'binomial($1,$2)'
         );
 
-        // Fractions (loop for nesting).
         while (s.indexOf('\\frac') !== -1 && maxIter > 0) {
             maxIter--;
             s = s.replace(
@@ -196,31 +349,21 @@ define([], function() {
             );
         }
 
-        // Square root.
         s = s.replace(
             /\\sqrt\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
             'sqrt($1)'
         );
 
-        // Decorative commands: strip to content (before {} cleanup).
         s = s.replace(/\\vec\{([^{}]*)\}/g, '$1');
         s = s.replace(/\\overline\{([^{}]*)\}/g, '$1');
         s = s.replace(/\\mathbb\{([^{}]*)\}/g, '$1');
-        // Constants: \mathrm{e} -> %e, \mathrm{i} -> %i
         s = s.replace(/\\mathrm\{e\}/g, '%e');
         s = s.replace(/\\mathrm\{i\}/g, '%i');
         s = s.replace(/\\mathrm\{([^{}]*)\}/g, '$1');
         s = s.replace(/\\operatorname\{([^{}]*)\}/g, '$1');
-
-        // Exponents.
         s = s.replace(/\^\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g, '^($1)');
-
-        // Subscripts.
         s = s.replace(/_\{([^{}]*)\}/g, '_$1');
 
-        // ── Functions ───────────────────────────────
-
-        // Trig & hyperbolic.
         var funcs = [
             'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
             'arcsin', 'arccos', 'arctan',
@@ -233,47 +376,28 @@ define([], function() {
             );
         });
 
-        // Logarithms / exp.
         s = s.replace(/\\ln(?![a-zA-Z])/g, 'log');
         s = s.replace(/\\log(?![a-zA-Z])/g, 'log');
         s = s.replace(/\\exp(?![a-zA-Z])/g, 'exp');
-
-        // ── Constants ───────────────────────────────
-
         s = s.replace(/\\pi(?![a-zA-Z])/g, '%pi');
         s = s.replace(/\\infty/g, 'inf');
         s = s.replace(/\\e(?![a-zA-Z])/g, '%e');
-
-        // ── Operators ───────────────────────────────
-
         s = s.replace(/\\cdot/g, '*');
         s = s.replace(/\\times/g, '*');
         s = s.replace(/\\div/g, '/');
         s = s.replace(/\\%/g, '%');
         s = s.replace(/\\&/g, '&');
-
-        // ── Comparison ──────────────────────────────
-
         s = s.replace(/\\leq?/g, '<=');
         s = s.replace(/\\geq?/g, '>=');
         s = s.replace(/\\neq?/g, '#');
         s = s.replace(/\\ne(?![a-zA-Z])/g, '#');
         s = s.replace(/\\approx(?![a-zA-Z])/g, '~=');
-
-        // ── Integral / sum / product operators ──────
-
         s = s.replace(/\\oint(?![a-zA-Z])/g, 'oint');
         s = s.replace(/\\int(?![a-zA-Z])/g, 'int');
         s = s.replace(/\\sum(?![a-zA-Z])/g, 'sum');
         s = s.replace(/\\prod(?![a-zA-Z])/g, 'product');
-
-        // ── Absolute value: |expr| -> abs(expr) ────────
-
         s = s.replace(/\\\|/g, '|');
         s = s.replace(/\|([^|]+)\|/g, 'abs($1)');
-
-        // ── Greek letters (lower) ───────────────────
-        // Longer variants first to prevent partial match.
 
         var greek = [
             'varepsilon', 'vartheta', 'varphi',
@@ -291,8 +415,6 @@ define([], function() {
             );
         });
 
-        // ── Greek letters (upper) ───────────────────
-
         var greekUpper = [
             'Gamma', 'Delta', 'Theta', 'Lambda',
             'Xi', 'Pi', 'Sigma', 'Upsilon',
@@ -305,8 +427,6 @@ define([], function() {
             );
         });
 
-        // ── Set theory ──────────────────────────────
-
         s = s.replace(/\\notin(?![a-zA-Z])/g, ' notin ');
         s = s.replace(/\\in(?![a-zA-Z])/g, ' in ');
         s = s.replace(/\\cup(?![a-zA-Z])/g, ' union ');
@@ -314,9 +434,6 @@ define([], function() {
         s = s.replace(/\\setminus(?![a-zA-Z])/g, ' setdiff ');
         s = s.replace(/\\subset(?![a-zA-Z])/g, ' subset ');
         s = s.replace(/\\supset(?![a-zA-Z])/g, ' superset ');
-
-        // ── Logic (\not\exists before \exists) ──────
-
         s = s.replace(/\\nexists/g, ' nexists ');
         s = s.replace(/\\not\\exists/g, ' nexists ');
         s = s.replace(/\\forall(?![a-zA-Z])/g, ' forall ');
@@ -327,38 +444,27 @@ define([], function() {
         s = s.replace(/\\Rightarrow(?![a-zA-Z])/g, ' implies ');
         s = s.replace(/\\Leftarrow(?![a-zA-Z])/g, ' impliedby ');
         s = s.replace(/\\Leftrightarrow(?![a-zA-Z])/g, ' iff ');
-
-        // ── Geometry / physics ──────────────────────
-
         s = s.replace(/\\angle(?![a-zA-Z])/g, 'angle');
         s = s.replace(/\\perp(?![a-zA-Z])/g, 'perp');
         s = s.replace(/\\circ(?![a-zA-Z])/g, 'circ');
         s = s.replace(/\\nabla(?![a-zA-Z])/g, 'nabla');
         s = s.replace(/\\partial(?![a-zA-Z])/g, 'del');
         s = s.replace(/\\hbar(?![a-zA-Z])/g, 'hbar');
-
-        // ── Matrix decorators ───────────────────────
-
         s = s.replace(/\\dagger(?![a-zA-Z])/g, 'dagger');
         s = s.replace(/\\intercal(?![a-zA-Z])/g, 'T');
-
-        // ── Cleanup ─────────────────────────────────
-
-        // Remove remaining LaTeX artifacts.
         s = s.replace(/\\ /g, '');
         s = s.replace(/[{}]/g, '');
 
-        // Decimal separator: comma -> dot.
         if (commaDecimal) {
             s = replaceDecimalCommas(s);
         }
 
-        // Implicit multiplication: 2x -> 2*x.
-        s = insertImplicitMultiplication(s);
+        s = insertImplicitMultiplication(s, {
+            defs: defs,
+            variableMode: variableMode
+        });
 
-        // Final cleanup.
         s = s.replace(/\s+/g, ' ').trim();
-
         return s;
     }
 

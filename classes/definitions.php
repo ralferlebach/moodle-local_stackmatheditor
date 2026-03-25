@@ -7,18 +7,22 @@ defined('MOODLE_INTERNAL') || die();
  * Toolbar element definitions for STACK MathEditor.
  *
  * Each group has:
- *   - label:           Human-readable name.
- *   - default_enabled: Whether enabled by default.
+ *   - label:           Human-readable group name (resolved via get_string()).
+ *   - default_enabled: Whether the group is enabled by default.
  *   - elements:        Array of button definitions.
  *
  * Each element has:
- *   - label:   Button tooltip / fallback text.
- *   - write:   MathQuill write() command (template with placeholders).
- *   - cmd:     MathQuill cmd() command (single symbol/command).
- *   - display: Plain-text button label (if no LaTeX rendering).
+ *   - display:  Symbol or text shown on the button face.
+ *   - tooltip:  Descriptive hover text (get_string() for natural language).
+ *               Omit for buttons where display alone is self-explanatory
+ *               (e.g. sin, cos, +, −).
+ *   - label:    LaTeX string used as rendered button face when it contains
+ *               a backslash. Plain symbols are redundant if display is set.
+ *   - write:    MathQuill write() command (template with cursor placeholders).
+ *   - cmd:      MathQuill cmd() command (inserts a single symbol/command).
  *
- * "write" inserts a template (e.g. \frac{}{} with cursor placement).
- * "cmd" inserts a single command (e.g. \pi).
+ * Tooltip priority in toolbar.js: tooltip > display > label > command.
+ * Always set tooltip when display alone would not describe the button clearly.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
@@ -26,574 +30,467 @@ defined('MOODLE_INTERNAL') || die();
  */
 class definitions {
 
-    /** Single-character variable mode. */
+    /** Legacy single-character variable mode identifier. */
     const VAR_SINGLE = 'single';
 
-    /** Multi-character variable mode. */
+    /** Legacy multi-character variable mode identifier. */
     const VAR_MULTI = 'multi';
+
+    /** Explicit multiplication, assume single-character variables. */
+    const IMPLICIT_EXPLICIT_SINGLE = 'explicit_single';
+
+    /** Explicit multiplication, assume multi-character variables. */
+    const IMPLICIT_EXPLICIT_MULTI = 'explicit_multi';
+
+    /** Space separation, assume single-character variables. */
+    const IMPLICIT_SPACE_SINGLE = 'space_single';
+
+    /** Space separation, assume multi-character variables. */
+    const IMPLICIT_SPACE_MULTI = 'space_multi';
+
+    /** Leave untouched; STACK handles implicit multiplication. */
+    const IMPLICIT_STACK = 'stack';
+
+    /**
+     * Normalise stored implicit multiplication mode values.
+     *
+     * Supports legacy values 'single' and 'multi'.
+     *
+     * @param string $mode Raw mode.
+     * @return string Normalised mode.
+     */
+    public static function normalise_implicit_mode(string $mode): string {
+        switch ($mode) {
+            case self::VAR_SINGLE:
+                return self::IMPLICIT_EXPLICIT_SINGLE;
+            case self::VAR_MULTI:
+                return self::IMPLICIT_EXPLICIT_MULTI;
+            case self::IMPLICIT_EXPLICIT_SINGLE:
+            case self::IMPLICIT_EXPLICIT_MULTI:
+            case self::IMPLICIT_SPACE_SINGLE:
+            case self::IMPLICIT_SPACE_MULTI:
+            case self::IMPLICIT_STACK:
+                return $mode;
+            default:
+                return self::IMPLICIT_STACK;
+        }
+    }
 
     /**
      * Return all element group definitions.
      *
-     * @return array Associative array of groups.
+     * Group labels and button tooltips containing natural language are resolved
+     * through Moodle's get_string() so they are delivered in the current user
+     * language. Pure mathematical symbols used as button faces stay as literals.
+     *
+     * @return array Associative array keyed by group identifier.
      */
     public static function get_element_groups(): array {
+        $p = 'local_stackmatheditor';
+
         return [
 
-            // ── 1. Grundrechenarten ─────────────────
+            // ── 1. Basic arithmetic ──────────────────────────────────
             'basic_operators' => [
-                'label' => 'Grundrechenarten',
+                'label'           => get_string('group_basic_operators', $p),
                 'default_enabled' => true,
-                'elements' => [
-                    ['label' => '+',
-                        'write' => '+',
-                        'display' => '+'],
-                    ['label' => '−',
-                        'write' => '-',
-                        'display' => '−'],
-                    ['label' => '·',
-                        'cmd' => '\\cdot',
-                        'display' => '·'],
-                    ['label' => '÷',
-                        'cmd' => '\\div',
-                        'display' => '÷'],
-                    ['label' => '\\frac{a}{b}',
-                        'write' => '\\frac{}{}',
-                        'display' => 'a/b'],
-                    ['label' => '%',
-                        'write' => '\\%',
-                        'display' => '%'],
+                'elements'        => [
+                    ['display' => '+',   'write' => '+'],
+                    ['display' => '−',   'write' => '-'],
+                    ['display' => '·',   'cmd'   => '\\cdot',
+                        'tooltip' => get_string('btn_cdot', $p)],
+                    ['display' => '÷',   'cmd'   => '\\div',
+                        'tooltip' => get_string('btn_div', $p)],
+                    ['label'   => '\\frac{a}{b}', 'write' => '\\frac{}{}',
+                        'display' => 'a/b',
+                        'tooltip' => get_string('btn_fraction', $p)],
+                    ['display' => '%',   'write' => '\\%',
+                        'tooltip' => get_string('btn_percent', $p)],
                 ],
             ],
 
-            // ── 2. Potenzen und Wurzeln ─────────────
+            // ── 2. Powers and roots ──────────────────────────────────
             'power_root' => [
-                'label' => 'Potenzen und Wurzeln',
+                'label'           => get_string('group_power_root', $p),
                 'default_enabled' => true,
-                'elements' => [
-                    ['label' => 'x^n',
-                        'write' => '^{}',
-                        'display' => "x\u{207F}"],
-                    ['label' => "\u{221A}x",
-                        'write' => '\\sqrt{}',
-                        'display' => "\u{221A}"],
-                    ['label' => "\u{207F}\u{221A}x",
-                        'write' => '\\nthroot{}{}',
-                        'display' => "ⁿ\u{221A}"],
+                'elements'        => [
+                    ['display' => "x\u{207F}",   'write' => '^{}',
+                        'tooltip' => get_string('btn_power', $p)],
+                    ['display' => "\u{221A}",      'write' => '\\sqrt{}',
+                        'tooltip' => get_string('btn_sqrt', $p)],
+                    ['display' => "ⁿ\u{221A}",    'write' => '\\nthroot{}{}',
+                        'tooltip' => get_string('btn_nthroot', $p)],
                 ],
             ],
 
-            // ── 3. Exponential und Logarithmus ──────
+            // ── 3. Exponential and logarithm ────────────────────────
             'exponential_log' => [
-                'label' => 'Exponential / Logarithmus',
+                'label'           => get_string('group_exponential_log', $p),
                 'default_enabled' => true,
-                'elements' => [
-                    ['label' => 'exp',
-                        'write' => '\\exp\\left(\\right)',
-                        'display' => 'exp'],
-                    ['label' => 'log',
-                        'write' => '\\log\\left(\\right)',
-                        'display' => 'log'],
-                    ['label' => 'ln',
-                        'write' => '\\ln\\left(\\right)',
-                        'display' => 'ln'],
+                'elements'        => [
+                    ['display' => 'exp', 'write' => '\\exp\\left(\\right)'],
+                    ['display' => 'log', 'write' => '\\log\\left(\\right)'],
+                    ['display' => 'ln',  'write' => '\\ln\\left(\\right)'],
                 ],
             ],
 
-            // ── 4. Vergleichsoperatoren ─────────────
+            // ── 4. Comparison operators ──────────────────────────────
             'comparators' => [
-                'label' => 'Vergleichsoperatoren',
+                'label'           => get_string('group_comparators', $p),
                 'default_enabled' => true,
-                'elements' => [
-                    ['label' => '=',
-                        'write' => '=',
-                        'display' => '='],
-                    ['label' => '≠',
-                        'cmd' => '\\neq',
-                        'display' => '≠'],
-                    ['label' => '≈',
-                        'cmd' => '\\approx',
-                        'display' => '≈'],
-                    ['label' => '<',
-                        'write' => '<',
-                        'display' => '<'],
-                    ['label' => '>',
-                        'write' => '>',
-                        'display' => '>'],
-                    ['label' => '≤',
-                        'cmd' => '\\leq',
-                        'display' => '≤'],
-                    ['label' => '≥',
-                        'cmd' => '\\geq',
-                        'display' => '≥'],
+                'elements'        => [
+                    ['display' => '=',  'write' => '='],
+                    ['display' => '≠',  'cmd'   => '\\neq',
+                        'tooltip' => get_string('btn_neq', $p)],
+                    ['display' => '≈',  'cmd'   => '\\approx',
+                        'tooltip' => get_string('btn_approx', $p)],
+                    ['display' => '<',  'write' => '<'],
+                    ['display' => '>',  'write' => '>'],
+                    ['display' => '≤',  'cmd'   => '\\leq',
+                        'tooltip' => get_string('btn_leq', $p)],
+                    ['display' => '≥',  'cmd'   => '\\geq',
+                        'tooltip' => get_string('btn_geq', $p)],
                 ],
             ],
 
-            // ── 5. Betrag ───────────────────────────
+            // ── 5. Absolute value ────────────────────────────────────
             'absolute' => [
-                'label' => 'Betrag',
+                'label'           => get_string('group_absolute', $p),
                 'default_enabled' => true,
-                'elements' => [
-                    ['label' => '|x|',
-                        'write' => '\\left|\\right|',
-                        'display' => '|x|'],
+                'elements'        => [
+                    ['display' => '|x|', 'write' => '\\left|\\right|',
+                        'tooltip' => get_string('btn_abs', $p)],
                 ],
             ],
 
-            // ── 6. Mengenlehre ──────────────────────
+            // ── 6. Set theory ────────────────────────────────────────
             'set_theory' => [
-                'label' => 'Mengenlehre',
+                'label'           => get_string('group_set_theory', $p),
                 'default_enabled' => false,
-                'elements' => [
-                    ['label' => '∈',
-                        'cmd' => '\\in',
-                        'display' => '∈'],
-                    ['label' => '∉',
-                        'cmd' => '\\notin',
-                        'display' => '∉'],
-                    ['label' => '∪',
-                        'cmd' => '\\cup',
-                        'display' => '∪'],
-                    ['label' => '∩',
-                        'cmd' => '\\cap',
-                        'display' => '∩'],
-                    ['label' => '∖',
-                        'cmd' => '\\setminus',
-                        'display' => '∖'],
-                    ['label' => '⊂',
-                        'cmd' => '\\subset',
-                        'display' => '⊂'],
-                    ['label' => '⊃',
-                        'cmd' => '\\supset',
-                        'display' => '⊃'],
-                    ['label' => 'ℕ',
-                        'write' => '\\mathbb{N}',
-                        'display' => 'ℕ'],
-                    ['label' => 'ℤ',
-                        'write' => '\\mathbb{Z}',
-                        'display' => 'ℤ'],
-                    ['label' => 'ℚ',
-                        'write' => '\\mathbb{Q}',
-                        'display' => 'ℚ'],
-                    ['label' => 'ℝ',
-                        'write' => '\\mathbb{R}',
-                        'display' => 'ℝ'],
-                    ['label' => 'ℂ',
-                        'write' => '\\mathbb{C}',
-                        'display' => 'ℂ'],
+                'elements'        => [
+                    ['display' => '∈',  'cmd'   => '\\in',
+                        'tooltip' => get_string('btn_in', $p)],
+                    ['display' => '∉',  'cmd'   => '\\notin',
+                        'tooltip' => get_string('btn_notin', $p)],
+                    ['display' => '∪',  'cmd'   => '\\cup',
+                        'tooltip' => get_string('btn_cup', $p)],
+                    ['display' => '∩',  'cmd'   => '\\cap',
+                        'tooltip' => get_string('btn_cap', $p)],
+                    ['display' => '∖',  'cmd'   => '\\setminus',
+                        'tooltip' => get_string('btn_setminus', $p)],
+                    ['display' => '⊂',  'cmd'   => '\\subset',
+                        'tooltip' => get_string('btn_subset', $p)],
+                    ['display' => '⊃',  'cmd'   => '\\supset',
+                        'tooltip' => get_string('btn_supset', $p)],
+                    ['display' => 'ℕ',  'write' => '\\mathbb{N}',
+                        'tooltip' => get_string('btn_naturals', $p)],
+                    ['display' => 'ℤ',  'write' => '\\mathbb{Z}',
+                        'tooltip' => get_string('btn_integers', $p)],
+                    ['display' => 'ℚ',  'write' => '\\mathbb{Q}',
+                        'tooltip' => get_string('btn_rationals', $p)],
+                    ['display' => 'ℝ',  'write' => '\\mathbb{R}',
+                        'tooltip' => get_string('btn_reals', $p)],
+                    ['display' => 'ℂ',  'write' => '\\mathbb{C}',
+                        'tooltip' => get_string('btn_complex', $p)],
                 ],
             ],
 
-            // ── 7. Logik ────────────────────────────
+            // ── 7. Logic ─────────────────────────────────────────────
             'logic' => [
-                'label' => 'Logik',
+                'label'           => get_string('group_logic', $p),
                 'default_enabled' => false,
-                'elements' => [
-                    ['label' => '∀',
-                        'cmd' => '\\forall',
-                        'display' => '∀'],
-                    ['label' => '∃',
-                        'cmd' => '\\exists',
-                        'display' => '∃'],
-                    ['label' => '∄',
-                        'cmd' => '\\nexists',
-                        'display' => '∄'],
-                    ['label' => '¬',
-                        'cmd' => '\\neg',
-                        'display' => '¬'],
-                    ['label' => '∧',
-                        'cmd' => '\\land',
-                        'display' => '∧'],
-                    ['label' => '∨',
-                        'cmd' => '\\lor',
-                        'display' => '∨'],
-                    ['label' => '⇒',
-                        'cmd' => '\\Rightarrow',
-                        'display' => '⇒'],
-                    ['label' => '⇐',
-                        'cmd' => '\\Leftarrow',
-                        'display' => '⇐'],
-                    ['label' => '⇔',
-                        'cmd' => '\\Leftrightarrow',
-                        'display' => '⇔'],
+                'elements'        => [
+                    ['display' => '∀',  'cmd' => '\\forall',
+                        'tooltip' => get_string('btn_forall', $p)],
+                    ['display' => '∃',  'cmd' => '\\exists',
+                        'tooltip' => get_string('btn_exists', $p)],
+                    ['display' => '∄',  'cmd' => '\\nexists',
+                        'tooltip' => get_string('btn_nexists', $p)],
+                    ['display' => '¬',  'cmd' => '\\neg',
+                        'tooltip' => get_string('btn_neg', $p)],
+                    ['display' => '∧',  'cmd' => '\\land',
+                        'tooltip' => get_string('btn_logical_and', $p)],
+                    ['display' => '∨',  'cmd' => '\\lor',
+                        'tooltip' => get_string('btn_logical_or', $p)],
+                    ['display' => '⇒',  'cmd' => '\\Rightarrow',
+                        'tooltip' => get_string('btn_implies', $p)],
+                    ['display' => '⇐',  'cmd' => '\\Leftarrow',
+                        'tooltip' => get_string('btn_impliedby', $p)],
+                    ['display' => '⇔',  'cmd' => '\\Leftrightarrow',
+                        'tooltip' => get_string('btn_iff', $p)],
                 ],
             ],
 
-            // ── 8. Klammern ─────────────────────────
+            // ── 8. Brackets ──────────────────────────────────────────
             'brackets' => [
-                'label' => 'Klammern',
+                'label'           => get_string('group_brackets', $p),
                 'default_enabled' => true,
-                'elements' => [
-                    ['label' => '( )',
-                        'write' => '\\left(\\right)',
-                        'display' => '( )'],
-                    ['label' => '[ ]',
-                        'write' => '\\left[\\right]',
-                        'display' => '[ ]'],
-                    ['label' => '{ }',
-                        'write' => '\\left\\{\\right\\}',
-                        'display' => '{ }'],
+                'elements'        => [
+                    ['display' => '( )', 'write' => '\\left(\\right)',
+                        'tooltip' => get_string('btn_round_brackets', $p)],
+                    ['display' => '[ ]', 'write' => '\\left[\\right]',
+                        'tooltip' => get_string('btn_square_brackets', $p)],
+                    ['display' => '{ }', 'write' => '\\left\\{\\right\\}',
+                        'tooltip' => get_string('btn_curly_brackets', $p)],
                 ],
             ],
 
-            // ── 9. Mathematische Konstanten ─────────
+            // ── 9. Mathematical constants ────────────────────────────
             'constants_math' => [
-                'label' => 'Konstanten (Mathematik)',
+                'label'           => get_string('group_constants_math', $p),
                 'default_enabled' => true,
-                'elements' => [
-                    ['label' => 'π',
-                        'cmd' => '\\pi',
-                        'display' => 'π'],
-                    ['label' => '∞',
-                        'cmd' => '\\infty',
-                        'display' => '∞'],
-                    ['label' => 'e',
-                        'write' => '\\mathrm{e}',
-                        'display' => 'e'],
-                    ['label' => 'i',
-                        'write' => '\\mathrm{i}',
-                        'display' => 'i'],
+                'elements'        => [
+                    ['display' => 'π',  'cmd'   => '\\pi',
+                        'tooltip' => get_string('btn_pi', $p)],
+                    ['display' => '∞',  'cmd'   => '\\infty',
+                        'tooltip' => get_string('btn_infty', $p)],
+                    ['display' => 'e',  'write' => '\\mathrm{e}',
+                        'tooltip' => get_string('btn_euler', $p)],
+                    ['display' => 'i',  'write' => '\\mathrm{i}',
+                        'tooltip' => get_string('btn_imaginary', $p)],
                 ],
             ],
 
-            // ── 10. Naturkonstanten ─────────────────
+            // ── 10. Physical constants ───────────────────────────────
             'constants_nature' => [
-                'label' => 'Konstanten (Natur)',
+                'label'           => get_string('group_constants_nature', $p),
                 'default_enabled' => false,
-                'elements' => [
-                    ['label' => 'c₀',
-                        'write' => 'c_0',
-                        'display' => 'c₀'],
-                    ['label' => 'ℏ',
-                        'cmd' => '\\hbar',
-                        'display' => 'ℏ'],
-                    ['label' => 'G',
-                        'cmd' => '\\mathrm{G}',
-                        'display' => 'G'],
-                    ['label' => 'e⁻',
-                        'write' => '\\mathrm{e^{-}}',
-                        'display' => 'e⁻'],
-                    ['label' => 'k_B',
-                        'write' => '\\mathrm{k_B}',
-                        'display' => 'k'],
-                    ['label' => 'ε₀',
-                        'write' => '\\varepsilon_0',
-                        'display' => 'ε₀'],
-                    ['label' => 'μ₀',
-                        'write' => '\\mu_0',
-                        'display' => 'μ₀'],
+                'elements'        => [
+                    ['display' => 'c₀',  'write' => 'c_0',
+                        'tooltip' => get_string('btn_speed_of_light', $p)],
+                    ['display' => 'ℏ',   'cmd'   => '\\hbar',
+                        'tooltip' => get_string('btn_hbar', $p)],
+                    ['display' => 'G',   'cmd'   => '\\mathrm{G}',
+                        'tooltip' => get_string('btn_gravitational', $p)],
+                    ['display' => 'e⁻',  'write' => '\\mathrm{e^{-}}',
+                        'tooltip' => get_string('btn_electron_charge', $p)],
+                    ['display' => 'k',   'write' => '\\mathrm{k_B}',
+                        'tooltip' => get_string('btn_boltzmann', $p)],
+                    ['display' => 'ε₀',  'write' => '\\varepsilon_0',
+                        'tooltip' => get_string('btn_permittivity', $p)],
+                    ['display' => 'μ₀',  'write' => '\\mu_0',
+                        'tooltip' => get_string('btn_permeability', $p)],
                 ],
             ],
 
-            // ── 11. Geometrie ───────────────────────
+            // ── 11. Geometry ─────────────────────────────────────────
             'geometry' => [
-                'label' => 'Geometrie',
+                'label'           => get_string('group_geometry', $p),
                 'default_enabled' => false,
-                'elements' => [
-                    ['label' => '\\overline{AB}',
-                        'write' => '\\overline{}',
-                        'display' => 'AB̅'],
-                    ['label' => '°',
-                        'cmd' => '\\circ',
-                        'display' => '°'],
-                    ['label' => '∠',
-                        'cmd' => '\\angle',
-                        'display' => '∠'],
-                    ['label' => '⊥',
-                        'cmd' => '\\perp',
-                        'display' => '⊥'],
+                'elements'        => [
+                    ['label'   => '\\overline{AB}', 'write' => '\\overline{}',
+                        'display' => 'AB̅',
+                        'tooltip' => get_string('btn_overline', $p)],
+                    ['display' => '°',  'cmd'   => '\\circ',
+                        'tooltip' => get_string('btn_degree', $p)],
+                    ['display' => '∠',  'cmd'   => '\\angle',
+                        'tooltip' => get_string('btn_angle', $p)],
+                    ['display' => '⊥',  'cmd'   => '\\perp',
+                        'tooltip' => get_string('btn_perp', $p)],
                 ],
             ],
 
-            // ── 12. Trigonometrie ────────────────────
+            // ── 12. Trigonometry ─────────────────────────────────────
             'trigonometry' => [
-                'label' => 'Trigonometrie',
+                'label'           => get_string('group_trigonometry', $p),
                 'default_enabled' => true,
-                'elements' => [
-                    ['label' => 'sin',
-                        'write' => '\\sin\\left(\\right)',
-                        'display' => 'sin'],
-                    ['label' => 'cos',
-                        'write' => '\\cos\\left(\\right)',
-                        'display' => 'cos'],
-                    ['label' => 'tan',
-                        'write' => '\\tan\\left(\\right)',
-                        'display' => 'tan'],
-                    ['label' => 'asin',
-                        'write' => '\\arcsin\\left(\\right)',
-                        'display' => 'asin'],
-                    ['label' => 'acos',
-                        'write' => '\\arccos\\left(\\right)',
-                        'display' => 'acos'],
-                    ['label' => 'atan',
-                        'write' => '\\arctan\\left(\\right)',
-                        'display' => 'atan'],
+                'elements'        => [
+                    ['display' => 'sin',  'write' => '\\sin\\left(\\right)'],
+                    ['display' => 'cos',  'write' => '\\cos\\left(\\right)'],
+                    ['display' => 'tan',  'write' => '\\tan\\left(\\right)'],
+                    ['display' => 'asin', 'write' => '\\arcsin\\left(\\right)',
+                        'tooltip' => get_string('btn_arcsin', $p)],
+                    ['display' => 'acos', 'write' => '\\arccos\\left(\\right)',
+                        'tooltip' => get_string('btn_arccos', $p)],
+                    ['display' => 'atan', 'write' => '\\arctan\\left(\\right)',
+                        'tooltip' => get_string('btn_arctan', $p)],
                 ],
             ],
 
-            // ── 13. Hyperbolische Funktionen ────────
+            // ── 13. Hyperbolic functions ─────────────────────────────
             'hyperbolic' => [
-                'label' => 'Hyperbelfunktionen',
+                'label'           => get_string('group_hyperbolic', $p),
                 'default_enabled' => false,
-                'elements' => [
-                    ['label' => 'sinh',
-                        'write' => '\\sinh\\left(\\right)',
-                        'display' => 'sinh'],
-                    ['label' => 'cosh',
-                        'write' => '\\cosh\\left(\\right)',
-                        'display' => 'cosh'],
-                    ['label' => 'tanh',
-                        'write' => '\\tanh\\left(\\right)',
-                        'display' => 'tanh'],
+                'elements'        => [
+                    ['display' => 'sinh', 'write' => '\\sinh\\left(\\right)'],
+                    ['display' => 'cosh', 'write' => '\\cosh\\left(\\right)'],
+                    ['display' => 'tanh', 'write' => '\\tanh\\left(\\right)'],
                 ],
             ],
 
-            // ── 14. Analysis-Operatoren ─────────────
+            // ── 14. Calculus operators ───────────────────────────────
             'analysis_operators' => [
-                'label' => 'Analysis-Operatoren',
+                'label'           => get_string('group_analysis_operators', $p),
                 'default_enabled' => false,
-                'elements' => [
-                    ['label' => '|x|',
-                        'write' => '\\left|\\right|',
-                        'display' => '|x|'],
-                    ['label' => '∑',
-                        'write' => '\\sum_{}^{}',
-                        'display' => '∑'],
-                    ['label' => '∏',
-                        'write' => '\\prod_{}^{}',
-                        'display' => '∏'],
+                'elements'        => [
+                    ['display' => '|x|', 'write' => '\\left|\\right|',
+                        'tooltip' => get_string('btn_abs', $p)],
+                    ['display' => '∑',   'write' => '\\sum_{}^{}',
+                        'tooltip' => get_string('btn_sum', $p)],
+                    ['display' => '∏',   'write' => '\\prod_{}^{}',
+                        'tooltip' => get_string('btn_prod', $p)],
                 ],
             ],
 
-            // ── 15. Vektor-Operatoren ───────────────
+            // ── 15. Vectors ──────────────────────────────────────────
             'vector_operators' => [
-                'label' => 'Vektoren',
+                'label'           => get_string('group_vector_operators', $p),
                 'default_enabled' => false,
-                'elements' => [
-                    ['label' => '\\vec{v}',
-                        'write' => '\\vec{}',
-                        'display' => 'v⃗'],
-                    ['label' => '||v||',
-                        'write' => '\\left\\|\\right\\|',
-                        'display' => '‖v‖'],
-                    ['label' => '·',
-                        'cmd' => '\\cdot',
-                        'display' => '·'],
-                    ['label' => '×',
-                        'cmd' => '\\times',
-                        'display' => '×'],
+                'elements'        => [
+                    ['label'   => '\\vec{v}', 'write' => '\\vec{}',
+                        'display' => 'v⃗',
+                        'tooltip' => get_string('btn_vec', $p)],
+                    ['display' => '‖v‖', 'write' => '\\left\\|\\right\\|',
+                        'tooltip' => get_string('btn_norm', $p)],
+                    ['display' => '·',   'cmd'   => '\\cdot',
+                        'tooltip' => get_string('btn_cdot', $p)],
+                    ['display' => '×',   'cmd'   => '\\times',
+                        'tooltip' => get_string('btn_cross', $p)],
                 ],
             ],
 
-            // ── 16. Differential-Operatoren ─────────
+            // ── 16. Differential calculus ────────────────────────────
             'differential_operators' => [
-                'label' => 'Differentialrechnung',
+                'label'           => get_string('group_differential_operators', $p),
                 'default_enabled' => false,
-                'elements' => [
-                    ['label' => 'd/dx',
-                        'write' => '\\frac{d}{dx}',
-                        'display' => 'd/dx'],
-                    ['label' => '∂/∂x',
-                        'write' => '\\frac{\\partial}{\\partial x}',
-                        'display' => '∂/∂x'],
-                    ['label' => '∇',
-                        'cmd' => '\\nabla',
-                        'display' => '∇'],
-                    ['label' => 'Δ',
-                        'cmd' => '\\Delta',
-                        'display' => 'Δ'],
+                'elements'        => [
+                    ['display' => 'd/dx',   'write' => '\\frac{d}{dx}',
+                        'tooltip' => get_string('btn_deriv', $p)],
+                    ['display' => '∂/∂x',   'write' => '\\frac{\\partial}{\\partial x}',
+                        'tooltip' => get_string('btn_partial', $p)],
+                    ['display' => '∇',      'cmd'   => '\\nabla',
+                        'tooltip' => get_string('btn_nabla', $p)],
+                    ['display' => 'Δ',      'cmd'   => '\\Delta',
+                        'tooltip' => get_string('btn_laplacian', $p)],
                 ],
             ],
 
-            // ── 17. Vektor-Differentialoperatoren ───
+            // ── 17. Vector differential ──────────────────────────────
             'vector_differential' => [
-                'label' => 'Vektordifferential',
+                'label'           => get_string('group_vector_differential', $p),
                 'default_enabled' => false,
-                'elements' => [
-                    ['label' => 'grad',
-                        'write' => '\\mathrm{grad}\\,',
-                        'display' => 'grad'],
-                    ['label' => 'div',
-                        'write' => '\\mathrm{div}\\,',
-                        'display' => 'div'],
-                    ['label' => 'rot',
-                        'write' => '\\mathrm{rot}\\,',
-                        'display' => 'rot'],
+                'elements'        => [
+                    ['display' => 'grad', 'write' => '\\mathrm{grad}\\,',
+                        'tooltip' => get_string('btn_grad', $p)],
+                    ['display' => 'div',  'write' => '\\mathrm{div}\\,',
+                        'tooltip' => get_string('btn_div_op', $p)],
+                    ['display' => 'rot',  'write' => '\\mathrm{rot}\\,',
+                        'tooltip' => get_string('btn_rot', $p)],
                 ],
             ],
 
-            // ── 18. Matrix-Operatoren ───────────────
+            // ── 18. Matrices ─────────────────────────────────────────
             'matrix_operators' => [
-                'label' => 'Matrizen',
+                'label'           => get_string('group_matrix_operators', $p),
                 'default_enabled' => false,
-                'elements' => [
-                    ['label' => '𝟙',
-                        'write' => '\\mathbb{1}',
-                        'display' => '𝟙'],
-                    ['label' => 'Aᵀ',
-                        'write' => '^{\\intercal}',
-                        'display' => 'Aᵀ'],
-                    ['label' => 'A*',
-                        'write' => '^{*}',
-                        'display' => 'A*'],
-                    ['label' => 'A†',
-                        'write' => '^{\\dagger}',
-                        'display' => 'A†'],
+                'elements'        => [
+                    ['display' => '𝟙',  'write' => '\\mathbb{1}',
+                        'tooltip' => get_string('btn_unity_matrix', $p)],
+                    ['display' => 'Aᵀ', 'write' => '^{\\intercal}',
+                        'tooltip' => get_string('btn_transpose', $p)],
+                    ['display' => 'A*', 'write' => '^{*}',
+                        'tooltip' => get_string('btn_conjugate', $p)],
+                    ['display' => 'A†', 'write' => '^{\\dagger}',
+                        'tooltip' => get_string('btn_adjoint', $p)],
                 ],
             ],
 
-            // ── 19. Integral-Operatoren ─────────────
+            // ── 19. Integral calculus ────────────────────────────────
             'integral_operators' => [
-                'label' => 'Integralrechnung',
+                'label'           => get_string('group_integral_operators', $p),
                 'default_enabled' => true,
-                'elements' => [
-                    ['label' => '∫',
-                        'write' => '\\int_{}^{}',
-                        'display' => '∫'],
-                    ['label' => '∮',
-                        'write' => '\\oint_{}^{}',
-                        'display' => '∮'],
+                'elements'        => [
+                    ['display' => '∫',  'write' => '\\int_{}^{}',
+                        'tooltip' => get_string('btn_integral', $p)],
+                    ['display' => '∮',  'write' => '\\oint_{}^{}',
+                        'tooltip' => get_string('btn_contour_integral', $p)],
                 ],
             ],
 
-            // ── 20. Stochastik-Operatoren ───────────
+            // ── 20. Statistics ───────────────────────────────────────
             'statistical_operators' => [
-                'label' => 'Stochastik',
+                'label'           => get_string('group_statistical_operators', $p),
                 'default_enabled' => false,
-                'elements' => [
-                    ['label' => 'n!',
-                        'write' => '!',
-                        'display' => 'n!'],
-                    ['label' => '\\binom{n}{k}',
-                        'write' => '\\binom{}{}',
-                        'display' => 'C(n,k)'],
-                    ['label' => 'E[X]',
-                        'write' => 'E\\left[\\right]',
-                        'display' => 'E[X]'],
-                    ['label' => 'σ',
-                        'cmd' => '\\sigma',
-                        'display' => 'σ'],
-                    ['label' => '∧ (und)',
-                        'cmd' => '\\land',
-                        'display' => '&'],
-                    ['label' => '∨ (oder)',
-                        'cmd' => '\\lor',
-                        'display' => '|'],
-                    ['label' => 'Γ',
-                        'cmd' => '\\Gamma',
-                        'display' => 'Γ'],
+                'elements'        => [
+                    ['display' => 'n!',    'write' => '!',
+                        'tooltip' => get_string('btn_factorial', $p)],
+                    ['label'   => '\\binom{n}{k}', 'write' => '\\binom{}{}',
+                        'display' => 'C(n,k)',
+                        'tooltip' => get_string('btn_binomial', $p)],
+                    ['display' => 'E[X]',  'write' => 'E\\left[\\right]',
+                        'tooltip' => get_string('btn_expected_value', $p)],
+                    ['display' => 'σ',     'cmd'   => '\\sigma',
+                        'tooltip' => get_string('btn_std_dev', $p)],
+                    ['display' => '∧',     'cmd'   => '\\land',
+                        'tooltip' => get_string('btn_logical_and', $p)],
+                    ['display' => '∨',     'cmd'   => '\\lor',
+                        'tooltip' => get_string('btn_logical_or', $p)],
+                    ['display' => 'Γ',     'cmd'   => '\\Gamma',
+                        'tooltip' => get_string('btn_gamma_func', $p)],
                 ],
             ],
 
-            // ── 21. Griechisch (klein) ──────────────
+            // ── 21. Greek letters (lowercase) ────────────────────────
             'greek_lower' => [
-                'label' => 'Griechisch (klein)',
+                'label'           => get_string('group_greek_lower', $p),
                 'default_enabled' => true,
-                'elements' => [
-                    ['label' => 'α', 'cmd' => '\\alpha',
-                        'display' => 'α'],
-                    ['label' => 'β', 'cmd' => '\\beta',
-                        'display' => 'β'],
-                    ['label' => 'γ', 'cmd' => '\\gamma',
-                        'display' => 'γ'],
-                    ['label' => 'δ', 'cmd' => '\\delta',
-                        'display' => 'δ'],
-                    ['label' => 'ε', 'cmd' => '\\epsilon',
-                        'display' => 'ε'],
-                    ['label' => 'ζ', 'cmd' => '\\zeta',
-                        'display' => 'ζ'],
-                    ['label' => 'η', 'cmd' => '\\eta',
-                        'display' => 'η'],
-                    ['label' => 'θ', 'cmd' => '\\theta',
-                        'display' => 'θ'],
-                    ['label' => 'ι', 'cmd' => '\\iota',
-                        'display' => 'ι'],
-                    ['label' => 'κ', 'cmd' => '\\kappa',
-                        'display' => 'κ'],
-                    ['label' => 'λ', 'cmd' => '\\lambda',
-                        'display' => 'λ'],
-                    ['label' => 'μ', 'cmd' => '\\mu',
-                        'display' => 'μ'],
-                    ['label' => 'ν', 'cmd' => '\\nu',
-                        'display' => 'ν'],
-                    ['label' => 'ξ', 'cmd' => '\\xi',
-                        'display' => 'ξ'],
-                    ['label' => 'ο', 'write' => 'o',
-                        'display' => 'ο'],
-                    ['label' => 'π', 'cmd' => '\\pi',
-                        'display' => 'π'],
-                    ['label' => 'ρ', 'cmd' => '\\rho',
-                        'display' => 'ρ'],
-                    ['label' => 'σ', 'cmd' => '\\sigma',
-                        'display' => 'σ'],
-                    ['label' => 'τ', 'cmd' => '\\tau',
-                        'display' => 'τ'],
-                    ['label' => 'υ', 'cmd' => '\\upsilon',
-                        'display' => 'υ'],
-                    ['label' => 'φ', 'cmd' => '\\phi',
-                        'display' => 'φ'],
-                    ['label' => 'χ', 'cmd' => '\\chi',
-                        'display' => 'χ'],
-                    ['label' => 'ψ', 'cmd' => '\\psi',
-                        'display' => 'ψ'],
-                    ['label' => 'ω', 'cmd' => '\\omega',
-                        'display' => 'ω'],
+                'elements'        => [
+                    ['display' => 'α', 'cmd' => '\\alpha',   'tooltip' => get_string('btn_alpha', $p)],
+                    ['display' => 'β', 'cmd' => '\\beta',    'tooltip' => get_string('btn_beta', $p)],
+                    ['display' => 'γ', 'cmd' => '\\gamma',   'tooltip' => get_string('btn_gamma', $p)],
+                    ['display' => 'δ', 'cmd' => '\\delta',   'tooltip' => get_string('btn_delta', $p)],
+                    ['display' => 'ε', 'cmd' => '\\epsilon', 'tooltip' => get_string('btn_epsilon', $p)],
+                    ['display' => 'ζ', 'cmd' => '\\zeta',    'tooltip' => get_string('btn_zeta', $p)],
+                    ['display' => 'η', 'cmd' => '\\eta',     'tooltip' => get_string('btn_eta', $p)],
+                    ['display' => 'θ', 'cmd' => '\\theta',   'tooltip' => get_string('btn_theta', $p)],
+                    ['display' => 'ι', 'cmd' => '\\iota',    'tooltip' => get_string('btn_iota', $p)],
+                    ['display' => 'κ', 'cmd' => '\\kappa',   'tooltip' => get_string('btn_kappa', $p)],
+                    ['display' => 'λ', 'cmd' => '\\lambda',  'tooltip' => get_string('btn_lambda', $p)],
+                    ['display' => 'μ', 'cmd' => '\\mu',      'tooltip' => get_string('btn_mu', $p)],
+                    ['display' => 'ν', 'cmd' => '\\nu',      'tooltip' => get_string('btn_nu', $p)],
+                    ['display' => 'ξ', 'cmd' => '\\xi',      'tooltip' => get_string('btn_xi', $p)],
+                    ['display' => 'ο', 'write' => 'o',        'tooltip' => get_string('btn_omicron', $p)],
+                    ['display' => 'π', 'cmd' => '\\pi',      'tooltip' => get_string('btn_pi_greek', $p)],
+                    ['display' => 'ρ', 'cmd' => '\\rho',     'tooltip' => get_string('btn_rho', $p)],
+                    ['display' => 'σ', 'cmd' => '\\sigma',   'tooltip' => get_string('btn_sigma', $p)],
+                    ['display' => 'τ', 'cmd' => '\\tau',     'tooltip' => get_string('btn_tau', $p)],
+                    ['display' => 'υ', 'cmd' => '\\upsilon', 'tooltip' => get_string('btn_upsilon', $p)],
+                    ['display' => 'φ', 'cmd' => '\\phi',     'tooltip' => get_string('btn_phi', $p)],
+                    ['display' => 'χ', 'cmd' => '\\chi',     'tooltip' => get_string('btn_chi', $p)],
+                    ['display' => 'ψ', 'cmd' => '\\psi',     'tooltip' => get_string('btn_psi', $p)],
+                    ['display' => 'ω', 'cmd' => '\\omega',   'tooltip' => get_string('btn_omega', $p)],
                 ],
             ],
 
-            // ── 22. Griechisch (groß) ───────────────
+            // ── 22. Greek letters (uppercase) ────────────────────────
             'greek_upper' => [
-                'label' => 'Griechisch (groß)',
+                'label'           => get_string('group_greek_upper', $p),
                 'default_enabled' => true,
-                'elements' => [
-                    ['label' => 'Α', 'write' => 'A',
-                        'display' => 'Α'],
-                    ['label' => 'Β', 'write' => 'B',
-                        'display' => 'Β'],
-                    ['label' => 'Γ', 'cmd' => '\\Gamma',
-                        'display' => 'Γ'],
-                    ['label' => 'Δ', 'cmd' => '\\Delta',
-                        'display' => 'Δ'],
-                    ['label' => 'Ε', 'write' => 'E',
-                        'display' => 'Ε'],
-                    ['label' => 'Ζ', 'write' => 'Z',
-                        'display' => 'Ζ'],
-                    ['label' => 'Η', 'write' => 'H',
-                        'display' => 'Η'],
-                    ['label' => 'Θ', 'cmd' => '\\Theta',
-                        'display' => 'Θ'],
-                    ['label' => 'Ι', 'write' => 'I',
-                        'display' => 'Ι'],
-                    ['label' => 'Κ', 'write' => 'K',
-                        'display' => 'Κ'],
-                    ['label' => 'Λ', 'cmd' => '\\Lambda',
-                        'display' => 'Λ'],
-                    ['label' => 'Μ', 'write' => 'M',
-                        'display' => 'Μ'],
-                    ['label' => 'Ν', 'write' => 'N',
-                        'display' => 'Ν'],
-                    ['label' => 'Ξ', 'cmd' => '\\Xi',
-                        'display' => 'Ξ'],
-                    ['label' => 'Ο', 'write' => 'O',
-                        'display' => 'Ο'],
-                    ['label' => 'Π', 'cmd' => '\\Pi',
-                        'display' => 'Π'],
-                    ['label' => 'Ρ', 'write' => 'P',
-                        'display' => 'Ρ'],
-                    ['label' => 'Σ', 'cmd' => '\\Sigma',
-                        'display' => 'Σ'],
-                    ['label' => 'Τ', 'write' => 'T',
-                        'display' => 'Τ'],
-                    ['label' => 'Υ', 'cmd' => '\\Upsilon',
-                        'display' => 'Υ'],
-                    ['label' => 'Φ', 'cmd' => '\\Phi',
-                        'display' => 'Φ'],
-                    ['label' => 'Χ', 'write' => 'X',
-                        'display' => 'Χ'],
-                    ['label' => 'Ψ', 'cmd' => '\\Psi',
-                        'display' => 'Ψ'],
-                    ['label' => 'Ω', 'cmd' => '\\Omega',
-                        'display' => 'Ω'],
+                'elements'        => [
+                    ['display' => 'Α', 'write' => 'A',         'tooltip' => get_string('btn_Alpha', $p)],
+                    ['display' => 'Β', 'write' => 'B',         'tooltip' => get_string('btn_Beta', $p)],
+                    ['display' => 'Γ', 'cmd'   => '\\Gamma',   'tooltip' => get_string('btn_Gamma', $p)],
+                    ['display' => 'Δ', 'cmd'   => '\\Delta',   'tooltip' => get_string('btn_Delta', $p)],
+                    ['display' => 'Ε', 'write' => 'E',         'tooltip' => get_string('btn_Epsilon', $p)],
+                    ['display' => 'Ζ', 'write' => 'Z',         'tooltip' => get_string('btn_Zeta', $p)],
+                    ['display' => 'Η', 'write' => 'H',         'tooltip' => get_string('btn_Eta', $p)],
+                    ['display' => 'Θ', 'cmd'   => '\\Theta',   'tooltip' => get_string('btn_Theta', $p)],
+                    ['display' => 'Ι', 'write' => 'I',         'tooltip' => get_string('btn_Iota', $p)],
+                    ['display' => 'Κ', 'write' => 'K',         'tooltip' => get_string('btn_Kappa', $p)],
+                    ['display' => 'Λ', 'cmd'   => '\\Lambda',  'tooltip' => get_string('btn_Lambda', $p)],
+                    ['display' => 'Μ', 'write' => 'M',         'tooltip' => get_string('btn_Mu', $p)],
+                    ['display' => 'Ν', 'write' => 'N',         'tooltip' => get_string('btn_Nu', $p)],
+                    ['display' => 'Ξ', 'cmd'   => '\\Xi',      'tooltip' => get_string('btn_Xi', $p)],
+                    ['display' => 'Ο', 'write' => 'O',         'tooltip' => get_string('btn_Omicron', $p)],
+                    ['display' => 'Π', 'cmd'   => '\\Pi',      'tooltip' => get_string('btn_Pi', $p)],
+                    ['display' => 'Ρ', 'write' => 'P',         'tooltip' => get_string('btn_Rho', $p)],
+                    ['display' => 'Σ', 'cmd'   => '\\Sigma',   'tooltip' => get_string('btn_Sigma', $p)],
+                    ['display' => 'Τ', 'write' => 'T',         'tooltip' => get_string('btn_Tau', $p)],
+                    ['display' => 'Υ', 'cmd'   => '\\Upsilon', 'tooltip' => get_string('btn_Upsilon', $p)],
+                    ['display' => 'Φ', 'cmd'   => '\\Phi',     'tooltip' => get_string('btn_Phi', $p)],
+                    ['display' => 'Χ', 'write' => 'X',         'tooltip' => get_string('btn_Chi', $p)],
+                    ['display' => 'Ψ', 'cmd'   => '\\Psi',     'tooltip' => get_string('btn_Psi', $p)],
+                    ['display' => 'Ω', 'cmd'   => '\\Omega',   'tooltip' => get_string('btn_Omega', $p)],
                 ],
             ],
 
@@ -601,7 +498,7 @@ class definitions {
     }
 
     /**
-     * Return the default config for which groups are enabled.
+     * Return the default enabled state for each group.
      *
      * @return array Group key => bool.
      */
@@ -614,7 +511,7 @@ class definitions {
     }
 
     /**
-     * Return all known function names for tex2max/max2tex.
+     * Return all known function names for tex2max/max2tex conversion.
      *
      * @return array List of function name strings.
      */
@@ -630,7 +527,7 @@ class definitions {
     }
 
     /**
-     * Return all known constant names.
+     * Return all known Maxima constant names.
      *
      * @return array List of constant strings.
      */
@@ -639,7 +536,7 @@ class definitions {
     }
 
     /**
-     * Return operator symbols for tex2max.
+     * Return operator symbols used in tex2max conversion.
      *
      * @return array List of operator strings.
      */
@@ -650,17 +547,16 @@ class definitions {
     /**
      * Return comparison operator LaTeX commands.
      *
-     * @return array List of comparison strings.
+     * @return array List of LaTeX comparison strings.
      */
     public static function get_comparison(): array {
-        return ['=', '\\neq', '\\leq', '\\geq',
-            '<', '>', '\\approx'];
+        return ['=', '\\neq', '\\leq', '\\geq', '<', '>', '\\approx'];
     }
 
     /**
-     * Return Greek letter names for variable detection.
+     * Return Greek letter names used for variable detection.
      *
-     * @return array List of Greek letter names.
+     * @return array List of Greek letter name strings.
      */
     public static function get_greek(): array {
         return [
@@ -677,9 +573,9 @@ class definitions {
     }
 
     /**
-     * Return unit names for units input type.
+     * Return SI and common unit abbreviations for the units input type.
      *
-     * @return array List of unit strings.
+     * @return array List of unit abbreviation strings.
      */
     public static function get_units(): array {
         return [
@@ -701,45 +597,41 @@ class definitions {
     }
 
     /**
-     * Return unit display symbols.
+     * Return display symbols for units (maps abbreviation to Unicode symbol).
      *
-     * @return array Unit name => display symbol.
+     * @return array Unit abbreviation => display symbol string.
      */
     public static function get_unit_symbols(): array {
         return [
-            'm' => 'm', 'km' => 'km', 'cm' => 'cm',
-            'mm' => 'mm', 'nm' => 'nm',
-            'um' => 'µm',
-            'kg' => 'kg', 'g' => 'g', 'mg' => 'mg',
+            'm' => 'm',     'km' => 'km',   'cm' => 'cm',
+            'mm' => 'mm',   'nm' => 'nm',   'um' => 'µm',
+            'kg' => 'kg',   'g' => 'g',     'mg' => 'mg',
             'ug' => 'µg',
-            's' => 's', 'ms' => 'ms', 'us' => 'µs',
-            'ns' => 'ns', 'min' => 'min', 'hr' => 'h',
-            'N' => 'N', 'kN' => 'kN', 'mN' => 'mN',
-            'Pa' => 'Pa', 'kPa' => 'kPa',
-            'MPa' => 'MPa', 'GPa' => 'GPa',
-            'bar' => 'bar', 'mbar' => 'mbar',
-            'J' => 'J', 'kJ' => 'kJ', 'MJ' => 'MJ',
-            'eV' => 'eV', 'keV' => 'keV',
-            'MeV' => 'MeV',
-            'W' => 'W', 'kW' => 'kW', 'MW' => 'MW',
-            'A' => 'A', 'mA' => 'mA', 'uA' => 'µA',
-            'V' => 'V', 'kV' => 'kV', 'mV' => 'mV',
+            's' => 's',     'ms' => 'ms',   'us' => 'µs',
+            'ns' => 'ns',   'min' => 'min', 'hr' => 'h',
+            'N' => 'N',     'kN' => 'kN',   'mN' => 'mN',
+            'Pa' => 'Pa',   'kPa' => 'kPa', 'MPa' => 'MPa',
+            'GPa' => 'GPa', 'bar' => 'bar', 'mbar' => 'mbar',
+            'J' => 'J',     'kJ' => 'kJ',   'MJ' => 'MJ',
+            'eV' => 'eV',   'keV' => 'keV', 'MeV' => 'MeV',
+            'W' => 'W',     'kW' => 'kW',   'MW' => 'MW',
+            'A' => 'A',     'mA' => 'mA',   'uA' => 'µA',
+            'V' => 'V',     'kV' => 'kV',   'mV' => 'mV',
             'C' => 'C',
-            'F' => 'F', 'uF' => 'µF', 'nF' => 'nF',
+            'F' => 'F',     'uF' => 'µF',   'nF' => 'nF',
             'pF' => 'pF',
-            'Ohm' => 'Ω', 'kOhm' => 'kΩ',
-            'MOhm' => 'MΩ',
-            'H' => 'H', 'mH' => 'mH', 'uH' => 'µH',
-            'T' => 'T', 'mT' => 'mT',
-            'Hz' => 'Hz', 'kHz' => 'kHz',
-            'MHz' => 'MHz', 'GHz' => 'GHz',
+            'Ohm' => 'Ω',   'kOhm' => 'kΩ', 'MOhm' => 'MΩ',
+            'H' => 'H',     'mH' => 'mH',   'uH' => 'µH',
+            'T' => 'T',     'mT' => 'mT',
+            'Hz' => 'Hz',   'kHz' => 'kHz', 'MHz' => 'MHz',
+            'GHz' => 'GHz',
             'mol' => 'mol', 'K' => 'K',
-            'cd' => 'cd', 'lm' => 'lm', 'lx' => 'lx',
+            'cd' => 'cd',   'lm' => 'lm',   'lx' => 'lx',
         ];
     }
 
     /**
-     * Return function names for LaTeX detection.
+     * Return function names for LaTeX-to-Maxima detection.
      *
      * @return array List of function name strings.
      */
@@ -754,7 +646,7 @@ class definitions {
     }
 
     /**
-     * Return reserved Maxima words.
+     * Return reserved Maxima keywords.
      *
      * @return array List of reserved word strings.
      */
@@ -770,18 +662,20 @@ class definitions {
     }
 
     /**
-     * Return names treated as % constants in Maxima.
+     * Return names treated as percent-prefixed constants in Maxima.
      *
-     * @return array List of percent-prefixed names.
+     * @return array List of percent-constant strings (including % prefix).
      */
     public static function get_percent_constants(): array {
         return ['%pi', '%e', '%i', '%phi', '%gamma'];
     }
 
     /**
-     * Export all definitions for JavaScript modules.
+     * Export all definitions as a data structure for JSON encoding.
      *
-     * @return array Data structure for JSON encoding.
+     * Called by mathjax_injector to pass definitions to JavaScript modules.
+     *
+     * @return array Nested data structure suitable for json_encode().
      */
     public static function export_for_js(): array {
         return [
@@ -800,21 +694,23 @@ class definitions {
     }
 
     /**
-     * Get group labels with example elements for settings UI.
+     * Return group labels with up to three example button faces for the settings UI.
      *
-     * @return array key => label string.
+     * Used to populate the multi-select on the admin settings page and the
+     * configure form, giving teachers a preview of what each group contains.
+     *
+     * @return array Group key => label string (with examples appended).
      */
     public static function get_group_labels_with_examples(): array {
         $groups = self::get_element_groups();
         $result = [];
         foreach ($groups as $key => $group) {
-            $label = $group['label'] ?? $key;
+            $label    = $group['label'] ?? $key;
             $examples = [];
-            $elements = $group['elements'] ?? [];
-            $count = 0;
-            foreach ($elements as $el) {
+            $count    = 0;
+            foreach (($group['elements'] ?? []) as $el) {
                 if ($count >= 3) {
-                    $examples[] = '...';
+                    $examples[] = '…';
                     break;
                 }
                 $examples[] = $el['display'] ?? $el['label'] ?? '';
@@ -824,6 +720,19 @@ class definitions {
                 $label .= ' (' . implode(', ', $examples) . ')';
             }
             $result[$key] = $label;
+        }
+        return $result;
+    }
+
+    /**
+     * Return only the default enabled state for each group.
+     *
+     * @return array Group key => bool.
+     */
+    public static function get_default_enabled(): array {
+        $result = [];
+        foreach (self::get_element_groups() as $key => $group) {
+            $result[$key] = (bool) ($group['default_enabled'] ?? false);
         }
         return $result;
     }

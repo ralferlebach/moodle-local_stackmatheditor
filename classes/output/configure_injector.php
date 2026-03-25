@@ -6,6 +6,9 @@ defined('MOODLE_INTERNAL') || die();
 use local_stackmatheditor\config_manager;
 use local_stackmatheditor\quiz_helper;
 
+// Shared page output utilities.
+use local_stackmatheditor\output\page_helper;
+
 /**
  * Injects configure links for STACK questions on quiz pages.
  *
@@ -42,18 +45,7 @@ class configure_injector {
 
         quiz_helper::dbg('configure_injector: injecting, mode=' . $linkdata['mode']);
 
-        $json = json_encode($linkdata, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
-
-        $PAGE->requires->js_amd_inline("
-            (function() {
-                var el = document.createElement('script');
-                el.type = 'application/json';
-                el.id = 'sme-configure-data';
-                el.textContent = "
-            . json_encode($json) . ";
-                document.body.appendChild(el);
-            })();
-        ");
+        page_helper::inject_json_element('sme-configure-data', $linkdata);
 
         $PAGE->requires->js_call_amd(
             'local_stackmatheditor/configure_links',

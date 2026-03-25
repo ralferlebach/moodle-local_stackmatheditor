@@ -9,6 +9,21 @@ define(['jquery'], function($) {
     'use strict';
 
     /**
+     * Write a developer-level debug message to the browser console.
+     *
+     * Only active when Moodle developer debug mode is enabled
+     * (M.cfg.developerdebug is truthy). Silent on production sites.
+     *
+     * @param {string} msg Message to log.
+     */
+    function dbg(msg) {
+        if (window.M && window.M.cfg && window.M.cfg.developerdebug) {
+            window.console.log('[SME-tb] ' + msg);
+        }
+    }
+
+
+    /**
      * Resolve the target MQ field.
      *
      * @param {Object|Function} target MQ field or getter.
@@ -218,8 +233,7 @@ define(['jquery'], function($) {
                 }
                 f.focus();
             } catch (ex) {
-                window.console.log(
-                    '[SME-tb] Error: ' + ex.message);
+                dbg('Error: ' + ex.message);
             }
         });
 
@@ -281,8 +295,7 @@ define(['jquery'], function($) {
                 }
             }
 
-            window.console.log(
-                '[SME-tb] built: ' + buttonCount
+            dbg('built: ' + buttonCount
                 + ' buttons');
 
             return $bar;
@@ -310,12 +323,9 @@ define(['jquery'], function($) {
                     window.MathJax.typesetPromise(
                         [$bar[0]]
                     ).then(function() {
-                        window.console.log(
-                            '[SME-tb] MathJax typeset OK');
+                        dbg('MathJax typeset OK');
                     }).catch(function(e) {
-                        window.console.log(
-                            '[SME-tb] MathJax error: '
-                            + e);
+                        dbg('MathJax error: ' + e);
                     });
                     return;
                 }

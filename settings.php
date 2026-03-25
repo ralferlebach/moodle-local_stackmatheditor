@@ -26,12 +26,18 @@ if ($hassiteconfig) {
         'local_stackmatheditor/variablemode',
         get_string('setting_variablemode', 'local_stackmatheditor'),
         get_string('setting_variablemode_desc', 'local_stackmatheditor'),
-        \local_stackmatheditor\definitions::VAR_SINGLE,
+        \local_stackmatheditor\definitions::IMPLICIT_STACK,
         [
-            \local_stackmatheditor\definitions::VAR_SINGLE =>
-                get_string('variablemode_single', 'local_stackmatheditor'),
-            \local_stackmatheditor\definitions::VAR_MULTI =>
-                get_string('variablemode_multi', 'local_stackmatheditor'),
+            \local_stackmatheditor\definitions::IMPLICIT_EXPLICIT_SINGLE =>
+                get_string('implicitmode_explicit_single', 'local_stackmatheditor'),
+            \local_stackmatheditor\definitions::IMPLICIT_EXPLICIT_MULTI =>
+                get_string('implicitmode_explicit_multi', 'local_stackmatheditor'),
+            \local_stackmatheditor\definitions::IMPLICIT_SPACE_SINGLE =>
+                get_string('implicitmode_space_single', 'local_stackmatheditor'),
+            \local_stackmatheditor\definitions::IMPLICIT_SPACE_MULTI =>
+                get_string('implicitmode_space_multi', 'local_stackmatheditor'),
+            \local_stackmatheditor\definitions::IMPLICIT_STACK =>
+                get_string('implicitmode_stack', 'local_stackmatheditor'),
         ]
     ));
 

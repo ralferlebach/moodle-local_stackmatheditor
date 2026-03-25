@@ -12,17 +12,23 @@ defined('MOODLE_INTERNAL') || die();
  */
 class quiz_helper {
 
-    /** @var bool Enable debug logging. */
-    private const DEBUG = true;
-
     /** @var array Per-request cache for attempt slot data. */
     private static array $attemptcache = [];
 
     /** @var array Per-request cache for quiz question data. */
     private static array $quizcache = [];
 
+    /**
+     * Write a developer-level debug message to the PHP error log.
+     *
+     * Only emitted when Moodle developer debug mode is active
+     * ($CFG->debug >= DEBUG_DEVELOPER). Silent on production sites.
+     *
+     * @param string $msg Message to log.
+     * @return void
+     */
     public static function dbg(string $msg): void {
-        if (self::DEBUG) {
+        if (debugging('', DEBUG_DEVELOPER)) {
             error_log('[SME-HOOK] ' . $msg);
         }
     }

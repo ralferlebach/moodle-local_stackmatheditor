@@ -18,36 +18,6 @@ define([
     var TYPES = ['algebraic', 'units'];
 
     /**
-     * Inject minimal container styles.
-     */
-    function ensureStyles() {
-        if (document.getElementById('sme-input-styles')) {
-            return;
-        }
-        var style = document.createElement('style');
-        style.id = 'sme-input-styles';
-        style.textContent = [
-            '.sme-input-wrap {',
-            '  display: block;',
-            '  margin: 4px 0;',
-            '}',
-            '.sme-mq-container {',
-            '  border: 1px solid #ced4da;',
-            '  border-radius: 0 0 4px 4px;',
-            '  background: #fff;',
-            '  padding: 4px 6px;',
-            '  cursor: text;',
-            '}',
-            '.sme-mq-container:focus-within {',
-            '  border-color: #86b7fe;',
-            '  box-shadow: 0 0 0 0.2rem',
-            '    rgba(13,110,253,.15);',
-            '}'
-        ].join('\n');
-        document.head.appendChild(style);
-    }
-
-    /**
      * Build selector for supported types.
      *
      * @returns {string} Selector.
@@ -140,6 +110,12 @@ define([
                 + '" -> LaTeX="' + latex + '"');
         } catch (e) {
             dbg('Pre-fill error: ' + e.message);
+            try {
+                mqField.latex(maxima);
+                dbg('Pre-fill fallback with raw value: "' + maxima + '"');
+            } catch (fallbackError) {
+                dbg('Pre-fill fallback error: ' + fallbackError.message);
+            }
         }
     }
 
@@ -228,11 +204,35 @@ define([
         });
         $input.attr('data-sme-init', '1');
 
+        // Read the initial Maxima value from the HTML attribute (defaultValue)
+        // rather than the JS .value property.
+        //
+        // WHY: STACK or Moodle JS can clear input.value before our AMD module
+        // initialises (e.g. during STACK's own input validation setup). The
+        // .defaultValue property always holds the value="" attribute written by
+        // PHP, and is immune to JS manipulation unless form.reset() is called.
+        // We fall back to .val() for dynamically created inputs where PHP never
+        // set a value attribute but JS may have set the property.
+        var initialMaxima = $input[0].defaultValue || $input.val();
+
+        // Suppress syncToInput while we are writing the initial content into
+        // the MathField. Without this flag, mqField.latex(latex) triggers the
+        // edit handler synchronously; that handler reads mqField.latex() before
+        // MathQuill has committed the new content, gets "", and overwrites
+        // $input — leaving the visible field blank on review pages.
+        //
+        // We set prefilling=true BEFORE MathField() is constructed so that
+        // any creation-time edit event from MathQuill is also suppressed.
+        var prefilling = (initialMaxima && initialMaxima.trim()) ? true : false;
+
         // Create MathQuill.
         mqField = ctx.MQ.MathField($mqSpan[0], {
             spaceBehavesLikeTab: true,
             handlers: {
                 edit: function() {
+                    if (prefilling) {
+                        return;
+                    }
                     syncToInput(
                         mqField, $input,
                         convOpts, ctx.dbg);
@@ -243,9 +243,51 @@ define([
         // Typeset toolbar (delayed for MathJax).
         toolbar.typeset($tb);
 
-        // Pre-fill.
-        prefill(mqField, $input.val(),
-            ctx.defs, varMode, ctx.dbg);
+        // Pre-fill: two nested setTimeout(0) calls are used intentionally.
+        //
+        // Outer setTimeout(0): lets MathQuill finish building its internal DOM
+        //   after MathField() returns, before we write LaTeX into it.
+        //
+        // Inner setTimeout(0): clears the prefilling flag only AFTER all
+        //   synchronous and microtask-queued MathQuill edit events from the
+        //   latex() setter have fired and been suppressed. If we cleared the
+        //   flag synchronously inside the outer callback, a MathQuill-internal
+        //   deferred edit event could still fire with an empty value afterwards.
+        //
+        // After both ticks, we restore $input.val(initialMaxima) directly —
+        // this is more reliable than calling syncToInput(), which round-trips
+        // through tex2max and could produce a slightly different Maxima string.
+        if (initialMaxima && initialMaxima.trim()) {
+            setTimeout(function() {
+                // Write the pre-filled LaTeX into the MathQuill field.
+                prefill(mqField, initialMaxima,
+                    ctx.defs, varMode, ctx.dbg);
+                // Immediately restore the known-good Maxima value into the
+                // hidden input. This is more reliable than calling syncToInput()
+                // which would round-trip through tex2max and might produce a
+                // slightly different Maxima string.
+                $input.val(initialMaxima);
+                // Release the prefilling guard after one more tick so that any
+                // async MathQuill edit events triggered by the latex() call above
+                // (which MathQuill can fire on a deferred internal setTimeout) are
+                // still suppressed before normal user-edit handling resumes.
+                setTimeout(function() {
+                    prefilling = false;
+                    // Final consistency check: if MathQuill is still empty at
+                    // this point (e.g. latex() silently failed), try once more.
+                    if (initialMaxima && !mqField.latex().trim()) {
+                        ctx.dbg('Pre-fill retry for: ' + initialMaxima);
+                        prefilling = true;
+                        prefill(mqField, initialMaxima,
+                            ctx.defs, varMode, ctx.dbg);
+                        $input.val(initialMaxima);
+                        setTimeout(function() {
+                            prefilling = false;
+                        }, 0);
+                    }
+                }, 0);
+            }, 0);
+        }
     }
 
     return /** @alias module:local_stackmatheditor/input_fields */ {
@@ -256,7 +298,6 @@ define([
          * @param {Object} ctx Shared context.
          */
         init: function(ctx) {
-            ensureStyles();
             var $inputs = $(selector());
             if (!$inputs.length) {
                 ctx.dbg(
