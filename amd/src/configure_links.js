@@ -16,10 +16,16 @@
 define(['jquery'], function($) {
     'use strict';
 
-    var DEBUG = true;
-
+    /**
+     * Write a developer-level debug message to the browser console.
+     *
+     * Only active when Moodle developer debug mode is enabled
+     * (M.cfg.developerdebug is truthy). Silent on production sites.
+     *
+     * @param {string} msg Message to log.
+     */
     function dbg(msg) {
-        if (DEBUG) {
+        if (window.M && window.M.cfg && window.M.cfg.developerdebug) {
             window.console.log('[SME-links] ' + msg);
         }
     }
