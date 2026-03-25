@@ -110,6 +110,12 @@ define([
                 + '" -> LaTeX="' + latex + '"');
         } catch (e) {
             dbg('Pre-fill error: ' + e.message);
+            try {
+                mqField.latex(maxima);
+                dbg('Pre-fill fallback with raw value: "' + maxima + '"');
+            } catch (fallbackError) {
+                dbg('Pre-fill fallback error: ' + fallbackError.message);
+            }
         }
     }
 

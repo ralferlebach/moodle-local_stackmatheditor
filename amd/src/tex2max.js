@@ -17,6 +17,8 @@ define([], function() {
      * Known unit abbreviations.
      * Sorted by length descending so longer matches are checked first.
      *
+     * Fallback list; runtime defs.units take precedence when available.
+     *
      * @type {string[]}
      */
     var UNITS = [
@@ -46,19 +48,39 @@ define([], function() {
     ];
 
     /**
-     * Check whether a string is a known measurement unit.
+     * Build a fast lookup set from a string array.
      *
-     * @param {string} str The string to check.
-     * @returns {boolean} True if it matches a known unit exactly.
+     * @param {string[]} list Source list.
+     * @returns {Object} Set-like object.
      */
-    function isUnit(str) {
+    function buildWordSet(list) {
+        var set = Object.create(null);
         var i;
-        for (i = 0; i < UNITS.length; i++) {
-            if (str === UNITS[i]) {
-                return true;
+        var item;
+
+        list = list || [];
+        for (i = 0; i < list.length; i++) {
+            item = list[i];
+            if (typeof item === 'string' && item) {
+                set[item] = true;
             }
         }
-        return false;
+        return set;
+    }
+
+    /**
+     * Return unit lookup set.
+     *
+     * Prefers defs.units from PHP runtime config; falls back to hardcoded list.
+     *
+     * @param {Object} defs Runtime definitions.
+     * @returns {Object} Set-like object of known units.
+     */
+    function getUnitSet(defs) {
+        if (defs && defs.units && defs.units.length) {
+            return buildWordSet(defs.units);
+        }
+        return buildWordSet(UNITS);
     }
 
     /**
@@ -96,54 +118,267 @@ define([], function() {
     }
 
     /**
+     * Tokenize an already mostly-converted Maxima string for implicit
+     * multiplication processing.
+     *
+     * Token types:
+     * - number
+     * - ident
+     * - open
+     * - close
+     * - comma
+     * - other
+     *
+     * @param {string} s Input string.
+     * @returns {Object[]} Token list.
+     */
+    function tokenizeForImplicitMultiplication(s) {
+        var tokens = [];
+        var i = 0;
+        var ch;
+        var rest;
+        var m;
+
+        while (i < s.length) {
+            ch = s.charAt(i);
+
+            if (/\s/.test(ch)) {
+                i++;
+                continue;
+            }
+
+            rest = s.substring(i);
+
+            // Number, supporting decimal dot or comma.
+            m = rest.match(/^\d+(?:[.,]\d+)?/);
+            if (m) {
+                tokens.push({
+                    type: 'number',
+                    value: m[0]
+                });
+                i += m[0].length;
+                continue;
+            }
+
+            // Percent-prefixed constant/identifier, e.g. %pi.
+            m = rest.match(/^%[a-zA-Z]+/);
+            if (m) {
+                tokens.push({
+                    type: 'ident',
+                    value: m[0]
+                });
+                i += m[0].length;
+                continue;
+            }
+
+            // Identifier, possibly with a simple suffix subscript.
+            m = rest.match(/^[a-zA-Z]+(?:_[a-zA-Z0-9]+)?/);
+            if (m) {
+                tokens.push({
+                    type: 'ident',
+                    value: m[0]
+                });
+                i += m[0].length;
+                continue;
+            }
+
+            if (ch === '(') {
+                tokens.push({type: 'open', value: ch});
+                i++;
+                continue;
+            }
+            if (ch === ')') {
+                tokens.push({type: 'close', value: ch});
+                i++;
+                continue;
+            }
+            if (ch === ',') {
+                tokens.push({type: 'comma', value: ch});
+                i++;
+                continue;
+            }
+
+            tokens.push({type: 'other', value: ch});
+            i++;
+        }
+
+        return tokens;
+    }
+
+    /**
+     * Expand identifier tokens according to variable mode.
+     *
+     * - multi: "ab" stays "ab"
+     * - single: "ab" becomes "a", "b"
+     *
+     * Protected names are NOT split:
+     * - Greek names (lambda, phi, ...)
+     * - known functions/constants/reserved words/units
+     * - percent constants like %pi
+     * - identifiers with subscript suffixes
+     *
+     * @param {Object[]} tokens Token list.
+     * @param {Object} options Conversion options.
+     * @returns {Object[]} Expanded token list.
+     */
+    function expandIdentifiers(tokens, options) {
+        var opts = options || {};
+        var defs = opts.defs || {};
+        var mode = opts.variableMode || 'single';
+        var protectedWords = Object.create(null);
+        var out = [];
+        var i;
+        var tok;
+        var value;
+        var parts;
+        var sets = [
+            buildWordSet(defs.functionNames || defs.functions || []),
+            buildWordSet(defs.constants || []),
+            buildWordSet(defs.greek || []),
+            buildWordSet(defs.reservedWords || []),
+            getUnitSet(defs),
+            buildWordSet(defs.percentConstants || [])
+        ];
+        var si;
+        var keys;
+        var ki;
+
+        for (si = 0; si < sets.length; si++) {
+            keys = Object.keys(sets[si]);
+            for (ki = 0; ki < keys.length; ki++) {
+                protectedWords[keys[ki]] = true;
+            }
+        }
+
+        for (i = 0; i < tokens.length; i++) {
+            tok = tokens[i];
+
+            if (tok.type !== 'ident') {
+                out.push(tok);
+                continue;
+            }
+
+            value = tok.value;
+
+            if (mode !== 'single') {
+                out.push(tok);
+                continue;
+            }
+
+            if (protectedWords[value]
+                || value.charAt(0) === '%'
+                || value.indexOf('_') !== -1
+                || !/^[a-zA-Z]+$/.test(value)) {
+                out.push(tok);
+                continue;
+            }
+
+            parts = value.split('');
+            parts.forEach(function(part) {
+                out.push({
+                    type: 'ident',
+                    value: part
+                });
+            });
+        }
+
+        return out;
+    }
+
+    /**
+     * Decide whether a multiplication sign must be inserted between tokens.
+     *
+     * @param {Object|null} prev Previous token.
+     * @param {Object|null} curr Current token.
+     * @param {Object} options Conversion options.
+     * @returns {boolean} True if "*" should be inserted.
+     */
+    function needsImplicitMultiplication(prev, curr, options) {
+        var opts = options || {};
+        var defs = opts.defs || {};
+        var functionNames = buildWordSet(
+            defs.functionNames || defs.functions || []
+        );
+        var unitSet = getUnitSet(defs);
+
+        if (!prev || !curr) {
+            return false;
+        }
+        if (prev.type === 'other' || curr.type === 'other') {
+            return false;
+        }
+        if (prev.type === 'comma' || curr.type === 'comma') {
+            return false;
+        }
+        if (prev.type === 'open' || curr.type === 'close') {
+            return false;
+        }
+
+        // 2x -> 2*x, but keep known units together: 2m -> 2m
+        if (prev.type === 'number' && curr.type === 'ident') {
+            return !unitSet[curr.value];
+        }
+
+        // 2(x+1) -> 2*(x+1)
+        if (prev.type === 'number' && curr.type === 'open') {
+            return true;
+        }
+
+        // ab -> a*b (only after identifier expansion in single mode)
+        if (prev.type === 'ident' && curr.type === 'ident') {
+            return true;
+        }
+
+        // x(y+1) -> x*(y+1), but sin(x) stays sin(x)
+        if (prev.type === 'ident' && curr.type === 'open') {
+            return !functionNames[prev.value];
+        }
+
+        // (a+b)c -> (a+b)*c, (a+b)2 -> (a+b)*2, (a+b)(c+d) -> ...
+        if (prev.type === 'close'
+            && (curr.type === 'ident'
+                || curr.type === 'number'
+                || curr.type === 'open')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Insert implicit multiplication where mathematically expected.
      *
      * Rules:
-     * - digit followed by letter: 2x → 2*x (unless letters form a known unit)
-     * - digit followed by (: 2( → 2*(
-     * - ) followed by (: )( → )*(
-     * - ) followed by letter: )x → )*x
-     * - ) followed by digit: )2 → )*2
-     * - %pi/%e followed by variable/paren: %pi x → %pi*x
+     * - digit followed by variable: 2x -> 2*x
+     * - digit followed by (: 2( -> 2*(
+     * - ) followed by (: )( -> )*(
+     * - ) followed by letter: )x -> )*x
+     * - ) followed by digit: )2 -> )*2
+     * - %pi/%e followed by variable/paren: %pi x -> %pi*x
+     *
+     * In variableMode "single", multi-letter identifiers are split unless they
+     * are protected names like units, greek names, functions, constants, etc.
      *
      * @param {string} s Input string (already in Maxima notation).
+     * @param {Object} [options] Conversion options.
      * @returns {string} String with explicit multiplication signs inserted.
      */
-    function insertImplicitMultiplication(s) {
-        // 1. ) followed by ( → )*(
-        s = s.replace(/\)\s*\(/g, ')*(');
+    function insertImplicitMultiplication(s, options) {
+        var tokens = tokenizeForImplicitMultiplication(s);
+        var out = '';
+        var i;
 
-        // 2. ) followed by letter → )*letter
-        s = s.replace(/\)\s*([a-zA-Z%])/g, ')*$1');
+        tokens = expandIdentifiers(tokens, options || {});
 
-        // 3. ) followed by digit → )*digit
-        s = s.replace(/\)\s*(\d)/g, ')*$1');
-
-        // 4. digit followed by ( → digit*(
-        s = s.replace(/(\d)\s*\(/g, '$1*(');
-
-        // 5. digit followed by letter(s) → digit*letters (with units exception).
-        s = s.replace(/(\d)\s*([a-zA-Z]+)/g, function(match, digit, letters) {
-            // Remove any whitespace in the match.
-            var clean = digit + letters;
-            if (isUnit(letters)) {
-                // Known unit: keep together without *.
-                return clean;
+        for (i = 0; i < tokens.length; i++) {
+            if (i > 0 &&
+                needsImplicitMultiplication(tokens[i - 1], tokens[i], options || {})) {
+                out += '*';
             }
-            // Not a unit: insert *.
-            return digit + '*' + letters;
-        });
+            out += tokens[i].value;
+        }
 
-        // 6. Constants followed by variable/digit/paren: %pi x → %pi*x
-        s = s.replace(/(%pi|%e)(\s*)([a-zA-Z0-9(])/g, function(match, constant, space, next) {
-            // Don't double up on *.
-            if (next === '*') {
-                return match;
-            }
-            return constant + '*' + next;
-        });
-
-        return s;
+        return out;
     }
 
     /**
@@ -152,11 +387,15 @@ define([], function() {
      * @param {string} latex LaTeX string from MathQuill.
      * @param {Object} [options] Conversion options.
      * @param {boolean} [options.commaDecimal=false] Treat commas as decimal separators.
+     * @param {Object} [options.defs={}] Runtime definitions.
+     * @param {string} [options.variableMode='single'] Variable mode.
      * @returns {string} Maxima expression.
      */
     function convert(latex, options) {
         var opts = options || {};
         var commaDecimal = opts.commaDecimal || false;
+        var defs = opts.defs || {};
+        var variableMode = opts.variableMode || 'single';
         var s = latex;
         var maxIter = 20;
 
@@ -353,8 +592,13 @@ define([], function() {
             s = replaceDecimalCommas(s);
         }
 
-        // Implicit multiplication: 2x -> 2*x.
-        s = insertImplicitMultiplication(s);
+        // Implicit multiplication.
+        // single mode: 2ab -> 2*a*b
+        // multi mode:  2ab -> 2*ab
+        s = insertImplicitMultiplication(s, {
+            defs: defs,
+            variableMode: variableMode
+        });
 
         // Final cleanup.
         s = s.replace(/\s+/g, ' ').trim();
