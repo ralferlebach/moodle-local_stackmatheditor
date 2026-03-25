@@ -8,6 +8,9 @@ use local_stackmatheditor\definitions;
 /**
  * Injects element definitions JSON into the page.
  *
+ * Creates the #sme-definitions JSON script element consumed by
+ * the mathquill_init AMD module.
+ *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -15,29 +18,14 @@ use local_stackmatheditor\definitions;
 class mathjax_injector {
 
     /**
-     * Inject definitions JSON into page via AMD inline.
-     * Creates the #sme-definitions script element.
+     * Inject toolbar element definitions as a JSON script element (#sme-definitions).
      *
      * @return void
      */
     public static function inject(): void {
-        global $PAGE;
-
-        $defsdata = definitions::export_for_js();
-        $defsjson = json_encode(
-            $defsdata,
-            JSON_UNESCAPED_UNICODE | JSON_HEX_TAG
+        page_helper::inject_json_element(
+            'sme-definitions',
+            definitions::export_for_js()
         );
-
-        $PAGE->requires->js_amd_inline("
-            (function() {
-                var el = document.createElement('script');
-                el.type = 'application/json';
-                el.id = 'sme-definitions';
-                el.textContent = "
-            . json_encode($defsjson) . ";
-                document.body.appendChild(el);
-            })();
-        ");
     }
 }

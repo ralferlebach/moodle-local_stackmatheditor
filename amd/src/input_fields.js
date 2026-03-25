@@ -18,36 +18,6 @@ define([
     var TYPES = ['algebraic', 'units'];
 
     /**
-     * Inject minimal container styles.
-     */
-    function ensureStyles() {
-        if (document.getElementById('sme-input-styles')) {
-            return;
-        }
-        var style = document.createElement('style');
-        style.id = 'sme-input-styles';
-        style.textContent = [
-            '.sme-input-wrap {',
-            '  display: block;',
-            '  margin: 4px 0;',
-            '}',
-            '.sme-mq-container {',
-            '  border: 1px solid #ced4da;',
-            '  border-radius: 0 0 4px 4px;',
-            '  background: #fff;',
-            '  padding: 4px 6px;',
-            '  cursor: text;',
-            '}',
-            '.sme-mq-container:focus-within {',
-            '  border-color: #86b7fe;',
-            '  box-shadow: 0 0 0 0.2rem',
-            '    rgba(13,110,253,.15);',
-            '}'
-        ].join('\n');
-        document.head.appendChild(style);
-    }
-
-    /**
      * Build selector for supported types.
      *
      * @returns {string} Selector.
@@ -228,11 +198,26 @@ define([
         });
         $input.attr('data-sme-init', '1');
 
+        // Capture the current value BEFORE creating MathField.
+        // Reading $input.val() after MathField() risks picking up an empty
+        // string if MathQuill's edit handler fires and clears it first.
+        var initialMaxima = $input.val();
+
+        // Flag that suppresses syncToInput during the initial pre-fill.
+        // Without this, calling mqField.latex(latex) inside prefill triggers
+        // the edit handler, which reads mqField.latex() before MathQuill has
+        // committed the new content, gets an empty string, and overwrites
+        // $input with that empty string — leaving the field blank.
+        var prefilling = false;
+
         // Create MathQuill.
         mqField = ctx.MQ.MathField($mqSpan[0], {
             spaceBehavesLikeTab: true,
             handlers: {
                 edit: function() {
+                    if (prefilling) {
+                        return;
+                    }
                     syncToInput(
                         mqField, $input,
                         convOpts, ctx.dbg);
@@ -243,9 +228,18 @@ define([
         // Typeset toolbar (delayed for MathJax).
         toolbar.typeset($tb);
 
-        // Pre-fill.
-        prefill(mqField, $input.val(),
-            ctx.defs, varMode, ctx.dbg);
+        // Pre-fill after one event-loop tick so MathQuill has finished
+        // building its internal DOM before we write content into it.
+        if (initialMaxima && initialMaxima.trim()) {
+            setTimeout(function() {
+                prefilling = true;
+                prefill(mqField, initialMaxima,
+                    ctx.defs, varMode, ctx.dbg);
+                prefilling = false;
+                // One explicit sync so $input reflects the pre-filled state.
+                syncToInput(mqField, $input, convOpts, ctx.dbg);
+            }, 0);
+        }
     }
 
     return /** @alias module:local_stackmatheditor/input_fields */ {
@@ -256,7 +250,6 @@ define([
          * @param {Object} ctx Shared context.
          */
         init: function(ctx) {
-            ensureStyles();
             var $inputs = $(selector());
             if (!$inputs.length) {
                 ctx.dbg(

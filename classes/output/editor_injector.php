@@ -6,6 +6,9 @@ defined('MOODLE_INTERNAL') || die();
 use local_stackmatheditor\config_manager;
 use local_stackmatheditor\quiz_helper;
 
+// Shared page output utilities.
+use local_stackmatheditor\output\page_helper;
+
 /**
  * Injects MathQuill editor runtime data.
  *
@@ -61,23 +64,12 @@ class editor_injector {
         );
 
         // Runtime JSON element.
-        $runtimedata = json_encode([
+        page_helper::inject_json_element('sme-runtime', [
             'slotConfigs'      => !empty($slotconfigs)  ? $slotconfigs  : new \stdClass(),
             'slotVarModes'     => !empty($slotvarmodes) ? $slotvarmodes : new \stdClass(),
             'slotEnabled'      => !empty($slotenabled)  ? $slotenabled  : new \stdClass(),
             'instanceDefaults' => config_manager::get_instance_defaults(),
-        ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
-
-        $PAGE->requires->js_amd_inline("
-            (function() {
-                var el = document.createElement('script');
-                el.type = 'application/json';
-                el.id = 'sme-runtime';
-                el.textContent = "
-            . json_encode($runtimedata) . ";
-                document.body.appendChild(el);
-            })();
-        ");
+        ]);
     }
 
     /**
