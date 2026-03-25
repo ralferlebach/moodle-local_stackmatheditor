@@ -1,9 +1,32 @@
 <?php
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * English language strings for local_stackmatheditor.
+ *
+ * @package    local_stackmatheditor
+ * @copyright  2026 Ralf Erlebach
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
 defined('MOODLE_INTERNAL') || die();
 
 $string['pluginname'] = 'STACK MathQuill Editor';
 
-// ── Settings (instance level) ─────────────────────────────────────────────────
+// ── Admin settings (instance level) ──────────────────────────────────────────
 $string['setting_enabled']      = 'Plugin activation (instance-wide)';
 $string['setting_enabled_desc'] = 'Controls how the visual math editor is enabled across the instance.';
 $string['enabled_mode_0'] = 'Completely disabled (no override at quiz or question level)';
@@ -12,7 +35,7 @@ $string['enabled_mode_2'] = 'Off by default – can be enabled per quiz or quest
 $string['enabled_mode_3'] = 'On by default – can be disabled per quiz or question';
 
 $string['setting_variablemode']      = 'Variable mode (default)';
-$string['setting_variablemode_desc'] = 'Determines how consecutive letters are interpreted. "Single character": ab = a×b. "Multi-character": ab = variable named ab.';
+$string['setting_variablemode_desc'] = 'Determines how consecutive letters are interpreted. "Single character": ab = a×b. "Multi-character": ab = a variable named ab.';
 $string['variablemode_single'] = 'Single-character variables (ab → a·b)';
 $string['variablemode_multi']  = 'Multi-character variables (ab → ab)';
 
@@ -20,7 +43,7 @@ $string['setting_defaultgroups']      = 'Default toolbar groups';
 $string['setting_defaultgroups_desc'] = 'Select the toolbar groups enabled by default. Hold Ctrl/Cmd for multi-select. Can be overridden per quiz or question.';
 $string['setting_defaultgroups_help'] = 'Select which toolbar element groups are available in the MathQuill editor. Hold Ctrl (Cmd on Mac) to select multiple groups.';
 
-// ── Configure – question level ────────────────────────────────────────────────
+// ── Configure page – question level ──────────────────────────────────────────
 $string['configure']         = 'Configure MathQuill toolbar';
 $string['configure_heading'] = 'MathQuill toolbar for: {$a}';
 $string['configure_editor']  = 'Configure editor';
@@ -33,34 +56,53 @@ $string['questionpreview']   = 'Question preview';
 $string['notstackquestion']  = 'This question is not a STACK question.';
 $string['cannotresolveqbeid'] = 'The question bank entry could not be resolved.';
 
-// ── Configure – quiz level (NEW) ──────────────────────────────────────────────
+// ── Configure page – quiz level ───────────────────────────────────────────────
 $string['configure_quiz']         = 'MathQuill default settings for this quiz';
 $string['configure_quiz_heading'] = 'MathQuill default settings for quiz: {$a}';
 $string['configure_quiz_nav']     = 'Set up STACK MathQuill Editor';
-$string['configure_quiz_note']    = 'These settings act as defaults for all STACK questions in this quiz. They can be overridden per individual question.';
+$string['configure_quiz_note']    = 'These settings apply as defaults to all STACK questions in this quiz. They can be overridden for individual questions.';
 
-// ── Enabled toggle in configure.php (mode 2 or 3 only) ───────────────────────
-$string['configure_enabled_header'] = 'Plugin activation';
-$string['configure_enabled_label']  = 'Enable MathQuill editor';
-$string['configure_enabled_desc']   = 'Enable or disable the editor for this quiz or question. Overrides the parent-level setting.';
-$string['configure_enabled_label_help'] = 'If the parent-level default is "enabled", you can disable the editor here for this quiz or question — and vice versa.';
+// ── Enabled toggle in configure.php ──────────────────────────────────────────
+$string['configure_enabled_header']              = 'Plugin activation';
+$string['configure_enabled_label']               = 'Enable MathQuill editor';
+$string['configure_enabled_desc']                = 'Enable or disable the editor for this quiz or question. Overrides the parent-level setting.';
+$string['configure_enabled_label_help']          = 'If the parent-level default is "enabled", you can disable the editor here for this quiz or question — and vice versa.';
+$string['configure_enabled_checkboxlabel_quiz']     = 'Enable MathQuill editor for this quiz';
+$string['configure_enabled_checkboxlabel_question'] = 'Enable MathQuill editor for this question';
+$string['configure_enabled_locked_on']           = 'Globally enabled – this setting cannot be overridden here.';
+$string['configure_enabled_locked_off']          = 'Globally disabled – this setting cannot be overridden here.';
+$string['configure_enabled_parenthint_on']       = 'Parent default: enabled. The checkbox disables the editor for this quiz / question only.';
+$string['configure_enabled_parenthint_off']      = 'Parent default: disabled. The checkbox enables the editor for this quiz / question.';
 
-// ── Toolbar groups ─────────────────────────────────────────────────────────────
-$string['group_fractions']    = 'Fractions';
-$string['group_powers']       = 'Powers';
-$string['group_roots']        = 'Roots';
-$string['group_trigonometry'] = 'Trigonometry';
-$string['group_hyperbolic']   = 'Hyperbolic functions';
-$string['group_logarithms']   = 'Logarithms';
-$string['group_constants']    = 'Constants';
-$string['group_comparison']   = 'Comparison operators';
-$string['group_parentheses']  = 'Parentheses';
-$string['group_calculus']     = 'Calculus';
-$string['group_greek_lower']  = 'Greek, lowercase';
-$string['group_greek_upper']  = 'Greek, uppercase';
-$string['group_matrices']     = 'Matrices';
+// ── Toolbar group names ───────────────────────────────────────────────────────
+$string['group_basic_operators']         = 'Basic arithmetic';
+$string['group_power_root']              = 'Powers and roots';
+$string['group_exponential_log']         = 'Exponential / logarithm';
+$string['group_comparators']             = 'Comparison operators';
+$string['group_absolute']                = 'Absolute value';
+$string['group_set_theory']              = 'Set theory';
+$string['group_logic']                   = 'Logic';
+$string['group_brackets']                = 'Brackets';
+$string['group_constants_math']          = 'Mathematical constants';
+$string['group_constants_nature']        = 'Physical constants';
+$string['group_geometry']                = 'Geometry';
+$string['group_trigonometry']            = 'Trigonometry';
+$string['group_hyperbolic']              = 'Hyperbolic functions';
+$string['group_analysis_operators']      = 'Calculus operators';
+$string['group_vector_operators']        = 'Vectors';
+$string['group_differential_operators']  = 'Differential calculus';
+$string['group_vector_differential']     = 'Vector differential';
+$string['group_matrix_operators']        = 'Matrices';
+$string['group_integral_operators']      = 'Integral calculus';
+$string['group_statistical_operators']   = 'Statistics';
+$string['group_greek_lower']             = 'Greek letters (lowercase)';
+$string['group_greek_upper']             = 'Greek letters (uppercase)';
 
-// ── Units (unchanged) ─────────────────────────────────────────────────────────
+// ── Button tooltips containing natural language ───────────────────────────────
+$string['btn_logical_and'] = '∧ (and)';
+$string['btn_logical_or']  = '∨ (or)';
+
+// ── Unit strings ──────────────────────────────────────────────────────────────
 $string['unit_hz']        = 'Hertz (frequency)';
 $string['unit_khz']       = 'Kilohertz (frequency)';
 $string['unit_mhz']       = 'Megahertz (frequency)';
@@ -111,22 +153,12 @@ $string['unit_hr']        = 'Hour (time)';
 $string['unit_l']         = 'Litre (volume)';
 $string['unit_ml']        = 'Millilitre (volume)';
 $string['unit_dl']        = 'Decilitre (volume)';
-$string['unit_mol']       = 'Mole (amount)';
+$string['unit_mol']       = 'Mole (amount of substance)';
 $string['unit_k']         = 'Kelvin (temperature)';
 
-// ── Privacy ────────────────────────────────────────────────────────────────────
+// ── Privacy ───────────────────────────────────────────────────────────────────
 $string['privacy:metadata:local_stackmatheditor']     = 'Stores toolbar configuration per quiz and question (or as a quiz default when questionbankentryid is NULL).';
 $string['privacy:metadata:cmid']                      = 'The course module ID of the quiz.';
 $string['privacy:metadata:questionbankentryid']       = 'The question bank entry ID (version-independent); NULL = quiz-level default.';
 $string['privacy:metadata:allowed_elements']          = 'JSON toolbar configuration including _enabled and _variableMode flags.';
 $string['privacy:metadata:usermodified']              = 'The person who last modified the configuration.';
-
-// ── Enabled toggle – new strings ─────────────────────────────────────────────
-// replaced
-$string['configure_enabled_locked_on']      = 'Globally enabled – this setting cannot be overridden here.';
-$string['configure_enabled_locked_off']     = 'Globally disabled – this setting cannot be overridden here.';
-$string['configure_enabled_parenthint_on']  = 'Parent default: enabled. The checkbox disables the editor for this quiz / question only.';
-$string['configure_enabled_parenthint_off'] = 'Parent default: disabled. The checkbox enables the editor for this quiz / question.';
-
-$string['configure_enabled_checkboxlabel_quiz']     = 'Enable MathQuill editor for this quiz';
-$string['configure_enabled_checkboxlabel_question'] = 'Enable MathQuill editor for this question';
