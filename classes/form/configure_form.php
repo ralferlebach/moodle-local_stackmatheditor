@@ -153,12 +153,18 @@ class configure_form extends \moodleform {
             : get_string('label_variablemode',      'local_stackmatheditor');
 
         $mform->addElement('select', 'variablemode', $varmodelabel, [
-            definitions::VAR_SINGLE =>
-                get_string('variablemode_single', 'local_stackmatheditor'),
-            definitions::VAR_MULTI  =>
-                get_string('variablemode_multi',  'local_stackmatheditor'),
+            definitions::IMPLICIT_EXPLICIT_SINGLE =>
+                get_string('implicitmode_explicit_single', 'local_stackmatheditor'),
+            definitions::IMPLICIT_EXPLICIT_MULTI  =>
+                get_string('implicitmode_explicit_multi', 'local_stackmatheditor'),
+            definitions::IMPLICIT_SPACE_SINGLE    =>
+                get_string('implicitmode_space_single', 'local_stackmatheditor'),
+            definitions::IMPLICIT_SPACE_MULTI     =>
+                get_string('implicitmode_space_multi', 'local_stackmatheditor'),
+            definitions::IMPLICIT_STACK           =>
+                get_string('implicitmode_stack', 'local_stackmatheditor'),
         ]);
-        $mform->setDefault('variablemode', definitions::VAR_SINGLE);
+        $mform->setDefault('variablemode', definitions::IMPLICIT_STACK);
 
         // ── Buttons ───────────────────────────────────────────────────
         $buttons   = [];

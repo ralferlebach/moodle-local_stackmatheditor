@@ -66,17 +66,29 @@ class config_manager {
         return definitions::get_default_enabled();
     }
 
+
     /**
-     * Returns instance-wide variable mode.
+     * Returns the full instance-level base config used for inheritance.
      *
-     * @return string 'single' or 'multi'.
+     * This includes the toolbar defaults plus non-toolbar keys that must also
+     * inherit cleanly across instance → quiz → question levels.
+     *
+     * @return array
+     */
+    public static function get_instance_base_config(): array {
+        $config = self::get_instance_defaults();
+        $config['_variableMode'] = self::get_instance_variable_mode();
+        return $config;
+    }
+
+    /**
+     * Returns instance-wide implicit multiplication mode.
+     *
+     * @return string Normalised implicit multiplication mode.
      */
     public static function get_instance_variable_mode(): string {
         $mode = get_config('local_stackmatheditor', 'variablemode');
-        if ($mode === definitions::VAR_MULTI) {
-            return definitions::VAR_MULTI;
-        }
-        return definitions::VAR_SINGLE;
+        return definitions::normalise_implicit_mode((string) $mode);
     }
 
     /**
@@ -190,13 +202,17 @@ class config_manager {
     // ------------------------------------------------------------------
 
     /**
-     * Decode a config JSON string and merge with defaults.
+     * Decode a raw config JSON string.
+     *
+     * IMPORTANT: do not merge defaults here. Effective inheritance must be
+     * resolved across instance → quiz → question by layering partial records.
+     * Merging defaults at this stage would make an early match shadow higher
+     * and lower precedence sources for keys it does not even contain.
      *
      * @param string|null $json
-     * @param array       $defaults
      * @return array|null
      */
-    private static function decode_config(?string $json, array $defaults): ?array {
+    private static function decode_raw_config(?string $json): ?array {
         if (empty($json)) {
             return null;
         }
@@ -204,7 +220,21 @@ class config_manager {
         if (!is_array($decoded)) {
             return null;
         }
-        return array_merge($defaults, $decoded);
+        return $decoded;
+    }
+
+    /**
+     * Merge a raw config layer into an effective config.
+     *
+     * @param array $base
+     * @param array|null $layer
+     * @return array
+     */
+    private static function merge_config_layer(array $base, ?array $layer): array {
+        if ($layer === null) {
+            return $base;
+        }
+        return array_merge($base, $layer);
     }
 
     // ------------------------------------------------------------------
@@ -229,70 +259,15 @@ class config_manager {
      */
     public static function get_config(int $cmid, int $qbeid = 0,
                                       int $questionid = 0): array {
-        $col      = self::get_config_column();
-        $defaults = self::get_instance_defaults();
+        global $DB;
+
+        $col    = self::get_config_column();
+        $result = self::get_instance_base_config();
 
         $qbeid = self::ensure_qbeid($qbeid, $questionid) ?? 0;
 
-        // 1. Exact: cmid + qbeid.
-        if ($cmid > 0 && $qbeid > 0) {
-            $rec = self::get_one(
-                "cmid = :cmid AND questionbankentryid = :qbeid",
-                ['cmid' => $cmid, 'qbeid' => $qbeid]
-            );
-            if ($rec) {
-                $result = self::decode_config($rec->$col, $defaults);
-                if ($result !== null) {
-                    return $result;
-                }
-            }
-        }
-
-        // 2. Quiz-level default: cmid + qbeid IS NULL.
-        if ($cmid > 0) {
-            $rec = self::get_one(
-                "cmid = :cmid AND questionbankentryid IS NULL",
-                ['cmid' => $cmid]
-            );
-            if ($rec) {
-                $result = self::decode_config($rec->$col, $defaults);
-                if ($result !== null) {
-                    return $result;
-                }
-            }
-        }
-
-        // 3. Global: cmid=0 + qbeid.
-        if ($qbeid > 0) {
-            $rec = self::get_one(
-                "cmid = 0 AND questionbankentryid = :qbeid",
-                ['qbeid' => $qbeid]
-            );
-            if ($rec) {
-                $result = self::decode_config($rec->$col, $defaults);
-                if ($result !== null) {
-                    return $result;
-                }
-            }
-        }
-
-        // 4. Any record with matching qbeid.
-        if ($qbeid > 0) {
-            $rec = self::get_one(
-                "questionbankentryid = :qbeid",
-                ['qbeid' => $qbeid]
-            );
-            if ($rec) {
-                $result = self::decode_config($rec->$col, $defaults);
-                if ($result !== null) {
-                    return $result;
-                }
-            }
-        }
-
-        // 5. Legacy: questionid field.
+        // Lowest-priority legacy/global fallbacks first.
         if ($questionid > 0) {
-            global $DB;
             $columns = $DB->get_columns(self::TABLE);
             if (isset($columns['questionid'])) {
                 $rec = self::get_one(
@@ -300,15 +275,67 @@ class config_manager {
                     ['qid' => $questionid]
                 );
                 if ($rec) {
-                    $result = self::decode_config($rec->$col, $defaults);
-                    if ($result !== null) {
-                        return $result;
-                    }
+                    $result = self::merge_config_layer(
+                        $result,
+                        self::decode_raw_config($rec->$col)
+                    );
                 }
             }
         }
 
-        return $defaults;
+        if ($qbeid > 0) {
+            $rec = self::get_one(
+                "questionbankentryid = :qbeid",
+                ['qbeid' => $qbeid]
+            );
+            if ($rec) {
+                $result = self::merge_config_layer(
+                    $result,
+                    self::decode_raw_config($rec->$col)
+                );
+            }
+
+            $rec = self::get_one(
+                "cmid = 0 AND questionbankentryid = :qbeid",
+                ['qbeid' => $qbeid]
+            );
+            if ($rec) {
+                $result = self::merge_config_layer(
+                    $result,
+                    self::decode_raw_config($rec->$col)
+                );
+            }
+        }
+
+        // Quiz-level defaults override instance/global fallbacks.
+        if ($cmid > 0) {
+            $rec = self::get_one(
+                "cmid = :cmid AND questionbankentryid IS NULL",
+                ['cmid' => $cmid]
+            );
+            if ($rec) {
+                $result = self::merge_config_layer(
+                    $result,
+                    self::decode_raw_config($rec->$col)
+                );
+            }
+        }
+
+        // Most specific question-level config wins last.
+        if ($cmid > 0 && $qbeid > 0) {
+            $rec = self::get_one(
+                "cmid = :cmid AND questionbankentryid = :qbeid",
+                ['cmid' => $cmid, 'qbeid' => $qbeid]
+            );
+            if ($rec) {
+                $result = self::merge_config_layer(
+                    $result,
+                    self::decode_raw_config($rec->$col)
+                );
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -319,8 +346,7 @@ class config_manager {
      * @return array|null Decoded config or null.
      */
     public static function get_quiz_default(int $cmid): ?array {
-        $col      = self::get_config_column();
-        $defaults = self::get_instance_defaults();
+        $col = self::get_config_column();
 
         $rec = self::get_one(
             "cmid = :cmid AND questionbankentryid IS NULL",
@@ -329,7 +355,11 @@ class config_manager {
         if (!$rec) {
             return null;
         }
-        return self::decode_config($rec->$col, $defaults);
+
+        return self::merge_config_layer(
+            self::get_instance_base_config(),
+            self::decode_raw_config($rec->$col)
+        );
     }
 
     /**
@@ -344,112 +374,104 @@ class config_manager {
                                        array $questionids = []): array {
         global $DB;
         $col      = self::get_config_column();
-        $defaults = self::get_instance_defaults();
         $configs  = [];
+        $base     = self::get_instance_base_config();
+        $columns  = null;
 
         $qbeids = array_values(array_unique(array_filter($qbeids)));
         foreach ($qbeids as $qbeid) {
-            $configs[$qbeid] = $defaults;
+            $configs[$qbeid] = $base;
         }
         if (empty($qbeids)) {
             return $configs;
         }
 
-        // 1. Exact: cmid + qbeids.
-        if ($cmid > 0) {
-            list($insql, $params) = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
-            $params['cmid']       = $cmid;
-            $records              = $DB->get_records_select(
-                self::TABLE,
-                "cmid = :cmid AND questionbankentryid {$insql}",
-                $params
-            );
-            foreach ($records as $rec) {
-                $result = self::decode_config($rec->$col, $defaults);
-                if ($result !== null) {
-                    $configs[$rec->questionbankentryid] = $result;
+        // 1. Legacy questionid layer (lowest fallback).
+        if (!empty($questionids)) {
+            $columns = $DB->get_columns(self::TABLE);
+            if (isset($columns['questionid'])) {
+                foreach ($qbeids as $qbeid) {
+                    if (!isset($questionids[$qbeid])) {
+                        continue;
+                    }
+                    $rec = self::get_one(
+                        "questionid = :qid AND questionid > 0",
+                        ['qid' => $questionids[$qbeid]]
+                    );
+                    if ($rec) {
+                        $configs[$qbeid] = self::merge_config_layer(
+                            $configs[$qbeid],
+                            self::decode_raw_config($rec->$col)
+                        );
+                    }
                 }
             }
         }
 
-        // 2. Quiz-level default for all still-at-instance-default entries.
-        $stilldefault = array_keys(array_filter(
-            $configs,
-            fn($cfg) => $cfg === $defaults
-        ));
-        if (!empty($stilldefault) && $cmid > 0) {
+        // 2. Any qbeid match fallback.
+        list($insql, $params) = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
+        $records = $DB->get_records_select(
+            self::TABLE,
+            "questionbankentryid {$insql}",
+            $params
+        );
+        foreach ($records as $rec) {
+            $qbeid = (int) $rec->questionbankentryid;
+            if (isset($configs[$qbeid])) {
+                $configs[$qbeid] = self::merge_config_layer(
+                    $configs[$qbeid],
+                    self::decode_raw_config($rec->$col)
+                );
+            }
+        }
+
+        // 3. Global question defaults (cmid=0 + qbeid).
+        $params['cmid'] = 0;
+        $records = $DB->get_records_select(
+            self::TABLE,
+            "cmid = :cmid AND questionbankentryid {$insql}",
+            $params
+        );
+        foreach ($records as $rec) {
+            $qbeid = (int) $rec->questionbankentryid;
+            if (isset($configs[$qbeid])) {
+                $configs[$qbeid] = self::merge_config_layer(
+                    $configs[$qbeid],
+                    self::decode_raw_config($rec->$col)
+                );
+            }
+        }
+
+        // 4. Quiz-level default overrides lower layers for all slots.
+        if ($cmid > 0) {
             $quizrec = self::get_one(
                 "cmid = :cmid AND questionbankentryid IS NULL",
                 ['cmid' => $cmid]
             );
             if ($quizrec) {
-                $quizresult = self::decode_config($quizrec->$col, $defaults);
-                if ($quizresult !== null) {
-                    foreach ($stilldefault as $qbeid) {
-                        $configs[$qbeid] = $quizresult;
-                    }
+                $quizlayer = self::decode_raw_config($quizrec->$col);
+                foreach ($configs as $qbeid => $cfg) {
+                    $configs[$qbeid] = self::merge_config_layer($cfg, $quizlayer);
                 }
             }
         }
 
-        // 3. Global fallback: cmid=0 + qbeid.
-        $stilldefault = array_keys(array_filter(
-            $configs,
-            fn($cfg) => $cfg === $defaults
-        ));
-        if (!empty($stilldefault)) {
-            list($insql, $params) = $DB->get_in_or_equal($stilldefault, SQL_PARAMS_NAMED);
-            $params['cmid']       = 0;
-            $records              = $DB->get_records_select(
+        // 5. Exact question-level configs win last.
+        if ($cmid > 0) {
+            list($insql, $params) = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
+            $params['cmid'] = $cmid;
+            $records = $DB->get_records_select(
                 self::TABLE,
                 "cmid = :cmid AND questionbankentryid {$insql}",
                 $params
             );
             foreach ($records as $rec) {
-                $result = self::decode_config($rec->$col, $defaults);
-                if ($result !== null) {
-                    $configs[$rec->questionbankentryid] = $result;
-                }
-            }
-        }
-
-        // 4. Any qbeid match.
-        $stilldefault = array_keys(array_filter(
-            $configs,
-            fn($cfg) => $cfg === $defaults
-        ));
-        if (!empty($stilldefault)) {
-            list($insql, $params) = $DB->get_in_or_equal($stilldefault, SQL_PARAMS_NAMED);
-            $records              = $DB->get_records_select(
-                self::TABLE,
-                "questionbankentryid {$insql}",
-                $params
-            );
-            foreach ($records as $rec) {
-                $result = self::decode_config($rec->$col, $defaults);
-                if ($result !== null && ($configs[$rec->questionbankentryid] ?? null) === $defaults) {
-                    $configs[$rec->questionbankentryid] = $result;
-                }
-            }
-        }
-
-        // 5. Legacy: questionid field.
-        if (!empty($questionids)) {
-            $columns = $DB->get_columns(self::TABLE);
-            if (isset($columns['questionid'])) {
-                foreach ($configs as $qbeid => $cfg) {
-                    if ($cfg === $defaults && isset($questionids[$qbeid])) {
-                        $rec = self::get_one(
-                            "questionid = :qid AND questionid > 0",
-                            ['qid' => $questionids[$qbeid]]
-                        );
-                        if ($rec) {
-                            $result = self::decode_config($rec->$col, $defaults);
-                            if ($result !== null) {
-                                $configs[$qbeid] = $result;
-                            }
-                        }
-                    }
+                $qbeid = (int) $rec->questionbankentryid;
+                if (isset($configs[$qbeid])) {
+                    $configs[$qbeid] = self::merge_config_layer(
+                        $configs[$qbeid],
+                        self::decode_raw_config($rec->$col)
+                    );
                 }
             }
         }

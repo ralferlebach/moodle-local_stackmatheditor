@@ -30,11 +30,51 @@ defined('MOODLE_INTERNAL') || die();
  */
 class definitions {
 
-    /** Single-character variable mode identifier. */
+    /** Legacy single-character variable mode identifier. */
     const VAR_SINGLE = 'single';
 
-    /** Multi-character variable mode identifier. */
+    /** Legacy multi-character variable mode identifier. */
     const VAR_MULTI = 'multi';
+
+    /** Explicit multiplication, assume single-character variables. */
+    const IMPLICIT_EXPLICIT_SINGLE = 'explicit_single';
+
+    /** Explicit multiplication, assume multi-character variables. */
+    const IMPLICIT_EXPLICIT_MULTI = 'explicit_multi';
+
+    /** Space separation, assume single-character variables. */
+    const IMPLICIT_SPACE_SINGLE = 'space_single';
+
+    /** Space separation, assume multi-character variables. */
+    const IMPLICIT_SPACE_MULTI = 'space_multi';
+
+    /** Leave untouched; STACK handles implicit multiplication. */
+    const IMPLICIT_STACK = 'stack';
+
+    /**
+     * Normalise stored implicit multiplication mode values.
+     *
+     * Supports legacy values 'single' and 'multi'.
+     *
+     * @param string $mode Raw mode.
+     * @return string Normalised mode.
+     */
+    public static function normalise_implicit_mode(string $mode): string {
+        switch ($mode) {
+            case self::VAR_SINGLE:
+                return self::IMPLICIT_EXPLICIT_SINGLE;
+            case self::VAR_MULTI:
+                return self::IMPLICIT_EXPLICIT_MULTI;
+            case self::IMPLICIT_EXPLICIT_SINGLE:
+            case self::IMPLICIT_EXPLICIT_MULTI:
+            case self::IMPLICIT_SPACE_SINGLE:
+            case self::IMPLICIT_SPACE_MULTI:
+            case self::IMPLICIT_STACK:
+                return $mode;
+            default:
+                return self::IMPLICIT_STACK;
+        }
+    }
 
     /**
      * Return all element group definitions.

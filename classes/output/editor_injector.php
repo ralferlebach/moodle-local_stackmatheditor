@@ -4,6 +4,7 @@ namespace local_stackmatheditor\output;
 defined('MOODLE_INTERNAL') || die();
 
 use local_stackmatheditor\config_manager;
+use local_stackmatheditor\definitions;
 use local_stackmatheditor\quiz_helper;
 
 // Shared page output utilities.
@@ -156,7 +157,9 @@ class editor_injector {
         $modes   = [];
         $default = config_manager::get_instance_variable_mode();
         foreach ($slotconfigs as $slot => $config) {
-            $modes[$slot] = $config['_variableMode'] ?? $default;
+            $modes[$slot] = definitions::normalise_implicit_mode(
+                (string) ($config['_variableMode'] ?? $default)
+            );
         }
         return $modes;
     }
