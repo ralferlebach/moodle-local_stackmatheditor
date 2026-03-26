@@ -33,7 +33,6 @@ use local_stackmatheditor\definitions;
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class config_manager_test extends advanced_testcase {
-    // Ensure_qbeid().
 
     /**
      * ensure_qbeid with a concrete qbeid returns it unchanged.
@@ -51,7 +50,6 @@ final class config_manager_test extends advanced_testcase {
         $this->assertNull($result);
     }
 
-    // Get_instance_enabled_mode().
 
     /**
      * Test get_instance_enabled_mode() returns the correct integer for each stored value.
@@ -84,7 +82,6 @@ final class config_manager_test extends advanced_testcase {
         ];
     }
 
-    // Get_instance_variable_mode().
 
     /**
      * Variable mode falls back to VAR_SINGLE when unset.
@@ -106,7 +103,6 @@ final class config_manager_test extends advanced_testcase {
         $this->assertSame(definitions::VAR_MULTI, $mode);
     }
 
-    // Get_instance_defaults().
 
     /**
      * Instance defaults contain all group keys as boolean values.
@@ -116,8 +112,11 @@ final class config_manager_test extends advanced_testcase {
         $defaults = config_manager::get_instance_defaults();
         $groups   = definitions::get_element_groups();
 
-        $this->assertSame(array_keys($groups), array_keys($defaults),
-            'Instance defaults must cover exactly the same keys as element groups');
+        $this->assertSame(
+            array_keys($groups),
+            array_keys($defaults),
+            'Instance defaults must cover exactly the same keys as element groups'
+        );
 
         foreach ($defaults as $key => $val) {
             $this->assertIsBool($val, "Default for '$key' must be bool");
@@ -139,7 +138,6 @@ final class config_manager_test extends advanced_testcase {
         $this->assertFalse($defaults['trigonometry'], 'trigonometry must be disabled');
     }
 
-    // Get_effective_enabled().
 
     /**
      * @dataProvider effective_enabled_provider
@@ -151,8 +149,11 @@ final class config_manager_test extends advanced_testcase {
         set_config('enabled', (string) $mode, 'local_stackmatheditor');
         // No cmid/qbeid → instance-level decision only.
         $result = config_manager::get_effective_enabled(0, 0);
-        $this->assertSame($expected, $result,
-            "Mode $mode without context should return " . ($expected ? 'true' : 'false'));
+        $this->assertSame(
+            $expected,
+            $result,
+            "Mode $mode without context should return " . ($expected ? 'true' : 'false')
+        );
     }
 
     /**
@@ -167,7 +168,6 @@ final class config_manager_test extends advanced_testcase {
         ];
     }
 
-    // DB-level tests (require full Moodle DB).
 
     /**
      * save_config() and get_config() round-trip.

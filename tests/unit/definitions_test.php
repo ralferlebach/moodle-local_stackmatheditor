@@ -31,7 +31,6 @@ use local_stackmatheditor\definitions;
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class definitions_test extends advanced_testcase {
-    // Get_element_groups().
 
     /**
      * Every group must have a non-empty string label.
@@ -89,7 +88,8 @@ final class definitions_test extends advanced_testcase {
                     "$ref must have 'write' or 'cmd'"
                 );
                 $this->assertArrayHasKey(
-                    'display', $el,
+                    'display',
+                    $el,
                     "$ref must have 'display'"
                 );
                 $this->assertIsString(
@@ -117,13 +117,13 @@ final class definitions_test extends advanced_testcase {
         ];
         foreach ($expected as $key) {
             $this->assertArrayHasKey(
-                $key, $groups,
+                $key,
+                $groups,
                 "Group '$key' must exist in definitions"
             );
         }
     }
 
-    // Get_default_config() / get_default_enabled().
 
     /**
      * Default config keys match group keys.
@@ -144,7 +144,6 @@ final class definitions_test extends advanced_testcase {
         }
     }
 
-    // Export_for_js().
 
     /**
      * export_for_js() must contain all required top-level keys.
@@ -184,7 +183,6 @@ final class definitions_test extends advanced_testcase {
         );
     }
 
-    // Get_group_labels_with_examples().
 
     /**
      * Labels with examples must include a parenthesised example snippet.
@@ -195,7 +193,8 @@ final class definitions_test extends advanced_testcase {
             $this->assertIsString($label, "Label for '$key' must be string");
             // Each label should have the format "Name (x, y, z, …)" or similar.
             $this->assertStringContainsString(
-                '(', $label,
+                '(',
+                $label,
                 "Label for '$key' should contain an example in parentheses"
             );
         }
@@ -237,7 +236,8 @@ final class definitions_test extends advanced_testcase {
         $symbols = definitions::get_unit_symbols();
         foreach ($units as $unit) {
             $this->assertArrayHasKey(
-                $unit, $symbols,
+                $unit,
+                $symbols,
                 "Unit '$unit' must have a display symbol"
             );
         }
