@@ -16,8 +16,6 @@
 
 namespace local_stackmatheditor;
 
-defined('MOODLE_INTERNAL') || die();
-
 use local_stackmatheditor\output\mathjax_injector;
 use local_stackmatheditor\output\editor_injector;
 use local_stackmatheditor\output\configure_injector;
@@ -121,23 +119,23 @@ class hook_callbacks {
             return;
         }
 
-        $is_editor    = self::is_editor_page();
-        $is_configure = self::is_configure_page();
+        $iseditor    = self::is_editor_page();
+        $isconfigure = self::is_configure_page();
 
         quiz_helper::dbg(
             'before_footer: page=' . $PAGE->pagetype
-            . ' editor=' . ($is_editor ? 'Y' : 'N')
-            . ' configure=' . ($is_configure ? 'Y' : 'N')
+            . ' editor=' . ($iseditor ? 'Y' : 'N')
+            . ' configure=' . ($isconfigure ? 'Y' : 'N')
         );
 
-        if (!$is_editor && !$is_configure) {
+        if (!$iseditor && !$isconfigure) {
             return;
         }
 
         $cmid = quiz_helper::get_cmid();
 
         // Editor injection.
-        if ($is_editor) {
+        if ($iseditor) {
             if (!config_manager::get_effective_enabled($cmid)) {
                 quiz_helper::dbg('editor: disabled for cmid=' . $cmid . ', skipping');
             } else {
@@ -154,7 +152,7 @@ class hook_callbacks {
         // Configure links injection.
         // Always inject configure links when the user can manage the quiz,.
         // Regardless of the enabled mode — the configure page handles the toggle.
-        if ($is_configure) {
+        if ($isconfigure) {
             try {
                 if ($cmid <= 0) {
                     quiz_helper::dbg('configure: no cmid, skipping');

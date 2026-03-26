@@ -16,8 +16,6 @@
 
 namespace local_stackmatheditor\form;
 
-defined('MOODLE_INTERNAL') || die();
-
 use local_stackmatheditor\definitions;
 
 /**
@@ -38,40 +36,55 @@ use local_stackmatheditor\definitions;
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class configure_form extends \moodleform {
-    protected function definition() {
-        $mform      = $this->_form;
+
+    /**
+     * Build the form elements.
+     *
+     * @return void
+     */
+    protected function definition(): void {
+        $mform = $this->_form;
         $customdata = $this->_customdata;
 
-        $mode           = $customdata['mode']           ?? 'question';
+        $mode = $customdata['mode'] ?? 'question';
         $questionrecord = $customdata['questionrecord'] ?? null;
-        $quiz           = $customdata['quiz'];
-        $grouplabels    = $customdata['grouplabels'];
-        $previewhtml    = $customdata['previewhtml']    ?? '';
-        $returnurl      = $customdata['returnurl']      ?? '';
-        $instancemode   = (int) ($customdata['instancemode'] ?? 1);
+        $quiz = $customdata['quiz'];
+        $grouplabels = $customdata['grouplabels'];
+        $previewhtml = $customdata['previewhtml'] ?? '';
+        $returnurl = $customdata['returnurl'] ?? '';
+        $instancemode = (int) ($customdata['instancemode'] ?? 1);
 
         // Hidden fields.
         $mform->addElement('hidden', 'returnurl', $returnurl);
         $mform->setType('returnurl', PARAM_LOCALURL);
 
         // Info section.
-        $mform->addElement('header', 'infosection',
-            get_string('configure', 'local_stackmatheditor'));
+        $mform->addElement(
+            'header',
+            'infosection',
+            get_string('configure', 'local_stackmatheditor')
+        );
 
-        $mform->addElement('static', 'quizname',
+        $mform->addElement(
+            'static',
+            'quizname',
             get_string('modulename', 'quiz'),
-            format_string($quiz->name));
+            format_string($quiz->name)
+        );
 
         if ($mode === 'question' && $questionrecord) {
-            $mform->addElement('static', 'questionname',
+            $mform->addElement(
+                'static',
+                'questionname',
                 get_string('question'),
                 format_string($questionrecord->name)
-                . ' <span class="text-muted">(v'
-                . $questionrecord->version . ')</span>');
+                    . ' <span class="text-muted">(v'
+                    . $questionrecord->version . ')</span>'
+            );
 
             if (!empty($previewhtml)) {
-                $collapseid     = 'sme-question-preview';
-                $previewbutton  =
+                $collapseid = 'sme-question-preview';
+                $previewbutton =
                     '<a class="btn btn-outline-secondary btn-sm"'
                     . ' data-toggle="collapse"'
                     . ' href="#' . $collapseid . '"'
@@ -85,105 +98,151 @@ class configure_form extends \moodleform {
                     . $previewhtml
                     . '</div></div>';
 
-                $mform->addElement('static', 'preview',
+                $mform->addElement(
+                    'static',
+                    'preview',
                     get_string('questionpreview', 'local_stackmatheditor'),
-                    $previewbutton . $previewcontent);
+                    $previewbutton . $previewcontent
+                );
             }
         } else {
             // Quiz mode: explain scope.
-            $mform->addElement('static', 'quizmodenote', '',
+            $mform->addElement(
+                'static',
+                'quizmodenote',
+                '',
                 '<div class="alert alert-info mb-0">'
-                . get_string('configure_quiz_note', 'local_stackmatheditor')
-                . '</div>');
+                    . get_string('configure_quiz_note', 'local_stackmatheditor')
+                    . '</div>'
+            );
         }
 
         // Enabled section – always visible.
-        $mform->addElement('header', 'enabledsection',
-            get_string('configure_enabled_header', 'local_stackmatheditor'));
+        $mform->addElement(
+            'header',
+            'enabledsection',
+            get_string('configure_enabled_header', 'local_stackmatheditor')
+        );
         $mform->setExpanded('enabledsection', true);
 
         if ($instancemode === 0) {
             // Globally forced off – read-only info, no checkbox.
-            $mform->addElement('static', 'enabled_info', '',
+            $mform->addElement(
+                'static',
+                'enabled_info',
+                '',
                 '<span class="badge badge-secondary px-2 py-1">'
-                . '<i class="fa fa-lock mr-1" aria-hidden="true"></i>'
-                . get_string('configure_enabled_locked_off', 'local_stackmatheditor')
-                . '</span>');
+                    . '<i class="fa fa-lock mr-1" aria-hidden="true"></i>'
+                    . get_string('configure_enabled_locked_off', 'local_stackmatheditor')
+                    . '</span>'
+            );
         } else if ($instancemode === 1) {
             // Globally forced on – read-only info, no checkbox.
-            $mform->addElement('static', 'enabled_info', '',
+            $mform->addElement(
+                'static',
+                'enabled_info',
+                '',
                 '<span class="badge badge-success px-2 py-1">'
-                . '<i class="fa fa-lock mr-1" aria-hidden="true"></i>'
-                . get_string('configure_enabled_locked_on', 'local_stackmatheditor')
-                . '</span>');
+                    . '<i class="fa fa-lock mr-1" aria-hidden="true"></i>'
+                    . get_string('configure_enabled_locked_on', 'local_stackmatheditor')
+                    . '</span>'
+            );
         } else {
             // Modes 2 and 3: override allowed – show editable checkbox.
             $checkboxlabel = ($mode === 'quiz')
-                ? get_string('configure_enabled_checkboxlabel_quiz',     'local_stackmatheditor')
+                ? get_string('configure_enabled_checkboxlabel_quiz', 'local_stackmatheditor')
                 : get_string('configure_enabled_checkboxlabel_question', 'local_stackmatheditor');
 
-            $mform->addElement('advcheckbox', 'enabled',
+            $mform->addElement(
+                'advcheckbox',
+                'enabled',
                 get_string('configure_enabled_label', 'local_stackmatheditor'),
                 $checkboxlabel,
                 ['id' => 'id_sme_enabled'],
-                [0, 1]);
+                [0, 1]
+            );
             $mform->setType('enabled', PARAM_INT);
-            $mform->addHelpButton('enabled',
-                'configure_enabled_label', 'local_stackmatheditor');
+            $mform->addHelpButton(
+                'enabled',
+                'configure_enabled_label',
+                'local_stackmatheditor'
+            );
 
             // Context hint: show what the parent default is.
             $parenthint = ($instancemode === 3)
-                ? get_string('configure_enabled_parenthint_on',  'local_stackmatheditor')
+                ? get_string('configure_enabled_parenthint_on', 'local_stackmatheditor')
                 : get_string('configure_enabled_parenthint_off', 'local_stackmatheditor');
-            $mform->addElement('static', 'enabled_hint', '',
+            $mform->addElement(
+                'static',
+                'enabled_hint',
+                '',
                 '<small class="text-muted">'
-                . '<i class="fa fa-info-circle mr-1" aria-hidden="true"></i>'
-                . $parenthint
-                . '</small>');
+                    . '<i class="fa fa-info-circle mr-1" aria-hidden="true"></i>'
+                    . $parenthint
+                    . '</small>'
+            );
         }
 
         // Toolbar groups section.
-        $mform->addElement('header', 'toolbarsection',
-            get_string('setting_defaultgroups', 'local_stackmatheditor'));
+        $mform->addElement(
+            'header',
+            'toolbarsection',
+            get_string('setting_defaultgroups', 'local_stackmatheditor')
+        );
         $mform->setExpanded('toolbarsection', true);
 
-        $select = $mform->addElement('select', 'groups',
+        $select = $mform->addElement(
+            'select',
+            'groups',
             get_string('setting_defaultgroups', 'local_stackmatheditor'),
-            $grouplabels);
+            $grouplabels
+        );
         $select->setMultiple(true);
         $select->setSize(count($grouplabels));
-        $mform->addHelpButton('groups',
-            'setting_defaultgroups', 'local_stackmatheditor');
+        $mform->addHelpButton(
+            'groups',
+            'setting_defaultgroups',
+            'local_stackmatheditor'
+        );
 
         // Variable mode section.
-        $mform->addElement('header', 'variablesection',
-            get_string('label_variablemode', 'local_stackmatheditor'));
+        $mform->addElement(
+            'header',
+            'variablesection',
+            get_string('label_variablemode', 'local_stackmatheditor')
+        );
         $mform->setExpanded('variablesection', true);
 
         $varmodelabel = ($mode === 'quiz')
             ? get_string('label_variablemode_quiz', 'local_stackmatheditor')
-            : get_string('label_variablemode',      'local_stackmatheditor');
+            : get_string('label_variablemode', 'local_stackmatheditor');
 
         $mform->addElement('select', 'variablemode', $varmodelabel, [
             definitions::IMPLICIT_EXPLICIT_SINGLE =>
                 get_string('implicitmode_explicit_single', 'local_stackmatheditor'),
-            definitions::IMPLICIT_EXPLICIT_MULTI  =>
+            definitions::IMPLICIT_EXPLICIT_MULTI =>
                 get_string('implicitmode_explicit_multi', 'local_stackmatheditor'),
-            definitions::IMPLICIT_SPACE_SINGLE    =>
+            definitions::IMPLICIT_SPACE_SINGLE =>
                 get_string('implicitmode_space_single', 'local_stackmatheditor'),
-            definitions::IMPLICIT_SPACE_MULTI     =>
+            definitions::IMPLICIT_SPACE_MULTI =>
                 get_string('implicitmode_space_multi', 'local_stackmatheditor'),
-            definitions::IMPLICIT_STACK           =>
+            definitions::IMPLICIT_STACK =>
                 get_string('implicitmode_stack', 'local_stackmatheditor'),
         ]);
         $mform->setDefault('variablemode', definitions::IMPLICIT_STACK);
 
         // Buttons.
-        $buttons   = [];
-        $buttons[] = $mform->createElement('submit', 'submitbutton',
-            get_string('save', 'local_stackmatheditor'));
-        $buttons[] = $mform->createElement('cancel', 'cancel',
-            get_string('back', 'local_stackmatheditor'));
+        $buttons = [];
+        $buttons[] = $mform->createElement(
+            'submit',
+            'submitbutton',
+            get_string('save', 'local_stackmatheditor')
+        );
+        $buttons[] = $mform->createElement(
+            'cancel',
+            'cancel',
+            get_string('back', 'local_stackmatheditor')
+        );
         $mform->addGroup($buttons, 'buttonar', '', ' ', false);
         $mform->closeHeaderBefore('buttonar');
     }

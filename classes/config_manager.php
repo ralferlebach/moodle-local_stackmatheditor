@@ -16,8 +16,6 @@
 
 namespace local_stackmatheditor;
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * Manages per-quiz per-question toolbar configuration.
  *
@@ -271,8 +269,11 @@ class config_manager {
      * @param int $questionid Question ID (for resolving qbeid and legacy lookup).
      * @return array Merged config array.
      */
-    public static function get_config(int $cmid, int $qbeid = 0,
-                                      int $questionid = 0): array {
+    public static function get_config(
+        int $cmid,
+        int $qbeid = 0,
+        int $questionid = 0
+    ): array {
         global $DB;
 
         $col    = self::get_config_column();
@@ -384,8 +385,11 @@ class config_manager {
      * @param array $questionids Optional qbeid => questionid map for legacy.
      * @return array Map of qbeid => config.
      */
-    public static function get_configs(int $cmid, array $qbeids,
-                                       array $questionids = []): array {
+    public static function get_configs(
+        int $cmid,
+        array $qbeids,
+        array $questionids = []
+    ): array {
         global $DB;
         $col      = self::get_config_column();
         $configs  = [];
@@ -423,7 +427,7 @@ class config_manager {
         }
 
         // 2. Any qbeid match fallback.
-        list($insql, $params) = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
+        [$insql, $params] = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
         $records = $DB->get_records_select(
             self::TABLE,
             "questionbankentryid {$insql}",
@@ -472,7 +476,7 @@ class config_manager {
 
         // 5. Exact question-level configs win last.
         if ($cmid > 0) {
-            list($insql, $params) = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
+            [$insql, $params] = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
             $params['cmid'] = $cmid;
             $records = $DB->get_records_select(
                 self::TABLE,
@@ -506,8 +510,12 @@ class config_manager {
      * @param int   $questionid Optional questionid to resolve qbeid.
      * @throws \moodle_exception If qbeid cannot be determined.
      */
-    public static function save_config(int $cmid, int $qbeid, array $elements,
-                                       int $questionid = 0): void {
+    public static function save_config(
+        int $cmid,
+        int $qbeid,
+        array $elements,
+        int $questionid = 0
+    ): void {
         global $DB, $USER;
 
         $qbeid = self::ensure_qbeid($qbeid, $questionid);
@@ -538,8 +546,12 @@ class config_manager {
      * @param array    $elements
      * @param int      $userid
      */
-    private static function upsert_record(int $cmid, ?int $qbeid,
-                                          array $elements, int $userid): void {
+    private static function upsert_record(
+        int $cmid,
+        ?int $qbeid,
+        array $elements,
+        int $userid
+    ): void {
         global $DB;
 
         $col  = self::get_config_column();
@@ -599,8 +611,10 @@ class config_manager {
      * @param int $qbeid  Question bank entry ID (0 = ignore question level).
      * @return bool
      */
-    public static function get_effective_enabled(int $cmid = 0,
-                                                 int $qbeid = 0): bool {
+    public static function get_effective_enabled(
+        int $cmid = 0,
+        int $qbeid = 0
+    ): bool {
         $mode = self::get_instance_enabled_mode();
 
         if ($mode === 0) {
@@ -611,21 +625,21 @@ class config_manager {
         }
 
         // Mode 2 or 3 – check quiz then question level.
-        $default_enabled = ($mode === 3);
+        $defaultenabled = ($mode === 3);
 
         // Load the most specific applicable config.
         if ($cmid > 0 && $qbeid > 0) {
             $cfg = self::get_config($cmid, $qbeid);
-        } elseif ($cmid > 0) {
+        } else if ($cmid > 0) {
             $cfg = self::get_quiz_default($cmid) ?? [];
         } else {
-            return $default_enabled;
+            return $defaultenabled;
         }
 
         if (isset($cfg['_enabled'])) {
             return (bool) $cfg['_enabled'];
         }
 
-        return $default_enabled;
+        return $defaultenabled;
     }
 }

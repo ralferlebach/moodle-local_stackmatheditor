@@ -54,7 +54,12 @@ final class config_manager_test extends advanced_testcase {
     // Get_instance_enabled_mode().
 
     /**
+     * Test get_instance_enabled_mode() returns the correct integer for each stored value.
+     *
      * @dataProvider enabled_mode_provider
+     * @param string $stored  Stored config value.
+     * @param int    $expected Expected return value.
+     * @return void
      */
     public function test_get_instance_enabled_mode(string $stored, int $expected): void {
         $this->resetAfterTest();
@@ -64,6 +69,8 @@ final class config_manager_test extends advanced_testcase {
     }
 
     /**
+     * Data provider for test_get_instance_enabled_mode.
+     *
      * @return array<string, array{string, int}>
      */
     public static function enabled_mode_provider(): array {
@@ -72,8 +79,8 @@ final class config_manager_test extends advanced_testcase {
             'mode 1 (enabled)'  => ['1', 1],
             'mode 2 (default off, override)' => ['2', 2],
             'mode 3 (default on, override)'  => ['3', 3],
-            'invalid negative'  => ['-1', 1],  // safe fallback
-            'invalid high'      => ['99', 1],  // safe fallback
+            'invalid negative'  => ['-1', 1],  // Safe fallback.
+            'invalid high'      => ['99', 1],  // Safe fallback.
         ];
     }
 
@@ -127,8 +134,8 @@ final class config_manager_test extends advanced_testcase {
 
         $defaults = config_manager::get_instance_defaults();
 
-        $this->assertTrue($defaults['brackets'],  'brackets must be enabled');
-        $this->assertTrue($defaults['logic'],     'logic must be enabled');
+        $this->assertTrue($defaults['brackets'], 'brackets must be enabled');
+        $this->assertTrue($defaults['logic'], 'logic must be enabled');
         $this->assertFalse($defaults['trigonometry'], 'trigonometry must be disabled');
     }
 
@@ -184,10 +191,8 @@ final class config_manager_test extends advanced_testcase {
         config_manager::save_config($cmid, $qbeid, $elements);
         $loaded = config_manager::get_config($cmid, $qbeid);
 
-        $this->assertTrue($loaded['basic_operators'],
-            'basic_operators must be true after save');
-        $this->assertFalse($loaded['trigonometry'],
-            'trigonometry must be false after save');
+        $this->assertTrue($loaded['basic_operators'], 'basic_operators must be true after save');
+        $this->assertFalse($loaded['trigonometry'], 'trigonometry must be false after save');
         $this->assertSame(definitions::VAR_MULTI, $loaded['_variableMode'],
             '_variableMode must be persisted');
     }
@@ -206,7 +211,7 @@ final class config_manager_test extends advanced_testcase {
 
         $loaded = config_manager::get_quiz_default($cmid);
         $this->assertNotNull($loaded, 'Quiz default must exist after save');
-        $this->assertTrue($loaded['logic'],    'logic must be true');
+        $this->assertTrue($loaded['logic'], 'logic must be true');
         $this->assertFalse($loaded['_enabled'], '_enabled must be false');
     }
 
@@ -229,14 +234,12 @@ final class config_manager_test extends advanced_testcase {
 
         // No question-level config yet → should get quiz default.
         $config = config_manager::get_config($cmid, $qbeid);
-        $this->assertTrue($config['brackets'],
-            'brackets must be inherited from quiz default');
+        $this->assertTrue($config['brackets'], 'brackets must be inherited from quiz default');
 
         // Question-level: override brackets off.
         config_manager::save_config($cmid, $qbeid, ['brackets' => false]);
         $config = config_manager::get_config($cmid, $qbeid);
-        $this->assertFalse($config['brackets'],
-            'brackets must be overridden at question level');
+        $this->assertFalse($config['brackets'], 'brackets must be overridden at question level');
     }
 
     /**
@@ -273,8 +276,7 @@ final class config_manager_test extends advanced_testcase {
         config_manager::save_quiz_default($cmid, ['_enabled' => true]);
 
         $result = config_manager::get_effective_enabled($cmid);
-        $this->assertTrue($result,
-            'Quiz-level _enabled=true must activate editor in mode 2');
+        $this->assertTrue($result, 'Quiz-level _enabled=true must activate editor in mode 2');
     }
 
     /**
@@ -292,7 +294,6 @@ final class config_manager_test extends advanced_testcase {
         config_manager::save_config($cmid, $qbeid, ['_enabled' => false]);
 
         $result = config_manager::get_effective_enabled($cmid, $qbeid);
-        $this->assertFalse($result,
-            'Question-level _enabled=false must deactivate editor in mode 3');
+        $this->assertFalse($result, 'Question-level _enabled=false must deactivate editor in mode 3');
     }
 }

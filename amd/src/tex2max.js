@@ -45,6 +45,12 @@ define([], function() {
         'N', 'J', 'W', 'V', 'A', 'K', 'L', 'F', 'C'
     ];
 
+    /**
+     * Build a fast-lookup set from an array of strings.
+     *
+     * @param {Array} list Array of strings.
+     * @returns {Object} Object with string keys for O(1) lookup.
+     */
     function buildWordSet(list) {
         var set = Object.create(null);
         var i;
@@ -60,6 +66,12 @@ define([], function() {
         return set;
     }
 
+    /**
+     * Return a word-set of known unit abbreviations from defs or the built-in list.
+     *
+     * @param {Object} defs Definitions object from the server.
+     * @returns {Object} Word set of unit strings.
+     */
     function getUnitSet(defs) {
         if (defs && defs.units && defs.units.length) {
             return buildWordSet(defs.units);
@@ -67,6 +79,15 @@ define([], function() {
         return buildWordSet(UNITS);
     }
 
+    /**
+     * Normalise a variable mode string to a canonical form.
+     *
+     * Accepts legacy aliases ("single", "multi") and maps them to
+     * the current canonical names.
+     *
+     * @param {string} mode Raw mode string.
+     * @returns {string} Canonical mode string.
+     */
     function normaliseImplicitMode(mode) {
         switch (mode) {
             case 'single':
@@ -84,6 +105,12 @@ define([], function() {
         }
     }
 
+    /**
+     * Return the implicit multiplication separator character for a given mode.
+     *
+     * @param {string} mode Variable mode string.
+     * @returns {string} Separator: "*", " ", or "".
+     */
     function getImplicitSeparator(mode) {
         mode = normaliseImplicitMode(mode);
 
@@ -96,6 +123,12 @@ define([], function() {
         return '';
     }
 
+    /**
+     * Replace decimal commas with dots, ignoring commas inside list brackets.
+     *
+     * @param {string} s Input string.
+     * @returns {string} String with decimal commas replaced by dots.
+     */
     function replaceDecimalCommas(s) {
         var result = '';
         var bracketDepth = 0;
@@ -121,6 +154,12 @@ define([], function() {
         return result;
     }
 
+    /**
+     * Tokenize a LaTeX string for implicit multiplication detection.
+     *
+     * @param {string} s Preprocessed LaTeX string.
+     * @returns {Array} Array of token objects with type and value.
+     */
     function tokenizeForImplicitMultiplication(s) {
         var tokens = [];
         var i = 0;
@@ -182,6 +221,13 @@ define([], function() {
         return tokens;
     }
 
+    /**
+     * Expand multi-character identifiers into individual variables if required.
+     *
+     * @param {Array}  tokens  Token array from tokenizeForImplicitMultiplication.
+     * @param {Object} options Conversion options.
+     * @returns {Array} Expanded token array.
+     */
     function expandIdentifiers(tokens, options) {
         var opts = options || {};
         var defs = opts.defs || {};
@@ -248,6 +294,15 @@ define([], function() {
         return out;
     }
 
+    /**
+     * Determine whether an implicit multiplication sign should be inserted
+     * between two adjacent tokens.
+     *
+     * @param {Object} prev    Previous token.
+     * @param {Object} curr    Current token.
+     * @param {Object} options Conversion options.
+     * @returns {boolean} True if a multiplication sign should be inserted.
+     */
     function needsImplicitMultiplication(prev, curr, options) {
         var opts = options || {};
         var defs = opts.defs || {};
@@ -291,6 +346,13 @@ define([], function() {
         return false;
     }
 
+    /**
+     * Insert implicit multiplication signs between tokens where required.
+     *
+     * @param {string} s       Preprocessed string.
+     * @param {Object} options Conversion options.
+     * @returns {string} String with explicit multiplication signs inserted.
+     */
     function insertImplicitMultiplication(s, options) {
         var opts = options || {};
         var mode = normaliseImplicitMode(opts.variableMode || 'stack');
@@ -316,6 +378,16 @@ define([], function() {
         return out;
     }
 
+    /**
+     * Convert a MathQuill LaTeX string to Maxima CAS notation.
+     *
+     * @param {string} latex   LaTeX string from MathQuill.
+     * @param {Object} options Conversion options.
+     * @param {boolean} [options.commaDecimal] Treat commas as decimal separators.
+     * @param {Object}  [options.defs]          Server-side definitions.
+     * @param {string}  [options.variableMode]  Variable interpretation mode.
+     * @returns {string} Maxima expression string.
+     */
     function convert(latex, options) {
         var opts = options || {};
         var commaDecimal = opts.commaDecimal || false;

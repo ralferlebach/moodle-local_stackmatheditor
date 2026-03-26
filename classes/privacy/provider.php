@@ -16,8 +16,6 @@
 
 namespace local_stackmatheditor\privacy;
 
-defined('MOODLE_INTERNAL') || die();
-
 use core_privacy\local\metadata\collection;
 use core_privacy\local\metadata\provider as metadata_provider;
 
