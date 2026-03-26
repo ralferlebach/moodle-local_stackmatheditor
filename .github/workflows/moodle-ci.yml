@@ -12,18 +12,19 @@
 #   gnuplot       → für STACK-Plot-Rendering
 #
 # WICHTIG:
+#   - moodle-plugin-ci install --plugin ./plugin registriert das Plugin.
+#     Nachfolgende Subcommands (phpunit, behat, grunt) werden OHNE
+#     Plugin-Argument aufgerufen – sie kennen das Plugin bereits.
 #   - Ab Moodle 4.5 verlangt MariaDB den Treiber "mariadb" (NICHT "mysqli").
 #   - MariaDB-Service OHNE MYSQL_DATABASE → moodle-plugin-ci erstellt
-#     die DB selbst. Verbindung über root/root (hat CREATE DATABASE).
+#     die DB selbst.
 #   - PostgreSQL-Service mit POSTGRES_DB=postgres → DB "moodle" wird
 #     NICHT vorab erstellt.
 #   - max_input_vars=5000 via ini-values (Moodle-Mindestanforderung).
 #   - --branch (nicht --moodle!) übergibt den Moodle-Branch.
-#   - Maxima + gnuplot in ALLEN Jobs mit qtype_stack, da dessen
-#     db/install.php beim Site-Install eine CAS-Verbindung aufbaut.
-#   - KEIN admin/cli/cfg.php (Haupt-DB hat keine Tabellen in CI).
-#   - moodle-plugin-ci v4: phpunit, behat, grunt verwenden <plugin>
-#     als POSITIONELLES Argument – --plugin existiert NICHT.
+#   - Maxima + gnuplot in ALLEN Jobs mit qtype_stack.
+#   - en_AU.UTF-8 Locale muss installiert werden (Moodle-Core-
+#     Anforderung für PHPUnit/Behat Test-Suite-Initialisierung).
 ##############################################################################
 
 name: Moodle Plugin CI
@@ -106,6 +107,12 @@ jobs:
         with:
           node-version: '20'
 
+      # Moodle Core benötigt en_AU.UTF-8 für Test-Suite-Initialisierung
+      - name: Install required locale
+        run: |
+          sudo locale-gen en_AU.UTF-8
+          sudo update-locale
+
       - name: Install Maxima (≥ 5.46) and gnuplot
         run: |
           sudo apt-get update -qq
@@ -155,10 +162,10 @@ jobs:
         run: chmod -R u+w plugin/.git/ 2>/dev/null || true
 
       - name: ESLint – AMD JS
-        run: moodle-plugin-ci grunt -m "$GITHUB_WORKSPACE/moodle" -t eslint ./plugin
+        run: moodle-plugin-ci grunt -m "$GITHUB_WORKSPACE/moodle" -t eslint
 
       - name: Stylelint – CSS
-        run: moodle-plugin-ci grunt -m "$GITHUB_WORKSPACE/moodle" -t stylelint ./plugin
+        run: moodle-plugin-ci grunt -m "$GITHUB_WORKSPACE/moodle" -t stylelint
         continue-on-error: true
 
       - name: Verify AMD build artefacts
@@ -179,14 +186,6 @@ jobs:
           echo "AMD build OK: $(ls plugin/amd/src/*.js | wc -l) Datei(en) verifiziert."
 
   # ── 2. PHPUnit ────────────────────────────────────────────────────────────
-  #
-  # moodle-plugin-ci v4: <plugin> ist ein POSITIONELLES Argument.
-  #   --plugin existiert NICHT.
-  #   --group  existiert NICHT (kein Durchreichen an PHPUnit).
-  #   "all tests" läuft bereits alle Tests inkl. DB-Gruppe.
-  #
-  # STACK-Konfiguration erfolgt automatisch:
-  #   Maxima im PATH → install → db/install.php → Autoerkennung
   phpunit:
     name: "PHPUnit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.db.engine }})"
     runs-on: ubuntu-24.04
@@ -240,8 +239,12 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
-      # ⚠️  Maxima MUSS vor moodle-plugin-ci install stehen, da
-      #     qtype_stack's db/install.php sofort eine CAS-Verbindung aufbaut.
+      # Moodle Core benötigt en_AU.UTF-8 für PHPUnit-Initialisierung
+      - name: Install required locale
+        run: |
+          sudo locale-gen en_AU.UTF-8
+          sudo update-locale
+
       - name: Install Maxima (≥ 5.46) and gnuplot
         run: |
           sudo apt-get update -qq
@@ -271,10 +274,6 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
-      # moodle-plugin-ci install (ohne --no-init) erledigt alles:
-      #   - Moodle klonen, config.php schreiben, DB erstellen
-      #   - Plugins installieren (qtype_stack db/install.php → Maxima-Autoerkennung)
-      #   - PHPUnit + Behat Test-Suites initialisieren
       - name: Install Moodle ${{ matrix.moodle }}
         run: |
           moodle-plugin-ci install \
@@ -287,15 +286,11 @@ jobs:
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
 
-      # FIX: <plugin> ist positionelles Argument – --plugin existiert NICHT
+      # KEIN Plugin-Argument: install --plugin hat es bereits registriert.
       - name: PHPUnit – all tests
-        run: moodle-plugin-ci phpunit ./plugin
+        run: moodle-plugin-ci phpunit
 
   # ── 3. Behat ──────────────────────────────────────────────────────────────
-  #
-  # Gleiche Konvention wie phpunit/grunt:
-  #   <plugin> ist positionelles Argument – --plugin existiert NICHT.
-  #   --tags filtert Szenarien (kein Feature-Pfad als Argument nötig).
   behat:
     name: "Behat (${{ matrix.moodle }} / PHP 8.2 / Chrome)"
     runs-on: ubuntu-24.04
@@ -336,6 +331,12 @@ jobs:
           extensions: mbstring, pdo, pdo_mysql, gd, xml, zip, intl
           ini-values: max_input_vars=5000
           coverage: none
+
+      # Moodle Core benötigt en_AU.UTF-8 für Behat-Initialisierung
+      - name: Install required locale
+        run: |
+          sudo locale-gen en_AU.UTF-8
+          sudo update-locale
 
       - name: Install Maxima (≥ 5.46) and gnuplot
         run: |
@@ -378,15 +379,12 @@ jobs:
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
 
-      # FIX: <plugin> ist positionelles Argument – --plugin existiert NICHT.
-      # --tags filtert auf die gewünschten Szenarien; Feature-Pfade werden
-      # NICHT als separate Argumente übergeben.
+      # KEIN Plugin-Argument: install --plugin hat es bereits registriert.
       - name: Behat – all plugin scenarios
         run: |
           moodle-plugin-ci behat \
             --profile chrome \
-            --tags "@local_stackmatheditor and not @broken" \
-            ./plugin
+            --tags "@local_stackmatheditor and not @broken"
 
       - name: Upload failure screenshots
         if: failure()
