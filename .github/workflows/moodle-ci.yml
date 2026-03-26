@@ -10,6 +10,24 @@
 #   qtype_stack  → branch master
 #   Maxima ≥ 5.46 via apt + Versionscheck
 #   gnuplot       → für STACK-Plot-Rendering
+#
+# WICHTIG:
+#   - Ab Moodle 4.5 verlangt MariaDB den Treiber "mariadb" (NICHT "mysqli").
+#   - MariaDB-Service OHNE MYSQL_DATABASE → moodle-plugin-ci erstellt
+#     die DB selbst. Verbindung über root/root (hat CREATE DATABASE).
+#   - PostgreSQL-Service mit POSTGRES_DB=postgres → DB "moodle" wird
+#     NICHT vorab erstellt.
+#   - max_input_vars=5000 via ini-values (Moodle-Mindestanforderung).
+#   - --branch (nicht --moodle!) übergibt den Moodle-Branch.
+#   - Maxima + gnuplot werden in ALLEN Jobs installiert, die
+#     qtype_stack registrieren – STACK auto-konfiguriert sich
+#     während der Test-Suite-Initialisierung via db/install.php.
+#   - KEIN admin/cli/cfg.php: dieses Tool greift auf die Haupt-DB
+#     zu, die in der CI-Umgebung keine Tabellen hat (nur Test-DBs
+#     werden von moodle-plugin-ci erstellt).
+#   - .git/objects/pack/ muss vor grunt beschreibbar gemacht werden,
+#     da moodle-plugin-ci grunt ein Backup/Restore durchführt und
+#     git Pack-Dateien read-only setzt.
 ##############################################################################
 
 name: Moodle Plugin CI
@@ -60,6 +78,9 @@ jobs:
         run: moodle-plugin-ci phpmd plugin || true
 
   # ── 1b. JS / CSS Lint ────────────────────────────────────────────────────
+  # Benötigt eine vollständige Moodle-Installation für grunt-Config-Auflösung.
+  # qtype_stack's db/install.php baut beim Site-Install sofort eine
+  # CAS-Verbindung auf → Maxima + gnuplot müssen VORHER installiert sein.
   lint-js:
     name: "JS/CSS Lint"
     runs-on: ubuntu-24.04
@@ -121,17 +142,6 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
-      # FIX: STACK-Konfiguration MUSS VOR install stehen, da qtype_stack's
-      #      db/install.php beim Site-Install sofort Maxima aufruft.
-      #      add-config schreibt in config.php (kein DB-Zugriff nötig).
-      - name: Pre-configure STACK (Maxima) via config.php
-        run: |
-          B=$(which maxima)
-          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['platform']        = 'linux';"
-          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['maximacommand']    = '$B';"
-          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['maximacommandopt'] = '';"
-          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['castimeout']       = 30;"
-
       - name: Install Moodle (grunt-Config)
         run: |
           moodle-plugin-ci install \
@@ -148,9 +158,14 @@ jobs:
         run: npm install
         working-directory: ${{ github.workspace }}/moodle
 
+      # Git setzt Pack-Dateien read-only. moodle-plugin-ci grunt erstellt
+      # ein Backup inkl. .git/ und stellt es danach wieder her. Ohne
+      # Schreibrechte schlägt die Wiederherstellung fehl und korrumpiert
+      # den Zustand für nachfolgende grunt-Aufrufe (Gruntfile not found).
       - name: Fix .git pack permissions for grunt backup/restore
         run: chmod -R u+w plugin/.git/ 2>/dev/null || true
 
+      # -m zeigt explizit auf das Moodle-Verzeichnis mit Gruntfile.js
       - name: ESLint – AMD JS
         run: moodle-plugin-ci grunt -m "$GITHUB_WORKSPACE/moodle" -t eslint ./plugin
 
@@ -176,6 +191,20 @@ jobs:
           echo "AMD build OK: $(ls plugin/amd/src/*.js | wc -l) Datei(en) verifiziert."
 
   # ── 2. PHPUnit ────────────────────────────────────────────────────────────
+  #
+  # STACK-Konfiguration erfolgt automatisch:
+  #   1. Maxima wird vor install installiert (im PATH)
+  #   2. moodle-plugin-ci install (ohne --no-init) → Test-Suite-Init
+  #      → install_site() → qtype_stack db/install.php
+  #   3. db/install.php erkennt Maxima automatisch im PATH
+  #   4. Settings werden in der Test-DB gespeichert
+  #
+  # admin/cli/cfg.php darf NICHT verwendet werden – es greift auf die
+  # Haupt-DB zu, die in der CI-Umgebung keine Tabellen hat
+  # (Table "config" does not exist).
+  #
+  # Initialise PHPUnit ist ebenfalls NICHT nötig – moodle-plugin-ci
+  # install (ohne --no-init) initialisiert die Test-Suite bereits.
   phpunit:
     name: "PHPUnit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.db.engine }})"
     runs-on: ubuntu-24.04
@@ -229,6 +258,8 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
+      # ⚠️  Maxima MUSS vor moodle-plugin-ci install stehen, da
+      #     qtype_stack's db/install.php sofort eine CAS-Verbindung aufbaut.
       - name: Install Maxima (≥ 5.46) and gnuplot
         run: |
           sudo apt-get update -qq
@@ -258,19 +289,10 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
-      # FIX: STACK via config.php konfigurieren (forced_plugin_settings).
-      #      Muss VOR install stehen, da qtype_stack's db/install.php
-      #      beim Site-Install sofort eine CAS-Verbindung aufbaut.
-      #      admin/cli/cfg.php funktioniert NICHT, da die DB-Tabelle
-      #      "config" im CI-Kontext nicht existiert.
-      - name: Pre-configure STACK (Maxima) via config.php
-        run: |
-          B=$(which maxima)
-          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['platform']        = 'linux';"
-          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['maximacommand']    = '$B';"
-          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['maximacommandopt'] = '';"
-          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['castimeout']       = 30;"
-
+      # moodle-plugin-ci install (ohne --no-init) erledigt alles:
+      #   - Moodle klonen, config.php schreiben, DB erstellen
+      #   - Plugins installieren (qtype_stack db/install.php → Maxima-Autoerkennung)
+      #   - PHPUnit + Behat Test-Suites initialisieren
       - name: Install Moodle ${{ matrix.moodle }}
         run: |
           moodle-plugin-ci install \
@@ -283,10 +305,6 @@ jobs:
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
 
-      - name: Initialise PHPUnit
-        run: php admin/tool/phpunit/cli/init.php
-        working-directory: ${{ github.workspace }}/moodle
-
       - name: PHPUnit – all tests
         run: moodle-plugin-ci phpunit --plugin ./plugin
 
@@ -296,6 +314,11 @@ jobs:
             -- --group local_stackmatheditor_db
 
   # ── 3. Behat ──────────────────────────────────────────────────────────────
+  #
+  # Gleiche Logik wie PHPUnit:
+  #   - KEIN admin/cli/cfg.php (Haupt-DB hat keine Tabellen)
+  #   - KEIN separates Initialise Behat (moodle-plugin-ci install erledigt das)
+  #   - Maxima wird vor install installiert → db/install.php erkennt es automatisch
   behat:
     name: "Behat (${{ matrix.moodle }} / PHP 8.2 / Chrome)"
     runs-on: ubuntu-24.04
@@ -337,6 +360,7 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
+      # ⚠️  Maxima MUSS vor moodle-plugin-ci install stehen!
       - name: Install Maxima (≥ 5.46) and gnuplot
         run: |
           sudo apt-get update -qq
@@ -366,15 +390,6 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
-      # FIX: STACK via config.php VOR install konfigurieren
-      - name: Pre-configure STACK (Maxima) via config.php
-        run: |
-          B=$(which maxima)
-          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['platform']        = 'linux';"
-          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['maximacommand']    = '$B';"
-          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['maximacommandopt'] = '';"
-          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['castimeout']       = 30;"
-
       - name: Install Moodle ${{ matrix.moodle }}
         run: |
           moodle-plugin-ci install \
@@ -386,10 +401,6 @@ jobs:
             --db-pass  root \
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
-
-      - name: Initialise Behat
-        run: php admin/tool/behat/cli/init.php
-        working-directory: ${{ github.workspace }}/moodle
 
       - name: Behat – toolbar configuration
         run: |
