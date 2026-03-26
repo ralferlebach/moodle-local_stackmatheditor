@@ -62,7 +62,7 @@ The plugin also supports question-specific configuration for STACK questions in 
 A dedicated configuration page is available at:
 
 - the question page in a quiz (for STACK questions)
-- at the attempt pages in zthe question info boxes (for STACK questions)
+- at the attempt pages in the question info boxes (for STACK questions)
 - additionally it may be manually retrieved by the following URL
   /local/stackmatheditor/configure.php?cmid=<CourseModuleID>&qbeid=<QuestinBankEntryID>  
 
