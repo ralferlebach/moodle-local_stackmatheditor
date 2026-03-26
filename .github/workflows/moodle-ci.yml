@@ -23,8 +23,9 @@
 #     qtype_stack registrieren, da dessen db/install.php beim
 #     Site-Install sofort eine CAS-Verbindung aufbaut.
 #   - grunt: Tasks via -t, Plugin-Pfad als positionelles Argument.
-#   - Plugin .eslintrc nutzt Option A: {"extends": "../../.eslintrc"}
-#     (erbt Moodle-Core-Config, kein veraltetes "es5"-Environment).
+#   - .git/objects/pack/ muss vor grunt beschreibbar gemacht werden,
+#     da moodle-plugin-ci grunt ein Backup/Restore durchführt und
+#     git Pack-Dateien read-only setzt.
 ##############################################################################
 
 name: Moodle Plugin CI
@@ -35,7 +36,7 @@ on:
   pull_request:
 
 env:
-  MOODLE_CI: '^4'   # moodle-plugin-ci Versionsconstraint (einmalig gepflegt)
+  MOODLE_CI: '^4'
 
 jobs:
 
@@ -75,9 +76,6 @@ jobs:
         run: moodle-plugin-ci phpmd plugin || true
 
   # ── 1b. JS / CSS Lint ────────────────────────────────────────────────────
-  # Benötigt eine vollständige Moodle-Installation für grunt-Config-Auflösung.
-  # qtype_stack's db/install.php baut beim Site-Install sofort eine
-  # CAS-Verbindung auf → Maxima + gnuplot müssen VORHER installiert sein.
   lint-js:
     name: "JS/CSS Lint"
     runs-on: ubuntu-24.04
@@ -155,6 +153,12 @@ jobs:
         run: npm install
         working-directory: ${{ github.workspace }}/moodle
 
+      # FIX: Git setzt Pack-Dateien read-only. moodle-plugin-ci grunt
+      # erstellt ein Backup inkl. .git/ und stellt es danach wieder her.
+      # Ohne Schreibrechte schlägt die Wiederherstellung fehl.
+      - name: Fix .git pack permissions for grunt backup/restore
+        run: chmod -R u+w plugin/.git/ 2>/dev/null || true
+
       - name: ESLint – AMD JS
         run: moodle-plugin-ci grunt -t eslint ./plugin
 
@@ -179,7 +183,7 @@ jobs:
           fi
           echo "AMD build OK: $(ls plugin/amd/src/*.js | wc -l) Datei(en) verifiziert."
 
-  # ── 2. PHPUnit (MariaDB + PostgreSQL als Matrix-Dimension) ────────────────
+  # ── 2. PHPUnit ────────────────────────────────────────────────────────────
   phpunit:
     name: "PHPUnit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.db.engine }})"
     runs-on: ubuntu-24.04
