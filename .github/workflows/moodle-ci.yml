@@ -23,6 +23,8 @@
 #     qtype_stack registrieren, da dessen db/install.php beim
 #     Site-Install sofort eine CAS-Verbindung aufbaut.
 #   - grunt: Tasks via -t, Plugin-Pfad als positionelles Argument.
+#   - Plugin .eslintrc nutzt Option A: {"extends": "../../.eslintrc"}
+#     (erbt Moodle-Core-Config, kein veraltetes "es5"-Environment).
 ##############################################################################
 
 name: Moodle Plugin CI
@@ -108,9 +110,6 @@ jobs:
         with:
           node-version: '20'
 
-      # ⚠️  Maxima + gnuplot MÜSSEN vor moodle-plugin-ci install stehen,
-      #     weil qtype_stack's db/install.php sofort eine CAS-Verbindung
-      #     aufbaut (xmldb_qtype_stack_install → maxima_opt_auto).
       - name: Install Maxima (≥ 5.46) and gnuplot
         run: |
           sudo apt-get update -qq
@@ -156,16 +155,12 @@ jobs:
         run: npm install
         working-directory: ${{ github.workspace }}/moodle
 
-      # FIX: grunt-Signatur ist:
-      #   grunt [-t|--tasks TASKS] [--] <plugin>
-      # Tasks via -t, Plugin-Pfad als positionelles Argument.
-      # --plugin existiert NICHT als Option.
       - name: ESLint – AMD JS
         run: moodle-plugin-ci grunt -t eslint ./plugin
 
       - name: Stylelint – CSS
         run: moodle-plugin-ci grunt -t stylelint ./plugin
-        continue-on-error: true   # warn only until baseline is established
+        continue-on-error: true
 
       - name: Verify AMD build artefacts
         run: |
