@@ -19,15 +19,11 @@
 #     NICHT vorab erstellt.
 #   - max_input_vars=5000 via ini-values (Moodle-Mindestanforderung).
 #   - --branch (nicht --moodle!) übergibt den Moodle-Branch.
-#   - Maxima + gnuplot werden in ALLEN Jobs installiert, die
-#     qtype_stack registrieren – STACK auto-konfiguriert sich
-#     während der Test-Suite-Initialisierung via db/install.php.
-#   - KEIN admin/cli/cfg.php: dieses Tool greift auf die Haupt-DB
-#     zu, die in der CI-Umgebung keine Tabellen hat (nur Test-DBs
-#     werden von moodle-plugin-ci erstellt).
-#   - .git/objects/pack/ muss vor grunt beschreibbar gemacht werden,
-#     da moodle-plugin-ci grunt ein Backup/Restore durchführt und
-#     git Pack-Dateien read-only setzt.
+#   - Maxima + gnuplot in ALLEN Jobs mit qtype_stack, da dessen
+#     db/install.php beim Site-Install eine CAS-Verbindung aufbaut.
+#   - KEIN admin/cli/cfg.php (Haupt-DB hat keine Tabellen in CI).
+#   - moodle-plugin-ci v4: phpunit, behat, grunt verwenden <plugin>
+#     als POSITIONELLES Argument – --plugin existiert NICHT.
 ##############################################################################
 
 name: Moodle Plugin CI
@@ -78,9 +74,6 @@ jobs:
         run: moodle-plugin-ci phpmd plugin || true
 
   # ── 1b. JS / CSS Lint ────────────────────────────────────────────────────
-  # Benötigt eine vollständige Moodle-Installation für grunt-Config-Auflösung.
-  # qtype_stack's db/install.php baut beim Site-Install sofort eine
-  # CAS-Verbindung auf → Maxima + gnuplot müssen VORHER installiert sein.
   lint-js:
     name: "JS/CSS Lint"
     runs-on: ubuntu-24.04
@@ -158,14 +151,9 @@ jobs:
         run: npm install
         working-directory: ${{ github.workspace }}/moodle
 
-      # Git setzt Pack-Dateien read-only. moodle-plugin-ci grunt erstellt
-      # ein Backup inkl. .git/ und stellt es danach wieder her. Ohne
-      # Schreibrechte schlägt die Wiederherstellung fehl und korrumpiert
-      # den Zustand für nachfolgende grunt-Aufrufe (Gruntfile not found).
       - name: Fix .git pack permissions for grunt backup/restore
         run: chmod -R u+w plugin/.git/ 2>/dev/null || true
 
-      # -m zeigt explizit auf das Moodle-Verzeichnis mit Gruntfile.js
       - name: ESLint – AMD JS
         run: moodle-plugin-ci grunt -m "$GITHUB_WORKSPACE/moodle" -t eslint ./plugin
 
@@ -192,19 +180,13 @@ jobs:
 
   # ── 2. PHPUnit ────────────────────────────────────────────────────────────
   #
+  # moodle-plugin-ci v4: <plugin> ist ein POSITIONELLES Argument.
+  #   --plugin existiert NICHT.
+  #   --group  existiert NICHT (kein Durchreichen an PHPUnit).
+  #   "all tests" läuft bereits alle Tests inkl. DB-Gruppe.
+  #
   # STACK-Konfiguration erfolgt automatisch:
-  #   1. Maxima wird vor install installiert (im PATH)
-  #   2. moodle-plugin-ci install (ohne --no-init) → Test-Suite-Init
-  #      → install_site() → qtype_stack db/install.php
-  #   3. db/install.php erkennt Maxima automatisch im PATH
-  #   4. Settings werden in der Test-DB gespeichert
-  #
-  # admin/cli/cfg.php darf NICHT verwendet werden – es greift auf die
-  # Haupt-DB zu, die in der CI-Umgebung keine Tabellen hat
-  # (Table "config" does not exist).
-  #
-  # Initialise PHPUnit ist ebenfalls NICHT nötig – moodle-plugin-ci
-  # install (ohne --no-init) initialisiert die Test-Suite bereits.
+  #   Maxima im PATH → install → db/install.php → Autoerkennung
   phpunit:
     name: "PHPUnit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.db.engine }})"
     runs-on: ubuntu-24.04
@@ -305,20 +287,15 @@ jobs:
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
 
+      # FIX: <plugin> ist positionelles Argument – --plugin existiert NICHT
       - name: PHPUnit – all tests
-        run: moodle-plugin-ci phpunit --plugin ./plugin
-
-      - name: PHPUnit – DB group
-        run: |
-          moodle-plugin-ci phpunit --plugin ./plugin \
-            -- --group local_stackmatheditor_db
+        run: moodle-plugin-ci phpunit ./plugin
 
   # ── 3. Behat ──────────────────────────────────────────────────────────────
   #
-  # Gleiche Logik wie PHPUnit:
-  #   - KEIN admin/cli/cfg.php (Haupt-DB hat keine Tabellen)
-  #   - KEIN separates Initialise Behat (moodle-plugin-ci install erledigt das)
-  #   - Maxima wird vor install installiert → db/install.php erkennt es automatisch
+  # Gleiche Konvention wie phpunit/grunt:
+  #   <plugin> ist positionelles Argument – --plugin existiert NICHT.
+  #   --tags filtert Szenarien (kein Feature-Pfad als Argument nötig).
   behat:
     name: "Behat (${{ matrix.moodle }} / PHP 8.2 / Chrome)"
     runs-on: ubuntu-24.04
@@ -360,7 +337,6 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
-      # ⚠️  Maxima MUSS vor moodle-plugin-ci install stehen!
       - name: Install Maxima (≥ 5.46) and gnuplot
         run: |
           sudo apt-get update -qq
@@ -402,19 +378,15 @@ jobs:
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
 
-      - name: Behat – toolbar configuration
+      # FIX: <plugin> ist positionelles Argument – --plugin existiert NICHT.
+      # --tags filtert auf die gewünschten Szenarien; Feature-Pfade werden
+      # NICHT als separate Argumente übergeben.
+      - name: Behat – all plugin scenarios
         run: |
-          moodle-plugin-ci behat --plugin ./plugin \
+          moodle-plugin-ci behat \
             --profile chrome \
-            --tags    "@local_stackmatheditor and not @broken" \
-            -- "local/stackmatheditor/tests/behat/configure_toolbar.feature"
-
-      - name: Behat – editor rendering
-        run: |
-          moodle-plugin-ci behat --plugin ./plugin \
-            --profile chrome \
-            --tags    "@local_stackmatheditor and not @broken" \
-            -- "local/stackmatheditor/tests/behat/editor_rendering.feature"
+            --tags "@local_stackmatheditor and not @broken" \
+            ./plugin
 
       - name: Upload failure screenshots
         if: failure()
