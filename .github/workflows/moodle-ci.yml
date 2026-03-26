@@ -64,8 +64,6 @@ jobs:
   lint-js:
     name: "JS/CSS Lint"
     runs-on: ubuntu-24.04
-    env:
-      TRAVIS_BRANCH: ${{ github.head_ref || github.ref_name }}
 
     services:
       mariadb:
@@ -103,6 +101,9 @@ jobs:
           composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci ${{ env.MOODLE_CI }}
           echo "$GITHUB_WORKSPACE/ci/bin"        >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
+
+      - name: Export plugin branch for moodle-plugin-ci
+        run: echo "TRAVIS_BRANCH=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" >> "$GITHUB_ENV"
 
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
@@ -158,8 +159,6 @@ jobs:
     name: "PHPUnit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.db.engine }})"
     runs-on: ubuntu-24.04
     needs: [lint-php, lint-js]
-    env:
-      TRAVIS_BRANCH: ${{ github.head_ref || github.ref_name }}
     strategy:
       fail-fast: false
       matrix:
@@ -232,6 +231,9 @@ jobs:
           echo "$GITHUB_WORKSPACE/ci/bin"        >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
 
+      - name: Export plugin branch for moodle-plugin-ci
+        run: echo "TRAVIS_BRANCH=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
@@ -277,8 +279,6 @@ jobs:
     name: "Behat (${{ matrix.moodle }} / PHP 8.2 / Chrome)"
     runs-on: ubuntu-24.04
     needs: [phpunit]
-    env:
-      TRAVIS_BRANCH: ${{ github.head_ref || github.ref_name }}
     strategy:
       fail-fast: false
       matrix:
@@ -327,6 +327,9 @@ jobs:
           composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci ${{ env.MOODLE_CI }}
           echo "$GITHUB_WORKSPACE/ci/bin"        >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
+
+      - name: Export plugin branch for moodle-plugin-ci
+        run: echo "TRAVIS_BRANCH=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" >> "$GITHUB_ENV"
 
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
