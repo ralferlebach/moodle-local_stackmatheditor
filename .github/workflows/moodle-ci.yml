@@ -108,8 +108,7 @@ jobs:
           moodle-plugin-ci install \
             --plugin   ./plugin \
             --db-type  mysqli \
-            --moodle   MOODLE_405_STABLE \
-            --branch   ${{ github.head_ref || github.ref_name }}
+            --moodle   MOODLE_405_STABLE
         env:
           DB:     mysqli
           DBHOST: 127.0.0.1
