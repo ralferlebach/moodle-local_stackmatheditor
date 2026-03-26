@@ -74,9 +74,6 @@ jobs:
         run: moodle-plugin-ci phpmd plugin || true
 
   # ── 1b. JS / CSS Lint ────────────────────────────────────────────────────
-  # Benötigt eine vollständige Moodle-Installation für grunt-Config-Auflösung.
-  # qtype_stack's db/install.php baut beim Site-Install sofort eine
-  # CAS-Verbindung auf → Maxima + gnuplot müssen VORHER installiert sein.
   lint-js:
     name: "JS/CSS Lint"
     runs-on: ubuntu-24.04
@@ -154,9 +151,6 @@ jobs:
         run: npm install
         working-directory: ${{ github.workspace }}/moodle
 
-      # Git setzt Pack-Dateien read-only. moodle-plugin-ci grunt erstellt
-      # ein Backup inkl. .git/ und stellt es danach wieder her. Ohne
-      # Schreibrechte schlägt die Wiederherstellung fehl.
       - name: Fix .git pack permissions for grunt backup/restore
         run: chmod -R u+w plugin/.git/ 2>/dev/null || true
 
@@ -186,11 +180,13 @@ jobs:
 
   # ── 2. PHPUnit ────────────────────────────────────────────────────────────
   #
-  # moodle-plugin-ci v4 Signatur:
-  #   phpunit [options] [--] [<plugin>]
+  # moodle-plugin-ci v4: <plugin> ist ein POSITIONELLES Argument.
+  #   --plugin existiert NICHT.
+  #   --group  existiert NICHT (kein Durchreichen an PHPUnit).
+  #   "all tests" läuft bereits alle Tests inkl. DB-Gruppe.
   #
-  # --plugin existiert NICHT → <plugin> ist positionelles Argument.
-  # STACK-Konfiguration: Maxima im PATH → install → db/install.php → auto
+  # STACK-Konfiguration erfolgt automatisch:
+  #   Maxima im PATH → install → db/install.php → Autoerkennung
   phpunit:
     name: "PHPUnit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.db.engine }})"
     runs-on: ubuntu-24.04
@@ -227,3 +223,175 @@ jobs:
           POSTGRES_DB:       postgres
         ports: ['5432:5432']
         options: >-
+          --health-cmd="pg_isready -U moodle"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, pdo, pdo_mysql, pdo_pgsql, gd, xml, zip, intl
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      # ⚠️  Maxima MUSS vor moodle-plugin-ci install stehen, da
+      #     qtype_stack's db/install.php sofort eine CAS-Verbindung aufbaut.
+      - name: Install Maxima (≥ 5.46) and gnuplot
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y maxima gnuplot
+          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
+          echo "Installed Maxima $VER"
+          python3 -c "
+          v = tuple(int(x) for x in '${VER}'.split('.'))
+          assert v >= (5, 46), f'Maxima {v} < required (5, 46)'
+          print(f'Maxima {v}: OK')
+          "
+
+      - name: Install moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci ${{ env.MOODLE_CI }}
+          echo "$GITHUB_WORKSPACE/ci/bin"        >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
+
+      - name: Set TRAVIS_BRANCH for moodle-plugin-ci
+        run: |
+          BRANCH_NAME=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
+          if [ -z "$BRANCH_NAME" ]; then
+            BRANCH_NAME="default-branch"
+          fi
+          echo "TRAVIS_BRANCH=$BRANCH_NAME" >> "$GITHUB_ENV"
+
+      - name: Register qtype_stack
+        run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
+
+      # moodle-plugin-ci install (ohne --no-init) erledigt alles:
+      #   - Moodle klonen, config.php schreiben, DB erstellen
+      #   - Plugins installieren (qtype_stack db/install.php → Maxima-Autoerkennung)
+      #   - PHPUnit + Behat Test-Suites initialisieren
+      - name: Install Moodle ${{ matrix.moodle }}
+        run: |
+          moodle-plugin-ci install \
+            --plugin   ./plugin \
+            --db-type  ${{ matrix.db.type }} \
+            --db-host  127.0.0.1 \
+            --db-port  ${{ matrix.db.port }} \
+            --db-user  ${{ matrix.db.user }} \
+            --db-pass  ${{ matrix.db.pass }} \
+            --db-name  moodle \
+            --branch   ${{ matrix.moodle }}
+
+      # FIX: <plugin> ist positionelles Argument – --plugin existiert NICHT
+      - name: PHPUnit – all tests
+        run: moodle-plugin-ci phpunit ./plugin
+
+  # ── 3. Behat ──────────────────────────────────────────────────────────────
+  #
+  # Gleiche Konvention wie phpunit/grunt:
+  #   <plugin> ist positionelles Argument – --plugin existiert NICHT.
+  #   --tags filtert Szenarien (kein Feature-Pfad als Argument nötig).
+  behat:
+    name: "Behat (${{ matrix.moodle }} / PHP 8.2 / Chrome)"
+    runs-on: ubuntu-24.04
+    needs: [phpunit]
+    strategy:
+      fail-fast: false
+      matrix:
+        moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE', 'MOODLE_501_STABLE']
+
+    services:
+      selenium:
+        image: selenium/standalone-chrome:latest
+        options: >-
+          --shm-size=2g
+          --health-cmd="curl -sf http://localhost:4444/status"
+          --health-interval=15s
+          --health-retries=5
+        ports: ['4444:4444']
+
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo, pdo_mysql, gd, xml, zip, intl
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      - name: Install Maxima (≥ 5.46) and gnuplot
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y maxima gnuplot
+          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
+          echo "Installed Maxima $VER"
+          python3 -c "
+          v = tuple(int(x) for x in '${VER}'.split('.'))
+          assert v >= (5, 46), f'Maxima {v} < required (5, 46)'
+          print(f'Maxima {v}: OK')
+          "
+
+      - name: Install moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci ${{ env.MOODLE_CI }}
+          echo "$GITHUB_WORKSPACE/ci/bin"        >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
+
+      - name: Set TRAVIS_BRANCH for moodle-plugin-ci
+        run: |
+          BRANCH_NAME=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
+          if [ -z "$BRANCH_NAME" ]; then
+            BRANCH_NAME="default-branch"
+          fi
+          echo "TRAVIS_BRANCH=$BRANCH_NAME" >> "$GITHUB_ENV"
+
+      - name: Register qtype_stack
+        run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
+
+      - name: Install Moodle ${{ matrix.moodle }}
+        run: |
+          moodle-plugin-ci install \
+            --plugin   ./plugin \
+            --db-type  mariadb \
+            --db-host  127.0.0.1 \
+            --db-port  3306 \
+            --db-user  root \
+            --db-pass  root \
+            --db-name  moodle \
+            --branch   ${{ matrix.moodle }}
+
+      # FIX: <plugin> ist positionelles Argument – --plugin existiert NICHT.
+      # --tags filtert auf die gewünschten Szenarien; Feature-Pfade werden
+      # NICHT als separate Argumente übergeben.
+      - name: Behat – all plugin scenarios
+        run: |
+          moodle-plugin-ci behat \
+            --profile chrome \
+            --tags "@local_stackmatheditor and not @broken" \
+            ./plugin
+
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: behat-screenshots-${{ matrix.moodle }}
+          path: ${{ github.workspace }}/moodle/behatfaildumps/
+          retention-days: 7
