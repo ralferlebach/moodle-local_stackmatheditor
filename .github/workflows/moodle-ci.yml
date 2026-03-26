@@ -19,8 +19,10 @@
 #     NICHT vorab erstellt.
 #   - max_input_vars=5000 via ini-values (Moodle-Mindestanforderung).
 #   - --branch (nicht --moodle!) übergibt den Moodle-Branch.
-#   - lint-js nutzt --no-init, da keine lauffähige Site nötig ist
-#     (vermeidet qtype_stack Install-Hook / Maxima-Abhängigkeit).
+#   - Maxima + gnuplot werden in ALLEN Jobs installiert, die
+#     qtype_stack registrieren, da dessen db/install.php beim
+#     Site-Install sofort eine CAS-Verbindung aufbaut.
+#   - grunt: Tasks via -t, Plugin-Pfad als positionelles Argument.
 ##############################################################################
 
 name: Moodle Plugin CI
@@ -71,9 +73,9 @@ jobs:
         run: moodle-plugin-ci phpmd plugin || true
 
   # ── 1b. JS / CSS Lint ────────────────────────────────────────────────────
-  # Benötigt eine minimale Moodle-Installation für grunt-Config-Auflösung,
-  # aber KEINE lauffähige Site → --no-init überspringt Test-Suite-Init
-  # und damit den qtype_stack Install-Hook (Maxima nicht erforderlich).
+  # Benötigt eine vollständige Moodle-Installation für grunt-Config-Auflösung.
+  # qtype_stack's db/install.php baut beim Site-Install sofort eine
+  # CAS-Verbindung auf → Maxima + gnuplot müssen VORHER installiert sein.
   lint-js:
     name: "JS/CSS Lint"
     runs-on: ubuntu-24.04
@@ -106,6 +108,21 @@ jobs:
         with:
           node-version: '20'
 
+      # ⚠️  Maxima + gnuplot MÜSSEN vor moodle-plugin-ci install stehen,
+      #     weil qtype_stack's db/install.php sofort eine CAS-Verbindung
+      #     aufbaut (xmldb_qtype_stack_install → maxima_opt_auto).
+      - name: Install Maxima (≥ 5.46) and gnuplot
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y maxima gnuplot
+          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
+          echo "Installed Maxima $VER"
+          python3 -c "
+          v = tuple(int(x) for x in '${VER}'.split('.'))
+          assert v >= (5, 46), f'Maxima {v} < required (5, 46)'
+          print(f'Maxima {v}: OK')
+          "
+
       - name: Install moodle-plugin-ci
         run: |
           composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci ${{ env.MOODLE_CI }}
@@ -123,10 +140,7 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
-      # --no-init: Überspringt PHPUnit-/Behat-Initialisierung und damit
-      #            install_site() → qtype_stack db/install.php wird NICHT
-      #            ausgeführt → kein Maxima nötig.
-      - name: Install Moodle (grunt-Config only)
+      - name: Install Moodle (grunt-Config)
         run: |
           moodle-plugin-ci install \
             --plugin   ./plugin \
@@ -136,19 +150,22 @@ jobs:
             --db-user  root \
             --db-pass  root \
             --db-name  moodle \
-            --branch   MOODLE_405_STABLE \
-            --no-init
+            --branch   MOODLE_405_STABLE
 
       - name: Install Node dependencies
         run: npm install
         working-directory: ${{ github.workspace }}/moodle
 
+      # FIX: grunt-Signatur ist:
+      #   grunt [-t|--tasks TASKS] [--] <plugin>
+      # Tasks via -t, Plugin-Pfad als positionelles Argument.
+      # --plugin existiert NICHT als Option.
       - name: ESLint – AMD JS
-        run: moodle-plugin-ci grunt --plugin ./plugin eslint
+        run: moodle-plugin-ci grunt -t eslint ./plugin
 
       - name: Stylelint – CSS
-        run: moodle-plugin-ci grunt --plugin ./plugin stylelint
-        continue-on-error: true
+        run: moodle-plugin-ci grunt -t stylelint ./plugin
+        continue-on-error: true   # warn only until baseline is established
 
       - name: Verify AMD build artefacts
         run: |
@@ -221,8 +238,6 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
-      # ⚠️  Maxima MUSS vor moodle-plugin-ci install stehen, weil
-      #     qtype_stack's db/install.php sofort eine CAS-Verbindung aufbaut.
       - name: Install Maxima (≥ 5.46) and gnuplot
         run: |
           sudo apt-get update -qq
@@ -329,9 +344,17 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
-      # ⚠️  Maxima MUSS vor moodle-plugin-ci install stehen!
-      - name: Install Maxima and gnuplot
-        run: sudo apt-get update -qq && sudo apt-get install -y maxima gnuplot
+      - name: Install Maxima (≥ 5.46) and gnuplot
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y maxima gnuplot
+          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
+          echo "Installed Maxima $VER"
+          python3 -c "
+          v = tuple(int(x) for x in '${VER}'.split('.'))
+          assert v >= (5, 46), f'Maxima {v} < required (5, 46)'
+          print(f'Maxima {v}: OK')
+          "
 
       - name: Install moodle-plugin-ci
         run: |
@@ -366,9 +389,12 @@ jobs:
         run: |
           M="$GITHUB_WORKSPACE/moodle"
           B=$(which maxima)
-          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=maximaversion --set=5.46
-          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=castimeout    --set=30
-          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=maximacommand --set="$B"
+          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
+          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=maximaversion      --set="$VER"
+          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=castimeout         --set=30
+          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=maximacommand      --set="$B"
+          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=maximacommandopt   --set=""
+          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=stackmaximaversion --set=2024010400
 
       - name: Initialise Behat
         run: php admin/tool/behat/cli/init.php
