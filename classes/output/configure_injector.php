@@ -32,7 +32,6 @@ use local_stackmatheditor\output\page_helper;
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class configure_injector {
-
     /**
      * Inject configuration link data and initialise the AMD module.
      *

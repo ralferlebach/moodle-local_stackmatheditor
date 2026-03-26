@@ -19,8 +19,6 @@ namespace local_stackmatheditor\output;
 use local_stackmatheditor\config_manager;
 use local_stackmatheditor\definitions;
 use local_stackmatheditor\quiz_helper;
-
-// Shared page output utilities.
 use local_stackmatheditor\output\page_helper;
 
 /**

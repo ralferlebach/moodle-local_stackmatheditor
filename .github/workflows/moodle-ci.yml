@@ -64,6 +64,8 @@ jobs:
   lint-js:
     name: "JS/CSS Lint"
     runs-on: ubuntu-24.04
+    env:
+      TRAVIS_BRANCH: ${{ github.head_ref || github.ref_name }}
 
     services:
       mariadb:
@@ -110,8 +112,7 @@ jobs:
           moodle-plugin-ci install \
             --plugin   ./plugin \
             --db-type  mysqli \
-            --moodle   MOODLE_405_STABLE \
-            --branch   ${{ github.head_ref || github.ref_name }}
+            --moodle   MOODLE_405_STABLE
         env:
           DB:     mysqli
           DBHOST: 127.0.0.1
@@ -157,6 +158,8 @@ jobs:
     name: "PHPUnit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.db.engine }})"
     runs-on: ubuntu-24.04
     needs: [lint-php, lint-js]
+    env:
+      TRAVIS_BRANCH: ${{ github.head_ref || github.ref_name }}
     strategy:
       fail-fast: false
       matrix:
@@ -237,8 +240,7 @@ jobs:
           moodle-plugin-ci install \
             --plugin   ./plugin \
             --db-type  ${{ matrix.db.type }} \
-            --moodle   ${{ matrix.moodle }} \
-            --branch   ${{ github.head_ref || github.ref_name }}
+            --moodle   ${{ matrix.moodle }}
         env:
           DB:     ${{ matrix.db.type }}
           DBHOST: 127.0.0.1
@@ -275,6 +277,8 @@ jobs:
     name: "Behat (${{ matrix.moodle }} / PHP 8.2 / Chrome)"
     runs-on: ubuntu-24.04
     needs: [phpunit]
+    env:
+      TRAVIS_BRANCH: ${{ github.head_ref || github.ref_name }}
     strategy:
       fail-fast: false
       matrix:
@@ -332,8 +336,7 @@ jobs:
           moodle-plugin-ci install \
             --plugin   ./plugin \
             --db-type  mysqli \
-            --moodle   ${{ matrix.moodle }} \
-            --branch   ${{ github.head_ref || github.ref_name }}
+            --moodle   ${{ matrix.moodle }}
         env:
           DB:     mysqli
           DBHOST: 127.0.0.1
