@@ -16,8 +16,6 @@
 
 namespace local_stackmatheditor\output;
 
-defined('MOODLE_INTERNAL') || die();
-
 use local_stackmatheditor\config_manager;
 use local_stackmatheditor\definitions;
 use local_stackmatheditor\quiz_helper;
@@ -80,9 +78,9 @@ class editor_injector {
 
         // Runtime JSON element.
         page_helper::inject_json_element('sme-runtime', [
-            'slotConfigs'      => !empty($slotconfigs)  ? $slotconfigs  : new \stdClass(),
+            'slotConfigs'      => !empty($slotconfigs) ? $slotconfigs : new \stdClass(),
             'slotVarModes'     => !empty($slotvarmodes) ? $slotvarmodes : new \stdClass(),
-            'slotEnabled'      => !empty($slotenabled)  ? $slotenabled  : new \stdClass(),
+            'slotEnabled'      => !empty($slotenabled) ? $slotenabled : new \stdClass(),
             'instanceDefaults' => config_manager::get_instance_defaults(),
         ]);
     }

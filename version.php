@@ -14,13 +14,21 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
+/**
+ * Plugin version metadata for local_stackmatheditor.
+ *
+ * @package    local_stackmatheditor
+ * @copyright  2026 Ralf Erlebach
+ * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version      = 2026032602;
+$plugin->version      = 2026032605;
 $plugin->requires     = 2024042200;  // Moodle 4.4 minimum (tested up to 4.5+).
 $plugin->component    = 'local_stackmatheditor';
-$plugin->maturity     = MATURITY_BETA;
-$plugin->release      = '0.97';
+$plugin->maturity     = MATURITY_BETA
+$plugin->release      = '0.98;
 $plugin->dependencies = [
     // Requires STACK 4.6 or later (supports Maxima 5.46+ and PHP 8.x).
     'qtype_stack' => 2024010400,

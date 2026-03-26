@@ -33,7 +33,6 @@ use local_stackmatheditor\definitions;
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class config_manager_test extends advanced_testcase {
-
     /**
      * ensure_qbeid with a concrete qbeid returns it unchanged.
      */
@@ -77,8 +76,8 @@ final class config_manager_test extends advanced_testcase {
             'mode 1 (enabled)'  => ['1', 1],
             'mode 2 (default off, override)' => ['2', 2],
             'mode 3 (default on, override)'  => ['3', 3],
-            'invalid negative'  => ['-1', 1],  // Safe fallback.
-            'invalid high'      => ['99', 1],  // Safe fallback.
+            'invalid negative'  => ['-1', 1], // Safe fallback.
+            'invalid high'      => ['99', 1], // Safe fallback.
         ];
     }
 
@@ -140,10 +139,16 @@ final class config_manager_test extends advanced_testcase {
 
 
     /**
+     * Test get_effective_enabled() returns the correct bool for each instance mode.
+     *
      * @dataProvider effective_enabled_provider
+     * @param int  $mode     Instance enabled mode (0-3).
+     * @param bool $expected Expected return value.
+     * @return void
      */
     public function test_get_effective_enabled_instance_only(
-        int $mode, bool $expected
+        int $mode,
+        bool $expected
     ): void {
         $this->resetAfterTest();
         set_config('enabled', (string) $mode, 'local_stackmatheditor');
@@ -157,6 +162,8 @@ final class config_manager_test extends advanced_testcase {
     }
 
     /**
+     * Data provider for test_get_effective_enabled_instance_only.
+     *
      * @return array<string, array{int, bool}>
      */
     public static function effective_enabled_provider(): array {
@@ -193,8 +200,11 @@ final class config_manager_test extends advanced_testcase {
 
         $this->assertTrue($loaded['basic_operators'], 'basic_operators must be true after save');
         $this->assertFalse($loaded['trigonometry'], 'trigonometry must be false after save');
-        $this->assertSame(definitions::VAR_MULTI, $loaded['_variableMode'],
-            '_variableMode must be persisted');
+        $this->assertSame(
+            definitions::VAR_MULTI,
+            $loaded['_variableMode'],
+            '_variableMode must be persisted'
+        );
     }
 
     /**
@@ -256,10 +266,15 @@ final class config_manager_test extends advanced_testcase {
         config_manager::save_config($cmid, $qbeid, ['trigonometry' => true]);
         config_manager::save_config($cmid, $qbeid, ['trigonometry' => false]);
 
-        $count = $DB->count_records('local_stackmatheditor',
-            ['cmid' => $cmid, 'questionbankentryid' => $qbeid]);
-        $this->assertSame(1, $count,
-            'Only one record must exist after double-save (deduplication)');
+        $count = $DB->count_records(
+            'local_stackmatheditor',
+            ['cmid' => $cmid, 'questionbankentryid' => $qbeid]
+        );
+        $this->assertSame(
+            1,
+            $count,
+            'Only one record must exist after double-save (deduplication)'
+        );
     }
 
     /**

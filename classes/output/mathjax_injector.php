@@ -16,8 +16,6 @@
 
 namespace local_stackmatheditor\output;
 
-defined('MOODLE_INTERNAL') || die();
-
 use local_stackmatheditor\definitions;
 
 /**

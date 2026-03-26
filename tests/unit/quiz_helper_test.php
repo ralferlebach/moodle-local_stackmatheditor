@@ -45,8 +45,10 @@ final class quiz_helper_test extends advanced_testcase {
      */
     public function test_can_manage_quiz_invalid_cmid(): void {
         $result = quiz_helper::can_manage_quiz(0);
-        $this->assertFalse($result,
-            'can_manage_quiz(0) must return false — cmid 0 does not exist');
+        $this->assertFalse(
+            $result,
+            'can_manage_quiz(0) must return false — cmid 0 does not exist'
+        );
     }
 
     /**
@@ -54,8 +56,10 @@ final class quiz_helper_test extends advanced_testcase {
      */
     public function test_can_manage_quiz_nonexistent_cmid(): void {
         $result = quiz_helper::can_manage_quiz(PHP_INT_MAX);
-        $this->assertFalse($result,
-            'can_manage_quiz with nonexistent cmid must return false');
+        $this->assertFalse(
+            $result,
+            'can_manage_quiz with nonexistent cmid must return false'
+        );
     }
 
     /**
@@ -74,8 +78,10 @@ final class quiz_helper_test extends advanced_testcase {
      */
     public function test_quiz_has_stack_questions_invalid(): void {
         $result = quiz_helper::quiz_has_stack_questions(0);
-        $this->assertFalse($result,
-            'Nonexistent quiz must have no STACK questions');
+        $this->assertFalse(
+            $result,
+            'Nonexistent quiz must have no STACK questions'
+        );
     }
 
     /**
@@ -87,8 +93,10 @@ final class quiz_helper_test extends advanced_testcase {
         $this->resetAfterTest();
         $questions = quiz_helper::load_quiz_stack_questions(99999999);
         $this->assertIsArray($questions);
-        $this->assertEmpty($questions,
-            'Nonexistent quiz must return empty question list');
+        $this->assertEmpty(
+            $questions,
+            'Nonexistent quiz must return empty question list'
+        );
     }
 
     /**
@@ -100,8 +108,8 @@ final class quiz_helper_test extends advanced_testcase {
         $this->resetAfterTest();
         $result = quiz_helper::load_attempt_stack_slots(99999999);
         $this->assertIsArray($result);
-        $this->assertArrayHasKey('slotmap',  $result);
-        $this->assertArrayHasKey('qbeids',   $result);
+        $this->assertArrayHasKey('slotmap', $result);
+        $this->assertArrayHasKey('qbeids', $result);
         $this->assertArrayHasKey('qbeidmap', $result);
         $this->assertEmpty($result['slotmap']);
     }

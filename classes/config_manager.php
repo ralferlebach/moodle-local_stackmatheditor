@@ -117,7 +117,7 @@ class config_manager {
         $val = get_config('local_stackmatheditor', 'enabled');
         $int = (int) $val;
         if ($int < 0 || $int > 3) {
-            return 1; // safe default: enabled.
+            return 1; // Safe default: enabled.
         }
         return $int;
     }
@@ -567,7 +567,10 @@ class config_manager {
         }
 
         $records = $DB->get_records_select(
-            self::TABLE, $where, $params, 'timemodified DESC'
+            self::TABLE,
+            $where,
+            $params,
+            'timemodified DESC'
         );
 
         if (!empty($records)) {
@@ -583,7 +586,7 @@ class config_manager {
         } else {
             $record                      = new \stdClass();
             $record->cmid                = $cmid;
-            $record->questionbankentryid = $qbeid; // null for quiz-level
+            $record->questionbankentryid = $qbeid; // Null for quiz-level defaults.
             $record->$col                = $json;
             $record->usermodified        = $userid;
             $record->timecreated         = $now;

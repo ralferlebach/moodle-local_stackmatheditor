@@ -14,8 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * Upgrade script for local_stackmatheditor.
  *
@@ -28,25 +26,23 @@ function xmldb_local_stackmatheditor_upgrade(int $oldversion): bool {
     $dbman = $DB->get_manager();
     $targettable = new xmldb_table('local_stackmatheditor');
 
-
     // STEP 1: Ensure base table exists (initial install path).
 
     if ($oldversion < 2024010100) {
         if (!$dbman->table_exists($targettable)) {
             $table = new xmldb_table('local_stackmatheditor');
-            $table->add_field('id',             XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
-            $table->add_field('cmid',           XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
-            $table->add_field('questionid',     XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
-            $table->add_field('config',         XMLDB_TYPE_TEXT,    null, null, null,          null);
-            $table->add_field('usermodified',   XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
-            $table->add_field('timecreated',    XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
-            $table->add_field('timemodified',   XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+            $table->add_field('cmid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('questionid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('config', XMLDB_TYPE_TEXT, null, null, null, null);
+            $table->add_field('usermodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
             $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
             $dbman->create_table($table);
         }
         upgrade_plugin_savepoint(true, 2024010100, 'local', 'stackmatheditor');
     }
-
 
     // STEP 2: Add questionbankentryid + allowed_elements; clean up schema.
 
@@ -105,9 +101,9 @@ function xmldb_local_stackmatheditor_upgrade(int $oldversion): bool {
 
             // Drop old unique indexes.
             foreach ([
-                new xmldb_index('questionid_uix',  XMLDB_INDEX_UNIQUE, ['questionid']),
-                new xmldb_index('cmid_qbeid_uix',  XMLDB_INDEX_UNIQUE, ['cmid', 'questionbankentryid']),
-                new xmldb_index('questionid_ix',   XMLDB_INDEX_NOTUNIQUE, ['questionid']),
+                new xmldb_index('questionid_uix', XMLDB_INDEX_UNIQUE, ['questionid']),
+                new xmldb_index('cmid_qbeid_uix', XMLDB_INDEX_UNIQUE, ['cmid', 'questionbankentryid']),
+                new xmldb_index('questionid_ix', XMLDB_INDEX_NOTUNIQUE, ['questionid']),
             ] as $oldidx) {
                 if ($dbman->index_exists($targettable, $oldidx)) {
                     $dbman->drop_index($targettable, $oldidx);
@@ -116,7 +112,6 @@ function xmldb_local_stackmatheditor_upgrade(int $oldversion): bool {
         }
         upgrade_plugin_savepoint(true, 2026032200, 'local', 'stackmatheditor');
     }
-
 
     // STEP 3: Migrate legacy data – fill questionbankentryid from questionid.
 
@@ -144,7 +139,6 @@ function xmldb_local_stackmatheditor_upgrade(int $oldversion): bool {
         }
         upgrade_plugin_savepoint(true, 2026032201, 'local', 'stackmatheditor');
     }
-
 
     // STEP 4: Make questionbankentryid nullable (supports quiz-level defaults).
     //

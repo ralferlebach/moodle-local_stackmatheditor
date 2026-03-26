@@ -14,8 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * Web service definitions for local_stackmatheditor.
  *
@@ -23,6 +21,9 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+
+defined('MOODLE_INTERNAL') || die();
+
 $functions = [
     'local_stackmatheditor_get_config' => [
         'classname'     => 'local_stackmatheditor\\external\\get_config',

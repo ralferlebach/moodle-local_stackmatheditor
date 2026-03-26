@@ -31,7 +31,6 @@ use local_stackmatheditor\definitions;
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class definitions_test extends advanced_testcase {
-
     /**
      * Every group must have a non-empty string label.
      */

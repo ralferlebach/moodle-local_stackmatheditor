@@ -16,8 +16,6 @@
 
 namespace local_stackmatheditor;
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * Multiselect admin setting that auto-sizes to the number of choices.
  *

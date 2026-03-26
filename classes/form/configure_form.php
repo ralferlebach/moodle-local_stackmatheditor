@@ -36,7 +36,6 @@ use local_stackmatheditor\definitions;
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class configure_form extends \moodleform {
-
     /**
      * Build the form elements.
      *

@@ -16,12 +16,8 @@
 
 namespace local_stackmatheditor\output;
 
-defined('MOODLE_INTERNAL') || die();
-
 use local_stackmatheditor\config_manager;
 use local_stackmatheditor\quiz_helper;
-
-// Shared page output utilities.
 use local_stackmatheditor\output\page_helper;
 
 /**
@@ -29,28 +25,40 @@ use local_stackmatheditor\output\page_helper;
  *
  * On mod-quiz-edit, also supplies a quiz-level configure URL so the JS
  * can insert a "STACK MathQuill-Editor einrichten" option into the
- * quiz navigation selector (Anforderung B).
+ * quiz navigation selector.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class configure_injector {
+
+    /**
+     * Inject configuration link data and initialise the AMD module.
+     *
+     * @param int $cmid Course module ID of the quiz.
+     * @return void
+     */
     public static function inject(int $cmid): void {
         global $PAGE;
 
         quiz_helper::dbg(
             'configure_injector: cmid=' . $cmid
-            . ' pagetype=' . $PAGE->pagetype
+                . ' pagetype=' . $PAGE->pagetype
         );
 
-        $configureurl    = (new \moodle_url('/local/stackmatheditor/configure.php'))->out(false);
-        $linktext        = get_string('configure_editor', 'local_stackmatheditor');
+        $configureurl = (new \moodle_url('/local/stackmatheditor/configure.php'))->out(false);
+        $linktext = get_string('configure_editor', 'local_stackmatheditor');
         $quizlinktextraw = get_string('configure_quiz_nav', 'local_stackmatheditor');
-        $returnurl       = quiz_helper::get_return_url($cmid);
+        $returnurl = quiz_helper::get_return_url($cmid);
 
         $linkdata = self::build_link_data(
-            $cmid, $configureurl, $returnurl, $linktext, $quizlinktextraw);
+            $cmid,
+            $configureurl,
+            $returnurl,
+            $linktext,
+            $quizlinktextraw
+        );
 
         if (empty($linkdata)) {
             quiz_helper::dbg('configure_injector: no data, skipping');
@@ -68,12 +76,23 @@ class configure_injector {
         );
     }
 
+    /**
+     * Route to the correct data-builder based on the current page type.
+     *
+     * @param int    $cmid           Course module ID.
+     * @param string $configureurl   Base configure URL.
+     * @param string $returnurl      Return URL after save.
+     * @param string $linktext       Link text for question-level links.
+     * @param string $quizlinktext   Link text for quiz-level nav option.
+     * @return array Data array for the AMD module, or empty array if not applicable.
+     */
     private static function build_link_data(
         int $cmid,
         string $configureurl,
         string $returnurl,
         string $linktext,
-        string $quizlinktext): array {
+        string $quizlinktext
+    ): array {
         global $PAGE;
 
         if (in_array($PAGE->pagetype, ['mod-quiz-attempt', 'mod-quiz-review'])) {
@@ -82,15 +101,32 @@ class configure_injector {
 
         if ($PAGE->pagetype === 'mod-quiz-edit') {
             return self::build_edit_data(
-                $cmid, $configureurl, $returnurl, $linktext, $quizlinktext);
+                $cmid,
+                $configureurl,
+                $returnurl,
+                $linktext,
+                $quizlinktext
+            );
         }
 
         return [];
     }
 
+    /**
+     * Build link data for quiz attempt and review pages.
+     *
+     * @param int    $cmid         Course module ID.
+     * @param string $configureurl Base configure URL.
+     * @param string $returnurl    Return URL after save.
+     * @param string $linktext     Link text for configure anchors.
+     * @return array Data array for the AMD module, or empty array if no STACK slots found.
+     */
     private static function build_attempt_data(
-        int $cmid, string $configureurl,
-        string $returnurl, string $linktext): array {
+        int $cmid,
+        string $configureurl,
+        string $returnurl,
+        string $linktext
+    ): array {
         $attemptid = optional_param('attempt', 0, PARAM_INT);
         if (!$attemptid) {
             return [];
@@ -105,24 +141,39 @@ class configure_injector {
         foreach ($stackdata['slotmap'] as $slot => $qid) {
             $slots[$slot] = [
                 'questionid' => $qid,
-                'qbeid'      => $stackdata['qbeids'][$slot] ?? 0,
+                'qbeid' => $stackdata['qbeids'][$slot] ?? 0,
             ];
         }
 
         return [
-            'mode'         => 'attempt',
-            'cmid'         => $cmid,
+            'mode' => 'attempt',
+            'cmid' => $cmid,
             'configureUrl' => $configureurl,
-            'returnUrl'    => $returnurl,
-            'slots'        => $slots,
-            'linkText'     => $linktext,
+            'returnUrl' => $returnurl,
+            'slots' => $slots,
+            'linkText' => $linktext,
         ];
     }
 
+    /**
+     * Build link data for the quiz edit page.
+     *
+     * Includes a quiz-level configure URL for the navigation selector.
+     *
+     * @param int    $cmid          Course module ID.
+     * @param string $configureurl  Base configure URL.
+     * @param string $returnurl     Return URL after save.
+     * @param string $linktext      Link text for question-level anchors.
+     * @param string $quizlinktext  Label for the quiz navigation selector option.
+     * @return array Data array for the AMD module, or empty array if no STACK questions found.
+     */
     private static function build_edit_data(
-        int $cmid, string $configureurl,
-        string $returnurl, string $linktext,
-        string $quizlinktext): array {
+        int $cmid,
+        string $configureurl,
+        string $returnurl,
+        string $linktext,
+        string $quizlinktext
+    ): array {
         $instanceid = quiz_helper::get_quiz_instance_id($cmid);
         if (!$instanceid) {
             return [];
@@ -133,21 +184,21 @@ class configure_injector {
             return [];
         }
 
-        // Quiz-level configure URL: cmid only, no qbeid → quiz-mode.
+        // Quiz-level configure URL: cmid only, no qbeid, opens quiz-mode form.
         $quizconfigureurl = (new \moodle_url(
             '/local/stackmatheditor/configure.php',
             ['cmid' => $cmid, 'returnurl' => $returnurl]
         ))->out(false);
 
         return [
-            'mode'             => 'edit',
-            'cmid'             => $cmid,
-            'configureUrl'     => $configureurl,
-            'quizConfigureUrl' => $quizconfigureurl,   // NEW: quiz-level entry
-            'quizLinkText'     => $quizlinktext,        // NEW: label for selector
-            'returnUrl'        => $returnurl,
-            'questions'        => $questions,
-            'linkText'         => $linktext,
+            'mode' => 'edit',
+            'cmid' => $cmid,
+            'configureUrl' => $configureurl,
+            'quizConfigureUrl' => $quizconfigureurl,
+            'quizLinkText' => $quizlinktext,
+            'returnUrl' => $returnurl,
+            'questions' => $questions,
+            'linkText' => $linktext,
         ];
     }
 }

@@ -14,6 +14,16 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
+/**
+ * STACK MathQuill toolbar configuration page.
+ *
+ * Handles both quiz-level and question-level configuration.
+ *
+ * @package    local_stackmatheditor
+ * @copyright  2026 Ralf Erlebach
+ * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
 require_once(__DIR__ . '/../../config.php');
 require_once($CFG->libdir . '/formslib.php');
 require_once($CFG->dirroot . '/question/engine/lib.php');
@@ -94,14 +104,18 @@ $PAGE->set_pagelayout('admin');
 if ($quizmode) {
     $PAGE->set_title(get_string('configure_quiz', 'local_stackmatheditor'));
     $PAGE->set_heading($course->fullname);
-    $PAGE->navbar->add($quiz->name,
-        new \moodle_url('/mod/quiz/edit.php', ['cmid' => $cmid]));
+    $PAGE->navbar->add(
+        $quiz->name,
+        new \moodle_url('/mod/quiz/edit.php', ['cmid' => $cmid])
+    );
     $PAGE->navbar->add(get_string('configure_quiz', 'local_stackmatheditor'));
 } else {
     $PAGE->set_title(get_string('configure', 'local_stackmatheditor'));
     $PAGE->set_heading($course->fullname);
-    $PAGE->navbar->add($quiz->name,
-        new \moodle_url('/mod/quiz/edit.php', ['cmid' => $cmid]));
+    $PAGE->navbar->add(
+        $quiz->name,
+        new \moodle_url('/mod/quiz/edit.php', ['cmid' => $cmid])
+    );
     $PAGE->navbar->add(get_string('configure', 'local_stackmatheditor'));
 }
 
@@ -113,8 +127,10 @@ $questionpreviewhtml = '';
 if (!$quizmode && $questionrecord) {
     try {
         $question = question_bank::load_question($questionid);
-        $quba     = question_engine::make_questions_usage_by_activity(
-            'local_stackmatheditor', $context);
+        $quba = question_engine::make_questions_usage_by_activity(
+            'local_stackmatheditor',
+            $context
+        );
         $quba->set_preferred_behaviour('deferredfeedback');
         $slot = $quba->add_question($question);
         $quba->start_question($slot);
@@ -176,23 +192,23 @@ $currentvarmode = $config['_variableMode']
 // For mode 2/3 in question-mode: inherit quiz-level default if no question.
 // Record exists yet, then fall back to instance default.
 if ($instancemode === 0) {
-    $current_enabled = false;
+    $currentenabled = false;
 } else if ($instancemode === 1) {
-    $current_enabled = true;
+    $currentenabled = true;
 } else {
     // Modes 2 and 3 – check stored value first.
     if (isset($config['_enabled'])) {
-        $current_enabled = (bool) $config['_enabled'];
+        $currentenabled = (bool) $config['_enabled'];
     } else if ($quizmode) {
         // Quiz-level, no stored record yet → instance default.
-        $current_enabled = ($instancemode === 3);
+        $currentenabled = ($instancemode === 3);
     } else {
         // Question-level → try quiz-level default, then instance default.
         $quizdefault    = config_manager::get_quiz_default($cmid);
         if ($quizdefault !== null && isset($quizdefault['_enabled'])) {
-            $current_enabled = (bool) $quizdefault['_enabled'];
+            $currentenabled = (bool) $quizdefault['_enabled'];
         } else {
-            $current_enabled = ($instancemode === 3);
+            $currentenabled = ($instancemode === 3);
         }
     }
 }
@@ -212,7 +228,7 @@ $mform = new configure_form($pageurl->out(false), [
 $formdata = [
     'groups'       => $selectedkeys,
     'variablemode' => $currentvarmode,
-    'enabled'      => (int) $current_enabled,  // always set; form ignores for mode 0/1
+    'enabled' => (int) $currentenabled, // Always set; form ignores for mode 0 or 1.
 ];
 $mform->set_data($formdata);
 
@@ -253,11 +269,13 @@ if ($mform->is_cancelled()) {
 echo $OUTPUT->header();
 
 if ($quizmode) {
-    echo $OUTPUT->heading(get_string(
-        'configure_quiz_heading', 'local_stackmatheditor', $quiz->name));
+    echo $OUTPUT->heading(
+        get_string('configure_quiz_heading', 'local_stackmatheditor', $quiz->name)
+    );
 } else {
-    echo $OUTPUT->heading(get_string(
-        'configure_heading', 'local_stackmatheditor', $questionrecord->name));
+    echo $OUTPUT->heading(
+        get_string('configure_heading', 'local_stackmatheditor', $questionrecord->name)
+    );
 }
 
 $mform->display();

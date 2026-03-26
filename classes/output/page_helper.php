@@ -16,8 +16,6 @@
 
 namespace local_stackmatheditor\output;
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * Shared page-output utilities for local_stackmatheditor.
  *
