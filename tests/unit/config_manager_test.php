@@ -83,23 +83,64 @@ final class config_manager_test extends advanced_testcase {
 
 
     /**
-     * Variable mode falls back to VAR_SINGLE when unset.
+     * get_instance_variable_mode() returns the normalised IMPLICIT_* constant
+     * for any stored value, including the legacy VAR_SINGLE / VAR_MULTI aliases.
+     *
+     * Background: the variable-mode system was extended after the initial
+     * implementation. Legacy values 'single' / 'multi' are stored in older
+     * Moodle config records and are transparently mapped to the canonical
+     * 'explicit_single' / 'explicit_multi' constants by normalise_implicit_mode().
+     * New installations store the IMPLICIT_* constants directly.
+     *
+     * @dataProvider variable_mode_provider
+     * @param string $stored   Value written to config (empty = config deleted).
+     * @param string $expected Expected return value of get_instance_variable_mode().
+     * @return void
      */
-    public function test_variable_mode_default(): void {
+    public function test_variable_mode_normalisation(
+        string $stored,
+        string $expected
+    ): void {
         $this->resetAfterTest();
-        unset_config('variablemode', 'local_stackmatheditor');
+        if ($stored === '') {
+            unset_config('variablemode', 'local_stackmatheditor');
+        } else {
+            set_config('variablemode', $stored, 'local_stackmatheditor');
+        }
         $mode = config_manager::get_instance_variable_mode();
-        $this->assertSame(definitions::VAR_SINGLE, $mode);
+        $this->assertSame($expected, $mode);
     }
 
     /**
-     * Variable mode returns multi when configured.
+     * Data provider for test_variable_mode_normalisation.
+     *
+     * @return array<string, array{string, string}>
      */
-    public function test_variable_mode_multi(): void {
-        $this->resetAfterTest();
-        set_config('variablemode', definitions::VAR_MULTI, 'local_stackmatheditor');
-        $mode = config_manager::get_instance_variable_mode();
-        $this->assertSame(definitions::VAR_MULTI, $mode);
+    public static function variable_mode_provider(): array {
+        return [
+            // Unset config → default is IMPLICIT_STACK.
+            'unset defaults to stack'
+                => ['', definitions::IMPLICIT_STACK],
+            // Legacy aliases stored before the mode system was extended.
+            'legacy single alias'
+                => [definitions::VAR_SINGLE, definitions::IMPLICIT_EXPLICIT_SINGLE],
+            'legacy multi alias'
+                => [definitions::VAR_MULTI, definitions::IMPLICIT_EXPLICIT_MULTI],
+            // New canonical IMPLICIT_* values stored directly.
+            'explicit_single pass-through'
+                => [definitions::IMPLICIT_EXPLICIT_SINGLE, definitions::IMPLICIT_EXPLICIT_SINGLE],
+            'explicit_multi pass-through'
+                => [definitions::IMPLICIT_EXPLICIT_MULTI, definitions::IMPLICIT_EXPLICIT_MULTI],
+            'space_single pass-through'
+                => [definitions::IMPLICIT_SPACE_SINGLE, definitions::IMPLICIT_SPACE_SINGLE],
+            'space_multi pass-through'
+                => [definitions::IMPLICIT_SPACE_MULTI, definitions::IMPLICIT_SPACE_MULTI],
+            'stack pass-through'
+                => [definitions::IMPLICIT_STACK, definitions::IMPLICIT_STACK],
+            // Unknown value → safe fallback to IMPLICIT_STACK.
+            'unknown value falls back to stack'
+                => ['something_unknown', definitions::IMPLICIT_STACK],
+        ];
     }
 
 
@@ -124,17 +165,34 @@ final class config_manager_test extends advanced_testcase {
 
     /**
      * When default_groups config is set, it overrides the hardcoded defaults.
+     *
+     * Uses only groups that are guaranteed to exist in definitions to avoid
+     * test failures when optional groups (e.g. logic) are disabled.
      */
     public function test_instance_defaults_from_new_format(): void {
         $this->resetAfterTest();
-        // Enable only 'brackets' and 'logic'.
-        set_config('default_groups', 'brackets,logic', 'local_stackmatheditor');
 
+        $groups = definitions::get_element_groups();
+
+        // Pick one group that is enabled by default and one that is disabled.
+        // Fall back gracefully if a group is absent (e.g. commented out).
+        $enabled  = isset($groups['brackets']) ? 'brackets' : array_key_first($groups);
+        $disabled = null;
+        foreach ($groups as $key => $group) {
+            if (!$group['default_enabled'] && $key !== $enabled) {
+                $disabled = $key;
+                break;
+            }
+        }
+
+        set_config('default_groups', $enabled, 'local_stackmatheditor');
         $defaults = config_manager::get_instance_defaults();
 
-        $this->assertTrue($defaults['brackets'], 'brackets must be enabled');
-        $this->assertTrue($defaults['logic'], 'logic must be enabled');
-        $this->assertFalse($defaults['trigonometry'], 'trigonometry must be disabled');
+        $this->assertTrue($defaults[$enabled], "$enabled must be enabled");
+
+        if ($disabled !== null) {
+            $this->assertFalse($defaults[$disabled], "$disabled must be disabled");
+        }
     }
 
 

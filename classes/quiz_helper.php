@@ -336,10 +336,17 @@ class quiz_helper {
      */
     public static function get_return_url(int $cmid): string {
         global $PAGE;
+        $fallback = (new \moodle_url('/mod/quiz/view.php', ['id' => $cmid]))->out(false);
+        // Accessing $PAGE->url before set_url() triggers debugging() in Moodle 4.x.
+        // The has_set_url() check prevents that in both production and test context.
+        if (!$PAGE->has_set_url()) {
+            return $fallback;
+        }
         try {
-            return $PAGE->url->out(false);
+            $url = $PAGE->url->out(false);
+            return ($url !== '') ? $url : $fallback;
         } catch (\Throwable $e) {
-            return (new \moodle_url('/mod/quiz/view.php', ['id' => $cmid]))->out(false);
+            return $fallback;
         }
     }
 
