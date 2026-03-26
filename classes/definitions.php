@@ -175,6 +175,8 @@ class definitions {
                 ],
             ],
 
+            // @codingStandardsIgnoreStart
+            /*
             // 6. Set theory.
             'set_theory' => [
                 'label'           => get_string('group_set_theory', $p),
@@ -232,6 +234,8 @@ class definitions {
                         'tooltip' => get_string('btn_iff', $p)],
                 ],
             ],
+            */
+            // @codingStandardsIgnoreEn
 
             // 8. Brackets.
             'brackets' => [
@@ -263,6 +267,8 @@ class definitions {
                 ],
             ],
 
+            // @codingStandardsIgnoreStart
+            /*
             // 10. Physical constants.
             'constants_nature' => [
                 'label'           => get_string('group_constants_nature', $p),
@@ -301,6 +307,8 @@ class definitions {
                         'tooltip' => get_string('btn_perp', $p)],
                 ],
             ],
+            */
+            // @codingStandardsIgnoreEnd
 
             // 12. Trigonometry.
             'trigonometry' => [
@@ -319,6 +327,8 @@ class definitions {
                 ],
             ],
 
+            // @codingStandardsIgnoreStart
+            /*
             // 13. Hyperbolic functions.
             'hyperbolic' => [
                 'label'           => get_string('group_hyperbolic', $p),
@@ -410,7 +420,7 @@ class definitions {
             // 19. Integral calculus.
             'integral_operators' => [
                 'label'           => get_string('group_integral_operators', $p),
-                'default_enabled' => true,
+                'default_enabled' => false,
                 'elements'        => [
                     ['display' => '∫', 'write' => '\\int_{}^{}',
                         'tooltip' => get_string('btn_integral', $p)],
@@ -441,6 +451,8 @@ class definitions {
                         'tooltip' => get_string('btn_gamma_func', $p)],
                 ],
             ],
+            */
+            // @codingStandardsIgnoreEnd
 
             // 21. Greek letters (lowercase).
             'greek_lower' => [
