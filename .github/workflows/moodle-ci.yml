@@ -10,6 +10,14 @@
 #   qtype_stack  → branch master
 #   Maxima ≥ 5.46 via apt + Versionscheck
 #   gnuplot       → für STACK-Plot-Rendering
+#
+# WICHTIG:
+#   - MariaDB-Service OHNE MYSQL_DATABASE → moodle-plugin-ci erstellt die DB
+#     selbst. Verbindung über root/root (hat CREATE DATABASE-Rechte).
+#   - PostgreSQL-Service mit POSTGRES_DB=postgres (nicht "moodle") →
+#     Superuser "moodle" erstellt die DB "moodle" während install.
+#   - --branch (nicht --moodle!) übergibt den Moodle-Branch.
+#     --moodle setzt nur das Zielverzeichnis (Standard: "moodle").
 ##############################################################################
 
 name: Moodle Plugin CI
@@ -66,13 +74,11 @@ jobs:
     runs-on: ubuntu-24.04
 
     services:
+      # ⛔ KEIN MYSQL_DATABASE → DB wird NICHT vorab erstellt
       mariadb:
         image: mariadb:10.11
         env:
           MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE:      moodle
-          MYSQL_USER:          moodle
-          MYSQL_PASSWORD:      moodle
         ports: ['3306:3306']
         options: >-
           --health-cmd="mysqladmin ping --silent"
@@ -112,6 +118,8 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
+      # FIX 1: --branch statt --moodle
+      # FIX 2: Explizite CLI-DB-Flags statt Env-Vars; root hat CREATE DATABASE
       - name: Install Moodle (grunt-Config)
         run: |
           moodle-plugin-ci install \
@@ -119,8 +127,8 @@ jobs:
             --db-type  mysqli \
             --db-host  127.0.0.1 \
             --db-port  3306 \
-            --db-user  moodle \
-            --db-pass  moodle \
+            --db-user  root \
+            --db-pass  root \
             --db-name  moodle \
             --branch   MOODLE_405_STABLE
 
@@ -167,21 +175,19 @@ jobs:
         moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE', 'MOODLE_501_STABLE']
         php:    ['8.2', '8.3', '8.4']
         db:
-          - { engine: mariadb, type: mysqli, port: 3306 }
-          - { engine: pgsql,   type: pgsql,  port: 5432 }
+          - { engine: mariadb, type: mysqli, port: 3306, user: root,   pass: root   }
+          - { engine: pgsql,   type: pgsql,  port: 5432, user: moodle, pass: moodle }
         exclude:
           # PHP 8.4 wird erst ab Moodle 5.1 offiziell unterstützt
           - { moodle: MOODLE_405_STABLE, php: '8.4' }
           - { moodle: MOODLE_500_STABLE, php: '8.4' }
 
     services:
+      # ⛔ KEIN MYSQL_DATABASE → kein Konflikt mit CREATE DATABASE
       mariadb:
         image: mariadb:10.11
         env:
           MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE:      moodle
-          MYSQL_USER:          moodle
-          MYSQL_PASSWORD:      moodle
         ports: ['3306:3306']
         options: >-
           --health-cmd="mysqladmin ping --silent"
@@ -189,12 +195,15 @@ jobs:
           --health-timeout=5s
           --health-retries=10
 
+      # ⛔ POSTGRES_DB=postgres (nicht "moodle") → DB "moodle" wird NICHT
+      #    vorab erstellt. Ohne POSTGRES_DB würde der Image-Default den
+      #    Wert von POSTGRES_USER ("moodle") als DB-Namen verwenden!
       pgsql:
         image: postgres:16
         env:
           POSTGRES_USER:     moodle
           POSTGRES_PASSWORD: moodle
-          POSTGRES_DB:       moodle
+          POSTGRES_DB:       postgres
         ports: ['5432:5432']
         options: >-
           --health-cmd="pg_isready -U moodle"
@@ -243,6 +252,9 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
+      # FIX 1: --branch statt --moodle
+      # FIX 2: Explizite DB-CLI-Flags; user/pass aus Matrix (root für MariaDB,
+      #        moodle-Superuser für PostgreSQL)
       - name: Install Moodle ${{ matrix.moodle }}
         run: |
           moodle-plugin-ci install \
@@ -250,8 +262,8 @@ jobs:
             --db-type  ${{ matrix.db.type }} \
             --db-host  127.0.0.1 \
             --db-port  ${{ matrix.db.port }} \
-            --db-user  moodle \
-            --db-pass  moodle \
+            --db-user  ${{ matrix.db.user }} \
+            --db-pass  ${{ matrix.db.pass }} \
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
 
@@ -289,6 +301,7 @@ jobs:
         moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE', 'MOODLE_501_STABLE']
 
     services:
+      # FIX: Selenium 4 Health-Endpunkt → /status (nicht /wd/hub/status)
       selenium:
         image: selenium/standalone-chrome:latest
         options: >-
@@ -298,13 +311,11 @@ jobs:
           --health-retries=5
         ports: ['4444:4444']
 
+      # ⛔ KEIN MYSQL_DATABASE
       mariadb:
         image: mariadb:10.11
         env:
           MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE:      moodle
-          MYSQL_USER:          moodle
-          MYSQL_PASSWORD:      moodle
         ports: ['3306:3306']
         options: >-
           --health-cmd="mysqladmin ping --silent"
@@ -342,6 +353,8 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
+      # FIX 1: --branch statt --moodle
+      # FIX 2: Explizite DB-CLI-Flags mit root/root
       - name: Install Moodle ${{ matrix.moodle }}
         run: |
           moodle-plugin-ci install \
@@ -349,8 +362,8 @@ jobs:
             --db-type  mysqli \
             --db-host  127.0.0.1 \
             --db-port  3306 \
-            --db-user  moodle \
-            --db-pass  moodle \
+            --db-user  root \
+            --db-pass  root \
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
 
@@ -366,6 +379,8 @@ jobs:
         run: php admin/tool/behat/cli/init.php
         working-directory: ${{ github.workspace }}/moodle
 
+      # FIX: Feature-Pfad als positionelles Argument nach "--"
+      #      (--feature ist kein gültiger Flag von moodle-plugin-ci behat)
       - name: Behat – toolbar configuration
         run: |
           moodle-plugin-ci behat --plugin ./plugin \
