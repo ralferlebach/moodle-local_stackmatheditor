@@ -40,18 +40,17 @@ class quiz_helper {
      * @return void
      */
     /**
-     * Write a developer-level debug message to the browser/server debug output.
+     * Write a silent developer trace message to the PHP error log.
      *
-     * Uses Moodle's debugging() function so output only appears when developer
-     * debug mode is active. Silent on production sites.
+     * Uses error_log() so output never appears in the browser or disrupts
+     * normal page rendering. Only visible in the server error log.
      *
      * @param string $msg Message to log.
      * @return void
      */
     public static function dbg(string $msg): void {
-        if (debugging('', DEBUG_DEVELOPER)) {
-            debugging('[SME] ' . $msg, DEBUG_DEVELOPER);
-        }
+        // phpcs:ignore moodle.PHP.ForbiddenFunctions.FoundWithAlternative
+        error_log('[SME-HOOK] ' . $msg);
     }
 
     /**
