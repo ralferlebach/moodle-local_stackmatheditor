@@ -102,7 +102,12 @@ jobs:
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
 
       - name: Set TRAVIS_BRANCH for moodle-plugin-ci
-        run: echo "TRAVIS_BRANCH=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+        run: |
+          BRANCH_NAME=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
+          if [ -z "$BRANCH_NAME" ]; then
+            BRANCH_NAME="default-branch"
+          fi
+          echo "TRAVIS_BRANCH=$BRANCH_NAME" >> "$GITHUB_ENV"
 
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
@@ -230,7 +235,12 @@ jobs:
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
 
       - name: Set TRAVIS_BRANCH for moodle-plugin-ci
-        run: echo "TRAVIS_BRANCH=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+        run: |
+          BRANCH_NAME=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
+          if [ -z "$BRANCH_NAME" ]; then
+            BRANCH_NAME="default-branch"
+          fi
+          echo "TRAVIS_BRANCH=$BRANCH_NAME" >> "$GITHUB_ENV"
 
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
@@ -326,7 +336,12 @@ jobs:
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
 
       - name: Set TRAVIS_BRANCH for moodle-plugin-ci
-        run: echo "TRAVIS_BRANCH=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+        run: |
+          BRANCH_NAME=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
+          if [ -z "$BRANCH_NAME" ]; then
+            BRANCH_NAME="default-branch"
+          fi
+          echo "TRAVIS_BRANCH=$BRANCH_NAME" >> "$GITHUB_ENV"
 
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
