@@ -124,7 +124,7 @@ jobs:
           moodle-plugin-ci install \
             --plugin        ./plugin \
             --db-type         mysqli \
-            --moodle-branch MOODLE_405_STABLE
+            --moodle MOODLE_405_STABLE
         env:
           DB:     mysqli
           DBHOST: 127.0.0.1
@@ -245,7 +245,7 @@ jobs:
           moodle-plugin-ci install \
             --plugin        ./plugin \
             --db-type       mysqli \
-            --moodle-branch ${{ matrix.moodle }}
+            --moodle ${{ matrix.moodle }}
         env:
           DB:     mysqli
           DBHOST: 127.0.0.1
@@ -349,7 +349,7 @@ jobs:
           moodle-plugin-ci install \
             --plugin        ./plugin \
             --db-type       pgsql \
-            --moodle-branch ${{ matrix.moodle }}
+            --moodle ${{ matrix.moodle }}
         env:
           DB:     pgsql
           DBHOST: 127.0.0.1
@@ -451,7 +451,7 @@ jobs:
           moodle-plugin-ci install \
             --plugin        ./plugin \
             --db-type       mysqli \
-            --moodle-branch ${{ matrix.moodle }}
+            --moodle ${{ matrix.moodle }}
         env:
           DB:     mysqli
           DBHOST: 127.0.0.1
