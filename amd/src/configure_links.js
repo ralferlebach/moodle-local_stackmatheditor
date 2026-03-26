@@ -265,6 +265,13 @@ define(['jquery'], function($) {
         injectQuizNavOption(data);
     }
 
+    /**
+     * Executes the question edit configurator links.
+     *
+     * @param {Object} data Configuration data from the server.
+     * @param {Object} q Question data from the server.
+     * @returns {void}
+     */
     function doEditQuestion(data, q) {
         var url = buildUrl(data.configureUrl, data.cmid,
             q.qbeid, q.questionid, data.returnUrl);
