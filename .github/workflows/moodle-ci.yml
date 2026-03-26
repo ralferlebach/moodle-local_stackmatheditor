@@ -19,8 +19,8 @@ on:
   pull_request:
 
 env:
-  MOODLE_CI: '^4'
-  CI_BRANCH: ${{ github.head_ref || github.ref_name }}
+  MOODLE_CI: '^4'   # moodle-plugin-ci Versionsconstraint (einmalig gepflegt)
+  CI_BRANCH: ${{ github.head_ref || github.ref_name }}  # Plugin-Branch für moodle-plugin-ci install
 
 jobs:
 
@@ -45,7 +45,7 @@ jobs:
 
       - name: Install moodle-plugin-ci
         run: |
-          composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci "${MOODLE_CI}"
+          composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci ${{ env.MOODLE_CI }}
           echo "$GITHUB_WORKSPACE/ci/bin"        >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
 
@@ -64,17 +64,15 @@ jobs:
   lint-js:
     name: "JS/CSS Lint"
     runs-on: ubuntu-24.04
-    env:
-      TRAVIS_BRANCH: ${{ env.CI_BRANCH }}
 
     services:
       mariadb:
         image: mariadb:10.11
         env:
           MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: moodle
-          MYSQL_USER: moodle
-          MYSQL_PASSWORD: moodle
+          MYSQL_DATABASE:      moodle
+          MYSQL_USER:          moodle
+          MYSQL_PASSWORD:      moodle
         ports: ['3306:3306']
         options: >-
           --health-cmd="mysqladmin ping --silent"
@@ -99,7 +97,7 @@ jobs:
 
       - name: Install moodle-plugin-ci
         run: |
-          composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci "${MOODLE_CI}"
+          composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci ${{ env.MOODLE_CI }}
           echo "$GITHUB_WORKSPACE/ci/bin"        >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
 
@@ -114,7 +112,7 @@ jobs:
             --moodle   MOODLE_405_STABLE \
             --branch   "${CI_BRANCH}"
         env:
-          DB: mysqli
+          DB:     mysqli
           DBHOST: 127.0.0.1
           DBPORT: 3306
           DBUSER: moodle
@@ -130,7 +128,7 @@ jobs:
 
       - name: Stylelint – CSS
         run: moodle-plugin-ci grunt --plugin ./plugin stylelint
-        continue-on-error: true
+        continue-on-error: true   # warn only until baseline is established
 
       - name: Verify AMD build artefacts
         run: |
@@ -150,22 +148,24 @@ jobs:
           echo "AMD build OK: $(ls plugin/amd/src/*.js | wc -l) Datei(en) verifiziert."
 
   # ── 2. PHPUnit (MariaDB + PostgreSQL als Matrix-Dimension) ────────────────
+  #
+  # Beide DB-Services laufen pro Job (GHA unterstützt keine bedingten Services).
+  # Es wird jeweils nur der zur Matrix passende Service genutzt – akzeptabler
+  # Overhead als Tausch gegen eine einzige, wartbare Job-Definition.
   phpunit:
     name: "PHPUnit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.db.engine }})"
     runs-on: ubuntu-24.04
     needs: [lint-php, lint-js]
-    env:
-      TRAVIS_BRANCH: ${{ env.CI_BRANCH }}
-
     strategy:
       fail-fast: false
       matrix:
         moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE', 'MOODLE_501_STABLE']
-        php: ['8.2', '8.3', '8.4']
+        php:    ['8.2', '8.3', '8.4']
         db:
           - { engine: mariadb, type: mysqli, port: 3306 }
-          - { engine: pgsql, type: pgsql, port: 5432 }
+          - { engine: pgsql,   type: pgsql,  port: 5432 }
         exclude:
+          # PHP 8.4 wird erst ab Moodle 5.1 offiziell unterstützt
           - { moodle: MOODLE_405_STABLE, php: '8.4' }
           - { moodle: MOODLE_500_STABLE, php: '8.4' }
 
@@ -174,9 +174,9 @@ jobs:
         image: mariadb:10.11
         env:
           MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: moodle
-          MYSQL_USER: moodle
-          MYSQL_PASSWORD: moodle
+          MYSQL_DATABASE:      moodle
+          MYSQL_USER:          moodle
+          MYSQL_PASSWORD:      moodle
         ports: ['3306:3306']
         options: >-
           --health-cmd="mysqladmin ping --silent"
@@ -187,9 +187,9 @@ jobs:
       pgsql:
         image: postgres:16
         env:
-          POSTGRES_USER: moodle
+          POSTGRES_USER:     moodle
           POSTGRES_PASSWORD: moodle
-          POSTGRES_DB: moodle
+          POSTGRES_DB:       moodle
         ports: ['5432:5432']
         options: >-
           --health-cmd="pg_isready -U moodle"
@@ -202,6 +202,7 @@ jobs:
         with:
           path: plugin
 
+      # Beide DB-Treiber installieren – welcher aktiv ist, bestimmt die Matrix
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
@@ -222,7 +223,7 @@ jobs:
 
       - name: Install moodle-plugin-ci
         run: |
-          composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci "${MOODLE_CI}"
+          composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci ${{ env.MOODLE_CI }}
           echo "$GITHUB_WORKSPACE/ci/bin"        >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
 
@@ -237,7 +238,7 @@ jobs:
             --moodle   ${{ matrix.moodle }} \
             --branch   "${CI_BRANCH}"
         env:
-          DB: ${{ matrix.db.type }}
+          DB:     ${{ matrix.db.type }}
           DBHOST: 127.0.0.1
           DBPORT: ${{ matrix.db.port }}
           DBUSER: moodle
@@ -272,9 +273,6 @@ jobs:
     name: "Behat (${{ matrix.moodle }} / PHP 8.2 / Chrome)"
     runs-on: ubuntu-24.04
     needs: [phpunit]
-    env:
-      TRAVIS_BRANCH: ${{ env.CI_BRANCH }}
-
     strategy:
       fail-fast: false
       matrix:
@@ -294,9 +292,9 @@ jobs:
         image: mariadb:10.11
         env:
           MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: moodle
-          MYSQL_USER: moodle
-          MYSQL_PASSWORD: moodle
+          MYSQL_DATABASE:      moodle
+          MYSQL_USER:          moodle
+          MYSQL_PASSWORD:      moodle
         ports: ['3306:3306']
         options: >-
           --health-cmd="mysqladmin ping --silent"
@@ -319,7 +317,7 @@ jobs:
 
       - name: Install moodle-plugin-ci
         run: |
-          composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci "${MOODLE_CI}"
+          composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci ${{ env.MOODLE_CI }}
           echo "$GITHUB_WORKSPACE/ci/bin"        >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
 
@@ -334,7 +332,7 @@ jobs:
             --moodle   ${{ matrix.moodle }} \
             --branch   "${CI_BRANCH}"
         env:
-          DB: mysqli
+          DB:     mysqli
           DBHOST: 127.0.0.1
           DBPORT: 3306
           DBUSER: moodle
