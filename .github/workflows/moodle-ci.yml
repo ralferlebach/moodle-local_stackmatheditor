@@ -10,22 +10,6 @@
 #   qtype_stack  → branch master
 #   Maxima ≥ 5.46 via apt + Versionscheck
 #   gnuplot       → für STACK-Plot-Rendering
-#
-# WICHTIG:
-#   - Ab Moodle 4.5 verlangt MariaDB den Treiber "mariadb" (NICHT "mysqli").
-#   - MariaDB-Service OHNE MYSQL_DATABASE → moodle-plugin-ci erstellt
-#     die DB selbst. Verbindung über root/root (hat CREATE DATABASE).
-#   - PostgreSQL-Service mit POSTGRES_DB=postgres → DB "moodle" wird
-#     NICHT vorab erstellt.
-#   - max_input_vars=5000 via ini-values (Moodle-Mindestanforderung).
-#   - --branch (nicht --moodle!) übergibt den Moodle-Branch.
-#   - Maxima + gnuplot werden in ALLEN Jobs installiert, die
-#     qtype_stack registrieren, da dessen db/install.php beim
-#     Site-Install sofort eine CAS-Verbindung aufbaut.
-#   - grunt: Tasks via -t, Plugin-Pfad als positionelles Argument.
-#   - .git/objects/pack/ muss vor grunt beschreibbar gemacht werden,
-#     da moodle-plugin-ci grunt ein Backup/Restore durchführt und
-#     git Pack-Dateien read-only setzt.
 ##############################################################################
 
 name: Moodle Plugin CI
@@ -155,15 +139,18 @@ jobs:
 
       # FIX: Git setzt Pack-Dateien read-only. moodle-plugin-ci grunt
       # erstellt ein Backup inkl. .git/ und stellt es danach wieder her.
-      # Ohne Schreibrechte schlägt die Wiederherstellung fehl.
+      # Ohne Schreibrechte schlägt die Wiederherstellung fehl und
+      # korrumpiert den Zustand für nachfolgende grunt-Aufrufe.
       - name: Fix .git pack permissions for grunt backup/restore
         run: chmod -R u+w plugin/.git/ 2>/dev/null || true
 
+      # FIX: -m zeigt explizit auf das Moodle-Verzeichnis mit Gruntfile.js,
+      #      sodass grunt auch bei korrumpiertem CWD-Zustand startet.
       - name: ESLint – AMD JS
-        run: moodle-plugin-ci grunt -t eslint ./plugin
+        run: moodle-plugin-ci grunt -m "$GITHUB_WORKSPACE/moodle" -t eslint ./plugin
 
       - name: Stylelint – CSS
-        run: moodle-plugin-ci grunt -t stylelint ./plugin
+        run: moodle-plugin-ci grunt -m "$GITHUB_WORKSPACE/moodle" -t stylelint ./plugin
         continue-on-error: true
 
       - name: Verify AMD build artefacts
