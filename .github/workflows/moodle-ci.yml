@@ -121,6 +121,17 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
+      # FIX: STACK-Konfiguration MUSS VOR install stehen, da qtype_stack's
+      #      db/install.php beim Site-Install sofort Maxima aufruft.
+      #      add-config schreibt in config.php (kein DB-Zugriff nötig).
+      - name: Pre-configure STACK (Maxima) via config.php
+        run: |
+          B=$(which maxima)
+          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['platform']        = 'linux';"
+          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['maximacommand']    = '$B';"
+          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['maximacommandopt'] = '';"
+          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['castimeout']       = 30;"
+
       - name: Install Moodle (grunt-Config)
         run: |
           moodle-plugin-ci install \
@@ -137,15 +148,9 @@ jobs:
         run: npm install
         working-directory: ${{ github.workspace }}/moodle
 
-      # FIX: Git setzt Pack-Dateien read-only. moodle-plugin-ci grunt
-      # erstellt ein Backup inkl. .git/ und stellt es danach wieder her.
-      # Ohne Schreibrechte schlägt die Wiederherstellung fehl und
-      # korrumpiert den Zustand für nachfolgende grunt-Aufrufe.
       - name: Fix .git pack permissions for grunt backup/restore
         run: chmod -R u+w plugin/.git/ 2>/dev/null || true
 
-      # FIX: -m zeigt explizit auf das Moodle-Verzeichnis mit Gruntfile.js,
-      #      sodass grunt auch bei korrumpiertem CWD-Zustand startet.
       - name: ESLint – AMD JS
         run: moodle-plugin-ci grunt -m "$GITHUB_WORKSPACE/moodle" -t eslint ./plugin
 
@@ -253,6 +258,19 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
+      # FIX: STACK via config.php konfigurieren (forced_plugin_settings).
+      #      Muss VOR install stehen, da qtype_stack's db/install.php
+      #      beim Site-Install sofort eine CAS-Verbindung aufbaut.
+      #      admin/cli/cfg.php funktioniert NICHT, da die DB-Tabelle
+      #      "config" im CI-Kontext nicht existiert.
+      - name: Pre-configure STACK (Maxima) via config.php
+        run: |
+          B=$(which maxima)
+          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['platform']        = 'linux';"
+          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['maximacommand']    = '$B';"
+          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['maximacommandopt'] = '';"
+          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['castimeout']       = 30;"
+
       - name: Install Moodle ${{ matrix.moodle }}
         run: |
           moodle-plugin-ci install \
@@ -264,17 +282,6 @@ jobs:
             --db-pass  ${{ matrix.db.pass }} \
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
-
-      - name: Configure STACK (Maxima)
-        run: |
-          M="$GITHUB_WORKSPACE/moodle"
-          B=$(which maxima)
-          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
-          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=maximaversion      --set="$VER"
-          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=castimeout         --set=30
-          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=maximacommand      --set="$B"
-          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=maximacommandopt   --set=""
-          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=stackmaximaversion --set=2024010400
 
       - name: Initialise PHPUnit
         run: php admin/tool/phpunit/cli/init.php
@@ -359,6 +366,15 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
+      # FIX: STACK via config.php VOR install konfigurieren
+      - name: Pre-configure STACK (Maxima) via config.php
+        run: |
+          B=$(which maxima)
+          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['platform']        = 'linux';"
+          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['maximacommand']    = '$B';"
+          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['maximacommandopt'] = '';"
+          moodle-plugin-ci add-config "\$CFG->forced_plugin_settings['qtype_stack']['castimeout']       = 30;"
+
       - name: Install Moodle ${{ matrix.moodle }}
         run: |
           moodle-plugin-ci install \
@@ -370,17 +386,6 @@ jobs:
             --db-pass  root \
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
-
-      - name: Configure STACK (Maxima)
-        run: |
-          M="$GITHUB_WORKSPACE/moodle"
-          B=$(which maxima)
-          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
-          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=maximaversion      --set="$VER"
-          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=castimeout         --set=30
-          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=maximacommand      --set="$B"
-          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=maximacommandopt   --set=""
-          php "$M/admin/cli/cfg.php" --component=qtype_stack --name=stackmaximaversion --set=2024010400
 
       - name: Initialise Behat
         run: php admin/tool/behat/cli/init.php
