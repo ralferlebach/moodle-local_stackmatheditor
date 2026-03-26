@@ -270,7 +270,7 @@ define(['jquery'], function($) {
      *
      * @param {Object} data Configuration data from the server.
      * @param {Object} q Question data from the server.
-     * @returns {void}
+     * @returns {bool}
      */
     function doEditQuestion(data, q) {
         var url = buildUrl(data.configureUrl, data.cmid,
