@@ -117,14 +117,12 @@ jobs:
           moodle-plugin-ci install \
             --plugin   ./plugin \
             --db-type  mysqli \
-            --moodle   MOODLE_405_STABLE
-        env:
-          DB:     mysqli
-          DBHOST: 127.0.0.1
-          DBPORT: 3306
-          DBUSER: moodle
-          DBPASS: moodle
-          DBNAME: moodle
+            --db-host  127.0.0.1 \
+            --db-port  3306 \
+            --db-user  moodle \
+            --db-pass  moodle \
+            --db-name  moodle \
+            --branch   MOODLE_405_STABLE
 
       - name: Install Node dependencies
         run: npm install
@@ -250,14 +248,12 @@ jobs:
           moodle-plugin-ci install \
             --plugin   ./plugin \
             --db-type  ${{ matrix.db.type }} \
-            --moodle   ${{ matrix.moodle }}
-        env:
-          DB:     ${{ matrix.db.type }}
-          DBHOST: 127.0.0.1
-          DBPORT: ${{ matrix.db.port }}
-          DBUSER: moodle
-          DBPASS: moodle
-          DBNAME: moodle
+            --db-host  127.0.0.1 \
+            --db-port  ${{ matrix.db.port }} \
+            --db-user  moodle \
+            --db-pass  moodle \
+            --db-name  moodle \
+            --branch   ${{ matrix.moodle }}
 
       - name: Configure STACK (Maxima)
         run: |
@@ -297,7 +293,7 @@ jobs:
         image: selenium/standalone-chrome:latest
         options: >-
           --shm-size=2g
-          --health-cmd="curl -sf http://localhost:4444/wd/hub/status"
+          --health-cmd="curl -sf http://localhost:4444/status"
           --health-interval=15s
           --health-retries=5
         ports: ['4444:4444']
@@ -351,14 +347,12 @@ jobs:
           moodle-plugin-ci install \
             --plugin   ./plugin \
             --db-type  mysqli \
-            --moodle   ${{ matrix.moodle }}
-        env:
-          DB:     mysqli
-          DBHOST: 127.0.0.1
-          DBPORT: 3306
-          DBUSER: moodle
-          DBPASS: moodle
-          DBNAME: moodle
+            --db-host  127.0.0.1 \
+            --db-port  3306 \
+            --db-user  moodle \
+            --db-pass  moodle \
+            --db-name  moodle \
+            --branch   ${{ matrix.moodle }}
 
       - name: Configure STACK (Maxima)
         run: |
@@ -377,14 +371,14 @@ jobs:
           moodle-plugin-ci behat --plugin ./plugin \
             --profile chrome \
             --tags    "@local_stackmatheditor and not @broken" \
-            --feature "local/stackmatheditor/tests/behat/configure_toolbar.feature"
+            -- "local/stackmatheditor/tests/behat/configure_toolbar.feature"
 
       - name: Behat – editor rendering
         run: |
           moodle-plugin-ci behat --plugin ./plugin \
             --profile chrome \
             --tags    "@local_stackmatheditor and not @broken" \
-            --feature "local/stackmatheditor/tests/behat/editor_rendering.feature"
+            -- "local/stackmatheditor/tests/behat/editor_rendering.feature"
 
       - name: Upload failure screenshots
         if: failure()
