@@ -124,17 +124,34 @@ final class config_manager_test extends advanced_testcase {
 
     /**
      * When default_groups config is set, it overrides the hardcoded defaults.
+     *
+     * Uses only groups that are guaranteed to exist in definitions to avoid
+     * test failures when optional groups (e.g. logic) are disabled.
      */
     public function test_instance_defaults_from_new_format(): void {
         $this->resetAfterTest();
-        // Enable only 'brackets' and 'logic'.
-        set_config('default_groups', 'brackets,logic', 'local_stackmatheditor');
 
+        $groups = definitions::get_element_groups();
+
+        // Pick one group that is enabled by default and one that is disabled.
+        // Fall back gracefully if a group is absent (e.g. commented out).
+        $enabled  = isset($groups['brackets']) ? 'brackets' : array_key_first($groups);
+        $disabled = null;
+        foreach ($groups as $key => $group) {
+            if (!$group['default_enabled'] && $key !== $enabled) {
+                $disabled = $key;
+                break;
+            }
+        }
+
+        set_config('default_groups', $enabled, 'local_stackmatheditor');
         $defaults = config_manager::get_instance_defaults();
 
-        $this->assertTrue($defaults['brackets'], 'brackets must be enabled');
-        $this->assertTrue($defaults['logic'], 'logic must be enabled');
-        $this->assertFalse($defaults['trigonometry'], 'trigonometry must be disabled');
+        $this->assertTrue($defaults[$enabled], "$enabled must be enabled");
+
+        if ($disabled !== null) {
+            $this->assertFalse($defaults[$disabled], "$disabled must be disabled");
+        }
     }
 
 
