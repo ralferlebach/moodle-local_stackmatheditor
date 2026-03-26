@@ -110,9 +110,9 @@ jobs:
           moodle-plugin-ci install \
             --plugin   ./plugin \
             --db-type  mysqli \
-            --moodle   MOODLE_405_STABLE
+            --moodle   MOODLE_405_STABLE \
+            --branch   ${{ github.head_ref || github.ref_name }}
         env:
-          TRAVIS_BRANCH: ${{ github.head_ref || github.ref_name }}
           DB:     mysqli
           DBHOST: 127.0.0.1
           DBPORT: 3306
@@ -237,9 +237,9 @@ jobs:
           moodle-plugin-ci install \
             --plugin   ./plugin \
             --db-type  ${{ matrix.db.type }} \
-            --moodle   ${{ matrix.moodle }}
+            --moodle   ${{ matrix.moodle }} \
+            --branch   ${{ github.head_ref || github.ref_name }}
         env:
-          TRAVIS_BRANCH: ${{ github.head_ref || github.ref_name }}
           DB:     ${{ matrix.db.type }}
           DBHOST: 127.0.0.1
           DBPORT: ${{ matrix.db.port }}
@@ -332,9 +332,9 @@ jobs:
           moodle-plugin-ci install \
             --plugin   ./plugin \
             --db-type  mysqli \
-            --moodle   ${{ matrix.moodle }}
+            --moodle   ${{ matrix.moodle }} \
+            --branch   ${{ github.head_ref || github.ref_name }}
         env:
-          TRAVIS_BRANCH: ${{ github.head_ref || github.ref_name }}
           DB:     mysqli
           DBHOST: 127.0.0.1
           DBPORT: 3306
