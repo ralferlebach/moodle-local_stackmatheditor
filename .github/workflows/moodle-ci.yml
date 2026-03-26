@@ -1,0 +1,375 @@
+##############################################################################
+# GitHub Actions CI – local_stackmatheditor
+#
+# Matrix:
+#   Moodle:   MOODLE_45_STABLE, MOODLE_500_STABLE (and future stable branches)
+#   PHP:      8.2, 8.3
+#   Database: MariaDB 10.6, PostgreSQL 14
+#
+# Dependencies installed in CI:
+#   - qtype_stack (latest main branch from maths/moodle-qtype_stack)
+#   - Maxima ≥ 5.46 (via apt, configured in STACK settings)
+#   - gnuplot (for STACK plots)
+#
+# Tests run:
+#   - PHPUnit (unit suite, no-DB + DB groups)
+#   - Behat (JavaScript scenarios via Selenium/Chrome)
+#   - PHP CodeSniffer (Moodle coding style)
+#   - Grunt AMD lint / JS build check
+##############################################################################
+
+name: Moodle Plugin CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'MOODLE_*'
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+
+  # ── 1. Code style & lint (fast, no DB needed) ─────────────────────────────
+  lint:
+    name: "Lint – PHP ${{ matrix.php }}"
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3']
+
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - name: Set up PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Install moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev \
+            moodlehq/moodle-plugin-ci ci ^4
+          echo "$GITHUB_WORKSPACE/ci/bin" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> $GITHUB_PATH
+
+      - name: PHP CodeSniffer
+        run: moodle-plugin-ci phpcs plugin
+
+      - name: PHP Copy/Paste Detector
+        run: moodle-plugin-ci phpcpd plugin || true   # warning only
+
+      - name: PHP Mess Detector
+        run: moodle-plugin-ci phpmd plugin || true    # warning only
+
+      - name: Check AMD source exists for every build file
+        run: |
+          for min in plugin/amd/build/*.min.js; do
+            base=$(basename "$min" .min.js)
+            src="plugin/amd/src/${base}.js"
+            if [ ! -f "$src" ]; then
+              echo "ERROR: $min has no corresponding source in amd/src/"
+              exit 1
+            fi
+          done
+          echo "AMD source check passed."
+
+  # ── 2. PHPUnit (unit + integration) ───────────────────────────────────────
+  phpunit:
+    name: "PHPUnit – Moodle ${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.db }}"
+    runs-on: ubuntu-22.04
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        moodle: ['MOODLE_45_STABLE', 'MOODLE_500_STABLE']
+        php:    ['8.2', '8.3']
+        db:     ['mariadb', 'pgsql']
+        include:
+          # Pin service images per DB type.
+          - db: mariadb
+            db_image: mariadb:10.6
+            db_host: 127.0.0.1
+            db_port: 3306
+          - db: pgsql
+            db_image: postgres:14
+            db_host: 127.0.0.1
+            db_port: 5432
+
+    services:
+      mariadb:
+        image: ${{ matrix.db == 'mariadb' && 'mariadb:10.6' || 'hello-world' }}
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: moodle
+          MYSQL_USER: moodle
+          MYSQL_PASSWORD: moodle
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+      pgsql:
+        image: ${{ matrix.db == 'pgsql' && 'postgres:14' || 'hello-world' }}
+        env:
+          POSTGRES_USER: moodle
+          POSTGRES_PASSWORD: moodle
+          POSTGRES_DB: moodle
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - name: Set up PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, pdo, pdo_mysql, pdo_pgsql, gd, xml, zip, intl
+          coverage: none
+
+      # ── Maxima & gnuplot (required by qtype_stack) ──────────────────────
+      - name: Install Maxima ≥ 5.46 and gnuplot
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y maxima gnuplot
+
+          MAXIMA_VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
+          echo "Installed Maxima version: $MAXIMA_VER"
+
+          # Verify minimum version 5.46
+          python3 -c "
+          import sys
+          ver = tuple(int(x) for x in '${MAXIMA_VER}'.split('.'))
+          req = (5, 46)
+          if ver < req:
+              print(f'ERROR: Maxima {ver} < required {req}')
+              sys.exit(1)
+          print(f'Maxima version OK: {ver}')
+          "
+
+      - name: Install moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev \
+            moodlehq/moodle-plugin-ci ci ^4
+          echo "$GITHUB_WORKSPACE/ci/bin"        >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> $GITHUB_PATH
+
+      # ── Install Moodle + dependencies ────────────────────────────────────
+      - name: Install Moodle ${{ matrix.moodle }}
+        run: |
+          moodle-plugin-ci install \
+            --plugin       ./plugin \
+            --db           ${{ matrix.db }} \
+            --moodle       ${{ matrix.moodle }} \
+            --branch       ${{ matrix.moodle }} \
+            --extra-plugins \
+              'maths/moodle-qtype_stack=MOODLE_45_STABLE:qtype/stack' \
+            --no-init
+        env:
+          DB:       ${{ matrix.db }}
+          DBTYPE:   ${{ matrix.db == 'mariadb' && 'mysqli' || 'pgsql' }}
+          DBHOST:   ${{ matrix.db_host }}
+          DBPORT:   ${{ matrix.db_port }}
+          DBUSER:   moodle
+          DBPASS:   moodle
+          DBNAME:   moodle
+
+      # ── Configure STACK to use locally installed Maxima ──────────────────
+      - name: Configure STACK Maxima settings
+        run: |
+          MOODLE_DIR="$GITHUB_WORKSPACE/moodle"
+          php "$MOODLE_DIR/admin/cli/cfg.php" \
+            --component=qtype_stack \
+            --name=maximaversion \
+            --set=5.46
+
+          php "$MOODLE_DIR/admin/cli/cfg.php" \
+            --component=qtype_stack \
+            --name=castimeout \
+            --set=30
+
+          php "$MOODLE_DIR/admin/cli/cfg.php" \
+            --component=qtype_stack \
+            --name=stackmaximaversion \
+            --set=2024010400
+
+          # Point to the local Maxima binary.
+          MAXIMA_BIN=$(which maxima)
+          php "$MOODLE_DIR/admin/cli/cfg.php" \
+            --component=qtype_stack \
+            --name=maximacommand \
+            --set="$MAXIMA_BIN"
+
+          # Use optimised Maxima image for speed (pre-loaded STACK libraries).
+          php "$MOODLE_DIR/admin/cli/cfg.php" \
+            --component=qtype_stack \
+            --name=maximacommandopt \
+            --set=""
+
+          echo "STACK Maxima configuration applied."
+
+      - name: Initialise Moodle test DB
+        run: moodle-plugin-ci phpunit --init
+        working-directory: ${{ github.workspace }}/moodle
+
+      # ── PHPUnit: fast unit tests (no DB required) ─────────────────────────
+      - name: PHPUnit unit tests (no DB)
+        run: |
+          moodle-plugin-ci phpunit plugin \
+            --testsuite local_stackmatheditor
+        working-directory: ${{ github.workspace }}/moodle
+        env:
+          PHPUNIT_FILTER: "~@group~"   # exclude @group-tagged DB tests
+
+      # ── PHPUnit: DB-dependent integration tests ───────────────────────────
+      - name: PHPUnit DB integration tests
+        run: |
+          moodle-plugin-ci phpunit plugin \
+            --testsuite local_stackmatheditor \
+            --group local_stackmatheditor_db
+        working-directory: ${{ github.workspace }}/moodle
+
+  # ── 3. Behat browser tests ─────────────────────────────────────────────────
+  behat:
+    name: "Behat – Moodle ${{ matrix.moodle }} / PHP ${{ matrix.php }}"
+    runs-on: ubuntu-22.04
+    needs: phpunit
+    strategy:
+      fail-fast: false
+      matrix:
+        moodle: ['MOODLE_45_STABLE', 'MOODLE_500_STABLE']
+        php:    ['8.2']   # run Behat on one PHP only — it's slow
+
+    services:
+      selenium:
+        image: selenium/standalone-chrome:latest
+        options: >-
+          --shm-size="2g"
+          --health-cmd="curl -sf http://localhost:4444/wd/hub/status"
+          --health-interval=15s
+          --health-retries=5
+        ports:
+          - 4444:4444
+
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: moodle
+          MYSQL_USER: moodle
+          MYSQL_PASSWORD: moodle
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-retries=10
+
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - name: Set up PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, pdo, pdo_mysql, gd, xml, zip, intl
+          coverage: none
+
+      - name: Install Maxima and gnuplot
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y maxima gnuplot
+
+      - name: Install moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev \
+            moodlehq/moodle-plugin-ci ci ^4
+          echo "$GITHUB_WORKSPACE/ci/bin"        >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> $GITHUB_PATH
+
+      - name: Install Moodle ${{ matrix.moodle }}
+        run: |
+          moodle-plugin-ci install \
+            --plugin       ./plugin \
+            --db           mariadb \
+            --moodle       ${{ matrix.moodle }} \
+            --branch       ${{ matrix.moodle }} \
+            --extra-plugins \
+              'maths/moodle-qtype_stack=MOODLE_45_STABLE:qtype/stack' \
+            --no-init
+        env:
+          DB:     mariadb
+          DBTYPE: mysqli
+          DBHOST: 127.0.0.1
+          DBPORT: 3306
+          DBUSER: moodle
+          DBPASS: moodle
+          DBNAME: moodle
+
+      - name: Configure STACK Maxima settings
+        run: |
+          MOODLE_DIR="$GITHUB_WORKSPACE/moodle"
+          MAXIMA_BIN=$(which maxima)
+          php "$MOODLE_DIR/admin/cli/cfg.php" --component=qtype_stack --name=maximaversion   --set=5.46
+          php "$MOODLE_DIR/admin/cli/cfg.php" --component=qtype_stack --name=castimeout       --set=30
+          php "$MOODLE_DIR/admin/cli/cfg.php" --component=qtype_stack --name=maximacommand    --set="$MAXIMA_BIN"
+
+      - name: Initialise Behat
+        run: moodle-plugin-ci behat --init
+        working-directory: ${{ github.workspace }}/moodle
+        env:
+          BEHAT_SELENIUM_HOST: 127.0.0.1
+          BEHAT_SELENIUM_PORT: 4444
+
+      - name: Run Behat – configure_toolbar feature
+        run: |
+          moodle-plugin-ci behat plugin \
+            --profile    chrome \
+            --tags       "@local_stackmatheditor and not @broken" \
+            --feature    "local/stackmatheditor/tests/behat/configure_toolbar.feature"
+        working-directory: ${{ github.workspace }}/moodle
+        env:
+          BEHAT_SELENIUM_HOST: 127.0.0.1
+          BEHAT_SELENIUM_PORT: 4444
+
+      - name: Run Behat – editor_rendering feature
+        run: |
+          moodle-plugin-ci behat plugin \
+            --profile    chrome \
+            --tags       "@local_stackmatheditor and not @broken" \
+            --feature    "local/stackmatheditor/tests/behat/editor_rendering.feature"
+        working-directory: ${{ github.workspace }}/moodle
+        env:
+          BEHAT_SELENIUM_HOST: 127.0.0.1
+          BEHAT_SELENIUM_PORT: 4444
+
+      - name: Upload Behat failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: behat-screenshots-${{ matrix.moodle }}-php${{ matrix.php }}
+          path: ${{ github.workspace }}/moodle/behatfaildumps/
+          retention-days: 7
