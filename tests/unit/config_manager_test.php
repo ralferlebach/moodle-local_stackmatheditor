@@ -1,5 +1,5 @@
 <?php
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -8,11 +8,11 @@
 //
 // Moodle is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle. If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 namespace local_stackmatheditor\tests\unit;
 
@@ -30,11 +30,10 @@ use local_stackmatheditor\definitions;
  * @package    local_stackmatheditor
  * @covers     \local_stackmatheditor\config_manager
  * @copyright  2026 Ralf Erlebach
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class config_manager_test extends advanced_testcase {
-
-    // ── ensure_qbeid() ─────────────────────────────────────────────────────
+    // Ensure_qbeid().
 
     /**
      * ensure_qbeid with a concrete qbeid returns it unchanged.
@@ -52,7 +51,7 @@ final class config_manager_test extends advanced_testcase {
         $this->assertNull($result);
     }
 
-    // ── get_instance_enabled_mode() ────────────────────────────────────────
+    // Get_instance_enabled_mode().
 
     /**
      * @dataProvider enabled_mode_provider
@@ -78,7 +77,7 @@ final class config_manager_test extends advanced_testcase {
         ];
     }
 
-    // ── get_instance_variable_mode() ───────────────────────────────────────
+    // Get_instance_variable_mode().
 
     /**
      * Variable mode falls back to VAR_SINGLE when unset.
@@ -100,7 +99,7 @@ final class config_manager_test extends advanced_testcase {
         $this->assertSame(definitions::VAR_MULTI, $mode);
     }
 
-    // ── get_instance_defaults() ────────────────────────────────────────────
+    // Get_instance_defaults().
 
     /**
      * Instance defaults contain all group keys as boolean values.
@@ -133,7 +132,7 @@ final class config_manager_test extends advanced_testcase {
         $this->assertFalse($defaults['trigonometry'], 'trigonometry must be disabled');
     }
 
-    // ── get_effective_enabled() ────────────────────────────────────────────
+    // Get_effective_enabled().
 
     /**
      * @dataProvider effective_enabled_provider
@@ -161,7 +160,7 @@ final class config_manager_test extends advanced_testcase {
         ];
     }
 
-    // ── DB-level tests (require full Moodle DB) ─────────────────────────────
+    // DB-level tests (require full Moodle DB).
 
     /**
      * save_config() and get_config() round-trip.

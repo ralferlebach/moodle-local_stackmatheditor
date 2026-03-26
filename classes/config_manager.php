@@ -1,4 +1,19 @@
 <?php
+// This file is part of Moodle - https://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+
 namespace local_stackmatheditor;
 
 defined('MOODLE_INTERNAL') || die();
@@ -19,16 +34,15 @@ defined('MOODLE_INTERNAL') || die();
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class config_manager {
-
     /** @var string Database table name. */
     const TABLE = 'local_stackmatheditor';
 
-    // ------------------------------------------------------------------
-    // Instance-level helpers
-    // ------------------------------------------------------------------
+
+    // Instance-level helpers.
+
 
     /**
      * Returns instance-wide default enabled state for all element groups.
@@ -110,9 +124,9 @@ class config_manager {
         return $int;
     }
 
-    // ------------------------------------------------------------------
-    // DB column helpers
-    // ------------------------------------------------------------------
+
+    // DB column helpers.
+
 
     /**
      * Detect which column stores the JSON config.
@@ -139,9 +153,9 @@ class config_manager {
         return self::get_config_column();
     }
 
-    // ------------------------------------------------------------------
-    // Low-level DB fetch
-    // ------------------------------------------------------------------
+
+    // Low-level DB fetch.
+
 
     /**
      * Safe single-record fetch: returns newest matching record.
@@ -158,9 +172,9 @@ class config_manager {
         return $records ? reset($records) : null;
     }
 
-    // ------------------------------------------------------------------
-    // qbeid resolution
-    // ------------------------------------------------------------------
+
+    // Qbeid resolution.
+
 
     /**
      * Resolve any question ID to its question bank entry ID.
@@ -197,9 +211,9 @@ class config_manager {
         return null;
     }
 
-    // ------------------------------------------------------------------
-    // Decode helpers
-    // ------------------------------------------------------------------
+
+    // Decode helpers.
+
 
     /**
      * Decode a raw config JSON string.
@@ -237,9 +251,9 @@ class config_manager {
         return array_merge($base, $layer);
     }
 
-    // ------------------------------------------------------------------
-    // Public read API
-    // ------------------------------------------------------------------
+
+    // Public read API.
+
 
     /**
      * Load effective config for a quiz + question.
@@ -479,9 +493,9 @@ class config_manager {
         return $configs;
     }
 
-    // ------------------------------------------------------------------
-    // Public write API
-    // ------------------------------------------------------------------
+
+    // Public write API.
+
 
     /**
      * Save question-level config (cmid + qbeid).
@@ -566,9 +580,9 @@ class config_manager {
         }
     }
 
-    // ------------------------------------------------------------------
-    // Enabled-flag helpers
-    // ------------------------------------------------------------------
+
+    // Enabled-flag helpers.
+
 
     /**
      * Determine whether the editor is effectively enabled for a given context.
@@ -596,8 +610,8 @@ class config_manager {
             return true;
         }
 
-        // mode 2 or 3 – check quiz then question level.
-        $defaultEnabled = ($mode === 3);
+        // Mode 2 or 3 – check quiz then question level.
+        $default_enabled = ($mode === 3);
 
         // Load the most specific applicable config.
         if ($cmid > 0 && $qbeid > 0) {
@@ -605,13 +619,13 @@ class config_manager {
         } elseif ($cmid > 0) {
             $cfg = self::get_quiz_default($cmid) ?? [];
         } else {
-            return $defaultEnabled;
+            return $default_enabled;
         }
 
         if (isset($cfg['_enabled'])) {
             return (bool) $cfg['_enabled'];
         }
 
-        return $defaultEnabled;
+        return $default_enabled;
     }
 }

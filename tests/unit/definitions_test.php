@@ -1,5 +1,5 @@
 <?php
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -8,11 +8,11 @@
 //
 // Moodle is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle. If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 namespace local_stackmatheditor\tests\unit;
 
@@ -28,11 +28,10 @@ use local_stackmatheditor\definitions;
  * @package    local_stackmatheditor
  * @covers     \local_stackmatheditor\definitions
  * @copyright  2026 Ralf Erlebach
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class definitions_test extends advanced_testcase {
-
-    // ── get_element_groups() ────────────────────────────────────────────────
+    // Get_element_groups().
 
     /**
      * Every group must have a non-empty string label.
@@ -124,7 +123,7 @@ final class definitions_test extends advanced_testcase {
         }
     }
 
-    // ── get_default_config() / get_default_enabled() ───────────────────────
+    // Get_default_config() / get_default_enabled().
 
     /**
      * Default config keys match group keys.
@@ -145,7 +144,7 @@ final class definitions_test extends advanced_testcase {
         }
     }
 
-    // ── export_for_js() ────────────────────────────────────────────────────
+    // Export_for_js().
 
     /**
      * export_for_js() must contain all required top-level keys.
@@ -185,7 +184,7 @@ final class definitions_test extends advanced_testcase {
         );
     }
 
-    // ── get_group_labels_with_examples() ───────────────────────────────────
+    // Get_group_labels_with_examples().
 
     /**
      * Labels with examples must include a parenthesised example snippet.
@@ -202,7 +201,7 @@ final class definitions_test extends advanced_testcase {
         }
     }
 
-    // ── Helper arrays ───────────────────────────────────────────────────────
+    // Helper arrays.
 
     /**
      * get_functions() returns a non-empty array of strings.

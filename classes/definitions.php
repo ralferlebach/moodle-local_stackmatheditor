@@ -1,4 +1,19 @@
 <?php
+// This file is part of Moodle - https://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+
 namespace local_stackmatheditor;
 
 defined('MOODLE_INTERNAL') || die();
@@ -26,10 +41,9 @@ defined('MOODLE_INTERNAL') || die();
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class definitions {
-
     /** Legacy single-character variable mode identifier. */
     const VAR_SINGLE = 'single';
 
@@ -90,7 +104,7 @@ class definitions {
 
         return [
 
-            // ── 1. Basic arithmetic ──────────────────────────────────
+            // 1. Basic arithmetic.
             'basic_operators' => [
                 'label'           => get_string('group_basic_operators', $p),
                 'default_enabled' => true,
@@ -109,7 +123,7 @@ class definitions {
                 ],
             ],
 
-            // ── 2. Powers and roots ──────────────────────────────────
+            // 2. Powers and roots.
             'power_root' => [
                 'label'           => get_string('group_power_root', $p),
                 'default_enabled' => true,
@@ -123,7 +137,7 @@ class definitions {
                 ],
             ],
 
-            // ── 3. Exponential and logarithm ────────────────────────
+            // 3. Exponential and logarithm.
             'exponential_log' => [
                 'label'           => get_string('group_exponential_log', $p),
                 'default_enabled' => true,
@@ -134,7 +148,7 @@ class definitions {
                 ],
             ],
 
-            // ── 4. Comparison operators ──────────────────────────────
+            // 4. Comparison operators.
             'comparators' => [
                 'label'           => get_string('group_comparators', $p),
                 'default_enabled' => true,
@@ -153,7 +167,7 @@ class definitions {
                 ],
             ],
 
-            // ── 5. Absolute value ────────────────────────────────────
+            // 5. Absolute value.
             'absolute' => [
                 'label'           => get_string('group_absolute', $p),
                 'default_enabled' => true,
@@ -163,7 +177,7 @@ class definitions {
                 ],
             ],
 
-            // ── 6. Set theory ────────────────────────────────────────
+            // 6. Set theory.
             'set_theory' => [
                 'label'           => get_string('group_set_theory', $p),
                 'default_enabled' => false,
@@ -195,7 +209,7 @@ class definitions {
                 ],
             ],
 
-            // ── 7. Logic ─────────────────────────────────────────────
+            // 7. Logic.
             'logic' => [
                 'label'           => get_string('group_logic', $p),
                 'default_enabled' => false,
@@ -221,7 +235,7 @@ class definitions {
                 ],
             ],
 
-            // ── 8. Brackets ──────────────────────────────────────────
+            // 8. Brackets.
             'brackets' => [
                 'label'           => get_string('group_brackets', $p),
                 'default_enabled' => true,
@@ -235,7 +249,7 @@ class definitions {
                 ],
             ],
 
-            // ── 9. Mathematical constants ────────────────────────────
+            // 9. Mathematical constants.
             'constants_math' => [
                 'label'           => get_string('group_constants_math', $p),
                 'default_enabled' => true,
@@ -251,7 +265,7 @@ class definitions {
                 ],
             ],
 
-            // ── 10. Physical constants ───────────────────────────────
+            // 10. Physical constants.
             'constants_nature' => [
                 'label'           => get_string('group_constants_nature', $p),
                 'default_enabled' => false,
@@ -273,7 +287,7 @@ class definitions {
                 ],
             ],
 
-            // ── 11. Geometry ─────────────────────────────────────────
+            // 11. Geometry.
             'geometry' => [
                 'label'           => get_string('group_geometry', $p),
                 'default_enabled' => false,
@@ -290,7 +304,7 @@ class definitions {
                 ],
             ],
 
-            // ── 12. Trigonometry ─────────────────────────────────────
+            // 12. Trigonometry.
             'trigonometry' => [
                 'label'           => get_string('group_trigonometry', $p),
                 'default_enabled' => true,
@@ -307,7 +321,7 @@ class definitions {
                 ],
             ],
 
-            // ── 13. Hyperbolic functions ─────────────────────────────
+            // 13. Hyperbolic functions.
             'hyperbolic' => [
                 'label'           => get_string('group_hyperbolic', $p),
                 'default_enabled' => false,
@@ -318,7 +332,7 @@ class definitions {
                 ],
             ],
 
-            // ── 14. Calculus operators ───────────────────────────────
+            // 14. Calculus operators.
             'analysis_operators' => [
                 'label'           => get_string('group_analysis_operators', $p),
                 'default_enabled' => false,
@@ -332,7 +346,7 @@ class definitions {
                 ],
             ],
 
-            // ── 15. Vectors ──────────────────────────────────────────
+            // 15. Vectors.
             'vector_operators' => [
                 'label'           => get_string('group_vector_operators', $p),
                 'default_enabled' => false,
@@ -349,7 +363,7 @@ class definitions {
                 ],
             ],
 
-            // ── 16. Differential calculus ────────────────────────────
+            // 16. Differential calculus.
             'differential_operators' => [
                 'label'           => get_string('group_differential_operators', $p),
                 'default_enabled' => false,
@@ -365,7 +379,7 @@ class definitions {
                 ],
             ],
 
-            // ── 17. Vector differential ──────────────────────────────
+            // 17. Vector differential.
             'vector_differential' => [
                 'label'           => get_string('group_vector_differential', $p),
                 'default_enabled' => false,
@@ -379,7 +393,7 @@ class definitions {
                 ],
             ],
 
-            // ── 18. Matrices ─────────────────────────────────────────
+            // 18. Matrices.
             'matrix_operators' => [
                 'label'           => get_string('group_matrix_operators', $p),
                 'default_enabled' => false,
@@ -395,7 +409,7 @@ class definitions {
                 ],
             ],
 
-            // ── 19. Integral calculus ────────────────────────────────
+            // 19. Integral calculus.
             'integral_operators' => [
                 'label'           => get_string('group_integral_operators', $p),
                 'default_enabled' => true,
@@ -407,7 +421,7 @@ class definitions {
                 ],
             ],
 
-            // ── 20. Statistics ───────────────────────────────────────
+            // 20. Statistics.
             'statistical_operators' => [
                 'label'           => get_string('group_statistical_operators', $p),
                 'default_enabled' => false,
@@ -430,7 +444,7 @@ class definitions {
                 ],
             ],
 
-            // ── 21. Greek letters (lowercase) ────────────────────────
+            // 21. Greek letters (lowercase).
             'greek_lower' => [
                 'label'           => get_string('group_greek_lower', $p),
                 'default_enabled' => true,
@@ -462,7 +476,7 @@ class definitions {
                 ],
             ],
 
-            // ── 22. Greek letters (uppercase) ────────────────────────
+            // 22. Greek letters (uppercase).
             'greek_upper' => [
                 'label'           => get_string('group_greek_upper', $p),
                 'default_enabled' => true,

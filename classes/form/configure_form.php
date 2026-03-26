@@ -1,4 +1,19 @@
 <?php
+// This file is part of Moodle - https://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+
 namespace local_stackmatheditor\form;
 
 defined('MOODLE_INTERNAL') || die();
@@ -20,10 +35,9 @@ use local_stackmatheditor\definitions;
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class configure_form extends \moodleform {
-
     protected function definition() {
         $mform      = $this->_form;
         $customdata = $this->_customdata;
@@ -40,7 +54,7 @@ class configure_form extends \moodleform {
         $mform->addElement('hidden', 'returnurl', $returnurl);
         $mform->setType('returnurl', PARAM_LOCALURL);
 
-        // ── Info section ──────────────────────────────────────────────
+        // Info section.
         $mform->addElement('header', 'infosection',
             get_string('configure', 'local_stackmatheditor'));
 
@@ -83,7 +97,7 @@ class configure_form extends \moodleform {
                 . '</div>');
         }
 
-        // ── Enabled section – always visible ─────────────────────────
+        // Enabled section – always visible.
         $mform->addElement('header', 'enabledsection',
             get_string('configure_enabled_header', 'local_stackmatheditor'));
         $mform->setExpanded('enabledsection', true);
@@ -95,7 +109,6 @@ class configure_form extends \moodleform {
                 . '<i class="fa fa-lock mr-1" aria-hidden="true"></i>'
                 . get_string('configure_enabled_locked_off', 'local_stackmatheditor')
                 . '</span>');
-
         } else if ($instancemode === 1) {
             // Globally forced on – read-only info, no checkbox.
             $mform->addElement('static', 'enabled_info', '',
@@ -103,7 +116,6 @@ class configure_form extends \moodleform {
                 . '<i class="fa fa-lock mr-1" aria-hidden="true"></i>'
                 . get_string('configure_enabled_locked_on', 'local_stackmatheditor')
                 . '</span>');
-
         } else {
             // Modes 2 and 3: override allowed – show editable checkbox.
             $checkboxlabel = ($mode === 'quiz')
@@ -130,7 +142,7 @@ class configure_form extends \moodleform {
                 . '</small>');
         }
 
-        // ── Toolbar groups section ────────────────────────────────────
+        // Toolbar groups section.
         $mform->addElement('header', 'toolbarsection',
             get_string('setting_defaultgroups', 'local_stackmatheditor'));
         $mform->setExpanded('toolbarsection', true);
@@ -143,7 +155,7 @@ class configure_form extends \moodleform {
         $mform->addHelpButton('groups',
             'setting_defaultgroups', 'local_stackmatheditor');
 
-        // ── Variable mode section ─────────────────────────────────────
+        // Variable mode section.
         $mform->addElement('header', 'variablesection',
             get_string('label_variablemode', 'local_stackmatheditor'));
         $mform->setExpanded('variablesection', true);
@@ -166,7 +178,7 @@ class configure_form extends \moodleform {
         ]);
         $mform->setDefault('variablemode', definitions::IMPLICIT_STACK);
 
-        // ── Buttons ───────────────────────────────────────────────────
+        // Buttons.
         $buttons   = [];
         $buttons[] = $mform->createElement('submit', 'submitbutton',
             get_string('save', 'local_stackmatheditor'));

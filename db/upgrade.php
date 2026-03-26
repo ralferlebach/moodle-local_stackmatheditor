@@ -1,4 +1,19 @@
 <?php
+// This file is part of Moodle - https://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+
 defined('MOODLE_INTERNAL') || die();
 
 /**
@@ -6,16 +21,16 @@ defined('MOODLE_INTERNAL') || die();
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 function xmldb_local_stackmatheditor_upgrade(int $oldversion): bool {
     global $DB;
     $dbman = $DB->get_manager();
     $targettable = new xmldb_table('local_stackmatheditor');
 
-    // =========================================================================
+
     // STEP 1: Ensure base table exists (initial install path).
-    // =========================================================================
+
     if ($oldversion < 2024010100) {
         if (!$dbman->table_exists($targettable)) {
             $table = new xmldb_table('local_stackmatheditor');
@@ -32,20 +47,19 @@ function xmldb_local_stackmatheditor_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2024010100, 'local', 'stackmatheditor');
     }
 
-    // =========================================================================
+
     // STEP 2: Add questionbankentryid + allowed_elements; clean up schema.
-    // =========================================================================
+
     if ($oldversion < 2026032200) {
         if ($dbman->table_exists($targettable)) {
-
-            // questionbankentryid (nullable from the start; NULL = quiz-level default).
+            // Questionbankentryid (nullable from the start; NULL = quiz-level default).
             $field = new xmldb_field('questionbankentryid', XMLDB_TYPE_INTEGER, '10',
                 null, null, null, null);
             if (!$dbman->field_exists($targettable, $field)) {
                 $dbman->add_field($targettable, $field);
             }
 
-            // allowed_elements (replaces legacy 'config' column).
+            // Allowed_elements (replaces legacy 'config' column).
             $field = new xmldb_field('allowed_elements', XMLDB_TYPE_TEXT,
                 null, null, null, null);
             if (!$dbman->field_exists($targettable, $field)) {
@@ -61,21 +75,21 @@ function xmldb_local_stackmatheditor_upgrade(int $oldversion): bool {
                 }
             }
 
-            // usermodified.
+            // Usermodified.
             $field = new xmldb_field('usermodified', XMLDB_TYPE_INTEGER, '10',
                 null, XMLDB_NOTNULL, null, '0');
             if (!$dbman->field_exists($targettable, $field)) {
                 $dbman->add_field($targettable, $field);
             }
 
-            // timecreated.
+            // Timecreated.
             $field = new xmldb_field('timecreated', XMLDB_TYPE_INTEGER, '10',
                 null, XMLDB_NOTNULL, null, '0');
             if (!$dbman->field_exists($targettable, $field)) {
                 $dbman->add_field($targettable, $field);
             }
 
-            // timemodified.
+            // Timemodified.
             $field = new xmldb_field('timemodified', XMLDB_TYPE_INTEGER, '10',
                 null, XMLDB_NOTNULL, null, '0');
             if (!$dbman->field_exists($targettable, $field)) {
@@ -103,9 +117,9 @@ function xmldb_local_stackmatheditor_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026032200, 'local', 'stackmatheditor');
     }
 
-    // =========================================================================
+
     // STEP 3: Migrate legacy data – fill questionbankentryid from questionid.
-    // =========================================================================
+
     if ($oldversion < 2026032201) {
         $columns = $DB->get_columns('local_stackmatheditor');
         if (isset($columns['questionid'])) {
@@ -131,14 +145,14 @@ function xmldb_local_stackmatheditor_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026032201, 'local', 'stackmatheditor');
     }
 
-    // =========================================================================
+
     // STEP 4: Make questionbankentryid nullable (supports quiz-level defaults).
     //
-    // Quiz-level defaults are stored as:
-    //   cmid = <quiz cmid>,  questionbankentryid IS NULL
-    // Question-level configs remain:
-    //   cmid = <quiz cmid>,  questionbankentryid = <qbeid>
-    // =========================================================================
+    // Quiz-level defaults are stored as:.
+    // Cmid = <quiz cmid>,  questionbankentryid IS NULL.
+    // Question-level configs remain:.
+    // Cmid = <quiz cmid>,  questionbankentryid = <qbeid>
+
     if ($oldversion < 2026032400) {
         $columns = $DB->get_columns('local_stackmatheditor');
         if (isset($columns['questionbankentryid'])) {
