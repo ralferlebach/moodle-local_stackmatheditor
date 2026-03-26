@@ -1,5 +1,5 @@
 <?php
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -8,11 +8,11 @@
 //
 // Moodle is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle. If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 namespace local_stackmatheditor\tests\unit;
 
@@ -27,10 +27,9 @@ use local_stackmatheditor\quiz_helper;
  * @package    local_stackmatheditor
  * @covers     \local_stackmatheditor\quiz_helper
  * @copyright  2026 Ralf Erlebach
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class quiz_helper_test extends advanced_testcase {
-
     /**
      * get_cmid() returns 0 when no PAGE context or URL param is available.
      */
@@ -46,8 +45,10 @@ final class quiz_helper_test extends advanced_testcase {
      */
     public function test_can_manage_quiz_invalid_cmid(): void {
         $result = quiz_helper::can_manage_quiz(0);
-        $this->assertFalse($result,
-            'can_manage_quiz(0) must return false — cmid 0 does not exist');
+        $this->assertFalse(
+            $result,
+            'can_manage_quiz(0) must return false — cmid 0 does not exist'
+        );
     }
 
     /**
@@ -55,8 +56,10 @@ final class quiz_helper_test extends advanced_testcase {
      */
     public function test_can_manage_quiz_nonexistent_cmid(): void {
         $result = quiz_helper::can_manage_quiz(PHP_INT_MAX);
-        $this->assertFalse($result,
-            'can_manage_quiz with nonexistent cmid must return false');
+        $this->assertFalse(
+            $result,
+            'can_manage_quiz with nonexistent cmid must return false'
+        );
     }
 
     /**
@@ -75,8 +78,10 @@ final class quiz_helper_test extends advanced_testcase {
      */
     public function test_quiz_has_stack_questions_invalid(): void {
         $result = quiz_helper::quiz_has_stack_questions(0);
-        $this->assertFalse($result,
-            'Nonexistent quiz must have no STACK questions');
+        $this->assertFalse(
+            $result,
+            'Nonexistent quiz must have no STACK questions'
+        );
     }
 
     /**
@@ -88,8 +93,10 @@ final class quiz_helper_test extends advanced_testcase {
         $this->resetAfterTest();
         $questions = quiz_helper::load_quiz_stack_questions(99999999);
         $this->assertIsArray($questions);
-        $this->assertEmpty($questions,
-            'Nonexistent quiz must return empty question list');
+        $this->assertEmpty(
+            $questions,
+            'Nonexistent quiz must return empty question list'
+        );
     }
 
     /**
@@ -101,8 +108,8 @@ final class quiz_helper_test extends advanced_testcase {
         $this->resetAfterTest();
         $result = quiz_helper::load_attempt_stack_slots(99999999);
         $this->assertIsArray($result);
-        $this->assertArrayHasKey('slotmap',  $result);
-        $this->assertArrayHasKey('qbeids',   $result);
+        $this->assertArrayHasKey('slotmap', $result);
+        $this->assertArrayHasKey('qbeids', $result);
         $this->assertArrayHasKey('qbeidmap', $result);
         $this->assertEmpty($result['slotmap']);
     }

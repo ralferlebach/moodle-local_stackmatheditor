@@ -1,5 +1,5 @@
 <?php
-// This file is part of Moodle - http://moodle.org/
+// This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -8,11 +8,11 @@
 //
 // Moodle is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle. If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 namespace local_stackmatheditor\tests\unit;
 
@@ -30,12 +30,9 @@ use local_stackmatheditor\definitions;
  * @package    local_stackmatheditor
  * @covers     \local_stackmatheditor\config_manager
  * @copyright  2026 Ralf Erlebach
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class config_manager_test extends advanced_testcase {
-
-    // ── ensure_qbeid() ─────────────────────────────────────────────────────
-
     /**
      * ensure_qbeid with a concrete qbeid returns it unchanged.
      */
@@ -52,10 +49,14 @@ final class config_manager_test extends advanced_testcase {
         $this->assertNull($result);
     }
 
-    // ── get_instance_enabled_mode() ────────────────────────────────────────
 
     /**
+     * Test get_instance_enabled_mode() returns the correct integer for each stored value.
+     *
      * @dataProvider enabled_mode_provider
+     * @param string $stored  Stored config value.
+     * @param int    $expected Expected return value.
+     * @return void
      */
     public function test_get_instance_enabled_mode(string $stored, int $expected): void {
         $this->resetAfterTest();
@@ -65,6 +66,8 @@ final class config_manager_test extends advanced_testcase {
     }
 
     /**
+     * Data provider for test_get_instance_enabled_mode.
+     *
      * @return array<string, array{string, int}>
      */
     public static function enabled_mode_provider(): array {
@@ -73,12 +76,11 @@ final class config_manager_test extends advanced_testcase {
             'mode 1 (enabled)'  => ['1', 1],
             'mode 2 (default off, override)' => ['2', 2],
             'mode 3 (default on, override)'  => ['3', 3],
-            'invalid negative'  => ['-1', 1],  // safe fallback
-            'invalid high'      => ['99', 1],  // safe fallback
+            'invalid negative'  => ['-1', 1], // Safe fallback.
+            'invalid high'      => ['99', 1], // Safe fallback.
         ];
     }
 
-    // ── get_instance_variable_mode() ───────────────────────────────────────
 
     /**
      * Variable mode falls back to VAR_SINGLE when unset.
@@ -100,7 +102,6 @@ final class config_manager_test extends advanced_testcase {
         $this->assertSame(definitions::VAR_MULTI, $mode);
     }
 
-    // ── get_instance_defaults() ────────────────────────────────────────────
 
     /**
      * Instance defaults contain all group keys as boolean values.
@@ -110,8 +111,11 @@ final class config_manager_test extends advanced_testcase {
         $defaults = config_manager::get_instance_defaults();
         $groups   = definitions::get_element_groups();
 
-        $this->assertSame(array_keys($groups), array_keys($defaults),
-            'Instance defaults must cover exactly the same keys as element groups');
+        $this->assertSame(
+            array_keys($groups),
+            array_keys($defaults),
+            'Instance defaults must cover exactly the same keys as element groups'
+        );
 
         foreach ($defaults as $key => $val) {
             $this->assertIsBool($val, "Default for '$key' must be bool");
@@ -128,28 +132,38 @@ final class config_manager_test extends advanced_testcase {
 
         $defaults = config_manager::get_instance_defaults();
 
-        $this->assertTrue($defaults['brackets'],  'brackets must be enabled');
-        $this->assertTrue($defaults['logic'],     'logic must be enabled');
+        $this->assertTrue($defaults['brackets'], 'brackets must be enabled');
+        $this->assertTrue($defaults['logic'], 'logic must be enabled');
         $this->assertFalse($defaults['trigonometry'], 'trigonometry must be disabled');
     }
 
-    // ── get_effective_enabled() ────────────────────────────────────────────
 
     /**
+     * Test get_effective_enabled() returns the correct bool for each instance mode.
+     *
      * @dataProvider effective_enabled_provider
+     * @param int  $mode     Instance enabled mode (0-3).
+     * @param bool $expected Expected return value.
+     * @return void
      */
     public function test_get_effective_enabled_instance_only(
-        int $mode, bool $expected
+        int $mode,
+        bool $expected
     ): void {
         $this->resetAfterTest();
         set_config('enabled', (string) $mode, 'local_stackmatheditor');
         // No cmid/qbeid → instance-level decision only.
         $result = config_manager::get_effective_enabled(0, 0);
-        $this->assertSame($expected, $result,
-            "Mode $mode without context should return " . ($expected ? 'true' : 'false'));
+        $this->assertSame(
+            $expected,
+            $result,
+            "Mode $mode without context should return " . ($expected ? 'true' : 'false')
+        );
     }
 
     /**
+     * Data provider for test_get_effective_enabled_instance_only.
+     *
      * @return array<string, array{int, bool}>
      */
     public static function effective_enabled_provider(): array {
@@ -161,7 +175,6 @@ final class config_manager_test extends advanced_testcase {
         ];
     }
 
-    // ── DB-level tests (require full Moodle DB) ─────────────────────────────
 
     /**
      * save_config() and get_config() round-trip.
@@ -185,12 +198,13 @@ final class config_manager_test extends advanced_testcase {
         config_manager::save_config($cmid, $qbeid, $elements);
         $loaded = config_manager::get_config($cmid, $qbeid);
 
-        $this->assertTrue($loaded['basic_operators'],
-            'basic_operators must be true after save');
-        $this->assertFalse($loaded['trigonometry'],
-            'trigonometry must be false after save');
-        $this->assertSame(definitions::VAR_MULTI, $loaded['_variableMode'],
-            '_variableMode must be persisted');
+        $this->assertTrue($loaded['basic_operators'], 'basic_operators must be true after save');
+        $this->assertFalse($loaded['trigonometry'], 'trigonometry must be false after save');
+        $this->assertSame(
+            definitions::VAR_MULTI,
+            $loaded['_variableMode'],
+            '_variableMode must be persisted'
+        );
     }
 
     /**
@@ -207,7 +221,7 @@ final class config_manager_test extends advanced_testcase {
 
         $loaded = config_manager::get_quiz_default($cmid);
         $this->assertNotNull($loaded, 'Quiz default must exist after save');
-        $this->assertTrue($loaded['logic'],    'logic must be true');
+        $this->assertTrue($loaded['logic'], 'logic must be true');
         $this->assertFalse($loaded['_enabled'], '_enabled must be false');
     }
 
@@ -230,14 +244,12 @@ final class config_manager_test extends advanced_testcase {
 
         // No question-level config yet → should get quiz default.
         $config = config_manager::get_config($cmid, $qbeid);
-        $this->assertTrue($config['brackets'],
-            'brackets must be inherited from quiz default');
+        $this->assertTrue($config['brackets'], 'brackets must be inherited from quiz default');
 
         // Question-level: override brackets off.
         config_manager::save_config($cmid, $qbeid, ['brackets' => false]);
         $config = config_manager::get_config($cmid, $qbeid);
-        $this->assertFalse($config['brackets'],
-            'brackets must be overridden at question level');
+        $this->assertFalse($config['brackets'], 'brackets must be overridden at question level');
     }
 
     /**
@@ -254,10 +266,15 @@ final class config_manager_test extends advanced_testcase {
         config_manager::save_config($cmid, $qbeid, ['trigonometry' => true]);
         config_manager::save_config($cmid, $qbeid, ['trigonometry' => false]);
 
-        $count = $DB->count_records('local_stackmatheditor',
-            ['cmid' => $cmid, 'questionbankentryid' => $qbeid]);
-        $this->assertSame(1, $count,
-            'Only one record must exist after double-save (deduplication)');
+        $count = $DB->count_records(
+            'local_stackmatheditor',
+            ['cmid' => $cmid, 'questionbankentryid' => $qbeid]
+        );
+        $this->assertSame(
+            1,
+            $count,
+            'Only one record must exist after double-save (deduplication)'
+        );
     }
 
     /**
@@ -274,8 +291,7 @@ final class config_manager_test extends advanced_testcase {
         config_manager::save_quiz_default($cmid, ['_enabled' => true]);
 
         $result = config_manager::get_effective_enabled($cmid);
-        $this->assertTrue($result,
-            'Quiz-level _enabled=true must activate editor in mode 2');
+        $this->assertTrue($result, 'Quiz-level _enabled=true must activate editor in mode 2');
     }
 
     /**
@@ -293,7 +309,6 @@ final class config_manager_test extends advanced_testcase {
         config_manager::save_config($cmid, $qbeid, ['_enabled' => false]);
 
         $result = config_manager::get_effective_enabled($cmid, $qbeid);
-        $this->assertFalse($result,
-            'Question-level _enabled=false must deactivate editor in mode 3');
+        $this->assertFalse($result, 'Question-level _enabled=false must deactivate editor in mode 3');
     }
 }

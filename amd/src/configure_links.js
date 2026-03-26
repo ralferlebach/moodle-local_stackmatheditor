@@ -30,6 +30,11 @@ define(['jquery'], function($) {
         }
     }
 
+    /**
+     * Read the JSON configuration element injected by the server.
+     *
+     * @returns {Object|null} Parsed configuration object or null.
+     */
     function loadData() {
         var el = document.getElementById('sme-configure-data');
         if (!el) {
@@ -43,6 +48,16 @@ define(['jquery'], function($) {
         }
     }
 
+    /**
+     * Build the configure URL for a specific question or quiz.
+     *
+     * @param {string} base   Base configure URL.
+     * @param {number} cmid   Course module ID.
+     * @param {number} qbeid  Question bank entry ID.
+     * @param {number} qid    Question ID.
+     * @param {string} ret    Return URL.
+     * @returns {string} Complete URL string.
+     */
     function buildUrl(base, cmid, qbeid, qid, ret) {
         var url = base + '?cmid=' + encodeURIComponent(cmid);
         if (qbeid) {
@@ -57,6 +72,13 @@ define(['jquery'], function($) {
         return url;
     }
 
+    /**
+     * Create a plain text anchor element.
+     *
+     * @param {string} href  Link target URL.
+     * @param {string} text  Link text.
+     * @returns {jQuery} Anchor element.
+     */
     function createTextLink(href, text) {
         return $('<a>')
             .attr('href', href)
@@ -66,6 +88,13 @@ define(['jquery'], function($) {
             .append(' ' + text);
     }
 
+    /**
+     * Create an icon-only anchor element with a settings gear icon.
+     *
+     * @param {string} href   Link target URL.
+     * @param {string} title  Tooltip/aria-label text.
+     * @returns {jQuery} Anchor element.
+     */
     function createIconLink(href, title) {
         return $('<a>')
             .attr('href', href)
@@ -77,6 +106,12 @@ define(['jquery'], function($) {
 
     // ── Attempt page ─────────────────────────────────────────────────────────
 
+    /**
+     * Find the question container element for a given slot number.
+     *
+     * @param {number} slot Slot number.
+     * @returns {jQuery} Container element or empty jQuery object.
+     */
     function findContainer(slot) {
         var $c = $('[id$="-' + slot + '"].que');
         if ($c.length) {
@@ -89,6 +124,12 @@ define(['jquery'], function($) {
         return $m.length ? $m.first() : $();
     }
 
+    /**
+     * Inject configure links into all STACK question slots on attempt/review pages.
+     *
+     * @param {Object} data Configuration data from the server.
+     * @returns {void}
+     */
     function injectAttemptLinks(data) {
         var slots = data.slots || {};
         var slot;
@@ -104,6 +145,14 @@ define(['jquery'], function($) {
         dbg('attempt: ' + count + ' injected');
     }
 
+    /**
+     * Inject a configure link for a single attempt slot.
+     *
+     * @param {Object} data Configuration data from the server.
+     * @param {string} slot Slot number as string key.
+     * @param {Object} sd   Slot-specific data (url, qbeid, qid, name).
+     * @returns {void}
+     */
     function doAttemptSlot(data, slot, sd) {
         var url = buildUrl(data.configureUrl, data.cmid,
             sd.qbeid, sd.questionid, data.returnUrl);
@@ -145,6 +194,12 @@ define(['jquery'], function($) {
      * which Moodle version's handler fires first.
      *
      * @param {Object} data Configuration data from PHP.
+     */
+    /**
+     * Inject a "Set up STACK MathQuill Editor" option into the quiz edit nav selector.
+     *
+     * @param {Object} data Configuration data from the server.
+     * @returns {void}
      */
     function injectQuizNavOption(data) {
         if (!data.quizConfigureUrl || !data.quizLinkText) {
@@ -188,6 +243,12 @@ define(['jquery'], function($) {
         dbg('quiz nav option injected: ' + fullUrl);
     }
 
+    /**
+     * Inject configure icon links next to each STACK question on the quiz edit page.
+     *
+     * @param {Object} data Configuration data from the server.
+     * @returns {void}
+     */
     function injectEditLinks(data) {
         // 1. Per-question icon links (existing behaviour).
         var questions = data.questions || [];
@@ -204,6 +265,13 @@ define(['jquery'], function($) {
         injectQuizNavOption(data);
     }
 
+    /**
+     * Executes the question edit configurator links.
+     *
+     * @param {Object} data Configuration data from the server.
+     * @param {Object} q Question data from the server.
+     * @returns {bool}
+     */
     function doEditQuestion(data, q) {
         var url = buildUrl(data.configureUrl, data.cmid,
             q.qbeid, q.questionid, data.returnUrl);
@@ -244,6 +312,12 @@ define(['jquery'], function($) {
 
     // ── Run ───────────────────────────────────────────────────────────────────
 
+    /**
+     * Route to the correct injection function based on page mode.
+     *
+     * @param {Object} data Configuration data from the server.
+     * @returns {void}
+     */
     function run(data) {
         dbg('run: mode=' + data.mode);
         if (data.mode === 'attempt') {

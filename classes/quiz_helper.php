@@ -1,17 +1,29 @@
 <?php
-namespace local_stackmatheditor;
+// This file is part of Moodle - https://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
-defined('MOODLE_INTERNAL') || die();
+namespace local_stackmatheditor;
 
 /**
  * Shared helper for quiz/question DB lookups.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class quiz_helper {
-
     /** @var array Per-request cache for attempt slot data. */
     private static array $attemptcache = [];
 
@@ -27,12 +39,28 @@ class quiz_helper {
      * @param string $msg Message to log.
      * @return void
      */
+    /**
+     * Write a silent developer trace message to the PHP error log.
+     *
+     * Uses error_log() so output never appears in the browser or disrupts
+     * normal page rendering. Only visible in the server error log.
+     *
+     * @param string $msg Message to log.
+     * @return void
+     */
     public static function dbg(string $msg): void {
-        if (debugging('', DEBUG_DEVELOPER)) {
-            error_log('[SME-HOOK] ' . $msg);
-        }
+        // phpcs:ignore moodle.PHP.ForbiddenFunctions.FoundWithAlternative
+        error_log('[SME-HOOK] ' . $msg);
     }
 
+    /**
+     * Return the course module ID for the current page.
+     *
+     * Reads from $PAGE->cm if available, then falls back to the
+     * cmid or id URL parameter.
+     *
+     * @return int Course module ID, or 0 if not determinable.
+     */
     public static function get_cmid(): int {
         global $PAGE;
         if ($PAGE->cm) {
@@ -45,6 +73,12 @@ class quiz_helper {
         return $cmid;
     }
 
+    /**
+     * Return the quiz instance ID for a given course module ID.
+     *
+     * @param int $cmid Course module ID.
+     * @return int Quiz instance ID, or 0 if not found.
+     */
     public static function get_quiz_instance_id(int $cmid): int {
         global $PAGE;
         if ($PAGE->cm && (int) $PAGE->cm->id === $cmid) {
@@ -54,6 +88,13 @@ class quiz_helper {
         return $cm ? (int) $cm->instance : 0;
     }
 
+    /**
+     * Check whether the quiz_slots table has a questionbankentryid column.
+     *
+     * The column was added in Moodle 4.x. Result is cached per request.
+     *
+     * @return bool True if the column exists.
+     */
     private static function slots_have_qbeid(): bool {
         global $DB;
         static $result = null;
@@ -69,6 +110,16 @@ class quiz_helper {
         return $result;
     }
 
+    /**
+     * Load all STACK question records for a quiz instance.
+     *
+     * Returns an array of associative arrays with keys:
+     *   questionid, qbeid, name, slot.
+     * Result is cached per request.
+     *
+     * @param int $quizinstanceid Quiz instance ID (not cmid).
+     * @return array List of STACK question data.
+     */
     public static function load_quiz_stack_questions(int $quizinstanceid): array {
         if (isset(self::$quizcache[$quizinstanceid])) {
             self::dbg('load_quiz_stack_questions: cache hit quiz=' . $quizinstanceid);
@@ -89,6 +140,14 @@ class quiz_helper {
         return $data;
     }
 
+    /**
+     * Load STACK questions via the quiz_slots.questionbankentryid column.
+     *
+     * Used on Moodle 4.x where the column is present.
+     *
+     * @param int $quizid Quiz instance ID.
+     * @return array List of STACK question data.
+     */
     private static function load_questions_direct(int $quizid): array {
         global $DB;
         $data  = [];
@@ -121,6 +180,14 @@ class quiz_helper {
         return $data;
     }
 
+    /**
+     * Load STACK questions via the question_references table.
+     *
+     * Used as fallback when quiz_slots lacks questionbankentryid.
+     *
+     * @param int $quizid Quiz instance ID.
+     * @return array List of STACK question data.
+     */
     private static function load_questions_via_refs(int $quizid): array {
         global $DB;
         $data = [];
@@ -164,6 +231,18 @@ class quiz_helper {
         return $data;
     }
 
+    /**
+     * Load slot-to-STACK-question mapping for a quiz attempt.
+     *
+     * Returns an array with keys:
+     *   slotmap  (slot => questionid),
+     *   qbeids   (slot => qbeid),
+     *   qbeidmap (qbeid => questionid).
+     * Result is cached per request.
+     *
+     * @param int $attemptid Quiz attempt ID.
+     * @return array Slot mapping data.
+     */
     public static function load_attempt_stack_slots(int $attemptid): array {
         if (isset(self::$attemptcache[$attemptid])) {
             return self::$attemptcache[$attemptid];
@@ -178,6 +257,12 @@ class quiz_helper {
         return $result;
     }
 
+    /**
+     * Internal implementation for load_attempt_stack_slots().
+     *
+     * @param int $attemptid Quiz attempt ID.
+     * @return array Slot mapping data.
+     */
     private static function do_load_attempt_slots(int $attemptid): array {
         global $DB;
         $result = ['slotmap' => [], 'qbeids' => [], 'qbeidmap' => []];
@@ -207,7 +292,7 @@ class quiz_helper {
             }
         }
 
-        list($insql, $params) = $DB->get_in_or_equal($questionids, SQL_PARAMS_NAMED, 'qid');
+        [$insql, $params] = $DB->get_in_or_equal($questionids, SQL_PARAMS_NAMED, 'qid');
         $questions = $DB->get_records_select('question', "id {$insql}", $params, '', 'id, qtype');
 
         foreach ($rawslotmap as $slot => $qid) {
@@ -226,6 +311,12 @@ class quiz_helper {
         return $result;
     }
 
+    /**
+     * Check whether the current user has quiz management capability.
+     *
+     * @param int $cmid Course module ID.
+     * @return bool True if the user can manage the quiz.
+     */
     public static function can_manage_quiz(int $cmid): bool {
         try {
             $context = \context_module::instance($cmid);
@@ -235,6 +326,14 @@ class quiz_helper {
         }
     }
 
+    /**
+     * Return the URL to redirect to after saving configuration.
+     *
+     * Falls back to the quiz view page if $PAGE->url is not set.
+     *
+     * @param int $cmid Course module ID.
+     * @return string Absolute URL string.
+     */
     public static function get_return_url(int $cmid): string {
         global $PAGE;
         try {

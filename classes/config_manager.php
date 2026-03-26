@@ -1,7 +1,20 @@
 <?php
-namespace local_stackmatheditor;
+// This file is part of Moodle - https://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
-defined('MOODLE_INTERNAL') || die();
+namespace local_stackmatheditor;
 
 /**
  * Manages per-quiz per-question toolbar configuration.
@@ -19,16 +32,15 @@ defined('MOODLE_INTERNAL') || die();
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class config_manager {
-
     /** @var string Database table name. */
     const TABLE = 'local_stackmatheditor';
 
-    // ------------------------------------------------------------------
-    // Instance-level helpers
-    // ------------------------------------------------------------------
+
+    // Instance-level helpers.
+
 
     /**
      * Returns instance-wide default enabled state for all element groups.
@@ -105,14 +117,14 @@ class config_manager {
         $val = get_config('local_stackmatheditor', 'enabled');
         $int = (int) $val;
         if ($int < 0 || $int > 3) {
-            return 1; // safe default: enabled.
+            return 1; // Safe default: enabled.
         }
         return $int;
     }
 
-    // ------------------------------------------------------------------
-    // DB column helpers
-    // ------------------------------------------------------------------
+
+    // DB column helpers.
+
 
     /**
      * Detect which column stores the JSON config.
@@ -139,9 +151,9 @@ class config_manager {
         return self::get_config_column();
     }
 
-    // ------------------------------------------------------------------
-    // Low-level DB fetch
-    // ------------------------------------------------------------------
+
+    // Low-level DB fetch.
+
 
     /**
      * Safe single-record fetch: returns newest matching record.
@@ -158,9 +170,9 @@ class config_manager {
         return $records ? reset($records) : null;
     }
 
-    // ------------------------------------------------------------------
-    // qbeid resolution
-    // ------------------------------------------------------------------
+
+    // Qbeid resolution.
+
 
     /**
      * Resolve any question ID to its question bank entry ID.
@@ -197,9 +209,9 @@ class config_manager {
         return null;
     }
 
-    // ------------------------------------------------------------------
-    // Decode helpers
-    // ------------------------------------------------------------------
+
+    // Decode helpers.
+
 
     /**
      * Decode a raw config JSON string.
@@ -237,9 +249,9 @@ class config_manager {
         return array_merge($base, $layer);
     }
 
-    // ------------------------------------------------------------------
-    // Public read API
-    // ------------------------------------------------------------------
+
+    // Public read API.
+
 
     /**
      * Load effective config for a quiz + question.
@@ -257,8 +269,11 @@ class config_manager {
      * @param int $questionid Question ID (for resolving qbeid and legacy lookup).
      * @return array Merged config array.
      */
-    public static function get_config(int $cmid, int $qbeid = 0,
-                                      int $questionid = 0): array {
+    public static function get_config(
+        int $cmid,
+        int $qbeid = 0,
+        int $questionid = 0
+    ): array {
         global $DB;
 
         $col    = self::get_config_column();
@@ -370,8 +385,11 @@ class config_manager {
      * @param array $questionids Optional qbeid => questionid map for legacy.
      * @return array Map of qbeid => config.
      */
-    public static function get_configs(int $cmid, array $qbeids,
-                                       array $questionids = []): array {
+    public static function get_configs(
+        int $cmid,
+        array $qbeids,
+        array $questionids = []
+    ): array {
         global $DB;
         $col      = self::get_config_column();
         $configs  = [];
@@ -409,7 +427,7 @@ class config_manager {
         }
 
         // 2. Any qbeid match fallback.
-        list($insql, $params) = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
+        [$insql, $params] = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
         $records = $DB->get_records_select(
             self::TABLE,
             "questionbankentryid {$insql}",
@@ -458,7 +476,7 @@ class config_manager {
 
         // 5. Exact question-level configs win last.
         if ($cmid > 0) {
-            list($insql, $params) = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
+            [$insql, $params] = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
             $params['cmid'] = $cmid;
             $records = $DB->get_records_select(
                 self::TABLE,
@@ -479,9 +497,9 @@ class config_manager {
         return $configs;
     }
 
-    // ------------------------------------------------------------------
-    // Public write API
-    // ------------------------------------------------------------------
+
+    // Public write API.
+
 
     /**
      * Save question-level config (cmid + qbeid).
@@ -492,8 +510,12 @@ class config_manager {
      * @param int   $questionid Optional questionid to resolve qbeid.
      * @throws \moodle_exception If qbeid cannot be determined.
      */
-    public static function save_config(int $cmid, int $qbeid, array $elements,
-                                       int $questionid = 0): void {
+    public static function save_config(
+        int $cmid,
+        int $qbeid,
+        array $elements,
+        int $questionid = 0
+    ): void {
         global $DB, $USER;
 
         $qbeid = self::ensure_qbeid($qbeid, $questionid);
@@ -524,8 +546,12 @@ class config_manager {
      * @param array    $elements
      * @param int      $userid
      */
-    private static function upsert_record(int $cmid, ?int $qbeid,
-                                          array $elements, int $userid): void {
+    private static function upsert_record(
+        int $cmid,
+        ?int $qbeid,
+        array $elements,
+        int $userid
+    ): void {
         global $DB;
 
         $col  = self::get_config_column();
@@ -541,7 +567,10 @@ class config_manager {
         }
 
         $records = $DB->get_records_select(
-            self::TABLE, $where, $params, 'timemodified DESC'
+            self::TABLE,
+            $where,
+            $params,
+            'timemodified DESC'
         );
 
         if (!empty($records)) {
@@ -557,7 +586,7 @@ class config_manager {
         } else {
             $record                      = new \stdClass();
             $record->cmid                = $cmid;
-            $record->questionbankentryid = $qbeid; // null for quiz-level
+            $record->questionbankentryid = $qbeid; // Null for quiz-level defaults.
             $record->$col                = $json;
             $record->usermodified        = $userid;
             $record->timecreated         = $now;
@@ -566,9 +595,9 @@ class config_manager {
         }
     }
 
-    // ------------------------------------------------------------------
-    // Enabled-flag helpers
-    // ------------------------------------------------------------------
+
+    // Enabled-flag helpers.
+
 
     /**
      * Determine whether the editor is effectively enabled for a given context.
@@ -585,8 +614,10 @@ class config_manager {
      * @param int $qbeid  Question bank entry ID (0 = ignore question level).
      * @return bool
      */
-    public static function get_effective_enabled(int $cmid = 0,
-                                                 int $qbeid = 0): bool {
+    public static function get_effective_enabled(
+        int $cmid = 0,
+        int $qbeid = 0
+    ): bool {
         $mode = self::get_instance_enabled_mode();
 
         if ($mode === 0) {
@@ -596,22 +627,22 @@ class config_manager {
             return true;
         }
 
-        // mode 2 or 3 – check quiz then question level.
-        $defaultEnabled = ($mode === 3);
+        // Mode 2 or 3 – check quiz then question level.
+        $defaultenabled = ($mode === 3);
 
         // Load the most specific applicable config.
         if ($cmid > 0 && $qbeid > 0) {
             $cfg = self::get_config($cmid, $qbeid);
-        } elseif ($cmid > 0) {
+        } else if ($cmid > 0) {
             $cfg = self::get_quiz_default($cmid) ?? [];
         } else {
-            return $defaultEnabled;
+            return $defaultenabled;
         }
 
         if (isset($cfg['_enabled'])) {
             return (bool) $cfg['_enabled'];
         }
 
-        return $defaultEnabled;
+        return $defaultenabled;
     }
 }

@@ -1,7 +1,20 @@
 <?php
-namespace local_stackmatheditor;
+// This file is part of Moodle - https://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
-defined('MOODLE_INTERNAL') || die();
+namespace local_stackmatheditor;
 
 use local_stackmatheditor\output\mathjax_injector;
 use local_stackmatheditor\output\editor_injector;
@@ -12,10 +25,9 @@ use local_stackmatheditor\output\configure_injector;
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class hook_callbacks {
-
     /** @var string[] Pages where the MathQuill editor is active. */
     private const EDITOR_PAGES = [
         'mod-quiz-attempt',
@@ -85,8 +97,8 @@ class hook_callbacks {
         }
 
         // Serve the MathJax v2 shim from the static js/ directory.
-        // This replaces the previous inline heredoc and keeps PHP files
-        // free of embedded JavaScript.
+        // This replaces the previous inline heredoc and keeps PHP files.
+        // Free of embedded JavaScript.
         $shimurl = new \moodle_url('/local/stackmatheditor/js/mathjax_shim.js');
         $hook->add_html(
             '<script type="text/javascript" src="' . $shimurl->out(false) . '"></script>'
@@ -107,23 +119,23 @@ class hook_callbacks {
             return;
         }
 
-        $isEditor    = self::is_editor_page();
-        $isConfigure = self::is_configure_page();
+        $iseditor    = self::is_editor_page();
+        $isconfigure = self::is_configure_page();
 
         quiz_helper::dbg(
             'before_footer: page=' . $PAGE->pagetype
-            . ' editor=' . ($isEditor ? 'Y' : 'N')
-            . ' configure=' . ($isConfigure ? 'Y' : 'N')
+            . ' editor=' . ($iseditor ? 'Y' : 'N')
+            . ' configure=' . ($isconfigure ? 'Y' : 'N')
         );
 
-        if (!$isEditor && !$isConfigure) {
+        if (!$iseditor && !$isconfigure) {
             return;
         }
 
         $cmid = quiz_helper::get_cmid();
 
-        // ── Editor injection ──────────────────────────────────────────────────
-        if ($isEditor) {
+        // Editor injection.
+        if ($iseditor) {
             if (!config_manager::get_effective_enabled($cmid)) {
                 quiz_helper::dbg('editor: disabled for cmid=' . $cmid . ', skipping');
             } else {
@@ -137,10 +149,10 @@ class hook_callbacks {
             }
         }
 
-        // ── Configure links injection ─────────────────────────────────────────
-        // Always inject configure links when the user can manage the quiz,
-        // regardless of the enabled mode — the configure page handles the toggle.
-        if ($isConfigure) {
+        // Configure links injection.
+        // Always inject configure links when the user can manage the quiz,.
+        // Regardless of the enabled mode — the configure page handles the toggle.
+        if ($isconfigure) {
             try {
                 if ($cmid <= 0) {
                     quiz_helper::dbg('configure: no cmid, skipping');
