@@ -336,10 +336,13 @@ class quiz_helper {
      */
     public static function get_return_url(int $cmid): string {
         global $PAGE;
+        $fallback = (new \moodle_url('/mod/quiz/view.php', ['id' => $cmid]))->out(false);
         try {
-            return $PAGE->url->out(false);
+            $url = $PAGE->url->out(false);
+            // $PAGE->url may exist but be empty in unit-test context.
+            return ($url !== '') ? $url : $fallback;
         } catch (\Throwable $e) {
-            return (new \moodle_url('/mod/quiz/view.php', ['id' => $cmid]))->out(false);
+            return $fallback;
         }
     }
 
