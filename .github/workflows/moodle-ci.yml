@@ -12,12 +12,14 @@
 #   gnuplot       → für STACK-Plot-Rendering
 #
 # WICHTIG:
-#   - MariaDB-Service OHNE MYSQL_DATABASE → moodle-plugin-ci erstellt die DB
-#     selbst. Verbindung über root/root (hat CREATE DATABASE-Rechte).
-#   - PostgreSQL-Service mit POSTGRES_DB=postgres (nicht "moodle") →
-#     Superuser "moodle" erstellt die DB "moodle" während install.
+#   - Ab Moodle 4.5 verlangt MariaDB den neuen Treiber "mariadb"
+#     (NICHT mehr "mysqli"). "mysqli" gilt nur noch für echtes MySQL.
+#   - MariaDB-Service OHNE MYSQL_DATABASE → moodle-plugin-ci erstellt
+#     die DB selbst. Verbindung über root/root (hat CREATE DATABASE).
+#   - PostgreSQL-Service mit POSTGRES_DB=postgres → DB "moodle" wird
+#     NICHT vorab erstellt (Default wäre POSTGRES_USER als DB-Name).
+#   - max_input_vars=5000 via ini-values (Moodle-Mindestanforderung).
 #   - --branch (nicht --moodle!) übergibt den Moodle-Branch.
-#     --moodle setzt nur das Zielverzeichnis (Standard: "moodle").
 ##############################################################################
 
 name: Moodle Plugin CI
@@ -49,6 +51,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
+          ini-values: max_input_vars=5000
           coverage: none
 
       - name: Install moodle-plugin-ci
@@ -67,14 +70,11 @@ jobs:
         run: moodle-plugin-ci phpmd plugin || true
 
   # ── 1b. JS / CSS Lint ────────────────────────────────────────────────────
-  # Benötigt eine minimale Moodle-Installation für grunt-Config-Auflösung,
-  # aber keine DB-Matrix – JS/CSS-Stil variiert nicht mit PHP-Version.
   lint-js:
     name: "JS/CSS Lint"
     runs-on: ubuntu-24.04
 
     services:
-      # ⛔ KEIN MYSQL_DATABASE → DB wird NICHT vorab erstellt
       mariadb:
         image: mariadb:10.11
         env:
@@ -95,6 +95,7 @@ jobs:
         with:
           php-version: '8.2'
           extensions: mbstring, pdo, pdo_mysql, gd, xml, zip, intl
+          ini-values: max_input_vars=5000
           coverage: none
 
       - uses: actions/setup-node@v4
@@ -118,13 +119,11 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
-      # FIX 1: --branch statt --moodle
-      # FIX 2: Explizite CLI-DB-Flags statt Env-Vars; root hat CREATE DATABASE
       - name: Install Moodle (grunt-Config)
         run: |
           moodle-plugin-ci install \
             --plugin   ./plugin \
-            --db-type  mysqli \
+            --db-type  mariadb \
             --db-host  127.0.0.1 \
             --db-port  3306 \
             --db-user  root \
@@ -141,7 +140,7 @@ jobs:
 
       - name: Stylelint – CSS
         run: moodle-plugin-ci grunt --plugin ./plugin stylelint
-        continue-on-error: true   # warn only until baseline is established
+        continue-on-error: true
 
       - name: Verify AMD build artefacts
         run: |
@@ -160,11 +159,7 @@ jobs:
           fi
           echo "AMD build OK: $(ls plugin/amd/src/*.js | wc -l) Datei(en) verifiziert."
 
-  # ── 2. PHPUnit (MariaDB + PostgreSQL als Matrix-Dimension) ────────────────
-  #
-  # Beide DB-Services laufen pro Job (GHA unterstützt keine bedingten Services).
-  # Es wird jeweils nur der zur Matrix passende Service genutzt – akzeptabler
-  # Overhead als Tausch gegen eine einzige, wartbare Job-Definition.
+  # ── 2. PHPUnit ────────────────────────────────────────────────────────────
   phpunit:
     name: "PHPUnit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.db.engine }})"
     runs-on: ubuntu-24.04
@@ -175,15 +170,13 @@ jobs:
         moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE', 'MOODLE_501_STABLE']
         php:    ['8.2', '8.3', '8.4']
         db:
-          - { engine: mariadb, type: mysqli, port: 3306, user: root,   pass: root   }
-          - { engine: pgsql,   type: pgsql,  port: 5432, user: moodle, pass: moodle }
+          - { engine: mariadb, type: mariadb, port: 3306, user: root,   pass: root   }
+          - { engine: pgsql,   type: pgsql,   port: 5432, user: moodle, pass: moodle }
         exclude:
-          # PHP 8.4 wird erst ab Moodle 5.1 offiziell unterstützt
           - { moodle: MOODLE_405_STABLE, php: '8.4' }
           - { moodle: MOODLE_500_STABLE, php: '8.4' }
 
     services:
-      # ⛔ KEIN MYSQL_DATABASE → kein Konflikt mit CREATE DATABASE
       mariadb:
         image: mariadb:10.11
         env:
@@ -195,9 +188,6 @@ jobs:
           --health-timeout=5s
           --health-retries=10
 
-      # ⛔ POSTGRES_DB=postgres (nicht "moodle") → DB "moodle" wird NICHT
-      #    vorab erstellt. Ohne POSTGRES_DB würde der Image-Default den
-      #    Wert von POSTGRES_USER ("moodle") als DB-Namen verwenden!
       pgsql:
         image: postgres:16
         env:
@@ -216,11 +206,11 @@ jobs:
         with:
           path: plugin
 
-      # Beide DB-Treiber installieren – welcher aktiv ist, bestimmt die Matrix
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
           extensions: mbstring, pdo, pdo_mysql, pdo_pgsql, gd, xml, zip, intl
+          ini-values: max_input_vars=5000
           coverage: none
 
       - name: Install Maxima (≥ 5.46) and gnuplot
@@ -252,9 +242,6 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
-      # FIX 1: --branch statt --moodle
-      # FIX 2: Explizite DB-CLI-Flags; user/pass aus Matrix (root für MariaDB,
-      #        moodle-Superuser für PostgreSQL)
       - name: Install Moodle ${{ matrix.moodle }}
         run: |
           moodle-plugin-ci install \
@@ -301,7 +288,6 @@ jobs:
         moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE', 'MOODLE_501_STABLE']
 
     services:
-      # FIX: Selenium 4 Health-Endpunkt → /status (nicht /wd/hub/status)
       selenium:
         image: selenium/standalone-chrome:latest
         options: >-
@@ -311,7 +297,6 @@ jobs:
           --health-retries=5
         ports: ['4444:4444']
 
-      # ⛔ KEIN MYSQL_DATABASE
       mariadb:
         image: mariadb:10.11
         env:
@@ -331,6 +316,7 @@ jobs:
         with:
           php-version: '8.2'
           extensions: mbstring, pdo, pdo_mysql, gd, xml, zip, intl
+          ini-values: max_input_vars=5000
           coverage: none
 
       - name: Install Maxima and gnuplot
@@ -353,13 +339,11 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
-      # FIX 1: --branch statt --moodle
-      # FIX 2: Explizite DB-CLI-Flags mit root/root
       - name: Install Moodle ${{ matrix.moodle }}
         run: |
           moodle-plugin-ci install \
             --plugin   ./plugin \
-            --db-type  mysqli \
+            --db-type  mariadb \
             --db-host  127.0.0.1 \
             --db-port  3306 \
             --db-user  root \
@@ -379,8 +363,6 @@ jobs:
         run: php admin/tool/behat/cli/init.php
         working-directory: ${{ github.workspace }}/moodle
 
-      # FIX: Feature-Pfad als positionelles Argument nach "--"
-      #      (--feature ist kein gültiger Flag von moodle-plugin-ci behat)
       - name: Behat – toolbar configuration
         run: |
           moodle-plugin-ci behat --plugin ./plugin \
