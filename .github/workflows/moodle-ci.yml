@@ -2,13 +2,13 @@
 # GitHub Actions CI – local_stackmatheditor
 #
 # Matrix:
-#   Moodle: MOODLE_45_STABLE, MOODLE_500_STABLE
+#   Moodle: MOODLE_405_STABLE, MOODLE_500_STABLE
 #   PHP:    8.2, 8.3
 #   DB:     MariaDB 10.6 (job phpunit-mariadb)
 #           PostgreSQL 14  (job phpunit-pgsql)
 #
 # External dependencies:
-#   qtype_stack  MOODLE_45_STABLE  → STACK 4.6+, requires Maxima ≥ 5.46
+#   qtype_stack  MOODLE_405_STABLE  → STACK 4.6+, requires Maxima ≥ 5.46
 #   Maxima 5.46+ via apt           → version assertion enforced
 #   gnuplot                        → required by STACK plot rendering
 ##############################################################################
@@ -17,14 +17,7 @@ name: Moodle Plugin CI
 
 on:
   push:
-    branches:
-      - main
-      - master
-      - 'MOODLE_*'
   pull_request:
-    branches:
-      - main
-      - master
 
 jobs:
 
@@ -121,7 +114,7 @@ jobs:
       - name: Register qtype_stack as a dependency
         run: |
           moodle-plugin-ci add-plugin \
-            --branch MOODLE_45_STABLE \
+            --branch MOODLE_405_STABLE \
             maths/moodle-qtype_stack
 
       # A minimal Moodle install is needed so grunt can resolve the shared
@@ -131,7 +124,7 @@ jobs:
           moodle-plugin-ci install \
             --plugin        ./plugin \
             --db            mysqli \
-            --moodle-branch MOODLE_45_STABLE
+            --moodle-branch MOODLE_405_STABLE
         env:
           DB:     mysqli
           DBHOST: 127.0.0.1
@@ -190,7 +183,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        moodle: ['MOODLE_45_STABLE', 'MOODLE_500_STABLE']
+        moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE']
         php:    ['8.2', '8.3']
 
     services:
@@ -244,7 +237,7 @@ jobs:
       - name: Register qtype_stack as a dependency
         run: |
           moodle-plugin-ci add-plugin \
-            --branch MOODLE_45_STABLE \
+            --branch MOODLE_405_STABLE \
             maths/moodle-qtype_stack
 
       - name: Install Moodle ${{ matrix.moodle }}
@@ -295,7 +288,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        moodle: ['MOODLE_45_STABLE', 'MOODLE_500_STABLE']
+        moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE']
         php:    ['8.2', '8.3']
 
     services:
@@ -348,7 +341,7 @@ jobs:
       - name: Register qtype_stack as a dependency
         run: |
           moodle-plugin-ci add-plugin \
-            --branch MOODLE_45_STABLE \
+            --branch MOODLE_405_STABLE \
             maths/moodle-qtype_stack
 
       - name: Install Moodle ${{ matrix.moodle }}
@@ -395,7 +388,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        moodle: ['MOODLE_45_STABLE', 'MOODLE_500_STABLE']
+        moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE']
 
     services:
       selenium:
@@ -450,7 +443,7 @@ jobs:
       - name: Register qtype_stack as a dependency
         run: |
           moodle-plugin-ci add-plugin \
-            --branch MOODLE_45_STABLE \
+            --branch MOODLE_405_STABLE \
             maths/moodle-qtype_stack
 
       - name: Install Moodle ${{ matrix.moodle }}
