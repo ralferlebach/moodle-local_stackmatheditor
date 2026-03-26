@@ -114,7 +114,7 @@ jobs:
       - name: Register qtype_stack as a dependency
         run: |
           moodle-plugin-ci add-plugin \
-            --branch MOODLE_405_STABLE \
+            --branch master \
             maths/moodle-qtype_stack
 
       # A minimal Moodle install is needed so grunt can resolve the shared
@@ -237,7 +237,7 @@ jobs:
       - name: Register qtype_stack as a dependency
         run: |
           moodle-plugin-ci add-plugin \
-            --branch MOODLE_405_STABLE \
+            --branch master \
             maths/moodle-qtype_stack
 
       - name: Install Moodle ${{ matrix.moodle }}
@@ -341,7 +341,7 @@ jobs:
       - name: Register qtype_stack as a dependency
         run: |
           moodle-plugin-ci add-plugin \
-            --branch MOODLE_405_STABLE \
+            --branch master \
             maths/moodle-qtype_stack
 
       - name: Install Moodle ${{ matrix.moodle }}
@@ -443,7 +443,7 @@ jobs:
       - name: Register qtype_stack as a dependency
         run: |
           moodle-plugin-ci add-plugin \
-            --branch MOODLE_405_STABLE \
+            --branch master \
             maths/moodle-qtype_stack
 
       - name: Install Moodle ${{ matrix.moodle }}
