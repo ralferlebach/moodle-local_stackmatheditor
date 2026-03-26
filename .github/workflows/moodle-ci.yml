@@ -12,14 +12,15 @@
 #   gnuplot       → für STACK-Plot-Rendering
 #
 # WICHTIG:
-#   - Ab Moodle 4.5 verlangt MariaDB den neuen Treiber "mariadb"
-#     (NICHT mehr "mysqli"). "mysqli" gilt nur noch für echtes MySQL.
+#   - Ab Moodle 4.5 verlangt MariaDB den Treiber "mariadb" (NICHT "mysqli").
 #   - MariaDB-Service OHNE MYSQL_DATABASE → moodle-plugin-ci erstellt
 #     die DB selbst. Verbindung über root/root (hat CREATE DATABASE).
 #   - PostgreSQL-Service mit POSTGRES_DB=postgres → DB "moodle" wird
-#     NICHT vorab erstellt (Default wäre POSTGRES_USER als DB-Name).
+#     NICHT vorab erstellt.
 #   - max_input_vars=5000 via ini-values (Moodle-Mindestanforderung).
 #   - --branch (nicht --moodle!) übergibt den Moodle-Branch.
+#   - lint-js nutzt --no-init, da keine lauffähige Site nötig ist
+#     (vermeidet qtype_stack Install-Hook / Maxima-Abhängigkeit).
 ##############################################################################
 
 name: Moodle Plugin CI
@@ -70,6 +71,9 @@ jobs:
         run: moodle-plugin-ci phpmd plugin || true
 
   # ── 1b. JS / CSS Lint ────────────────────────────────────────────────────
+  # Benötigt eine minimale Moodle-Installation für grunt-Config-Auflösung,
+  # aber KEINE lauffähige Site → --no-init überspringt Test-Suite-Init
+  # und damit den qtype_stack Install-Hook (Maxima nicht erforderlich).
   lint-js:
     name: "JS/CSS Lint"
     runs-on: ubuntu-24.04
@@ -119,7 +123,10 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
-      - name: Install Moodle (grunt-Config)
+      # --no-init: Überspringt PHPUnit-/Behat-Initialisierung und damit
+      #            install_site() → qtype_stack db/install.php wird NICHT
+      #            ausgeführt → kein Maxima nötig.
+      - name: Install Moodle (grunt-Config only)
         run: |
           moodle-plugin-ci install \
             --plugin   ./plugin \
@@ -129,7 +136,8 @@ jobs:
             --db-user  root \
             --db-pass  root \
             --db-name  moodle \
-            --branch   MOODLE_405_STABLE
+            --branch   MOODLE_405_STABLE \
+            --no-init
 
       - name: Install Node dependencies
         run: npm install
@@ -159,7 +167,7 @@ jobs:
           fi
           echo "AMD build OK: $(ls plugin/amd/src/*.js | wc -l) Datei(en) verifiziert."
 
-  # ── 2. PHPUnit ────────────────────────────────────────────────────────────
+  # ── 2. PHPUnit (MariaDB + PostgreSQL als Matrix-Dimension) ────────────────
   phpunit:
     name: "PHPUnit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.db.engine }})"
     runs-on: ubuntu-24.04
@@ -213,6 +221,8 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
+      # ⚠️  Maxima MUSS vor moodle-plugin-ci install stehen, weil
+      #     qtype_stack's db/install.php sofort eine CAS-Verbindung aufbaut.
       - name: Install Maxima (≥ 5.46) and gnuplot
         run: |
           sudo apt-get update -qq
@@ -319,6 +329,7 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
+      # ⚠️  Maxima MUSS vor moodle-plugin-ci install stehen!
       - name: Install Maxima and gnuplot
         run: sudo apt-get update -qq && sudo apt-get install -y maxima gnuplot
 
