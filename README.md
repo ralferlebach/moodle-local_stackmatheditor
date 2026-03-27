@@ -111,7 +111,7 @@ The per-question configuration page itself requires a quiz module context and th
 - Question-specific configuration is tied to quiz / question-bank entry resolution in the supported contexts.
 - Because the plugin is currently alpha, installations should be tested carefully before production rollout.
 
-## Knonw Issues ##
+## Known Issues ##
 
 - works at the moment only with input fields, not with text area
 - no option for quiz-wide preferences at the moment
