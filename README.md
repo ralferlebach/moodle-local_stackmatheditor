@@ -100,8 +100,8 @@ The per-question configuration page itself requires a quiz module context and th
 
 ## Development notes ##
 
-- The plugin is currently marked as **MATURITY_ALPHA**.
-- The current release string in `version.php` is **0.8**.
+- The plugin is currently marked as **MATURITY_BETA**.
+- The current release string in `version.php` is **0.99**.
 - The plugin stores configuration in its own database installation/upgrade layer and uses Moodle's standard upgrade flow.
 - The repository contains AMD source and build directories, JavaScript compatibility code, CSS, PHP classes, and language files.
 
