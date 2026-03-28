@@ -105,14 +105,10 @@ require_login($course, false, $cm);
 $capname = $isadaptivequiz ? 'mod/adaptivequiz:viewreport' : 'mod/quiz:manage';
 require_capability($capname, $context);
 
-// Return URL: default to the activity's primary management page.
-if (empty($returnurl)) {
-    if ($isadaptivequiz) {
-        $returnurl = (new \moodle_url('/mod/adaptivequiz/view.php', ['id' => $cmid]))->out(false);
-    } else {
-        $returnurl = (new \moodle_url('/mod/quiz/edit.php', ['cmid' => $cmid]))->out(false);
-    }
-}
+// Return URL: used only when the page was opened with an explicit returnurl
+// parameter (e.g. from the quiz edit page or an attempt page).
+// When called from the standard settings navigation no returnurl is supplied,
+// which suppresses the "Back" button in the form and the is_cancelled redirect.
 
 // Page setup.
 $pageparams = ['cmid' => $cmid];
@@ -263,8 +259,14 @@ $formdata = [
 $mform->set_data($formdata);
 
 // Process form.
+// is_cancelled() is only meaningful when there is a "Back" button, which is
+// rendered only when $returnurl is non-empty.  Without a returnurl the form
+// has no cancel button, so this branch is never reached; the guard prevents
+// a redirect to an empty URL if the form is somehow submitted cancelled.
 if ($mform->is_cancelled()) {
-    redirect(new \moodle_url($returnurl));
+    if (!empty($returnurl)) {
+        redirect(new \moodle_url($returnurl));
+    }
 } else if ($data = $mform->get_data()) {
     $selectedgroups = $data->groups ?? [];
     $elements       = [];

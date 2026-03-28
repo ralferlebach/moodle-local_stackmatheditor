@@ -62,10 +62,6 @@ class configure_form extends \moodleform {
         $instancemode   = (int) ($customdata['instancemode'] ?? 1);
         $isadaptivequiz = ($modname === 'adaptivequiz');
 
-        // Hidden fields.
-        $mform->addElement('hidden', 'returnurl', $returnurl);
-        $mform->setType('returnurl', PARAM_LOCALURL);
-
         // Info section.
         $mform->addElement(
             'header',
@@ -253,17 +249,23 @@ class configure_form extends \moodleform {
         $mform->setDefault('variablemode', definitions::IMPLICIT_STACK);
 
         // Buttons.
+        // The "Back" cancel button is only rendered when a returnurl was supplied.
+        // Without one (e.g. when opened from the settings navigation) the button
+        // is omitted so the form cannot trigger an is_cancelled() redirect to an
+        // empty URL.
         $buttons   = [];
         $buttons[] = $mform->createElement(
             'submit',
             'submitbutton',
             get_string('save', 'local_stackmatheditor')
         );
-        $buttons[] = $mform->createElement(
-            'cancel',
-            'cancel',
-            get_string('back', 'local_stackmatheditor')
-        );
+        if (!empty($returnurl)) {
+            $buttons[] = $mform->createElement(
+                'cancel',
+                'cancel',
+                get_string('back', 'local_stackmatheditor')
+            );
+        }
         $mform->addGroup($buttons, 'buttonar', '', ' ', false);
         $mform->closeHeaderBefore('buttonar');
     }

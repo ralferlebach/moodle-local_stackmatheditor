@@ -125,12 +125,14 @@ function local_stackmatheditor_extend_settings_navigation(
         return;
     }
 
-    $cmid      = (int) $cm->id;
-    $returnurl = $PAGE->has_set_url() ? $PAGE->url->out(false) : '';
+    $cmid = (int) $cm->id;
+
+    // No returnurl: when opened from the standard settings navigation the page
+    // manages its own back-navigation via the breadcrumb.  configure.php renders
+    // the "Back" button only when a returnurl parameter is present.
 
     $url = new moodle_url('/local/stackmatheditor/configure.php', [
-        'cmid'      => $cmid,
-        'returnurl' => $returnurl,
+        'cmid' => $cmid,
     ]);
 
     // Build the navigation node (not yet attached to the tree).
