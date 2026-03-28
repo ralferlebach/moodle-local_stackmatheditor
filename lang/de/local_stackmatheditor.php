@@ -57,11 +57,16 @@ $string['questionpreview'] = 'Fragenvorschau';
 $string['notstackquestion'] = 'Diese Frage ist keine STACK-Frage.';
 $string['cannotresolveqbeid'] = 'Der Fragenbank-Eintrag konnte nicht aufgelöst werden.';
 
-// Konfigurationsseite – Testebene.
+// Konfigurationsseite – Testebene (mod_quiz).
 $string['configure_quiz'] = 'MathQuill-Standardeinstellungen für diesen Test';
 $string['configure_quiz_heading'] = 'MathQuill-Standardeinstellungen für Test: {$a}';
 $string['configure_quiz_nav'] = 'STACK MathQuill-Editor einrichten';
 $string['configure_quiz_note'] = 'Diese Einstellungen gelten als Voreinstellung für alle STACK-Fragen in diesem Test. Sie können für einzelne Fragen überschrieben werden.';
+
+// Konfigurationsseite – Aktivitätsebene (mod_adaptivequiz).
+$string['configure_adaptivequiz'] = 'MathQuill-Standardeinstellungen für diesen adaptiven Test';
+$string['configure_adaptivequiz_heading'] = 'MathQuill-Standardeinstellungen für adaptiven Test: {$a}';
+$string['configure_adaptivequiz_note'] = 'Diese Einstellungen gelten für alle STACK-Fragen in diesem adaptiven Test.';
 
 // Aktivierungsschalter.
 $string['configure_enabled_header'] = 'Plugin-Aktivierung';
@@ -69,6 +74,7 @@ $string['configure_enabled_label'] = 'MathQuill-Editor aktivieren';
 $string['configure_enabled_desc'] = 'Aktivieren oder deaktivieren Sie den Editor für diesen Test bzw. diese Frage. Überschreibt die übergeordnete Einstellung.';
 $string['configure_enabled_label_help'] = 'Wenn der übergeordnete Standard „aktiviert" ist, können Sie den Editor hier für diesen Test oder diese Frage deaktivieren – und umgekehrt.';
 $string['configure_enabled_checkboxlabel_quiz'] = 'MathQuill-Editor für diesen Test einschalten';
+$string['configure_enabled_checkboxlabel_adaptivequiz'] = 'MathQuill-Editor für diesen adaptiven Test einschalten';
 $string['configure_enabled_checkboxlabel_question'] = 'MathQuill-Editor für diese Frage einschalten';
 $string['configure_enabled_locked_on'] = 'Global aktiviert – diese Einstellung kann hier nicht überschrieben werden.';
 $string['configure_enabled_locked_off'] = 'Global deaktiviert – diese Einstellung kann hier nicht überschrieben werden.';

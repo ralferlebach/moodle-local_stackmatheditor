@@ -19,11 +19,17 @@ namespace local_stackmatheditor\form;
 use local_stackmatheditor\definitions;
 
 /**
- * Form for configuring MathQuill toolbar per question or per quiz.
+ * Form for configuring MathQuill toolbar per question or per quiz/activity.
  *
  * Operates in two modes depending on $customdata['mode']:
  *   'question' – configure a single STACK question (cmid + qbeid)
- *   'quiz'     – configure quiz-level defaults    (cmid only, qbeid IS NULL)
+ *                (mod_quiz only)
+ *   'quiz'     – configure activity-level defaults  (cmid only, qbeid IS NULL)
+ *                (mod_quiz and mod_adaptivequiz)
+ *
+ * The 'modname' customdata value distinguishes the parent activity:
+ *   'quiz'         – standard mod_quiz
+ *   'adaptivequiz' – mod_adaptivequiz
  *
  * The 'instancemode' customdata value (0-3) controls the enabled section:
  *   0 – globally off, no override: shows locked-off badge (read-only)
@@ -42,16 +48,19 @@ class configure_form extends \moodleform {
      * @return void
      */
     protected function definition(): void {
-        $mform = $this->_form;
+        $mform      = $this->_form;
         $customdata = $this->_customdata;
 
-        $mode = $customdata['mode'] ?? 'question';
+        $mode           = $customdata['mode'] ?? 'question';
+        $modname        = $customdata['modname'] ?? 'quiz';
         $questionrecord = $customdata['questionrecord'] ?? null;
-        $quiz = $customdata['quiz'];
-        $grouplabels = $customdata['grouplabels'];
-        $previewhtml = $customdata['previewhtml'] ?? '';
-        $returnurl = $customdata['returnurl'] ?? '';
-        $instancemode = (int) ($customdata['instancemode'] ?? 1);
+        // Backwards-compatible: callers may pass 'quiz' or 'activity'.
+        $activity       = $customdata['activity'] ?? ($customdata['quiz'] ?? null);
+        $grouplabels    = $customdata['grouplabels'];
+        $previewhtml    = $customdata['previewhtml'] ?? '';
+        $returnurl      = $customdata['returnurl'] ?? '';
+        $instancemode   = (int) ($customdata['instancemode'] ?? 1);
+        $isadaptivequiz = ($modname === 'adaptivequiz');
 
         // Hidden fields.
         $mform->addElement('hidden', 'returnurl', $returnurl);
@@ -64,11 +73,16 @@ class configure_form extends \moodleform {
             get_string('configure', 'local_stackmatheditor')
         );
 
+        // Activity name row: use the correct module string for the label.
+        $activitylabelstr = $isadaptivequiz
+            ? get_string('modulename', 'adaptivequiz')
+            : get_string('modulename', 'quiz');
+
         $mform->addElement(
             'static',
-            'quizname',
-            get_string('modulename', 'quiz'),
-            format_string($quiz->name)
+            'activityname',
+            $activitylabelstr,
+            format_string($activity->name)
         );
 
         if ($mode === 'question' && $questionrecord) {
@@ -82,7 +96,7 @@ class configure_form extends \moodleform {
             );
 
             if (!empty($previewhtml)) {
-                $collapseid = 'sme-question-preview';
+                $collapseid    = 'sme-question-preview';
                 $previewbutton =
                     '<a class="btn btn-outline-secondary btn-sm"'
                     . ' data-toggle="collapse"'
@@ -105,13 +119,17 @@ class configure_form extends \moodleform {
                 );
             }
         } else {
-            // Quiz mode: explain scope.
+            // Quiz/activity mode: display a scope note.
+            $notemsgkey = $isadaptivequiz
+                ? 'configure_adaptivequiz_note'
+                : 'configure_quiz_note';
+
             $mform->addElement(
                 'static',
-                'quizmodenote',
+                'activitymodenote',
                 '',
                 '<div class="alert alert-info mb-0">'
-                    . get_string('configure_quiz_note', 'local_stackmatheditor')
+                    . get_string($notemsgkey, 'local_stackmatheditor')
                     . '</div>'
             );
         }
@@ -148,15 +166,19 @@ class configure_form extends \moodleform {
             );
         } else {
             // Modes 2 and 3: override allowed – show editable checkbox.
-            $checkboxlabel = ($mode === 'quiz')
-                ? get_string('configure_enabled_checkboxlabel_quiz', 'local_stackmatheditor')
-                : get_string('configure_enabled_checkboxlabel_question', 'local_stackmatheditor');
+            if ($mode === 'quiz') {
+                $checkboxlabelkey = $isadaptivequiz
+                    ? 'configure_enabled_checkboxlabel_adaptivequiz'
+                    : 'configure_enabled_checkboxlabel_quiz';
+            } else {
+                $checkboxlabelkey = 'configure_enabled_checkboxlabel_question';
+            }
 
             $mform->addElement(
                 'advcheckbox',
                 'enabled',
                 get_string('configure_enabled_label', 'local_stackmatheditor'),
-                $checkboxlabel,
+                get_string($checkboxlabelkey, 'local_stackmatheditor'),
                 ['id' => 'id_sme_enabled'],
                 [0, 1]
             );
@@ -231,7 +253,7 @@ class configure_form extends \moodleform {
         $mform->setDefault('variablemode', definitions::IMPLICIT_STACK);
 
         // Buttons.
-        $buttons = [];
+        $buttons   = [];
         $buttons[] = $mform->createElement(
             'submit',
             'submitbutton',

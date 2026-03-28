@@ -27,6 +27,11 @@ use local_stackmatheditor\output\page_helper;
  * Computes a per-slot enabled map (slotEnabled) and passes it to the
  * JS runtime so input_fields.js / textarea_fields.js can skip disabled slots.
  *
+ * For mod_adaptivequiz, per-slot configuration is not available (only one
+ * question is shown at a time and there is no per-question override UI).
+ * The runtime is injected with empty slot maps; all inputs fall back to
+ * the quiz-level default (or instance default) via instanceDefaults.
+ *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -54,6 +59,7 @@ class editor_injector {
         ))->out(false);
 
         // Resolve per-slot configs.
+        // For mod_adaptivequiz pages this returns [] — the JS falls back to instanceDefaults.
         $slotconfigs  = self::resolve_slot_configs($cmid);
         $slotvarmodes = self::build_variable_modes($slotconfigs);
 
@@ -61,6 +67,11 @@ class editor_injector {
         $slotenabled = self::build_slot_enabled($slotconfigs);
 
         $instancevarmode = config_manager::get_instance_variable_mode();
+
+        // For mod_adaptivequiz: use the quiz-level default as instanceDefaults so
+        // the JS runtime picks up any quiz-level customisation even though the
+        // per-slot maps are empty.
+        $instancedefaults = self::resolve_instance_defaults($cmid);
 
         // AMD init call.
         $PAGE->requires->js_call_amd(
@@ -79,12 +90,42 @@ class editor_injector {
             'slotConfigs'      => !empty($slotconfigs) ? $slotconfigs : new \stdClass(),
             'slotVarModes'     => !empty($slotvarmodes) ? $slotvarmodes : new \stdClass(),
             'slotEnabled'      => !empty($slotenabled) ? $slotenabled : new \stdClass(),
-            'instanceDefaults' => config_manager::get_instance_defaults(),
+            'instanceDefaults' => $instancedefaults,
         ]);
     }
 
     /**
+     * Resolve the instance defaults to pass to the JS runtime.
+     *
+     * For mod_quiz and question preview pages the standard instance defaults
+     * are used; per-slot configs override them.
+     *
+     * For mod_adaptivequiz there are no per-slot configs, so the quiz-level
+     * default (if one has been saved) is promoted to instanceDefaults.  This
+     * ensures any quiz-level toolbar customisation is honoured.
+     *
+     * @param int $cmid Course module ID.
+     * @return array Instance defaults config array.
+     */
+    private static function resolve_instance_defaults(int $cmid): array {
+        global $PAGE;
+
+        if ($PAGE->pagetype === 'mod-adaptivequiz-view' && $cmid > 0) {
+            $quizdefault = config_manager::get_quiz_default($cmid);
+            if ($quizdefault !== null) {
+                return $quizdefault;
+            }
+        }
+
+        return config_manager::get_instance_defaults();
+    }
+
+    /**
      * Resolve slot configs depending on page type.
+     *
+     * Returns an empty array for mod_adaptivequiz: there is no per-slot
+     * configuration UI, and the JS runtime falls back to instanceDefaults for
+     * every input it finds.
      *
      * @param int $cmid Course module ID.
      * @return array Slot => config.
@@ -98,6 +139,7 @@ class editor_injector {
         if (in_array($PAGE->pagetype, ['question-preview', 'question-bank-previewquestion'])) {
             return self::resolve_preview_configs($cmid);
         }
+        // mod-adaptivequiz-view and any future page types: no per-slot config.
         return [];
     }
 
@@ -185,6 +227,10 @@ class editor_injector {
      *
      * The _enabled value in $slotconfigs already reflects the full
      * lookup chain (question-level → quiz-level → instance defaults).
+     *
+     * For mod_adaptivequiz, $slotconfigs is always empty so this returns
+     * an empty array.  The JS runtime does not find a slot entry and
+     * therefore does not suppress any input field.
      *
      * @param array $slotconfigs Slot => merged config array.
      * @return array Slot => bool (true = activate MathQuill).

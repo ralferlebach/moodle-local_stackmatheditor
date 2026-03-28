@@ -57,11 +57,16 @@ $string['questionpreview'] = 'Question preview';
 $string['notstackquestion'] = 'This question is not a STACK question.';
 $string['cannotresolveqbeid'] = 'The question bank entry could not be resolved.';
 
-// Configure page – quiz level.
+// Configure page – quiz level (mod_quiz).
 $string['configure_quiz'] = 'MathQuill default settings for this quiz';
 $string['configure_quiz_heading'] = 'MathQuill default settings for quiz: {$a}';
 $string['configure_quiz_nav'] = 'Set up STACK MathQuill Editor';
 $string['configure_quiz_note'] = 'These settings apply as defaults to all STACK questions in this quiz. They can be overridden for individual questions.';
+
+// Configure page – activity level (mod_adaptivequiz).
+$string['configure_adaptivequiz'] = 'MathQuill default settings for this adaptive quiz';
+$string['configure_adaptivequiz_heading'] = 'MathQuill default settings for adaptive quiz: {$a}';
+$string['configure_adaptivequiz_note'] = 'These settings apply to all STACK questions in this adaptive quiz.';
 
 // Enabled toggle.
 $string['configure_enabled_header'] = 'Plugin activation';
@@ -69,6 +74,7 @@ $string['configure_enabled_label'] = 'Enable MathQuill editor';
 $string['configure_enabled_desc'] = 'Enable or disable the editor for this quiz or question. Overrides the parent-level setting.';
 $string['configure_enabled_label_help'] = 'If the parent-level default is "enabled", you can disable the editor here for this quiz or question — and vice versa.';
 $string['configure_enabled_checkboxlabel_quiz'] = 'Enable MathQuill editor for this quiz';
+$string['configure_enabled_checkboxlabel_adaptivequiz'] = 'Enable MathQuill editor for this adaptive quiz';
 $string['configure_enabled_checkboxlabel_question'] = 'Enable MathQuill editor for this question';
 $string['configure_enabled_locked_on'] = 'Globally enabled – this setting cannot be overridden here.';
 $string['configure_enabled_locked_off'] = 'Globally disabled – this setting cannot be overridden here.';

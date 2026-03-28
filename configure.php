@@ -17,7 +17,15 @@
 /**
  * STACK MathQuill toolbar configuration page.
  *
- * Handles both quiz-level and question-level configuration.
+ * Handles quiz-level configuration for both mod_quiz and mod_adaptivequiz,
+ * as well as question-level configuration for mod_quiz.
+ *
+ * Operating modes
+ * ---------------
+ * Quiz-mode    : neither qbeid nor questionid supplied (or both 0).
+ *                Supported by both mod_quiz and mod_adaptivequiz.
+ * Question-mode: at least one of qbeid / questionid is set.
+ *                Supported by mod_quiz only; mod_adaptivequiz always uses quiz-mode.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
@@ -39,17 +47,28 @@ $questionid = optional_param('questionid', 0, PARAM_INT);
 $qbeid      = optional_param('qbeid', 0, PARAM_INT);
 $returnurl  = optional_param('returnurl', '', PARAM_LOCALURL);
 
-// Determine operating mode.
-// Quiz-mode  → neither qbeid nor questionid supplied (or both 0).
-// Question-mode → at least one of qbeid / questionid is set.
-$quizmode = ($qbeid <= 0 && $questionid <= 0);
+// Resolve the course module without committing to a specific modname yet.
+// This allows the page to serve both mod_quiz and mod_adaptivequiz.
+$cm = get_coursemodule_from_id(null, $cmid, 0, false, MUST_EXIST);
 
-// Load quiz / course.
-$cm     = get_coursemodule_from_id('quiz', $cmid, 0, false, MUST_EXIST);
+$modname = $cm->modname;
+$isadaptivequiz = ($modname === 'adaptivequiz');
+$isquiz         = ($modname === 'quiz');
+
+if (!$isquiz && !$isadaptivequiz) {
+    throw new \moodle_exception('invalidcoursemodule');
+}
+
 $course = get_course($cm->course);
-$quiz   = $DB->get_record('quiz', ['id' => $cm->instance], '*', MUST_EXIST);
 
-// Question resolution (question-mode only).
+// Load the activity record.
+$activity = $DB->get_record($modname, ['id' => $cm->instance], '*', MUST_EXIST);
+
+// Determine operating mode.
+// mod_adaptivequiz always uses quiz-mode (no per-question configuration).
+$quizmode = $isadaptivequiz || ($qbeid <= 0 && $questionid <= 0);
+
+// Question resolution (mod_quiz question-mode only).
 $questionrecord = null;
 if (!$quizmode) {
     if ($qbeid <= 0 && $questionid > 0) {
@@ -80,11 +99,19 @@ if (!$quizmode) {
 // Context and permissions.
 $context = \context_module::instance($cmid);
 require_login($course, false, $cm);
-require_capability('mod/quiz:manage', $context);
 
-// Return URL.
+// mod_adaptivequiz does not define a :manage capability; :viewreport is
+// granted to editingteacher and manager and is the closest equivalent.
+$capname = $isadaptivequiz ? 'mod/adaptivequiz:viewreport' : 'mod/quiz:manage';
+require_capability($capname, $context);
+
+// Return URL: default to the activity's primary management page.
 if (empty($returnurl)) {
-    $returnurl = (new \moodle_url('/mod/quiz/edit.php', ['cmid' => $cmid]))->out(false);
+    if ($isadaptivequiz) {
+        $returnurl = (new \moodle_url('/mod/adaptivequiz/view.php', ['id' => $cmid]))->out(false);
+    } else {
+        $returnurl = (new \moodle_url('/mod/quiz/edit.php', ['cmid' => $cmid]))->out(false);
+    }
 }
 
 // Page setup.
@@ -101,19 +128,30 @@ $PAGE->set_url($pageurl);
 $PAGE->set_context($context);
 $PAGE->set_pagelayout('admin');
 
+// Page title, heading, and breadcrumb.
 if ($quizmode) {
-    $PAGE->set_title(get_string('configure_quiz', 'local_stackmatheditor'));
-    $PAGE->set_heading($course->fullname);
-    $PAGE->navbar->add(
-        $quiz->name,
-        new \moodle_url('/mod/quiz/edit.php', ['cmid' => $cmid])
-    );
-    $PAGE->navbar->add(get_string('configure_quiz', 'local_stackmatheditor'));
+    if ($isadaptivequiz) {
+        $PAGE->set_title(get_string('configure_adaptivequiz', 'local_stackmatheditor'));
+        $PAGE->set_heading($course->fullname);
+        $PAGE->navbar->add(
+            $activity->name,
+            new \moodle_url('/mod/adaptivequiz/view.php', ['id' => $cmid])
+        );
+        $PAGE->navbar->add(get_string('configure_adaptivequiz', 'local_stackmatheditor'));
+    } else {
+        $PAGE->set_title(get_string('configure_quiz', 'local_stackmatheditor'));
+        $PAGE->set_heading($course->fullname);
+        $PAGE->navbar->add(
+            $activity->name,
+            new \moodle_url('/mod/quiz/edit.php', ['cmid' => $cmid])
+        );
+        $PAGE->navbar->add(get_string('configure_quiz', 'local_stackmatheditor'));
+    }
 } else {
     $PAGE->set_title(get_string('configure', 'local_stackmatheditor'));
     $PAGE->set_heading($course->fullname);
     $PAGE->navbar->add(
-        $quiz->name,
+        $activity->name,
         new \moodle_url('/mod/quiz/edit.php', ['cmid' => $cmid])
     );
     $PAGE->navbar->add(get_string('configure', 'local_stackmatheditor'));
@@ -122,7 +160,7 @@ if ($quizmode) {
 // Instance enabled mode.
 $instancemode = config_manager::get_instance_enabled_mode();
 
-// Question preview (question-mode only).
+// Question preview (mod_quiz question-mode only).
 $questionpreviewhtml = '';
 if (!$quizmode && $questionrecord) {
     try {
@@ -182,15 +220,6 @@ $currentvarmode = $config['_variableMode']
     ?? config_manager::get_instance_variable_mode();
 
 // Determine initial enabled state.
-// Always computed so the form can show the correct badge / checkbox value.
-//
-// Mode 0 → false  (locked off, badge only)
-// Mode 1 → true   (locked on,  badge only)
-// Mode 2 → derive from stored _enabled, fallback: false  (override allowed)
-// Mode 3 → derive from stored _enabled, fallback: true   (override allowed)
-//
-// For mode 2/3 in question-mode: inherit quiz-level default if no question.
-// Record exists yet, then fall back to instance default.
 if ($instancemode === 0) {
     $currentenabled = false;
 } else if ($instancemode === 1) {
@@ -216,8 +245,9 @@ if ($instancemode === 0) {
 // Create form.
 $mform = new configure_form($pageurl->out(false), [
     'mode'           => $quizmode ? 'quiz' : 'question',
+    'modname'        => $modname,
     'questionrecord' => $questionrecord,
-    'quiz'           => $quiz,
+    'activity'       => $activity,
     'grouplabels'    => $grouplabels,
     'previewhtml'    => $questionpreviewhtml,
     'returnurl'      => $returnurl,
@@ -228,7 +258,7 @@ $mform = new configure_form($pageurl->out(false), [
 $formdata = [
     'groups'       => $selectedkeys,
     'variablemode' => $currentvarmode,
-    'enabled' => (int) $currentenabled, // Always set; form ignores for mode 0 or 1.
+    'enabled'      => (int) $currentenabled,
 ];
 $mform->set_data($formdata);
 
@@ -248,7 +278,9 @@ if ($mform->is_cancelled()) {
 
     // Store enabled flag when instance mode allows overrides.
     if ($instancemode === 2 || $instancemode === 3) {
-        $elements['_enabled'] = isset($data->enabled) ? (bool) $data->enabled : ($instancemode === 3);
+        $elements['_enabled'] = isset($data->enabled)
+            ? (bool) $data->enabled
+            : ($instancemode === 3);
     }
 
     if ($quizmode) {
@@ -269,9 +301,15 @@ if ($mform->is_cancelled()) {
 echo $OUTPUT->header();
 
 if ($quizmode) {
-    echo $OUTPUT->heading(
-        get_string('configure_quiz_heading', 'local_stackmatheditor', $quiz->name)
-    );
+    if ($isadaptivequiz) {
+        echo $OUTPUT->heading(
+            get_string('configure_adaptivequiz_heading', 'local_stackmatheditor', $activity->name)
+        );
+    } else {
+        echo $OUTPUT->heading(
+            get_string('configure_quiz_heading', 'local_stackmatheditor', $activity->name)
+        );
+    }
 } else {
     echo $OUTPUT->heading(
         get_string('configure_heading', 'local_stackmatheditor', $questionrecord->name)

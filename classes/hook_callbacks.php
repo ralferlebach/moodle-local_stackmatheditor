@@ -28,15 +28,33 @@ use local_stackmatheditor\output\configure_injector;
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class hook_callbacks {
-    /** @var string[] Pages where the MathQuill editor is active. */
+    /**
+     * Pages where the MathQuill editor is injected.
+     *
+     * Note: mod_adaptivequiz's attempt.php calls
+     *   $PAGE->set_url('/mod/adaptivequiz/view.php', ['cmid' => $cm->id])
+     * which results in pagetype 'mod-adaptivequiz-view'.  The additional
+     * is_adaptivequiz_attempt() guard prevents activation on the plain view page.
+     *
+     * @var string[]
+     */
     private const EDITOR_PAGES = [
         'mod-quiz-attempt',
         'mod-quiz-review',
         'question-preview',
         'question-bank-previewquestion',
+        'mod-adaptivequiz-view',
     ];
 
-    /** @var string[] Pages where configure links appear. */
+    /**
+     * Pages where mod_quiz configure links are injected via JavaScript.
+     *
+     * mod_adaptivequiz is intentionally absent: its configure link is provided
+     * through the standard Moodle settings navigation (extend_settings_navigation
+     * in lib.php) and does not require JS injection.
+     *
+     * @var string[]
+     */
     private const CONFIGURE_PAGES = [
         'mod-quiz-edit',
         'mod-quiz-attempt',
@@ -56,17 +74,46 @@ class hook_callbacks {
     }
 
     /**
+     * Return true if the current page is the mod_adaptivequiz attempt page.
+     *
+     * mod_adaptivequiz's attempt.php sets the page URL to view.php, resulting
+     * in pagetype 'mod-adaptivequiz-view' for both attempt.php and view.php.
+     * The two pages are distinguished by the URL parameter used:
+     *   attempt.php → ?cmid=<id>
+     *   view.php    → ?id=<id>
+     *
+     * @return bool
+     */
+    private static function is_adaptivequiz_attempt(): bool {
+        global $PAGE;
+        if ($PAGE->pagetype !== 'mod-adaptivequiz-view') {
+            return false;
+        }
+        // attempt.php passes 'cmid'; view.php passes 'id'.
+        return optional_param('cmid', 0, PARAM_INT) > 0;
+    }
+
+    /**
      * Return true if the current page is one where the editor should run.
+     *
+     * For mod-adaptivequiz-view, only the actual attempt page qualifies;
+     * the plain view page (student overview / teacher report) does not.
      *
      * @return bool
      */
     private static function is_editor_page(): bool {
         global $PAGE;
-        return in_array($PAGE->pagetype, self::EDITOR_PAGES);
+        if (!in_array($PAGE->pagetype, self::EDITOR_PAGES)) {
+            return false;
+        }
+        if ($PAGE->pagetype === 'mod-adaptivequiz-view') {
+            return self::is_adaptivequiz_attempt();
+        }
+        return true;
     }
 
     /**
-     * Return true if the current page is one where configure links appear.
+     * Return true if the current page is one where mod_quiz configure links appear.
      *
      * @return bool
      */
@@ -97,8 +144,8 @@ class hook_callbacks {
         }
 
         // Serve the MathJax v2 shim from the static js/ directory.
-        // This replaces the previous inline heredoc and keeps PHP files.
-        // Free of embedded JavaScript.
+        // This replaces the previous inline heredoc and keeps PHP files
+        // free of embedded JavaScript.
         $shimurl = new \moodle_url('/local/stackmatheditor/js/mathjax_shim.js');
         $hook->add_html(
             '<script type="text/javascript" src="' . $shimurl->out(false) . '"></script>'
@@ -107,6 +154,11 @@ class hook_callbacks {
 
     /**
      * Main injection: toolbar definitions, editor runtime, and configure links.
+     *
+     * Editor injection is performed for both mod_quiz and mod_adaptivequiz pages.
+     * Configure link injection (via JS) is performed for mod_quiz pages only;
+     * mod_adaptivequiz exposes its configure link through the standard Moodle
+     * settings navigation (see lib.php → local_stackmatheditor_extend_settings_navigation).
      *
      * @param \core\hook\output\before_footer_html_generation $hook
      */
@@ -134,7 +186,7 @@ class hook_callbacks {
 
         $cmid = quiz_helper::get_cmid();
 
-        // Editor injection.
+        // Editor injection (mod_quiz and mod_adaptivequiz).
         if ($iseditor) {
             if (!config_manager::get_effective_enabled($cmid)) {
                 quiz_helper::dbg('editor: disabled for cmid=' . $cmid . ', skipping');
@@ -149,9 +201,10 @@ class hook_callbacks {
             }
         }
 
-        // Configure links injection.
-        // Always inject configure links when the user can manage the quiz,.
-        // Regardless of the enabled mode — the configure page handles the toggle.
+        // Configure links injection (mod_quiz only, via JavaScript).
+        // mod_adaptivequiz configure links are provided by extend_settings_navigation.
+        // Always inject configure links when the user can manage the quiz,
+        // regardless of the enabled mode — the configure page handles the toggle.
         if ($isconfigure) {
             try {
                 if ($cmid <= 0) {
