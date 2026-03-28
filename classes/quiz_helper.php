@@ -364,4 +364,89 @@ class quiz_helper {
         $questions = self::load_quiz_stack_questions($instanceid);
         return !empty($questions);
     }
+
+    /**
+     * Return true when at least one STACK question exists in the question
+     * categories configured for the given mod_adaptivequiz instance.
+     *
+     * The configured categories are stored in the {adaptivequiz_question} table
+     * (fields: instance, questioncategory).  Subcategories are not implicitly
+     * included by mod_adaptivequiz itself, so only the directly assigned
+     * category IDs are checked here.
+     *
+     * Only questions whose latest published version (status = 'ready') has
+     * qtype = 'stack' are counted — draft versions are excluded to match the
+     * behaviour of the question engine during an actual attempt.
+     *
+     * Result is cached per request (keyed by instance ID).
+     *
+     * @param int $instanceid mod_adaptivequiz instance ID (not cmid).
+     * @return bool True when at least one ready STACK question is present.
+     */
+    public static function adaptivequiz_has_stack_questions(int $instanceid): bool {
+        static $cache = [];
+
+        if (isset($cache[$instanceid])) {
+            return $cache[$instanceid];
+        }
+
+        global $DB;
+        $result = false;
+
+        try {
+            // Fetch all question category IDs configured for this instance.
+            $catids = $DB->get_fieldset_select(
+                'adaptivequiz_question',
+                'questioncategory',
+                'instance = :instance',
+                ['instance' => $instanceid]
+            );
+
+            if (empty($catids)) {
+                self::dbg('adaptivequiz_has_stack_questions: no categories for instance=' . $instanceid);
+                $cache[$instanceid] = false;
+                return false;
+            }
+
+            // Check whether any ready STACK question lives in those categories.
+            // We join question_bank_entries → question_versions (latest ready
+            // version per entry) → question to filter by qtype.
+            [$catsql, $catparams] = $DB->get_in_or_equal($catids, SQL_PARAMS_NAMED, 'cat');
+
+            $sql = "SELECT 1
+                      FROM {question_bank_entries}  qbe
+                      JOIN {question_versions}      qv
+                           ON qv.questionbankentryid = qbe.id
+                      JOIN (
+                               SELECT questionbankentryid, MAX(version) AS latestver
+                                 FROM {question_versions}
+                                WHERE status = :status
+                             GROUP BY questionbankentryid
+                           ) lv
+                           ON lv.questionbankentryid = qv.questionbankentryid
+                          AND qv.version            = lv.latestver
+                      JOIN {question} q ON q.id = qv.questionid
+                     WHERE qbe.questioncategoryid {$catsql}
+                       AND q.qtype = :qtype";
+
+            $params = array_merge(
+                ['status' => 'ready', 'qtype' => 'stack'],
+                $catparams
+            );
+
+            $result = $DB->record_exists_sql($sql, $params);
+
+            self::dbg(
+                'adaptivequiz_has_stack_questions: instance=' . $instanceid
+                . ' cats=[' . implode(',', $catids) . ']'
+                . ' result=' . ($result ? 'true' : 'false')
+            );
+        } catch (\Throwable $e) {
+            self::dbg('adaptivequiz_has_stack_questions: ' . $e->getMessage());
+            $result = false;
+        }
+
+        $cache[$instanceid] = $result;
+        return $result;
+    }
 }

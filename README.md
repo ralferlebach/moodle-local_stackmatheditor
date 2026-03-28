@@ -43,6 +43,8 @@ to complete the installation from the command line.
 
 ## Configuration ##
 
+This plugin works with mod_quiz and mod_adaptivequiz.
+
 ### Global settings ###
 
 Global plugin settings are available at
@@ -55,7 +57,7 @@ The plugin currently provides at least these site-wide settings:
 - Default **variable mode**
 - Default enabled **toolbar groups**
 
-### Per-question configuration ###
+### Configuration ###
 
 The plugin also supports question-specific configuration for STACK questions in a quiz context.
 
@@ -73,63 +75,11 @@ Depending on the calling context, the plugin resolves the question bank entry au
 
 The configuration form also shows the quiz name, question name including version, and a collapsible question preview.
 
-## How it works ##
-
-The plugin registers output hooks and injects assets on supported pages. It loads MathQuill, initializes the frontend via AMD modules, and publishes runtime configuration data for the current STACK question slots.
-
-The frontend code includes modules for:
-
-- editor initialization
-- configure-link injection
-- MathJax compatibility handling
-- LaTeX-to-Maxima conversion
-- Maxima-to-TeX conversion
-
-Toolbar definitions include predefined groups for common mathematical constructs and symbol sets. The conversion layer also contains mappings for functions, constants, operators, comparison symbols, Greek letters, and units.
-
-## Supported contexts ##
-
-Based on the current implementation, the plugin is designed to work in these contexts:
-
-- **Quiz attempt** pages
-- **Quiz review** pages
-- **Question preview** pages
-- **Quiz editing** pages for injecting links to the configuration UI
-
-The per-question configuration page itself requires a quiz module context and the capability to manage the quiz.
-
-## Development notes ##
-
-- The plugin is currently marked as **MATURITY_BETA**.
-- The current release string in `version.php` is **0.99**.
-- The plugin stores configuration in its own database installation/upgrade layer and uses Moodle's standard upgrade flow.
-- The repository contains AMD source and build directories, JavaScript compatibility code, CSS, PHP classes, and language files.
-
 ## Limitations ##
 
 - The plugin is specifically built around **STACK** and is not a general-purpose editor for arbitrary Moodle question types.
 - Question-specific configuration is tied to quiz / question-bank entry resolution in the supported contexts.
 - Because the plugin is currently alpha, installations should be tested carefully before production rollout.
-
-## Known Issues ##
-
-- works at the moment only with input fields, not with text area
-- no option for quiz-wide preferences at the moment
-- no automated testing (CI still to be implemented)
-
-## Privacy ##
-
-The repository structure indicates that the plugin stores configuration required for editor behavior. No dedicated privacy provider is visible in the plugin structure at the moment, so you should review your local compliance requirements before production use.
-
-## Related components ##
-
-This plugin is designed to complement:
-
-- Moodle **quiz**
-- Moodle **question bank / preview** workflows
-- **qtype_stack**
-- **MathQuill** as the client-side formula editor
-- **Maxima / STACK** expression handling
 
 ## Support ##
 
