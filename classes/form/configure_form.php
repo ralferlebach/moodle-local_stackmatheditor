@@ -249,10 +249,8 @@ class configure_form extends \moodleform {
         $mform->setDefault('variablemode', definitions::IMPLICIT_STACK);
 
         // Buttons.
-        // The "Back" cancel button is only rendered when a returnurl was supplied.
-        // Without one (e.g. when opened from the settings navigation) the button
-        // is omitted so the form cannot trigger an is_cancelled() redirect to an
-        // empty URL.
+        // Render the "Back" cancel button only when a returnurl was supplied.
+        // Without one the form has no cancel action.
         $buttons   = [];
         $buttons[] = $mform->createElement(
             'submit',

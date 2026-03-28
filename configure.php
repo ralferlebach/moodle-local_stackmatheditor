@@ -65,7 +65,7 @@ $course = get_course($cm->course);
 $activity = $DB->get_record($modname, ['id' => $cm->instance], '*', MUST_EXIST);
 
 // Determine operating mode.
-// mod_adaptivequiz always uses quiz-mode (no per-question configuration).
+// Module mod_adaptivequiz always uses quiz-mode; no per-question override exists.
 $quizmode = $isadaptivequiz || ($qbeid <= 0 && $questionid <= 0);
 
 // Question resolution (mod_quiz question-mode only).
@@ -100,15 +100,14 @@ if (!$quizmode) {
 $context = \context_module::instance($cmid);
 require_login($course, false, $cm);
 
-// mod_adaptivequiz does not define a :manage capability; :viewreport is
-// granted to editingteacher and manager and is the closest equivalent.
+// Module mod_adaptivequiz does not define a :manage capability.
+// The :viewreport capability (editingteacher + manager) is the closest equivalent.
 $capname = $isadaptivequiz ? 'mod/adaptivequiz:viewreport' : 'mod/quiz:manage';
 require_capability($capname, $context);
 
-// Return URL: used only when the page was opened with an explicit returnurl
-// parameter (e.g. from the quiz edit page or an attempt page).
-// When called from the standard settings navigation no returnurl is supplied,
-// which suppresses the "Back" button in the form and the is_cancelled redirect.
+// Return URL: only present when explicitly passed as a URL parameter.
+// When called from the settings navigation no returnurl is supplied.
+// An empty returnurl suppresses the "Back" button and the cancel redirect.
 
 // Page setup.
 $pageparams = ['cmid' => $cmid];
@@ -259,10 +258,9 @@ $formdata = [
 $mform->set_data($formdata);
 
 // Process form.
-// is_cancelled() is only meaningful when there is a "Back" button, which is
-// rendered only when $returnurl is non-empty.  Without a returnurl the form
-// has no cancel button, so this branch is never reached; the guard prevents
-// a redirect to an empty URL if the form is somehow submitted cancelled.
+// The cancel branch applies only when a returnurl was supplied.
+// Without one no "Back" button is rendered and the form has no cancel action.
+// Guard prevents a redirect to an empty URL in edge cases.
 if ($mform->is_cancelled()) {
     if (!empty($returnurl)) {
         redirect(new \moodle_url($returnurl));

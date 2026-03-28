@@ -410,7 +410,7 @@ class quiz_helper {
 
             // Check whether any ready STACK question lives in those categories.
             // We join question_bank_entries → question_versions (latest ready
-            // version per entry) → question to filter by qtype.
+            // Version per entry joined to {question} to filter by qtype.
             [$catsql, $catparams] = $DB->get_in_or_equal($catids, SQL_PARAMS_NAMED, 'cat');
 
             $sql = "SELECT 1

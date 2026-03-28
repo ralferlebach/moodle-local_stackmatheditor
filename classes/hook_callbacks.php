@@ -89,7 +89,7 @@ class hook_callbacks {
         if ($PAGE->pagetype !== 'mod-adaptivequiz-view') {
             return false;
         }
-        // attempt.php passes 'cmid'; view.php passes 'id'.
+        // The attempt.php script passes 'cmid'; view.php passes 'id'.
         return optional_param('cmid', 0, PARAM_INT) > 0;
     }
 
@@ -144,8 +144,8 @@ class hook_callbacks {
         }
 
         // Serve the MathJax v2 shim from the static js/ directory.
-        // This replaces the previous inline heredoc and keeps PHP files
-        // free of embedded JavaScript.
+        // This replaces the previous inline heredoc and keeps PHP files.
+        // Free of embedded JavaScript.
         $shimurl = new \moodle_url('/local/stackmatheditor/js/mathjax_shim.js');
         $hook->add_html(
             '<script type="text/javascript" src="' . $shimurl->out(false) . '"></script>'
@@ -202,9 +202,9 @@ class hook_callbacks {
         }
 
         // Configure links injection (mod_quiz only, via JavaScript).
-        // mod_adaptivequiz configure links are provided by extend_settings_navigation.
-        // Always inject configure links when the user can manage the quiz,
-        // regardless of the enabled mode — the configure page handles the toggle.
+        // Module mod_adaptivequiz exposes its configure link via extend_settings_navigation
+        // In lib.php — no JS injection is needed there.
+        // The enabled mode does not gate this — the configure page handles the toggle.
         if ($isconfigure) {
             try {
                 if ($cmid <= 0) {

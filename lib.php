@@ -41,7 +41,6 @@
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
 
 /**
  * Add a configure link to the activity settings navigation.
@@ -88,8 +87,8 @@ function local_stackmatheditor_extend_settings_navigation(
     }
 
     // Capability check.
-    // mod_adaptivequiz has no :manage capability; :viewreport (editingteacher +
-    // manager) is the closest equivalent for teachers who administer the activity.
+    // Module mod_adaptivequiz does not define a :manage capability.
+    // The :viewreport capability (editingteacher + manager) is the equivalent.
     $capname = ($cm->modname === 'adaptivequiz')
         ? 'mod/adaptivequiz:viewreport'
         : 'mod/quiz:manage';
@@ -98,18 +97,19 @@ function local_stackmatheditor_extend_settings_navigation(
         return;
     }
 
-    // For mod_adaptivequiz: only add the link when STACK questions actually exist
-    // in the categories that are configured for this quiz instance.
-    // This avoids polluting the menu for adaptive quizzes without STACK questions.
+    // For mod_adaptivequiz: skip the link when the configured question categories
+    // Hold no STACK questions.
     if ($cm->modname === 'adaptivequiz') {
         try {
             $instanceid = (int) $cm->instance;
-            if (!$instanceid
-                || !\local_stackmatheditor\quiz_helper::adaptivequiz_has_stack_questions($instanceid)) {
+            if (
+                !$instanceid
+                || !\local_stackmatheditor\quiz_helper::adaptivequiz_has_stack_questions($instanceid)
+            ) {
                 return;
             }
         } catch (\Throwable $e) {
-            // If the check fails for any reason (missing table, etc.) suppress the link.
+            // Suppress the link on any DB or class-loading error.
             \local_stackmatheditor\quiz_helper::dbg(
                 'extend_settings_navigation: adaptivequiz STACK check failed: ' . $e->getMessage()
             );
@@ -118,8 +118,7 @@ function local_stackmatheditor_extend_settings_navigation(
     }
 
     // Locate the module settings node.
-    // In Moodle 4.x Boost this node is rendered as the "dropdownmoremenu" that
-    // appears as the "Mehr" (More) button in the secondary navigation bar.
+    // In Moodle 4.x Boost this is the "dropdownmoremenu" (More) button.
     $modulenode = $settingsnav->find('modulesettings', navigation_node::TYPE_SETTING);
     if (!$modulenode) {
         return;
@@ -127,9 +126,9 @@ function local_stackmatheditor_extend_settings_navigation(
 
     $cmid = (int) $cm->id;
 
-    // No returnurl: when opened from the standard settings navigation the page
-    // manages its own back-navigation via the breadcrumb.  configure.php renders
-    // the "Back" button only when a returnurl parameter is present.
+    // No returnurl is passed when opened from the settings navigation.
+    // Breadcrumb handles back-navigation in that case.
+    // Configure.php renders the "Back" button only when returnurl is present.
 
     $url = new moodle_url('/local/stackmatheditor/configure.php', [
         'cmid' => $cmid,
@@ -145,10 +144,9 @@ function local_stackmatheditor_extend_settings_navigation(
         new pix_icon('i/settings', '')
     );
 
-    // Try to insert immediately before the "Restore" entry so the link sits
-    // logically near the backup/restore section.
-    // navigation_node::add_node($node, $beforekey) inserts before the child
-    // whose key matches $beforekey; when $beforekey is null the node is appended.
+    // Insert before the "Restore" entry to sit near the backup/restore group.
+    // Method navigation_node::add_node($node, $beforekey) places the new node
+    // Before the child whose key matches $beforekey; null means append.
     $beforekey = local_stackmatheditor_find_restore_key($modulenode);
 
     $modulenode->add_node($newnode, $beforekey);
