@@ -77,9 +77,9 @@ The configuration form also shows the quiz name, question name including version
 
 ## Limitations ##
 
+- Works with mod_quiz and mod_adaptivequiz only
 - The plugin is specifically built around **STACK** and is not a general-purpose editor for arbitrary Moodle question types.
 - Question-specific configuration is tied to quiz / question-bank entry resolution in the supported contexts.
-- Because the plugin is currently alpha, installations should be tested carefully before production rollout.
 
 ## Support ##
 
