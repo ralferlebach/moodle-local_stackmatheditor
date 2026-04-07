@@ -264,7 +264,9 @@ $mform->set_data($formdata);
 
 // Process form.
 if ($mform->is_cancelled()) {
-    redirect(new \moodle_url($returnurl));
+    if (!empty($returnurl)) {
+        redirect(new \moodle_url($returnurl));
+    }
 } else if ($data = $mform->get_data()) {
     $selectedgroups = $data->groups ?? [];
     $elements       = [];

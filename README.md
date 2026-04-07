@@ -41,7 +41,10 @@ Alternatively, you can run
 
 to complete the installation from the command line.
 
+
 ## Configuration ##
+
+This plugin works with mod_quiz and mod_adaptivequiz.
 
 ### Global settings ###
 
@@ -55,7 +58,7 @@ The plugin currently provides at least these site-wide settings:
 - Default **variable mode**
 - Default enabled **toolbar groups**
 
-### Per-question configuration ###
+### Configuration ###
 
 The plugin also supports question-specific configuration for STACK questions in a quiz context.
 
@@ -73,46 +76,11 @@ Depending on the calling context, the plugin resolves the question bank entry au
 
 The configuration form also shows the quiz name, question name including version, and a collapsible question preview.
 
-## How it works ##
-
-The plugin registers output hooks and injects assets on supported pages. It loads MathQuill, initializes the frontend via AMD modules, and publishes runtime configuration data for the current STACK question slots.
-
-The frontend code includes modules for:
-
-- editor initialization
-- configure-link injection
-- MathJax compatibility handling
-- LaTeX-to-Maxima conversion
-- Maxima-to-TeX conversion
-
-Toolbar definitions include predefined groups for common mathematical constructs and symbol sets. The conversion layer also contains mappings for functions, constants, operators, comparison symbols, Greek letters, and units.
-
-## Supported contexts ##
-
-Based on the current implementation, the plugin is designed to work in these contexts:
-
-- **Quiz attempt** pages
-- **Quiz review** pages
-- **Question preview** pages
-- **Quiz editing** pages for injecting links to the configuration UI
-
-The per-question configuration page itself requires a quiz module context and the capability to manage the quiz.
-
 ## Limitations ##
 
 - Works with mod_quiz and mod_adaptivequiz only
 - The plugin is specifically built around **STACK** and is not a general-purpose editor for arbitrary Moodle question types.
 - Question-specific configuration is tied to quiz / question-bank entry resolution in the supported contexts.
-
-## Related components ##
-
-This plugin is designed to complement:
-
-- Moodle **quiz**
-- Moodle **question bank / preview** workflows
-- **qtype_stack**
-- **MathQuill** as the client-side formula editor
-- **Maxima / STACK** expression handling
 
 ## Support ##
 
