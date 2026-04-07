@@ -24,11 +24,11 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version      = 2026032610;
+$plugin->version      = 2026040700;
 $plugin->requires     = 2024042200;
 $plugin->component    = 'local_stackmatheditor';
-$plugin->maturity     = MATURITY_BETA;
-$plugin->release      = '0.99';
+$plugin->maturity     = MATURITY_STABLE;
+$plugin->release      = '1.0';
 $plugin->dependencies = [
     'qtype_stack' => 2024010400,
 ];
