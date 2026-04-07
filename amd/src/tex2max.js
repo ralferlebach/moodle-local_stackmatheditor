@@ -23,7 +23,7 @@
  * - Implicit multiplication handling with configurable modes
  *
  * @module     local_stackmatheditor/tex2max
- * @package    local_stackmatheditor
+ * @package
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */

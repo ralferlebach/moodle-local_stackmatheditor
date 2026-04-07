@@ -18,7 +18,7 @@
  * Converts Maxima CAS notation back to LaTeX for MathQuill display.
  *
  * @module     local_stackmatheditor/max2tex
- * @package    local_stackmatheditor
+ * @package
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */

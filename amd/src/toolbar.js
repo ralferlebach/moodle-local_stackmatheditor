@@ -18,7 +18,7 @@
  * Shared toolbar builder for STACK MathEditor.
  *
  * @module     local_stackmatheditor/toolbar
- * @package    local_stackmatheditor
+ * @package
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */

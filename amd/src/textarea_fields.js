@@ -20,7 +20,7 @@
  * Supports: data-stack-input-type="equiv" and "textarea".
  *
  * @module     local_stackmatheditor/textarea_fields
- * @package    local_stackmatheditor
+ * @package
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */

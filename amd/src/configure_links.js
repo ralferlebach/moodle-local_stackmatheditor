@@ -26,7 +26,7 @@
  * present in the data object, STACK questions exist in this quiz.
  *
  * @module     local_stackmatheditor/configure_links
- * @package    local_stackmatheditor
+ * @package
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */

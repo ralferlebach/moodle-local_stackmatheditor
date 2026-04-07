@@ -20,7 +20,7 @@
  * Supports: data-stack-input-type="algebraic" and "units".
  *
  * @module     local_stackmatheditor/input_fields
- * @package    local_stackmatheditor
+ * @package
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
