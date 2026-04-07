@@ -69,7 +69,7 @@ class editor_injector {
         $instancevarmode = config_manager::get_instance_variable_mode();
 
         // For mod_adaptivequiz: use the quiz-level default as instanceDefaults so
-        // the JS runtime picks up any quiz-level customisation even though the
+        // The JS runtime picks up any quiz-level customisation even though the
         // per-slot maps are empty.
         $instancedefaults = self::resolve_instance_defaults($cmid);
 
@@ -139,7 +139,7 @@ class editor_injector {
         if (in_array($PAGE->pagetype, ['question-preview', 'question-bank-previewquestion'])) {
             return self::resolve_preview_configs($cmid);
         }
-        // mod-adaptivequiz-view and any future page types: no per-slot config.
+        // Mod-adaptivequiz-view and any future page types: no per-slot config.
         return [];
     }
 

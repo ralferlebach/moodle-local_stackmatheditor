@@ -150,24 +150,53 @@ class quiz_helper {
      */
     private static function load_questions_direct(int $quizid): array {
         global $DB;
-        $data  = [];
-        $slots = $DB->get_records('quiz_slots', ['quizid' => $quizid], 'slot ASC');
 
+        $slots = $DB->get_records('quiz_slots', ['quizid' => $quizid], 'slot ASC');
+        if (empty($slots)) {
+            return [];
+        }
+
+        // Collect unique qbeids from all slots first.
+        $qbeids = [];
         foreach ($slots as $slot) {
             $qbeid = (int) ($slot->questionbankentryid ?? 0);
-            if (!$qbeid) {
+            if ($qbeid) {
+                $qbeids[] = $qbeid;
+            }
+        }
+        if (empty($qbeids)) {
+            return [];
+        }
+
+        // Bulk-load the latest question version for every qbeid in one query,
+        // Eliminating the previous per-slot DB call inside the loop.
+        $uniqueqbeids = array_unique($qbeids);
+        [$insql, $params] = $DB->get_in_or_equal($uniqueqbeids, SQL_PARAMS_NAMED, 'qbeid');
+        $sql = "SELECT qv.questionbankentryid, qv.questionid, q.qtype, q.name
+                  FROM {question_versions} qv
+                  JOIN {question} q ON q.id = qv.questionid
+                 WHERE qv.questionbankentryid {$insql}
+                   AND qv.version = (
+                       SELECT MAX(qv2.version)
+                         FROM {question_versions} qv2
+                        WHERE qv2.questionbankentryid = qv.questionbankentryid
+                   )";
+        $qrefs = $DB->get_records_sql($sql, $params);
+
+        // Index by qbeid for O(1) lookup while iterating slots.
+        $qrefbyqbeid = [];
+        foreach ($qrefs as $qref) {
+            $qrefbyqbeid[(int) $qref->questionbankentryid] = $qref;
+        }
+
+        $data = [];
+        foreach ($slots as $slot) {
+            $qbeid = (int) ($slot->questionbankentryid ?? 0);
+            if (!$qbeid || !isset($qrefbyqbeid[$qbeid])) {
                 continue;
             }
-            $qref = $DB->get_record_sql(
-                "SELECT qv.questionid, q.qtype, q.name
-                   FROM {question_versions} qv
-                   JOIN {question} q ON q.id = qv.questionid
-                  WHERE qv.questionbankentryid = :qbeid
-               ORDER BY qv.version DESC",
-                ['qbeid' => $qbeid],
-                IGNORE_MULTIPLE
-            );
-            if (!$qref || $qref->qtype !== 'stack') {
+            $qref = $qrefbyqbeid[$qbeid];
+            if ($qref->qtype !== 'stack') {
                 continue;
             }
             $data[] = [
@@ -190,7 +219,6 @@ class quiz_helper {
      */
     private static function load_questions_via_refs(int $quizid): array {
         global $DB;
-        $data = [];
         $sql  = "
             SELECT qs.slot AS slotnum,
                    qs.id   AS slotid,
@@ -203,22 +231,51 @@ class quiz_helper {
              WHERE qs.quizid = :quizid
           ORDER BY qs.slot ASC";
         $rows = $DB->get_records_sql($sql, ['quizid' => $quizid]);
+        if (empty($rows)) {
+            return [];
+        }
 
+        // Collect unique qbeids before any further queries.
+        $qbeids = [];
         foreach ($rows as $row) {
             $qbeid = (int) $row->qbeid;
-            if (!$qbeid) {
+            if ($qbeid) {
+                $qbeids[] = $qbeid;
+            }
+        }
+        if (empty($qbeids)) {
+            return [];
+        }
+
+        // Bulk-load the latest question version for every qbeid in one query,
+        // Eliminating the previous per-row DB call inside the loop.
+        $uniqueqbeids = array_unique($qbeids);
+        [$insql, $params] = $DB->get_in_or_equal($uniqueqbeids, SQL_PARAMS_NAMED, 'qbeid');
+        $versql = "SELECT qv.questionbankentryid, qv.questionid, q.qtype, q.name
+                     FROM {question_versions} qv
+                     JOIN {question} q ON q.id = qv.questionid
+                    WHERE qv.questionbankentryid {$insql}
+                      AND qv.version = (
+                          SELECT MAX(qv2.version)
+                            FROM {question_versions} qv2
+                           WHERE qv2.questionbankentryid = qv.questionbankentryid
+                      )";
+        $qrefs = $DB->get_records_sql($versql, $params);
+
+        // Index by qbeid for O(1) lookup while iterating rows.
+        $qrefbyqbeid = [];
+        foreach ($qrefs as $qref) {
+            $qrefbyqbeid[(int) $qref->questionbankentryid] = $qref;
+        }
+
+        $data = [];
+        foreach ($rows as $row) {
+            $qbeid = (int) $row->qbeid;
+            if (!$qbeid || !isset($qrefbyqbeid[$qbeid])) {
                 continue;
             }
-            $qref = $DB->get_record_sql(
-                "SELECT qv.questionid, q.qtype, q.name
-                   FROM {question_versions} qv
-                   JOIN {question} q ON q.id = qv.questionid
-                  WHERE qv.questionbankentryid = :qbeid
-               ORDER BY qv.version DESC",
-                ['qbeid' => $qbeid],
-                IGNORE_MULTIPLE
-            );
-            if (!$qref || $qref->qtype !== 'stack') {
+            $qref = $qrefbyqbeid[$qbeid];
+            if ($qref->qtype !== 'stack') {
                 continue;
             }
             $data[] = [

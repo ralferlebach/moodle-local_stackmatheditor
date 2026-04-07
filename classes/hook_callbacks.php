@@ -89,7 +89,7 @@ class hook_callbacks {
         if ($PAGE->pagetype !== 'mod-adaptivequiz-view') {
             return false;
         }
-        // attempt.php passes 'cmid'; view.php passes 'id'.
+        // Attempt.php passes 'cmid'; view.php passes 'id'.
         return optional_param('cmid', 0, PARAM_INT) > 0;
     }
 
@@ -123,18 +123,25 @@ class hook_callbacks {
     }
 
     /**
-     * Inject the MathJax v2 compatibility shim before page content is rendered.
+     * Register the MathJax v2 Hub compatibility shim as an early AMD module.
      *
-     * The shim (js/mathjax_shim.js) must load before MathQuill because MathQuill
-     * reads window.MathJax.Hub at parse time. The <script> tag is added via
-     * add_html() so it lands in the standard top-of-body HTML output, before
-     * AMD modules initialise.
+     * local_stackmatheditor/mathjax_shim is registered here — in the earliest
+     * available hook — so that its js_call_amd() entry appears before any AMD
+     * calls registered by qtype_stack during page-content rendering.  Because
+     * the module has zero dependencies and is small, it is typically evaluated
+     * by RequireJS before STACK's modules finish loading.
+     *
+     * A 500-iteration polling loop inside the module provides a safety net for
+     * the rare case where MathJax v3 (loaded by filter_mathjaxloader) has not
+     * yet replaced window.MathJax when the module first runs.
      *
      * @param \core\hook\output\before_standard_top_of_body_html_generation $hook
      */
     public static function before_top_of_body(
         \core\hook\output\before_standard_top_of_body_html_generation $hook
     ): void {
+        global $PAGE;
+
         if (!self::plugin_could_be_active()) {
             return;
         }
@@ -143,13 +150,7 @@ class hook_callbacks {
             return;
         }
 
-        // Serve the MathJax v2 shim from the static js/ directory.
-        // This replaces the previous inline heredoc and keeps PHP files
-        // free of embedded JavaScript.
-        $shimurl = new \moodle_url('/local/stackmatheditor/js/mathjax_shim.js');
-        $hook->add_html(
-            '<script type="text/javascript" src="' . $shimurl->out(false) . '"></script>'
-        );
+        $PAGE->requires->js_call_amd('local_stackmatheditor/mathjax_shim', 'install', []);
     }
 
     /**
@@ -202,9 +203,9 @@ class hook_callbacks {
         }
 
         // Configure links injection (mod_quiz only, via JavaScript).
-        // mod_adaptivequiz configure links are provided by extend_settings_navigation.
+        // Mod_adaptivequiz configure links are provided by extend_settings_navigation.
         // Always inject configure links when the user can manage the quiz,
-        // regardless of the enabled mode — the configure page handles the toggle.
+        // Regardless of the enabled mode — the configure page handles the toggle.
         if ($isconfigure) {
             try {
                 if ($cmid <= 0) {

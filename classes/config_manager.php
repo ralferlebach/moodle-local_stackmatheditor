@@ -405,21 +405,35 @@ class config_manager {
         }
 
         // 1. Legacy questionid layer (lowest fallback).
+        // Preload all matching records in a single bulk query to avoid N+1.
         if (!empty($questionids)) {
             $columns = $DB->get_columns(self::TABLE);
             if (isset($columns['questionid'])) {
+                $legacyqids = array_values($questionids);
+                [$legacyinsql, $legacyparams] = $DB->get_in_or_equal(
+                    $legacyqids,
+                    SQL_PARAMS_NAMED,
+                    'lqid'
+                );
+                $legacyrecs = $DB->get_records_select(
+                    self::TABLE,
+                    "questionid {$legacyinsql} AND questionid > 0",
+                    $legacyparams
+                );
+                // Index by questionid for O(1) lookup.
+                $legacybyqid = [];
+                foreach ($legacyrecs as $rec) {
+                    $legacybyqid[(int) $rec->questionid] = $rec;
+                }
                 foreach ($qbeids as $qbeid) {
                     if (!isset($questionids[$qbeid])) {
                         continue;
                     }
-                    $rec = self::get_one(
-                        "questionid = :qid AND questionid > 0",
-                        ['qid' => $questionids[$qbeid]]
-                    );
-                    if ($rec) {
+                    $qid = (int) $questionids[$qbeid];
+                    if (isset($legacybyqid[$qid])) {
                         $configs[$qbeid] = self::merge_config_layer(
                             $configs[$qbeid],
-                            self::decode_raw_config($rec->$col)
+                            self::decode_raw_config($legacybyqid[$qid]->$col)
                         );
                     }
                 }

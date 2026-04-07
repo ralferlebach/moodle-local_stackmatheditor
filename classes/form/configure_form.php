@@ -62,10 +62,6 @@ class configure_form extends \moodleform {
         $instancemode   = (int) ($customdata['instancemode'] ?? 1);
         $isadaptivequiz = ($modname === 'adaptivequiz');
 
-        // Hidden fields.
-        $mform->addElement('hidden', 'returnurl', $returnurl);
-        $mform->setType('returnurl', PARAM_LOCALURL);
-
         // Info section.
         $mform->addElement(
             'header',
@@ -259,11 +255,15 @@ class configure_form extends \moodleform {
             'submitbutton',
             get_string('save', 'local_stackmatheditor')
         );
-        $buttons[] = $mform->createElement(
-            'cancel',
-            'cancel',
-            get_string('back', 'local_stackmatheditor')
-        );
+
+        if (!empty($returnurl)) {
+            $buttons[] = $mform->createElement(
+                'cancel',
+                'cancel',
+                get_string('back', 'local_stackmatheditor')
+            );
+        }
+
         $mform->addGroup($buttons, 'buttonar', '', ' ', false);
         $mform->closeHeaderBefore('buttonar');
     }
