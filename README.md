@@ -98,28 +98,11 @@ Based on the current implementation, the plugin is designed to work in these con
 
 The per-question configuration page itself requires a quiz module context and the capability to manage the quiz.
 
-## Development notes ##
-
-- The plugin is currently marked as **MATURITY_BETA**.
-- The current release string in `version.php` is **0.99**.
-- The plugin stores configuration in its own database installation/upgrade layer and uses Moodle's standard upgrade flow.
-- The repository contains AMD source and build directories, JavaScript compatibility code, CSS, PHP classes, and language files.
-
 ## Limitations ##
 
+- Works with mod_quiz and mod_adaptivequiz only
 - The plugin is specifically built around **STACK** and is not a general-purpose editor for arbitrary Moodle question types.
 - Question-specific configuration is tied to quiz / question-bank entry resolution in the supported contexts.
-- Because the plugin is currently alpha, installations should be tested carefully before production rollout.
-
-## Known Issues ##
-
-- works at the moment only with input fields, not with text area
-- no option for quiz-wide preferences at the moment
-- no automated testing (CI still to be implemented)
-
-## Privacy ##
-
-The repository structure indicates that the plugin stores configuration required for editor behavior. No dedicated privacy provider is visible in the plugin structure at the moment, so you should review your local compliance requirements before production use.
 
 ## Related components ##
 
