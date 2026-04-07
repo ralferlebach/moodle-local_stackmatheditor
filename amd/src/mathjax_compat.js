@@ -1,3 +1,18 @@
+// This file is part of Moodle - https://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+
 /**
  * MathJax v2 compatibility shim for MathJax v3.
  *
@@ -45,25 +60,26 @@ define([], function() {
     }
 
     /**
-     * Installs a MathJax.Hub compatibility shim if MathJax v3 is present
-     * but MathJax.Hub is not.
+     * Try to install the Hub shim for a MathJax object that is already loaded.
+     * Returns true if the shim was installed (or Hub already existed), false
+     * if MathJax was not yet available.
+     *
+     * @returns {boolean} Whether installation was attempted.
      */
-    function install() {
-        // Nothing to do if MathJax isn't loaded yet or Hub already exists.
+    function tryInstall() {
         if (!window.MathJax) {
-            log('MathJax not loaded yet, deferring shim installation.');
-            return;
+            return false;
         }
 
-        if (window.MathJax.Hub) {
-            log('MathJax.Hub already exists (v2 or shim already installed).');
-            return;
+        if (window.MathJax.Hub && !window.MathJax.Hub._sme) {
+            log('MathJax.Hub already exists (v2 native or full shim).');
+            return true;
         }
 
         // Confirm this is MathJax v3.
         if (!window.MathJax.typesetPromise && !window.MathJax.typeset) {
             log('MathJax present but neither v2 Hub nor v3 typeset found. Skipping.');
-            return;
+            return true;
         }
 
         log('Installing MathJax.Hub compatibility shim (v3 -> v2 API).');
@@ -223,14 +239,53 @@ define([], function() {
         }
 
         log('MathJax.Hub shim installed successfully.');
+        return true;
+    }
+
+    /**
+     * Install the MathJax compatibility shim.
+     *
+     * If MathJax has not yet loaded when this is called (e.g. because
+     * Moodle's filter_mathjaxloader loads it asynchronously after AMD init),
+     * a lightweight polling loop retries every 50 ms for up to 10 seconds
+     * until MathJax is available.  Safe to call multiple times.
+     */
+    function install() {
+        if (tryInstall()) {
+            return; // Done immediately.
+        }
+
+        log('MathJax not loaded yet — starting poll (50 ms × 200).');
+
+        var attempts = 0;
+        var maxAttempts = 200; // 200 × 50 ms = 10 s maximum wait.
+        var timer = setInterval(function() {
+            attempts++;
+            if (tryInstall()) {
+                clearInterval(timer);
+                return;
+            }
+            if (attempts >= maxAttempts) {
+                clearInterval(timer);
+                log('Gave up waiting for MathJax after ' + attempts + ' attempts.');
+            }
+        }, 50);
     }
 
     return /** @alias module:local_stackmatheditor/mathjax_compat */ {
 
         /**
          * Install the MathJax compatibility shim.
+         * Polls until MathJax is available if it has not yet loaded.
          * Safe to call multiple times.
          */
-        install: install
+        install: install,
+
+        /**
+         * Alias for install() used by mathquill_init.js.
+         *
+         * @see install
+         */
+        init: install
     };
 });
