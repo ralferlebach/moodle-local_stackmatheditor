@@ -169,7 +169,7 @@ class quiz_helper {
         }
 
         // Bulk-load the latest question version for every qbeid in one query,
-        // eliminating the previous per-slot DB call inside the loop.
+        // Eliminating the previous per-slot DB call inside the loop.
         $uniqueqbeids = array_unique($qbeids);
         [$insql, $params] = $DB->get_in_or_equal($uniqueqbeids, SQL_PARAMS_NAMED, 'qbeid');
         $sql = "SELECT qv.questionbankentryid, qv.questionid, q.qtype, q.name
@@ -248,7 +248,7 @@ class quiz_helper {
         }
 
         // Bulk-load the latest question version for every qbeid in one query,
-        // eliminating the previous per-row DB call inside the loop.
+        // Eliminating the previous per-row DB call inside the loop.
         $uniqueqbeids = array_unique($qbeids);
         [$insql, $params] = $DB->get_in_or_equal($uniqueqbeids, SQL_PARAMS_NAMED, 'qbeid');
         $versql = "SELECT qv.questionbankentryid, qv.questionid, q.qtype, q.name

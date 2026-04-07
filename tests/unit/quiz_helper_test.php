@@ -72,7 +72,7 @@ final class quiz_helper_test extends advanced_testcase {
     public function test_get_return_url_fallback(): void {
         global $PAGE;
         // Initialise $PAGE->url so get_return_url() can access it without
-        // triggering the 'This page did not call $PAGE->set_url()' notice.
+        // Triggering the 'This page did not call $PAGE->set_url()' notice.
         $PAGE->set_url(new \moodle_url('/'));
 
         $url = quiz_helper::get_return_url(42);

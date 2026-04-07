@@ -77,7 +77,7 @@ function local_stackmatheditor_extend_settings_navigation(
     }
 
     // Require the module-specific management capability.
-    // mod_adaptivequiz does not define a :manage capability; :viewreport is
+    // Mod_adaptivequiz does not define a :manage capability; :viewreport is
     // granted to editingteacher and manager and is the closest equivalent.
     $capname = ($cm->modname === 'adaptivequiz')
         ? 'mod/adaptivequiz:viewreport'
@@ -89,7 +89,7 @@ function local_stackmatheditor_extend_settings_navigation(
 
     // Locate the module settings node in the navigation tree.
     // In Moodle 4.x boost this node is rendered as the "dropdownmoremenu" gear
-    // icon in the secondary navigation bar.
+    // Icon in the secondary navigation bar.
     $modulenode = $settingsnav->find('modulesettings', navigation_node::TYPE_SETTING);
     if (!$modulenode) {
         return;
