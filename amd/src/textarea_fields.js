@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
-
 /**
  * Multi-line MathQuill editor for STACK textarea fields.
  *
@@ -66,7 +65,7 @@ define([
             '  border: 1px solid #ced4da;',
             '  border-radius: 0 0 4px 4px;',
             '  background: #fff;',
-            '  padding: 3px;',
+            '  padding: 3px 4px;',
             '  max-height: 500px;',
             '  overflow-y: auto;',
             '}',
@@ -130,110 +129,45 @@ define([
      */
     function selector() {
         return TYPES.map(function(t) {
-            return 'textarea[data-stack-input-type="'
-                + t + '"]';
+            return 'textarea[data-stack-input-type="' + t + '"]';
         }).join(',');
     }
 
-
-
     /**
-     * Find a top-level relation operator in one expression.
+     * Trigger STACK validation on a textarea.
      *
-     * @param {string} expr Maxima fragment.
-     * @returns {boolean} True if a top-level relation exists.
+     * @param {jQuery} $ta Hidden textarea.
      */
-    function hasTopLevelRelation(expr) {
-        var depth = 0;
-        var i;
-        var twochar;
-        for (i = 0; i < expr.length; i++) {
-            if (expr.charAt(i) === '(') {
-                depth++;
-                continue;
-            }
-            if (expr.charAt(i) === ')') {
-                depth = Math.max(0, depth - 1);
-                continue;
-            }
-            if (depth !== 0) {
-                continue;
-            }
-            twochar = expr.slice(i, i + 2);
-            if (twochar === '<=' || twochar === '>=' || twochar === '#=' ||
-                    twochar === '~=') {
-                return true;
-            }
-            if (expr.charAt(i) === '=' || expr.charAt(i) === '<' ||
-                    expr.charAt(i) === '>' || expr.charAt(i) === '#') {
-                return true;
-            }
-        }
-        return false;
+    function triggerStackValidation($ta) {
+        $ta.trigger('change');
+        $ta.trigger('input');
+        $ta.trigger('blur');
+
+        var nativeInput = new Event('input', {
+            bubbles: true,
+            cancelable: true
+        });
+        $ta[0].dispatchEvent(nativeInput);
+
+        var nativeChange = new Event('change', {
+            bubbles: true,
+            cancelable: true
+        });
+        $ta[0].dispatchEvent(nativeChange);
     }
 
     /**
-     * Split a top-level Maxima and-chain.
+     * Trim a single pair of outer parentheses when they enclose the full value.
      *
-     * @param {string} expr Maxima expression.
-     * @returns {string[]} Parts or the original expression.
+     * @param {string} value Input value.
+     * @returns {string} Trimmed value.
      */
-    function splitTopLevelAnd(expr) {
-        var parts = [];
-        var depth = 0;
-        var start = 0;
-        var i;
-        var prev;
-        var next;
-        var part;
-
-        for (i = 0; i < expr.length; i++) {
-            if (expr.charAt(i) === '(') {
-                depth++;
-                continue;
-            }
-            if (expr.charAt(i) === ')') {
-                depth = Math.max(0, depth - 1);
-                continue;
-            }
-            if (depth !== 0 || expr.slice(i, i + 3) !== 'and') {
-                continue;
-            }
-            prev = i > 0 ? expr.charAt(i - 1) : '';
-            next = i + 3 < expr.length ? expr.charAt(i + 3) : '';
-            if ((prev && /[A-Za-z0-9_]/.test(prev)) ||
-                    (next && /[A-Za-z0-9_]/.test(next))) {
-                continue;
-            }
-            part = expr.slice(start, i).trim();
-            if (part) {
-                parts.push(part);
-            }
-            start = i + 3;
-            i += 2;
-        }
-
-        part = expr.slice(start).trim();
-        if (part) {
-            parts.push(part);
-        }
-
-        return parts;
-    }
-
-    /**
-     * Remove one pair of outer parentheses if they wrap the whole expression.
-     *
-     * @param {string} expr Expression.
-     * @returns {string} Unwrapped expression.
-     */
-    function unwrapOuterParens(expr) {
-        var text = (expr || '').trim();
+    function trimOuterParens(value) {
+        var text = (value || '').trim();
         var depth = 0;
         var i;
 
-        if (!text || text.charAt(0) !== '(' ||
-                text.charAt(text.length - 1) !== ')') {
+        if (text.charAt(0) !== '(' || text.charAt(text.length - 1) !== ')') {
             return text;
         }
 
@@ -248,53 +182,137 @@ define([
             }
         }
 
-        return text.slice(1, -1).trim();
+        return text.substring(1, text.length - 1).trim();
     }
 
     /**
-     * Detect a relation system represented by top-level and-connections.
+     * Check whether a character can be part of an identifier.
      *
-     * @param {string} maxima Maxima input.
-     * @returns {?Array} Relation parts or null.
+     * @param {string} ch Character.
+     * @returns {boolean} True when identifier-like.
      */
-    function getRelationSystemParts(maxima) {
-        var trimmed = (maxima || '').trim();
+    function isIdentifierChar(ch) {
+        return !!ch && /[A-Za-z0-9_]/.test(ch);
+    }
+
+    /**
+     * Split a top-level expression by the keyword "and".
+     *
+     * @param {string} expr Expression.
+     * @returns {Array} Parts.
+     */
+    function splitTopLevelAnd(expr) {
+        var text = (expr || '').trim();
+        var parts = [];
+        var depth = 0;
+        var start = 0;
+        var i;
+        var prev;
+        var next;
+
+        for (i = 0; i < text.length; i++) {
+            if (text.charAt(i) === '(') {
+                depth++;
+                continue;
+            }
+            if (text.charAt(i) === ')') {
+                depth = Math.max(0, depth - 1);
+                continue;
+            }
+            if (depth !== 0 || text.substr(i, 3) !== 'and') {
+                continue;
+            }
+            prev = i > 0 ? text.charAt(i - 1) : '';
+            next = i + 3 < text.length ? text.charAt(i + 3) : '';
+            if (isIdentifierChar(prev) || isIdentifierChar(next)) {
+                continue;
+            }
+            parts.push(text.substring(start, i).trim());
+            start = i + 3;
+            i += 2;
+        }
+
+        if (start === 0) {
+            return [text];
+        }
+
+        parts.push(text.substring(start).trim());
+        return parts.filter(function(part) {
+            return !!part;
+        });
+    }
+
+    /**
+     * Determine whether an expression contains a top-level relation operator.
+     *
+     * @param {string} expr Expression.
+     * @returns {boolean} True when relation-like.
+     */
+    function isRelationExpression(expr) {
+        var text = trimOuterParens(expr);
+        var depth = 0;
+        var i;
+        var ch;
+        var next;
+
+        for (i = 0; i < text.length; i++) {
+            ch = text.charAt(i);
+            next = text.charAt(i + 1);
+
+            if (ch === '(') {
+                depth++;
+                continue;
+            }
+            if (ch === ')') {
+                depth = Math.max(0, depth - 1);
+                continue;
+            }
+            if (depth !== 0) {
+                continue;
+            }
+            if (ch === '=') {
+                return true;
+            }
+            if (ch === '#' || ch === '<' || ch === '>') {
+                return true;
+            }
+            if (ch === '~' && next === '=') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Convert an initial textarea value into row values.
+     *
+     * @param {string} value Raw textarea value.
+     * @param {string} inputType STACK input type.
+     * @returns {Array} Row maxima strings.
+     */
+    function splitInitialRows(value, inputType) {
+        var text = (value || '').trim();
         var parts;
-        if (!trimmed) {
-            return null;
-        }
-        parts = splitTopLevelAnd(trimmed);
-        if (parts.length < 2) {
-            return null;
-        }
-        if (!parts.every(function(part) {
-            return hasTopLevelRelation(unwrapOuterParens(part));
-        })) {
-            return null;
-        }
-        return parts.map(function(part) {
-            return unwrapOuterParens(part);
-        });
-    }
-    /**
-     * Trigger STACK validation on a textarea.
-     *
-     * @param {jQuery} $ta Hidden textarea.
-     */
-    function triggerStackValidation($ta) {
-        $ta.trigger('change');
-        $ta.trigger('input');
-        $ta.trigger('blur');
 
-        var nativeInput = new Event('input', {
-            bubbles: true, cancelable: true
-        });
-        $ta[0].dispatchEvent(nativeInput);
+        if (!text) {
+            return [''];
+        }
 
-        var nativeChange = new Event('change', {
-            bubbles: true, cancelable: true
-        });
-        $ta[0].dispatchEvent(nativeChange);
+        if (text.indexOf('\n') !== -1 || inputType !== 'equiv') {
+            return text.split('\n').map(function(line) {
+                return line.trim();
+            });
+        }
+
+        parts = splitTopLevelAnd(text);
+        if (parts.length > 1 && parts.every(isRelationExpression)) {
+            return parts.map(function(part) {
+                return trimOuterParens(part);
+            });
+        }
+
+        return [text];
     }
 
     // ── EquivEditor ─────────────────────────────────
@@ -312,13 +330,11 @@ define([
 
         this.$ta = $ta;
         this.ctx = ctx;
+        this.inputType = $ta.attr('data-stack-input-type') || 'textarea';
         this.slot = ctx.extractSlot(name);
-        this.config = ctx.slotConfigs[this.slot]
-            || ctx.instanceDefaults;
-        this.varMode = ctx.slotVarModes[this.slot]
-            || ctx.instanceVarMode;
-        this.commaDecimal = ctx.isCommaDecimal(
-            $ta, ctx.localeComma);
+        this.config = ctx.slotConfigs[this.slot] || ctx.instanceDefaults;
+        this.varMode = ctx.slotVarModes[this.slot] || ctx.instanceVarMode;
+        this.commaDecimal = ctx.isCommaDecimal($ta, ctx.localeComma);
 
         this.convOpts = {
             commaDecimal: this.commaDecimal,
@@ -329,11 +345,8 @@ define([
         this.rows = [];
         this.activeIdx = 0;
         this.syncTimer = null;
-        this.inputType = $ta.attr('data-stack-input-type') || 'textarea';
 
-        dbg('Init: ' + name
-            + ' (slot ' + this.slot
-            + ', varMode=' + this.varMode + ')');
+        dbg('Init: ' + name + ' (slot ' + this.slot + ', type=' + this.inputType + ', varMode=' + this.varMode + ')');
 
         this.build();
     }
@@ -343,66 +356,53 @@ define([
      */
     EquivEditor.prototype.build = function() {
         var self = this;
+        var initialValue;
+        var lines;
+        var i;
 
-        this.$wrap = $('<div>')
-            .addClass('sme-equiv-wrap');
+        this.$wrap = $('<div>').addClass('sme-equiv-wrap');
 
         this.$tb = toolbar.build(
-            function() { return self.activeField(); },
+            function() {
+                return self.activeField();
+            },
             this.config,
             this.ctx.defs
         );
         this.$wrap.append(this.$tb);
 
-        this.$rows = $('<div>')
-            .addClass('sme-equiv-rows');
+        this.$rows = $('<div>').addClass('sme-equiv-rows');
         this.$wrap.append(this.$rows);
 
         this.$addBtn = $('<button>')
             .attr('type', 'button')
-            .addClass(
-                'btn btn-sm btn-outline-secondary mt-1')
-            .html(
-                '<i class="fa fa-plus"'
-                + ' aria-hidden="true"></i>')
+            .addClass('btn btn-sm btn-outline-secondary mt-1')
+            .html('<i class="fa fa-plus" aria-hidden="true"></i>')
             .attr('title', 'Add line')
             .on('click', function(e) {
-                var seed = self.getAppendSeed();
+                var seed = '';
                 e.preventDefault();
-                self.addRow(seed.maxima, undefined, seed.latex);
+                if (self.inputType === 'equiv' && self.rows.length > 0) {
+                    seed = self.rows[self.rows.length - 1].maxima || '';
+                }
+                self.addRow(seed);
                 self.focusRow(self.rows.length - 1);
             });
         this.$wrap.append(this.$addBtn);
 
-        var val = this.$ta.val().trim();
-        var relationparts = null;
-        var lines;
-        var i;
-
-        if (this.inputType === 'equiv' && val.indexOf('\n') === -1) {
-            relationparts = getRelationSystemParts(val);
-        }
-
-        if (relationparts && relationparts.length) {
-            lines = relationparts;
-            dbg('equiv relation system detected: ' + lines.length + ' rows');
-        } else {
-            lines = val ? val.split('\n') : [''];
-        }
-
+        initialValue = this.$ta[0].defaultValue || this.$ta.val() || '';
+        lines = splitInitialRows(initialValue, this.inputType);
         for (i = 0; i < lines.length; i++) {
-            this.addRow(lines[i].trim());
+            this.addRow(lines[i]);
         }
 
-        // Insert BEFORE textarea — keep textarea in
-        // its original DOM position for STACK feedback.
         this.$ta.before(this.$wrap);
         this.$ta.css({
-            'position': 'absolute',
-            'left': '-9999px',
-            'width': '1px',
-            'height': '1px',
-            'overflow': 'hidden'
+            position: 'absolute',
+            left: '-9999px',
+            width: '1px',
+            height: '1px',
+            overflow: 'hidden'
         });
         this.$ta.attr('data-sme-init', '1');
 
@@ -412,8 +412,7 @@ define([
             this.focusRow(0);
         }
 
-        dbg('created: ' + this.rows.length
-            + ' rows, id=' + this.$ta.attr('id'));
+        dbg('created: ' + this.rows.length + ' rows, id=' + this.$ta.attr('id') + ', initial="' + initialValue + '"');
     };
 
     /**
@@ -422,12 +421,10 @@ define([
      * @returns {Object|null} MQ field.
      */
     EquivEditor.prototype.activeField = function() {
-        if (this.activeIdx >= 0
-            && this.activeIdx < this.rows.length) {
+        if (this.activeIdx >= 0 && this.activeIdx < this.rows.length) {
             return this.rows[this.activeIdx].mq;
         }
-        return this.rows.length > 0
-            ? this.rows[0].mq : null;
+        return this.rows.length > 0 ? this.rows[0].mq : null;
     };
 
     /**
@@ -436,12 +433,10 @@ define([
      * @param {number} idx Row index.
      */
     EquivEditor.prototype.setActive = function(idx) {
-        this.$rows.find('.sme-equiv-row')
-            .removeClass('sme-equiv-row-active');
+        this.$rows.find('.sme-equiv-row').removeClass('sme-equiv-row-active');
         this.activeIdx = idx;
         if (idx >= 0 && idx < this.rows.length) {
-            this.rows[idx].$row
-                .addClass('sme-equiv-row-active');
+            this.rows[idx].$row.addClass('sme-equiv-row-active');
         }
     };
 
@@ -473,83 +468,28 @@ define([
         return -1;
     };
 
-
-    /**
-     * Determine whether new rows should clone the previous expression.
-     *
-     * @returns {boolean} True for equivalence reasoning.
-     */
-    EquivEditor.prototype.shouldClonePreviousRow = function() {
-        return this.inputType === 'equiv';
-    };
-
-    /**
-     * Build seed data for inserting a row after one index.
-     *
-     * @param {number} idx Current row index.
-     * @returns {{maxima: string, latex: string}} Seed values.
-     */
-    EquivEditor.prototype.getInsertSeed = function(idx) {
-        var row;
-        if (!this.shouldClonePreviousRow() || idx < 0 || idx >= this.rows.length) {
-            return {
-                maxima: '',
-                latex: ''
-            };
-        }
-        row = this.rows[idx];
-        return {
-            maxima: '',
-            latex: row.mq.latex() || ''
-        };
-    };
-
-    /**
-     * Build seed data for appending a row.
-     *
-     * @returns {{maxima: string, latex: string}} Seed values.
-     */
-    EquivEditor.prototype.getAppendSeed = function() {
-        if (!this.rows.length) {
-            return {
-                maxima: '',
-                latex: ''
-            };
-        }
-        return this.getInsertSeed(this.rows.length - 1);
-    };
-
     /**
      * Add a row.
      *
-     * @param {string} maximaVal Initial maxima value.
+     * @param {string} maximaVal Initial value.
      * @param {number} [atIdx] Position.
-     * @param {string} [latexVal] Initial LaTeX value.
      */
-    EquivEditor.prototype.addRow = function(
-        maximaVal, atIdx, latexVal) {
+    EquivEditor.prototype.addRow = function(maximaVal, atIdx) {
         var self = this;
-        var idx = (typeof atIdx === 'number')
-            ? atIdx : this.rows.length;
-
-        var $row = $('<div>')
-            .addClass('sme-equiv-row');
-        var $num = $('<div>')
-            .addClass('sme-equiv-num')
-            .text(idx + 1);
-        var $mqWrap = $('<div>')
-            .addClass('sme-equiv-mqwrap');
+        var idx = (typeof atIdx === 'number') ? atIdx : this.rows.length;
+        var $row = $('<div>').addClass('sme-equiv-row');
+        var $num = $('<div>').addClass('sme-equiv-num').text(idx + 1);
+        var $mqWrap = $('<div>').addClass('sme-equiv-mqwrap');
         var $mqSpan = $('<span>');
-        $mqWrap.append($mqSpan);
-
         var $del = $('<button>')
             .attr('type', 'button')
             .addClass('sme-equiv-del')
-            .html(
-                '<i class="fa fa-times text-danger"'
-                + ' aria-hidden="true"></i>')
+            .html('<i class="fa fa-times text-danger" aria-hidden="true"></i>')
             .attr('title', 'Remove line');
+        var mq;
+        var rowData;
 
+        $mqWrap.append($mqSpan);
         $row.append($num).append($mqWrap).append($del);
 
         if (idx < this.rows.length) {
@@ -558,32 +498,33 @@ define([
             this.$rows.append($row);
         }
 
-        var mq = this.ctx.MQ.MathField($mqSpan[0], {
+        mq = this.ctx.MQ.MathField($mqSpan[0], {
             spaceBehavesLikeTab: true,
             handlers: {
                 edit: function() {
+                    rowData.maxima = self.maximaFromField(mq);
                     self.debouncedSync();
                 },
                 enter: function() {
                     var i = self.indexOf(mq);
+                    var seed = '';
                     if (i >= 0) {
-                        var seed = self.getInsertSeed(i);
-                        self.addRow(seed.maxima, i + 1, seed.latex);
+                        if (self.inputType === 'equiv') {
+                            seed = self.rows[i].maxima || self.maximaFromField(mq);
+                        }
+                        self.addRow(seed, i + 1);
                         self.focusRow(i + 1);
                     }
                 }
             }
         });
 
-        $mqWrap.on('click', function() {
-            mq.focus();
-        });
-
-        var rowData = {
+        rowData = {
             $row: $row,
             $num: $num,
             $mqWrap: $mqWrap,
-            mq: mq
+            mq: mq,
+            maxima: maximaVal || ''
         };
 
         if (idx < this.rows.length) {
@@ -592,51 +533,47 @@ define([
             this.rows.push(rowData);
         }
 
+        $mqWrap.on('click', function() {
+            mq.focus();
+        });
+
         $mqWrap.on('focusin', function() {
             self.setActive(self.indexOf(mq));
         });
 
         $mqWrap.on('keydown', function(e) {
-            if (e.key === 'Backspace'
-                && (!mq.latex()
-                    || mq.latex().trim() === '')
-                && self.rows.length > 1) {
+            var i;
+            if (e.key === 'Backspace' && (!mq.latex() || mq.latex().trim() === '') && self.rows.length > 1) {
                 e.preventDefault();
-                var i = self.indexOf(mq);
+                i = self.indexOf(mq);
                 self.removeRow(i);
                 self.focusRow(Math.max(0, i - 1));
             }
         });
 
         $del.on('click', function(e) {
+            var i;
             e.preventDefault();
             if (self.rows.length <= 1) {
                 return;
             }
-            var i = self.indexOf(mq);
+            i = self.indexOf(mq);
             self.removeRow(i);
-            self.focusRow(
-                Math.min(i, self.rows.length - 1));
+            self.focusRow(Math.min(i, self.rows.length - 1));
         });
 
-        if (typeof latexVal === 'string' && latexVal.trim()) {
-            mq.latex(latexVal);
-            dbg('row ' + idx + ': cloned LaTeX="'
-                + latexVal + '"');
-        } else if (maximaVal) {
+        if (maximaVal) {
             try {
-                var latex = max2tex.convert(maximaVal, {
+                mq.latex(max2tex.convert(maximaVal, {
                     defs: self.ctx.defs,
                     variableMode: self.varMode
-                });
-                mq.latex(latex);
-                dbg('row ' + idx + ': "'
-                    + maximaVal + '" -> "'
-                    + latex + '"');
+                }));
             } catch (ex) {
                 dbg('pre-fill error: ' + ex.message);
                 mq.latex(maximaVal);
             }
+            rowData.maxima = self.maximaFromField(mq) || maximaVal;
+            dbg('row ' + idx + ': "' + maximaVal + '"');
         }
 
         this.renumber();
@@ -648,16 +585,14 @@ define([
      * @param {number} idx Row index.
      */
     EquivEditor.prototype.removeRow = function(idx) {
-        if (idx < 0 || idx >= this.rows.length
-            || this.rows.length <= 1) {
+        if (idx < 0 || idx >= this.rows.length || this.rows.length <= 1) {
             return;
         }
         this.rows[idx].$row.remove();
         this.rows.splice(idx, 1);
         this.renumber();
         this.syncNow();
-        dbg('removed row ' + idx
-            + ', ' + this.rows.length + ' left');
+        dbg('removed row ' + idx + ', ' + this.rows.length + ' left');
     };
 
     /**
@@ -667,6 +602,26 @@ define([
         var i;
         for (i = 0; i < this.rows.length; i++) {
             this.rows[i].$num.text(i + 1);
+        }
+    };
+
+    /**
+     * Convert a MathQuill row to Maxima.
+     *
+     * @param {Object} mq MathQuill field.
+     * @returns {string} Maxima representation.
+     */
+    EquivEditor.prototype.maximaFromField = function(mq) {
+        var latex = mq.latex();
+
+        if (!latex || !latex.trim()) {
+            return '';
+        }
+
+        try {
+            return tex2max.convert(latex, this.convOpts);
+        } catch (e) {
+            return latex;
         }
     };
 
@@ -688,27 +643,17 @@ define([
      */
     EquivEditor.prototype.syncNow = function() {
         var lines = [];
-        var self = this;
         var i;
-        var latex;
-        var maxima;
+        var value;
+        var oldVal;
 
         for (i = 0; i < this.rows.length; i++) {
-            latex = this.rows[i].mq.latex();
-            maxima = '';
-            if (latex && latex.trim()) {
-                try {
-                    maxima = tex2max.convert(
-                        latex, self.convOpts);
-                } catch (e) {
-                    maxima = latex;
-                }
-            }
-            lines.push(maxima);
+            this.rows[i].maxima = this.maximaFromField(this.rows[i].mq);
+            lines.push(this.rows[i].maxima);
         }
 
-        var value = lines.join('\n');
-        var oldVal = this.$ta.val();
+        value = lines.join('\n');
+        oldVal = this.$ta.val();
         this.$ta.val(value);
 
         if (value !== oldVal) {
@@ -726,30 +671,21 @@ define([
          */
         init: function(ctx) {
             ensureStyles();
-            var $areas = $(selector());
-            if (!$areas.length) {
-                ctx.dbg(
-                    'No supported textareas found');
-                return;
-            }
-            ctx.dbg('Found ' + $areas.length
-                + ' textareas');
-            $areas.each(function() {
-                if ($(this).attr('data-sme-init')
-                    === '1') {
+
+            $(selector()).each(function() {
+                var $ta = $(this);
+                var name = $ta.attr('name') || '';
+                var slot = ctx.extractSlot(name);
+
+                if ($ta.attr('data-sme-init') === '1') {
                     return;
                 }
-                // Check per-slot enabled map before activating.
-                var aname = $(this).attr('name') || '';
-                var aslot = ctx.extractSlot(aname);
-                if (ctx.slotEnabled
-                        && ctx.slotEnabled.hasOwnProperty(aslot)
-                        && !ctx.slotEnabled[aslot]) {
-                    ctx.dbg('Textarea ' + aname
-                        + ' -> slot ' + aslot
-                        + ' disabled, skipping');
+
+                if (ctx.slotEnabled && Object.prototype.hasOwnProperty.call(ctx.slotEnabled, slot) && !ctx.slotEnabled[slot]) {
+                    ctx.dbg('Textarea ' + name + ' -> slot ' + slot + ' disabled, skipping');
                     return;
                 }
+
                 new EquivEditor(this, ctx);
             });
         }
