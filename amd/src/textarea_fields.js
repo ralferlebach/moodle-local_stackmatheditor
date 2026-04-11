@@ -135,6 +135,147 @@ define([
         }).join(',');
     }
 
+
+
+    /**
+     * Find a top-level relation operator in one expression.
+     *
+     * @param {string} expr Maxima fragment.
+     * @returns {boolean} True if a top-level relation exists.
+     */
+    function hasTopLevelRelation(expr) {
+        var depth = 0;
+        var i;
+        var twochar;
+        for (i = 0; i < expr.length; i++) {
+            if (expr.charAt(i) === '(') {
+                depth++;
+                continue;
+            }
+            if (expr.charAt(i) === ')') {
+                depth = Math.max(0, depth - 1);
+                continue;
+            }
+            if (depth !== 0) {
+                continue;
+            }
+            twochar = expr.slice(i, i + 2);
+            if (twochar === '<=' || twochar === '>=' || twochar === '#=' ||
+                    twochar === '~=') {
+                return true;
+            }
+            if (expr.charAt(i) === '=' || expr.charAt(i) === '<' ||
+                    expr.charAt(i) === '>' || expr.charAt(i) === '#') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Split a top-level Maxima and-chain.
+     *
+     * @param {string} expr Maxima expression.
+     * @returns {string[]} Parts or the original expression.
+     */
+    function splitTopLevelAnd(expr) {
+        var parts = [];
+        var depth = 0;
+        var start = 0;
+        var i;
+        var prev;
+        var next;
+        var part;
+
+        for (i = 0; i < expr.length; i++) {
+            if (expr.charAt(i) === '(') {
+                depth++;
+                continue;
+            }
+            if (expr.charAt(i) === ')') {
+                depth = Math.max(0, depth - 1);
+                continue;
+            }
+            if (depth !== 0 || expr.slice(i, i + 3) !== 'and') {
+                continue;
+            }
+            prev = i > 0 ? expr.charAt(i - 1) : '';
+            next = i + 3 < expr.length ? expr.charAt(i + 3) : '';
+            if ((prev && /[A-Za-z0-9_]/.test(prev)) ||
+                    (next && /[A-Za-z0-9_]/.test(next))) {
+                continue;
+            }
+            part = expr.slice(start, i).trim();
+            if (part) {
+                parts.push(part);
+            }
+            start = i + 3;
+            i += 2;
+        }
+
+        part = expr.slice(start).trim();
+        if (part) {
+            parts.push(part);
+        }
+
+        return parts;
+    }
+
+    /**
+     * Remove one pair of outer parentheses if they wrap the whole expression.
+     *
+     * @param {string} expr Expression.
+     * @returns {string} Unwrapped expression.
+     */
+    function unwrapOuterParens(expr) {
+        var text = (expr || '').trim();
+        var depth = 0;
+        var i;
+
+        if (!text || text.charAt(0) !== '(' ||
+                text.charAt(text.length - 1) !== ')') {
+            return text;
+        }
+
+        for (i = 0; i < text.length; i++) {
+            if (text.charAt(i) === '(') {
+                depth++;
+            } else if (text.charAt(i) === ')') {
+                depth--;
+                if (depth === 0 && i < text.length - 1) {
+                    return text;
+                }
+            }
+        }
+
+        return text.slice(1, -1).trim();
+    }
+
+    /**
+     * Detect a relation system represented by top-level and-connections.
+     *
+     * @param {string} maxima Maxima input.
+     * @returns {?Array} Relation parts or null.
+     */
+    function getRelationSystemParts(maxima) {
+        var trimmed = (maxima || '').trim();
+        var parts;
+        if (!trimmed) {
+            return null;
+        }
+        parts = splitTopLevelAnd(trimmed);
+        if (parts.length < 2) {
+            return null;
+        }
+        if (!parts.every(function(part) {
+            return hasTopLevelRelation(unwrapOuterParens(part));
+        })) {
+            return null;
+        }
+        return parts.map(function(part) {
+            return unwrapOuterParens(part);
+        });
+    }
     /**
      * Trigger STACK validation on a textarea.
      *
@@ -234,8 +375,21 @@ define([
         this.$wrap.append(this.$addBtn);
 
         var val = this.$ta.val().trim();
-        var lines = val ? val.split('\n') : [''];
+        var relationparts = null;
+        var lines;
         var i;
+
+        if (this.inputType === 'equiv' && val.indexOf('\n') === -1) {
+            relationparts = getRelationSystemParts(val);
+        }
+
+        if (relationparts && relationparts.length) {
+            lines = relationparts;
+            dbg('equiv relation system detected: ' + lines.length + ' rows');
+        } else {
+            lines = val ? val.split('\n') : [''];
+        }
+
         for (i = 0; i < lines.length; i++) {
             this.addRow(lines[i].trim());
         }
