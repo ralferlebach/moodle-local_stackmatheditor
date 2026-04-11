@@ -211,3 +211,68 @@
 .sme-configure-edit-link {
     text-decoration: none;
 }
+
+
+/* ═══════════════════════════════════════════════════
+   Graphical equation-system experiment
+   ═══════════════════════════════════════════════════ */
+
+.sme-system-wrap {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+}
+
+.sme-system-brace {
+    flex: 0 0 auto;
+    font-family: serif;
+    font-size: 4.2em;
+    line-height: 0.9;
+    padding: 0 2px 0 0;
+    color: #444;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.sme-system-rows {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.sme-system-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.sme-system-row:last-child {
+    border-bottom: none;
+}
+
+.sme-system-row-active {
+    background: #f8fbff;
+}
+
+.sme-system-mqwrap {
+    flex: 1 1 auto;
+    min-width: 0;
+    cursor: text;
+}
+
+.sme-system-del {
+    flex: 0 0 auto;
+    color: #666;
+    text-decoration: none;
+}
+
+.sme-system-controls {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-start;
+}
+
+.sme-system-add {
+    min-width: 2rem;
+}
