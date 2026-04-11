@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
+
 /**
  * Multi-line MathQuill editor for STACK textarea fields.
  *
@@ -65,14 +66,14 @@ define([
             '  border: 1px solid #ced4da;',
             '  border-radius: 0 0 4px 4px;',
             '  background: #fff;',
-            '  padding: 3px 4px;',
+            '  padding: 4px;',
             '  max-height: 500px;',
             '  overflow-y: auto;',
             '}',
             '.sme-equiv-row {',
             '  display: flex;',
             '  align-items: center;',
-            '  padding: 1px 4px;',
+            '  padding: 3px 4px;',
             '  border-bottom: 1px solid #f0f0f0;',
             '}',
             '.sme-equiv-row:last-child {',
@@ -129,8 +130,131 @@ define([
      */
     function selector() {
         return TYPES.map(function(t) {
-            return 'textarea[data-stack-input-type="' + t + '"]';
+            return 'textarea[data-stack-input-type="'
+                + t + '"]';
         }).join(',');
+    }
+
+    /**
+     * Split a string by top-level 'and' operators.
+     *
+     * Accepts compact forms such as ')and(' and tolerates
+     * unmatched edge parentheses in review-prefill values.
+     *
+     * @param {string} input Maxima input.
+     * @returns {Array} Parts.
+     */
+    function splitTopLevelAnd(input) {
+        var parts = [];
+        var depth = 0;
+        var start = 0;
+        var i;
+        var before;
+        var after;
+
+        for (i = 0; i < input.length; i++) {
+            if (input.charAt(i) === '(') {
+                depth++;
+                continue;
+            }
+            if (input.charAt(i) === ')') {
+                depth = Math.max(0, depth - 1);
+                continue;
+            }
+            if (input.substr(i, 3).toLowerCase() !== 'and') {
+                continue;
+            }
+            if (depth !== 0) {
+                continue;
+            }
+            before = i === 0 ? '' : input.charAt(i - 1);
+            after = (i + 3) >= input.length ? '' : input.charAt(i + 3);
+            if (!(/[\s\)]/.test(before) || before === '')) {
+                continue;
+            }
+            if (!(/[\s\(]/.test(after) || after === '')) {
+                continue;
+            }
+            parts.push(input.substring(start, i).trim());
+            start = i + 3;
+            i = i + 2;
+        }
+
+        parts.push(input.substring(start).trim());
+        return parts.filter(function(part) {
+            return part !== '';
+        });
+    }
+
+    /**
+     * Remove wrapper parentheses from a relation part.
+     *
+     * This is intentionally tolerant because some review-prefill
+     * values arrive with missing first/last parentheses.
+     *
+     * @param {string} part Candidate part.
+     * @returns {string} Normalised part.
+     */
+    function trimRelationPart(part) {
+        var value = (part || '').trim();
+
+        while (value.charAt(0) === '(') {
+            value = value.substring(1).trim();
+        }
+        while (value.charAt(value.length - 1) === ')') {
+            value = value.substring(0, value.length - 1).trim();
+        }
+
+        return value;
+    }
+
+    /**
+     * Whether a string looks like a simple relation.
+     *
+     * @param {string} value Candidate expression.
+     * @returns {boolean} True if it contains a relation operator.
+     */
+    function isRelationPart(value) {
+        return /(^|[^<>~:#])(?:<=|>=|~=|#|=|<|>)(?!=)/.test(value);
+    }
+
+    /**
+     * Expand one-line equiv prefills that encode a relation system.
+     *
+     * @param {string} value Original textarea value.
+     * @param {string} type STACK input type.
+     * @returns {Array} Row maxima values.
+     */
+    function normaliseInitialLines(value, type) {
+        var trimmed = (value || '').trim();
+        var parts;
+        var cleaned;
+
+        if (!trimmed) {
+            return [''];
+        }
+
+        if (trimmed.indexOf('\n') !== -1) {
+            return trimmed.split('\n').map(function(line) {
+                return line.trim();
+            });
+        }
+
+        if (type !== 'equiv') {
+            return [trimmed];
+        }
+
+        parts = splitTopLevelAnd(trimmed);
+        if (parts.length < 2) {
+            return [trimmed];
+        }
+
+        cleaned = parts.map(trimRelationPart);
+        if (!cleaned.every(isRelationPart)) {
+            return [trimmed];
+        }
+
+        return cleaned;
     }
 
     /**
@@ -144,175 +268,14 @@ define([
         $ta.trigger('blur');
 
         var nativeInput = new Event('input', {
-            bubbles: true,
-            cancelable: true
+            bubbles: true, cancelable: true
         });
         $ta[0].dispatchEvent(nativeInput);
 
         var nativeChange = new Event('change', {
-            bubbles: true,
-            cancelable: true
+            bubbles: true, cancelable: true
         });
         $ta[0].dispatchEvent(nativeChange);
-    }
-
-    /**
-     * Trim a single pair of outer parentheses when they enclose the full value.
-     *
-     * @param {string} value Input value.
-     * @returns {string} Trimmed value.
-     */
-    function trimOuterParens(value) {
-        var text = (value || '').trim();
-        var depth = 0;
-        var i;
-
-        if (text.charAt(0) !== '(' || text.charAt(text.length - 1) !== ')') {
-            return text;
-        }
-
-        for (i = 0; i < text.length; i++) {
-            if (text.charAt(i) === '(') {
-                depth++;
-            } else if (text.charAt(i) === ')') {
-                depth--;
-                if (depth === 0 && i < text.length - 1) {
-                    return text;
-                }
-            }
-        }
-
-        return text.substring(1, text.length - 1).trim();
-    }
-
-    /**
-     * Check whether a character can be part of an identifier.
-     *
-     * @param {string} ch Character.
-     * @returns {boolean} True when identifier-like.
-     */
-    function isIdentifierChar(ch) {
-        return !!ch && /[A-Za-z0-9_]/.test(ch);
-    }
-
-    /**
-     * Split a top-level expression by the keyword "and".
-     *
-     * @param {string} expr Expression.
-     * @returns {Array} Parts.
-     */
-    function splitTopLevelAnd(expr) {
-        var text = (expr || '').trim();
-        var parts = [];
-        var depth = 0;
-        var start = 0;
-        var i;
-        var prev;
-        var next;
-
-        for (i = 0; i < text.length; i++) {
-            if (text.charAt(i) === '(') {
-                depth++;
-                continue;
-            }
-            if (text.charAt(i) === ')') {
-                depth = Math.max(0, depth - 1);
-                continue;
-            }
-            if (depth !== 0 || text.substr(i, 3) !== 'and') {
-                continue;
-            }
-            prev = i > 0 ? text.charAt(i - 1) : '';
-            next = i + 3 < text.length ? text.charAt(i + 3) : '';
-            if (isIdentifierChar(prev) || isIdentifierChar(next)) {
-                continue;
-            }
-            parts.push(text.substring(start, i).trim());
-            start = i + 3;
-            i += 2;
-        }
-
-        if (start === 0) {
-            return [text];
-        }
-
-        parts.push(text.substring(start).trim());
-        return parts.filter(function(part) {
-            return !!part;
-        });
-    }
-
-    /**
-     * Determine whether an expression contains a top-level relation operator.
-     *
-     * @param {string} expr Expression.
-     * @returns {boolean} True when relation-like.
-     */
-    function isRelationExpression(expr) {
-        var text = trimOuterParens(expr);
-        var depth = 0;
-        var i;
-        var ch;
-        var next;
-
-        for (i = 0; i < text.length; i++) {
-            ch = text.charAt(i);
-            next = text.charAt(i + 1);
-
-            if (ch === '(') {
-                depth++;
-                continue;
-            }
-            if (ch === ')') {
-                depth = Math.max(0, depth - 1);
-                continue;
-            }
-            if (depth !== 0) {
-                continue;
-            }
-            if (ch === '=') {
-                return true;
-            }
-            if (ch === '#' || ch === '<' || ch === '>') {
-                return true;
-            }
-            if (ch === '~' && next === '=') {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Convert an initial textarea value into row values.
-     *
-     * @param {string} value Raw textarea value.
-     * @param {string} inputType STACK input type.
-     * @returns {Array} Row maxima strings.
-     */
-    function splitInitialRows(value, inputType) {
-        var text = (value || '').trim();
-        var parts;
-
-        if (!text) {
-            return [''];
-        }
-
-        if (text.indexOf('\n') !== -1 || inputType !== 'equiv') {
-            return text.split('\n').map(function(line) {
-                return line.trim();
-            });
-        }
-
-        parts = splitTopLevelAnd(text);
-        if (parts.length > 1 && parts.every(isRelationExpression)) {
-            return parts.map(function(part) {
-                return trimOuterParens(part);
-            });
-        }
-
-        return [text];
     }
 
     // ── EquivEditor ─────────────────────────────────
@@ -330,11 +293,13 @@ define([
 
         this.$ta = $ta;
         this.ctx = ctx;
-        this.inputType = $ta.attr('data-stack-input-type') || 'textarea';
         this.slot = ctx.extractSlot(name);
-        this.config = ctx.slotConfigs[this.slot] || ctx.instanceDefaults;
-        this.varMode = ctx.slotVarModes[this.slot] || ctx.instanceVarMode;
-        this.commaDecimal = ctx.isCommaDecimal($ta, ctx.localeComma);
+        this.config = ctx.slotConfigs[this.slot]
+            || ctx.instanceDefaults;
+        this.varMode = ctx.slotVarModes[this.slot]
+            || ctx.instanceVarMode;
+        this.commaDecimal = ctx.isCommaDecimal(
+            $ta, ctx.localeComma);
 
         this.convOpts = {
             commaDecimal: this.commaDecimal,
@@ -345,8 +310,11 @@ define([
         this.rows = [];
         this.activeIdx = 0;
         this.syncTimer = null;
+        this.type = ($ta.attr('data-stack-input-type') || '').trim();
 
-        dbg('Init: ' + name + ' (slot ' + this.slot + ', type=' + this.inputType + ', varMode=' + this.varMode + ')');
+        dbg('Init: ' + name
+            + ' (slot ' + this.slot
+            + ', varMode=' + this.varMode + ')');
 
         this.build();
     }
@@ -356,53 +324,56 @@ define([
      */
     EquivEditor.prototype.build = function() {
         var self = this;
-        var initialValue;
-        var lines;
-        var i;
 
-        this.$wrap = $('<div>').addClass('sme-equiv-wrap');
+        this.$wrap = $('<div>')
+            .addClass('sme-equiv-wrap');
 
         this.$tb = toolbar.build(
-            function() {
-                return self.activeField();
-            },
+            function() { return self.activeField(); },
             this.config,
             this.ctx.defs
         );
         this.$wrap.append(this.$tb);
 
-        this.$rows = $('<div>').addClass('sme-equiv-rows');
+        this.$rows = $('<div>')
+            .addClass('sme-equiv-rows');
         this.$wrap.append(this.$rows);
 
         this.$addBtn = $('<button>')
             .attr('type', 'button')
-            .addClass('btn btn-sm btn-outline-secondary mt-1')
-            .html('<i class="fa fa-plus" aria-hidden="true"></i>')
+            .addClass(
+                'btn btn-sm btn-outline-secondary mt-1')
+            .html(
+                '<i class="fa fa-plus"'
+                + ' aria-hidden="true"></i>')
             .attr('title', 'Add line')
             .on('click', function(e) {
-                var seed = '';
                 e.preventDefault();
-                if (self.inputType === 'equiv' && self.rows.length > 0) {
-                    seed = self.rows[self.rows.length - 1].maxima || '';
+                var cloneVal = '';
+                if (self.type === 'equiv' && self.rows.length > 0) {
+                    cloneVal = self.rowToMaxima(self.rows[self.rows.length - 1]);
                 }
-                self.addRow(seed);
+                self.addRow(cloneVal);
                 self.focusRow(self.rows.length - 1);
             });
         this.$wrap.append(this.$addBtn);
 
-        initialValue = this.$ta[0].defaultValue || this.$ta.val() || '';
-        lines = splitInitialRows(initialValue, this.inputType);
+        var initialValue = (this.$ta[0].defaultValue || this.$ta.val() || '').trim();
+        var lines = normaliseInitialLines(initialValue, this.type);
+        var i;
         for (i = 0; i < lines.length; i++) {
-            this.addRow(lines[i]);
+            this.addRow(lines[i].trim());
         }
 
+        // Insert BEFORE textarea — keep textarea in
+        // its original DOM position for STACK feedback.
         this.$ta.before(this.$wrap);
         this.$ta.css({
-            position: 'absolute',
-            left: '-9999px',
-            width: '1px',
-            height: '1px',
-            overflow: 'hidden'
+            'position': 'absolute',
+            'left': '-9999px',
+            'width': '1px',
+            'height': '1px',
+            'overflow': 'hidden'
         });
         this.$ta.attr('data-sme-init', '1');
 
@@ -412,7 +383,8 @@ define([
             this.focusRow(0);
         }
 
-        dbg('created: ' + this.rows.length + ' rows, id=' + this.$ta.attr('id') + ', initial="' + initialValue + '"');
+        dbg('created: ' + this.rows.length
+            + ' rows, id=' + this.$ta.attr('id'));
     };
 
     /**
@@ -421,10 +393,12 @@ define([
      * @returns {Object|null} MQ field.
      */
     EquivEditor.prototype.activeField = function() {
-        if (this.activeIdx >= 0 && this.activeIdx < this.rows.length) {
+        if (this.activeIdx >= 0
+            && this.activeIdx < this.rows.length) {
             return this.rows[this.activeIdx].mq;
         }
-        return this.rows.length > 0 ? this.rows[0].mq : null;
+        return this.rows.length > 0
+            ? this.rows[0].mq : null;
     };
 
     /**
@@ -433,10 +407,12 @@ define([
      * @param {number} idx Row index.
      */
     EquivEditor.prototype.setActive = function(idx) {
-        this.$rows.find('.sme-equiv-row').removeClass('sme-equiv-row-active');
+        this.$rows.find('.sme-equiv-row')
+            .removeClass('sme-equiv-row-active');
         this.activeIdx = idx;
         if (idx >= 0 && idx < this.rows.length) {
-            this.rows[idx].$row.addClass('sme-equiv-row-active');
+            this.rows[idx].$row
+                .addClass('sme-equiv-row-active');
         }
     };
 
@@ -469,27 +445,55 @@ define([
     };
 
     /**
+     * Convert one row back to Maxima.
+     *
+     * @param {Object} rowData Row object.
+     * @returns {string} Maxima value.
+     */
+    EquivEditor.prototype.rowToMaxima = function(rowData) {
+        var latex = rowData.mq.latex();
+
+        if (!latex || !latex.trim()) {
+            return '';
+        }
+
+        try {
+            return tex2max.convert(latex, this.convOpts);
+        } catch (e) {
+            return latex;
+        }
+    };
+
+    /**
      * Add a row.
      *
      * @param {string} maximaVal Initial value.
      * @param {number} [atIdx] Position.
      */
-    EquivEditor.prototype.addRow = function(maximaVal, atIdx) {
+    EquivEditor.prototype.addRow = function(
+        maximaVal, atIdx) {
         var self = this;
-        var idx = (typeof atIdx === 'number') ? atIdx : this.rows.length;
-        var $row = $('<div>').addClass('sme-equiv-row');
-        var $num = $('<div>').addClass('sme-equiv-num').text(idx + 1);
-        var $mqWrap = $('<div>').addClass('sme-equiv-mqwrap');
+        var idx = (typeof atIdx === 'number')
+            ? atIdx : this.rows.length;
+
+        var $row = $('<div>')
+            .addClass('sme-equiv-row');
+        var $num = $('<div>')
+            .addClass('sme-equiv-num')
+            .text(idx + 1);
+        var $mqWrap = $('<div>')
+            .addClass('sme-equiv-mqwrap');
         var $mqSpan = $('<span>');
+        $mqWrap.append($mqSpan);
+
         var $del = $('<button>')
             .attr('type', 'button')
             .addClass('sme-equiv-del')
-            .html('<i class="fa fa-times text-danger" aria-hidden="true"></i>')
+            .html(
+                '<i class="fa fa-times text-danger"'
+                + ' aria-hidden="true"></i>')
             .attr('title', 'Remove line');
-        var mq;
-        var rowData;
 
-        $mqWrap.append($mqSpan);
         $row.append($num).append($mqWrap).append($del);
 
         if (idx < this.rows.length) {
@@ -498,33 +502,35 @@ define([
             this.$rows.append($row);
         }
 
-        mq = this.ctx.MQ.MathField($mqSpan[0], {
+        var mq = this.ctx.MQ.MathField($mqSpan[0], {
             spaceBehavesLikeTab: true,
             handlers: {
                 edit: function() {
-                    rowData.maxima = self.maximaFromField(mq);
                     self.debouncedSync();
                 },
                 enter: function() {
                     var i = self.indexOf(mq);
-                    var seed = '';
                     if (i >= 0) {
-                        if (self.inputType === 'equiv') {
-                            seed = self.rows[i].maxima || self.maximaFromField(mq);
+                        var cloneVal = '';
+                        if (self.type === 'equiv') {
+                            cloneVal = self.rowToMaxima(self.rows[i]);
                         }
-                        self.addRow(seed, i + 1);
+                        self.addRow(cloneVal, i + 1);
                         self.focusRow(i + 1);
                     }
                 }
             }
         });
 
-        rowData = {
+        $mqWrap.on('click', function() {
+            mq.focus();
+        });
+
+        var rowData = {
             $row: $row,
             $num: $num,
             $mqWrap: $mqWrap,
-            mq: mq,
-            maxima: maximaVal || ''
+            mq: mq
         };
 
         if (idx < this.rows.length) {
@@ -533,47 +539,47 @@ define([
             this.rows.push(rowData);
         }
 
-        $mqWrap.on('click', function() {
-            mq.focus();
-        });
-
         $mqWrap.on('focusin', function() {
             self.setActive(self.indexOf(mq));
         });
 
         $mqWrap.on('keydown', function(e) {
-            var i;
-            if (e.key === 'Backspace' && (!mq.latex() || mq.latex().trim() === '') && self.rows.length > 1) {
+            if (e.key === 'Backspace'
+                && (!mq.latex()
+                    || mq.latex().trim() === '')
+                && self.rows.length > 1) {
                 e.preventDefault();
-                i = self.indexOf(mq);
+                var i = self.indexOf(mq);
                 self.removeRow(i);
                 self.focusRow(Math.max(0, i - 1));
             }
         });
 
         $del.on('click', function(e) {
-            var i;
             e.preventDefault();
             if (self.rows.length <= 1) {
                 return;
             }
-            i = self.indexOf(mq);
+            var i = self.indexOf(mq);
             self.removeRow(i);
-            self.focusRow(Math.min(i, self.rows.length - 1));
+            self.focusRow(
+                Math.min(i, self.rows.length - 1));
         });
 
         if (maximaVal) {
             try {
-                mq.latex(max2tex.convert(maximaVal, {
+                var latex = max2tex.convert(maximaVal, {
                     defs: self.ctx.defs,
                     variableMode: self.varMode
-                }));
+                });
+                mq.latex(latex);
+                dbg('row ' + idx + ': "'
+                    + maximaVal + '" -> "'
+                    + latex + '"');
             } catch (ex) {
                 dbg('pre-fill error: ' + ex.message);
                 mq.latex(maximaVal);
             }
-            rowData.maxima = self.maximaFromField(mq) || maximaVal;
-            dbg('row ' + idx + ': "' + maximaVal + '"');
         }
 
         this.renumber();
@@ -585,14 +591,16 @@ define([
      * @param {number} idx Row index.
      */
     EquivEditor.prototype.removeRow = function(idx) {
-        if (idx < 0 || idx >= this.rows.length || this.rows.length <= 1) {
+        if (idx < 0 || idx >= this.rows.length
+            || this.rows.length <= 1) {
             return;
         }
         this.rows[idx].$row.remove();
         this.rows.splice(idx, 1);
         this.renumber();
         this.syncNow();
-        dbg('removed row ' + idx + ', ' + this.rows.length + ' left');
+        dbg('removed row ' + idx
+            + ', ' + this.rows.length + ' left');
     };
 
     /**
@@ -602,26 +610,6 @@ define([
         var i;
         for (i = 0; i < this.rows.length; i++) {
             this.rows[i].$num.text(i + 1);
-        }
-    };
-
-    /**
-     * Convert a MathQuill row to Maxima.
-     *
-     * @param {Object} mq MathQuill field.
-     * @returns {string} Maxima representation.
-     */
-    EquivEditor.prototype.maximaFromField = function(mq) {
-        var latex = mq.latex();
-
-        if (!latex || !latex.trim()) {
-            return '';
-        }
-
-        try {
-            return tex2max.convert(latex, this.convOpts);
-        } catch (e) {
-            return latex;
         }
     };
 
@@ -643,17 +631,18 @@ define([
      */
     EquivEditor.prototype.syncNow = function() {
         var lines = [];
+        var self = this;
         var i;
-        var value;
-        var oldVal;
+        var latex;
+        var maxima;
 
         for (i = 0; i < this.rows.length; i++) {
-            this.rows[i].maxima = this.maximaFromField(this.rows[i].mq);
-            lines.push(this.rows[i].maxima);
+            maxima = this.rowToMaxima(this.rows[i]);
+            lines.push(maxima);
         }
 
-        value = lines.join('\n');
-        oldVal = this.$ta.val();
+        var value = lines.join('\n');
+        var oldVal = this.$ta.val();
         this.$ta.val(value);
 
         if (value !== oldVal) {
@@ -671,21 +660,30 @@ define([
          */
         init: function(ctx) {
             ensureStyles();
-
-            $(selector()).each(function() {
-                var $ta = $(this);
-                var name = $ta.attr('name') || '';
-                var slot = ctx.extractSlot(name);
-
-                if ($ta.attr('data-sme-init') === '1') {
+            var $areas = $(selector());
+            if (!$areas.length) {
+                ctx.dbg(
+                    'No supported textareas found');
+                return;
+            }
+            ctx.dbg('Found ' + $areas.length
+                + ' textareas');
+            $areas.each(function() {
+                if ($(this).attr('data-sme-init')
+                    === '1') {
                     return;
                 }
-
-                if (ctx.slotEnabled && Object.prototype.hasOwnProperty.call(ctx.slotEnabled, slot) && !ctx.slotEnabled[slot]) {
-                    ctx.dbg('Textarea ' + name + ' -> slot ' + slot + ' disabled, skipping');
+                // Check per-slot enabled map before activating.
+                var aname = $(this).attr('name') || '';
+                var aslot = ctx.extractSlot(aname);
+                if (ctx.slotEnabled
+                        && ctx.slotEnabled.hasOwnProperty(aslot)
+                        && !ctx.slotEnabled[aslot]) {
+                    ctx.dbg('Textarea ' + aname
+                        + ' -> slot ' + aslot
+                        + ' disabled, skipping');
                     return;
                 }
-
                 new EquivEditor(this, ctx);
             });
         }
