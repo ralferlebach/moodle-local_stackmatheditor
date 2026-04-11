@@ -95,6 +95,13 @@ define([
             '  align-items: stretch;',
             '  gap: 6px;',
             '}',
+            '.sme-equiv-step-main {',
+            '  flex: 1 1 auto;',
+            '  min-width: 100px;',
+            '  display: flex;',
+            '  align-items: stretch;',
+            '  gap: 6px;',
+            '}',
             '.sme-equiv-system-brace {',
             '  width: 10px;',
             '  min-width: 10px;',
@@ -112,11 +119,46 @@ define([
             '  gap: 2px;',
             '}',
             '.sme-equiv-line {',
-            '  display: block;',
+            '  display: flex;',
+            '  align-items: center;',
+            '  gap: 4px;',
             '}',
             '.sme-equiv-mqwrap {',
+            '  flex: 1 1 auto;',
             '  min-width: 100px;',
             '  cursor: text;',
+            '}',
+            '.sme-equiv-subdel {',
+            '  flex: 0 0 auto;',
+            '  opacity: 0;',
+            '  padding: 0 4px;',
+            '  border: none;',
+            '  background: none;',
+            '  cursor: pointer;',
+            '  transition: opacity 0.12s;',
+            '  align-self: center;',
+            '}',
+            '.sme-equiv-line:hover .sme-equiv-subdel {',
+            '  opacity: 0.5;',
+            '}',
+            '.sme-equiv-subdel:hover {',
+            '  opacity: 1;',
+            '}',
+            '.sme-equiv-step-controls {',
+            '  flex: 0 0 auto;',
+            '  display: flex;',
+            '  flex-direction: column;',
+            '  justify-content: center;',
+            '}',
+            '.sme-equiv-subadd {',
+            '  padding: 0 6px;',
+            '  border: none;',
+            '  background: none;',
+            '  cursor: pointer;',
+            '  color: #666;',
+            '}',
+            '.sme-equiv-subadd:hover {',
+            '  color: #000;',
             '}',
             '.sme-equiv-del {',
             '  flex: 0 0 auto;',
@@ -456,6 +498,156 @@ define([
         return null;
     };
 
+
+    EquivEditor.prototype.updateStepControls = function(stepData) {
+        var isSystem = stepData.fields.length > 1;
+
+        if (isSystem) {
+            if (!stepData.$brace.parent().length) {
+                stepData.$main.prepend(stepData.$brace);
+            }
+            stepData.$subadd.removeAttr('disabled');
+            stepData.fields.forEach(function(fieldData) {
+                fieldData.$subdel.css('visibility', 'visible');
+            });
+        } else {
+            stepData.$brace.detach();
+            stepData.$subadd.removeAttr('disabled');
+            stepData.fields.forEach(function(fieldData) {
+                fieldData.$subdel.css('visibility', 'hidden');
+            });
+        }
+    };
+
+    EquivEditor.prototype.createStepField = function(stepData, maximaVal, fieldIdx) {
+        var self = this;
+        var $line = $('<div>').addClass('sme-equiv-line');
+        var $mqWrap = $('<div>').addClass('sme-equiv-mqwrap');
+        var $mqSpan = $('<span>');
+        var $subdel = $('<button>')
+            .attr('type', 'button')
+            .addClass('sme-equiv-subdel')
+            .attr('title', 'Remove equation row')
+            .text('×');
+        var mq;
+        var fieldData;
+
+        $mqWrap.append($mqSpan);
+        $line.append($mqWrap).append($subdel);
+
+        if (typeof fieldIdx === 'number' && fieldIdx < stepData.fields.length) {
+            stepData.fields[fieldIdx].$line.before($line);
+        } else {
+            stepData.$lines.append($line);
+        }
+
+        mq = self.ctx.MQ.MathField($mqSpan[0], {
+            spaceBehavesLikeTab: true,
+            handlers: {
+                edit: function() {
+                    fieldData.maxima = maximaFromLatex(mq.latex(), self.convOpts);
+                    self.debouncedSync();
+                },
+                enter: function() {
+                    var pos = self.indexOfField(mq);
+                    var template;
+                    if (!pos) {
+                        return;
+                    }
+                    if (self.inputType === 'equiv') {
+                        template = cloneStepValues(self.rows[pos.stepIdx]);
+                    } else {
+                        template = [''];
+                    }
+                    self.addStep(template, pos.stepIdx + 1);
+                    self.focusStep(pos.stepIdx + 1, pos.fieldIdx < template.length ? pos.fieldIdx : 0);
+                }
+            }
+        });
+
+        fieldData = {
+            $line: $line,
+            $mqWrap: $mqWrap,
+            $subdel: $subdel,
+            mq: mq,
+            maxima: maximaVal || ''
+        };
+
+        if (typeof fieldIdx === 'number' && fieldIdx < stepData.fields.length) {
+            stepData.fields.splice(fieldIdx, 0, fieldData);
+        } else {
+            stepData.fields.push(fieldData);
+        }
+
+        $mqWrap.on('click', function() {
+            mq.focus();
+        });
+        $mqWrap.on('focusin', function() {
+            var pos = self.indexOfField(mq);
+            if (pos) {
+                self.setActive(pos.stepIdx, pos.fieldIdx);
+            }
+        });
+        $mqWrap.on('keydown', function(e) {
+            var pos = self.indexOfField(mq);
+            if (!pos) {
+                return;
+            }
+            if (e.key === 'Backspace' && (!mq.latex() || mq.latex().trim() === '')) {
+                if (self.rows[pos.stepIdx].fields.length > 1) {
+                    e.preventDefault();
+                    self.removeField(pos.stepIdx, pos.fieldIdx);
+                } else if (self.rows.length > 1) {
+                    e.preventDefault();
+                    self.removeStep(pos.stepIdx);
+                    self.focusStep(Math.max(0, pos.stepIdx - 1), 0);
+                }
+            }
+        });
+
+        $subdel.on('click', function(e) {
+            var pos;
+            e.preventDefault();
+            pos = self.indexOfField(mq);
+            if (!pos) {
+                return;
+            }
+            self.removeField(pos.stepIdx, pos.fieldIdx);
+        });
+
+        if (maximaVal) {
+            mq.latex(latexFromMaxima(maximaVal, self.ctx.defs, self.varMode));
+        }
+
+        self.updateStepControls(stepData);
+        return fieldData;
+    };
+
+    EquivEditor.prototype.addField = function(stepIdx, maximaVal, atFieldIdx) {
+        var stepData = this.rows[stepIdx];
+        var fieldData;
+        if (!stepData) {
+            return null;
+        }
+        fieldData = this.createStepField(stepData, maximaVal || '', atFieldIdx);
+        this.syncNow();
+        return fieldData;
+    };
+
+    EquivEditor.prototype.removeField = function(stepIdx, fieldIdx) {
+        var stepData = this.rows[stepIdx];
+        var focusIdx;
+        if (!stepData || stepData.fields.length <= 1 || fieldIdx < 0 || fieldIdx >= stepData.fields.length) {
+            return;
+        }
+        stepData.fields[fieldIdx].$line.remove();
+        stepData.fields.splice(fieldIdx, 1);
+        this.updateStepControls(stepData);
+        this.syncNow();
+        focusIdx = Math.min(fieldIdx, stepData.fields.length - 1);
+        this.focusStep(stepIdx, focusIdx);
+    };
+
     EquivEditor.prototype.addStep = function(stepVals, atIdx) {
         var self = this;
         var idx = (typeof atIdx === 'number') ? atIdx : this.rows.length;
@@ -463,26 +655,34 @@ define([
         var $row = $('<div>').addClass('sme-equiv-row');
         var $num = $('<div>').addClass('sme-equiv-num').text(idx + 1);
         var $step = $('<div>').addClass('sme-equiv-step');
+        var $main = $('<div>').addClass('sme-equiv-step-main');
+        var $brace = $('<div>').addClass('sme-equiv-system-brace');
         var $lines = $('<div>').addClass('sme-equiv-step-lines');
+        var $stepControls = $('<div>').addClass('sme-equiv-step-controls');
+        var $subadd = $('<button>')
+            .attr('type', 'button')
+            .addClass('sme-equiv-subadd')
+            .attr('title', 'Add equation row')
+            .text('+');
         var $del = $('<button>')
             .attr('type', 'button')
             .addClass('sme-equiv-del')
             .html('<i class="fa fa-times text-danger" aria-hidden="true"></i>')
-            .attr('title', 'Remove line');
+            .attr('title', 'Remove transformation step');
         var stepData = {
             $row: $row,
             $num: $num,
             $step: $step,
+            $main: $main,
+            $brace: $brace,
             $lines: $lines,
+            $subadd: $subadd,
             fields: []
         };
-        var hasSystem = values.length > 1;
-        var i;
 
-        if (hasSystem) {
-            $step.append($('<div>').addClass('sme-equiv-system-brace'));
-        }
-        $step.append($lines);
+        $stepControls.append($subadd);
+        $main.append($lines);
+        $step.append($main).append($stepControls);
         $row.append($num).append($step).append($del);
 
         if (idx < this.rows.length) {
@@ -492,72 +692,18 @@ define([
         }
 
         values.forEach(function(maximaVal, fieldIdx) {
-            var $line = $('<div>').addClass('sme-equiv-line');
-            var $mqWrap = $('<div>').addClass('sme-equiv-mqwrap');
-            var $mqSpan = $('<span>');
-            var mq;
-            var fieldData;
+            self.createStepField(stepData, maximaVal, fieldIdx);
+        });
 
-            $mqWrap.append($mqSpan);
-            $line.append($mqWrap);
-            $lines.append($line);
-
-            mq = self.ctx.MQ.MathField($mqSpan[0], {
-                spaceBehavesLikeTab: true,
-                handlers: {
-                    edit: function() {
-                        fieldData.maxima = maximaFromLatex(mq.latex(), self.convOpts);
-                        self.debouncedSync();
-                    },
-                    enter: function() {
-                        var pos = self.indexOfField(mq);
-                        var template;
-                        if (!pos) {
-                            return;
-                        }
-                        if (self.inputType === 'equiv') {
-                            template = cloneStepValues(self.rows[pos.stepIdx]);
-                        } else {
-                            template = [''];
-                        }
-                        self.addStep(template, pos.stepIdx + 1);
-                        self.focusStep(pos.stepIdx + 1, pos.fieldIdx < template.length ? pos.fieldIdx : 0);
-                    }
-                }
-            });
-
-            fieldData = {
-                $line: $line,
-                $mqWrap: $mqWrap,
-                mq: mq,
-                maxima: maximaVal || ''
-            };
-            stepData.fields.push(fieldData);
-
-            $mqWrap.on('click', function() {
-                mq.focus();
-            });
-            $mqWrap.on('focusin', function() {
-                var pos = self.indexOfField(mq);
-                if (pos) {
-                    self.setActive(pos.stepIdx, pos.fieldIdx);
-                }
-            });
-            $mqWrap.on('keydown', function(e) {
-                var pos = self.indexOfField(mq);
-                if (!pos) {
-                    return;
-                }
-                if (e.key === 'Backspace' && (!mq.latex() || mq.latex().trim() === '') && self.rows.length > 1 && self.rows[pos.stepIdx].fields.length === 1) {
-                    e.preventDefault();
-                    self.removeStep(pos.stepIdx);
-                    self.focusStep(Math.max(0, pos.stepIdx - 1), 0);
-                }
-            });
-
-            if (maximaVal) {
-                mq.latex(latexFromMaxima(maximaVal, self.ctx.defs, self.varMode));
+        $subadd.on('click', function(e) {
+            var focusField = self.activeStepIdx === self.rows.indexOf(stepData) ? self.activeFieldIdx : (stepData.fields.length - 1);
+            var templateValue = '';
+            e.preventDefault();
+            if (focusField >= 0 && stepData.fields[focusField]) {
+                templateValue = stepData.fields[focusField].maxima || '';
             }
+            self.addField(self.rows.indexOf(stepData), templateValue, focusField + 1);
+            self.focusStep(self.rows.indexOf(stepData), focusField + 1);
         });
 
         $del.on('click', function(e) {
@@ -576,6 +722,7 @@ define([
             this.rows.push(stepData);
         }
 
+        this.updateStepControls(stepData);
         this.renumber();
     };
 
