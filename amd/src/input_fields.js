@@ -342,6 +342,9 @@ define([
             }
         });
 
+        /**
+         * Mark the current system row as active.
+         */
         function activateRow() {
             rows.forEach(function(entry) {
                 entry.$row.removeClass('sme-system-row-active');

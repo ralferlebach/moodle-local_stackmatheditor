@@ -33,12 +33,20 @@ define([
 
     var TYPES = ['equiv', 'textarea'];
 
+    /**
+     * Log a developer debug message for textarea editors.
+     *
+     * @param {string} msg Debug message.
+     */
     function dbg(msg) {
         if (window.M && window.M.cfg && window.M.cfg.developerdebug) {
             window.console.log('[SME-ta] ' + msg);
         }
     }
 
+    /**
+     * Inject runtime styles for the textarea-based MathQuill editor.
+     */
     function ensureStyles() {
         if (document.getElementById('sme-ta-styles')) {
             return;
@@ -93,35 +101,65 @@ define([
             '  min-width: 100px;',
             '  display: flex;',
             '  align-items: stretch;',
-            '  gap: 6px;',
+            '  gap: 4px;',
             '}',
             '.sme-equiv-step-main {',
             '  flex: 1 1 auto;',
             '  min-width: 100px;',
             '  display: flex;',
             '  align-items: stretch;',
-            '  gap: 6px;',
+            '  gap: 4px;',
             '}',
             '.sme-equiv-system-brace {',
-            '  width: 10px;',
-            '  min-width: 10px;',
-            '  border-left: 2px solid #666;',
-            '  border-top: 2px solid #666;',
-            '  border-bottom: 2px solid #666;',
-            '  border-radius: 8px 0 0 8px;',
-            '  margin: 2px 0;',
+            '  display: flex;',
+            '  flex: 0 0 16px;',
+            '  flex-direction: column;',
+            '  justify-content: stretch;',
+            '  align-self: stretch;',
+            '  width: 16px;',
+            '  min-width: 16px;',
+            '  margin: 1px 0;',
+            '  user-select: none;',
+            '  -webkit-user-select: none;',
+            '}',
+            '.sme-equiv-system-brace::before,',
+            '.sme-equiv-system-brace::after {',
+            '  content: "";',
+            '  display: block;',
+            '  width: 12px;',
+            '  flex: 0 0 8px;',
+            '  border-left: 2px solid #444;',
+            '}',
+            '.sme-equiv-system-brace::before {',
+            '  border-top: 2px solid #444;',
+            '  border-top-left-radius: 10px;',
+            '}',
+            '.sme-equiv-system-brace > span {',
+            '  display: block;',
+            '  flex: 1 1 auto;',
+            '  width: 12px;',
+            '  border-left: 2px solid #444;',
+            '}',
+            '.sme-equiv-system-brace::after {',
+            '  border-bottom: 2px solid #444;',
+            '  border-bottom-left-radius: 10px;',
             '}',
             '.sme-equiv-step-lines {',
             '  flex: 1 1 auto;',
             '  min-width: 100px;',
             '  display: flex;',
             '  flex-direction: column;',
-            '  gap: 2px;',
+            '  gap: 1px;',
             '}',
             '.sme-equiv-line {',
             '  display: flex;',
             '  align-items: center;',
             '  gap: 4px;',
+            '  padding: 1px 0;',
+            '  border-bottom: 1px solid #f0f0f0;',
+            '}',
+            '.sme-equiv-line:last-child {',
+            '  border-bottom: none;',
             '}',
             '.sme-equiv-mqwrap {',
             '  flex: 1 1 auto;',
@@ -130,35 +168,33 @@ define([
             '}',
             '.sme-equiv-subdel {',
             '  flex: 0 0 auto;',
+            '  min-width: 2rem;',
+            '  color: #666;',
+            '  text-decoration: none;',
             '  opacity: 0;',
-            '  padding: 0 4px;',
-            '  border: none;',
-            '  background: none;',
-            '  cursor: pointer;',
             '  transition: opacity 0.12s;',
             '  align-self: center;',
             '}',
-            '.sme-equiv-line:hover .sme-equiv-subdel {',
+            '.sme-equiv-line:hover .sme-equiv-subdel,',
+            '.sme-equiv-line:focus-within .sme-equiv-subdel {',
             '  opacity: 0.5;',
             '}',
-            '.sme-equiv-subdel:hover {',
+            '.sme-equiv-subdel:hover,',
+            '.sme-equiv-subdel:focus {',
             '  opacity: 1;',
+            '  color: #111;',
             '}',
             '.sme-equiv-step-controls {',
             '  flex: 0 0 auto;',
             '  display: flex;',
-            '  flex-direction: column;',
-            '  justify-content: center;',
+            '  align-items: flex-start;',
             '}',
             '.sme-equiv-subadd {',
-            '  padding: 0 6px;',
-            '  border: none;',
-            '  background: none;',
-            '  cursor: pointer;',
-            '  color: #666;',
+            '  min-width: 2rem;',
             '}',
-            '.sme-equiv-subadd:hover {',
-            '  color: #000;',
+            '.sme-equiv-subadd:hover,',
+            '.sme-equiv-subadd:focus {',
+            '  color: #111;',
             '}',
             '.sme-equiv-del {',
             '  flex: 0 0 auto;',
@@ -170,22 +206,34 @@ define([
             '  transition: opacity 0.12s;',
             '  align-self: center;',
             '}',
-            '.sme-equiv-row:hover .sme-equiv-del {',
+            '.sme-equiv-row:hover .sme-equiv-del,',
+            '.sme-equiv-row:focus-within .sme-equiv-del {',
             '  opacity: 0.5;',
             '}',
-            '.sme-equiv-del:hover {',
+            '.sme-equiv-del:hover,',
+            '.sme-equiv-del:focus {',
             '  opacity: 1;',
             '}'
         ].join('\n');
         document.head.appendChild(style);
     }
 
+    /**
+     * Build the selector for supported textarea input types.
+     *
+     * @returns {string} Combined textarea selector.
+     */
     function selector() {
         return TYPES.map(function(t) {
             return 'textarea[data-stack-input-type="' + t + '"]';
         }).join(',');
     }
 
+    /**
+     * Trigger native and jQuery validation events for a textarea.
+     *
+     * @param {jQuery} $ta Textarea element.
+     */
     function triggerStackValidation($ta) {
         $ta.trigger('change');
         $ta.trigger('input');
@@ -204,10 +252,22 @@ define([
         $ta[0].dispatchEvent(nativeChange);
     }
 
+    /**
+     * Check whether a character is a valid boundary for the keyword and.
+     *
+     * @param {string} ch Character to inspect.
+     * @returns {boolean} True when the character is a boundary.
+     */
     function isAndBoundaryChar(ch) {
         return !ch || /\s|[(){}\[\],;]/.test(ch);
     }
 
+    /**
+     * Split a Maxima expression by top-level and connectors.
+     *
+     * @param {string} expr Source expression.
+     * @returns {string[]} Split top-level parts.
+     */
     function splitTopLevelAnd(expr) {
         var parts = [];
         var depth = 0;
@@ -240,6 +300,12 @@ define([
         });
     }
 
+    /**
+     * Remove one or more balanced outer parentheses from an expression.
+     *
+     * @param {string} expr Source expression.
+     * @returns {string} Expression without redundant outer parentheses.
+     */
     function stripOuterParens(expr) {
         var value = expr.trim();
         var changed = true;
@@ -272,6 +338,12 @@ define([
         return value.trim();
     }
 
+    /**
+     * Check whether an expression contains a top-level relation operator.
+     *
+     * @param {string} expr Source expression.
+     * @returns {boolean} True when a relation operator exists at top level.
+     */
     function hasTopLevelRelation(expr) {
         var depth = 0;
         var i;
@@ -299,6 +371,12 @@ define([
         return false;
     }
 
+    /**
+     * Parse a single equivalence-reasoning step into one or more subexpressions.
+     *
+     * @param {string} raw Raw step value.
+     * @returns {string[]} Parsed step values.
+     */
     function parseEquivStep(raw) {
         var value = (raw || '').trim();
         var parts;
@@ -314,6 +392,13 @@ define([
         return [value];
     }
 
+    /**
+     * Parse the initial textarea value into editor steps.
+     *
+     * @param {string} value Initial textarea value.
+     * @param {string} inputType STACK input type.
+     * @returns {string[][]} Parsed editor steps.
+     */
     function parseInitialSteps(value, inputType) {
         var raw = (value || '').trim();
         var lines;
@@ -331,12 +416,25 @@ define([
         });
     }
 
+    /**
+     * Clone all maxima values from one editor step.
+     *
+     * @param {Object} step Step data object.
+     * @returns {string[]} Cloned maxima values.
+     */
     function cloneStepValues(step) {
         return step.fields.map(function(fieldData) {
             return fieldData.maxima || '';
         });
     }
 
+    /**
+     * Convert a MathQuill LaTeX string to Maxima.
+     *
+     * @param {string} latex LaTeX input.
+     * @param {Object} convOpts Converter options.
+     * @returns {string} Converted Maxima expression.
+     */
     function maximaFromLatex(latex, convOpts) {
         if (!latex || !latex.trim()) {
             return '';
@@ -348,6 +446,14 @@ define([
         }
     }
 
+    /**
+     * Convert a Maxima expression to LaTeX for MathQuill.
+     *
+     * @param {string} maximaVal Maxima input.
+     * @param {Object} defs Function definitions.
+     * @param {string} varMode Variable handling mode.
+     * @returns {string} Converted LaTeX expression.
+     */
     function latexFromMaxima(maximaVal, defs, varMode) {
         if (!maximaVal) {
             return '';
@@ -363,6 +469,12 @@ define([
         }
     }
 
+    /**
+     * Build a multi-line MathQuill editor for a STACK textarea field.
+     *
+     * @param {HTMLTextAreaElement} textarea Source textarea.
+     * @param {Object} ctx Initialisation context.
+     */
     function EquivEditor(textarea, ctx) {
         var $ta = $(textarea);
         var name = $ta.attr('name') || '';
@@ -394,6 +506,9 @@ define([
         this.build();
     }
 
+    /**
+     * Build the editor DOM and initialise all rows.
+     */
     EquivEditor.prototype.build = function() {
         var self = this;
         var startValue;
@@ -452,6 +567,11 @@ define([
         this.syncNow();
     };
 
+    /**
+     * Get the currently active MathQuill field.
+     *
+     * @returns {?Object} Active MathQuill field.
+     */
     EquivEditor.prototype.activeField = function() {
         var step = this.rows[this.activeStepIdx];
         if (!step) {
@@ -463,6 +583,12 @@ define([
         return step.fields.length ? step.fields[0].mq : null;
     };
 
+    /**
+     * Mark the given step and field as active.
+     *
+     * @param {number} stepIdx Active step index.
+     * @param {number} fieldIdx Active field index.
+     */
     EquivEditor.prototype.setActive = function(stepIdx, fieldIdx) {
         this.$rows.find('.sme-equiv-row').removeClass('sme-equiv-row-active');
         this.activeStepIdx = stepIdx;
@@ -472,6 +598,12 @@ define([
         }
     };
 
+    /**
+     * Focus a specific field inside a step.
+     *
+     * @param {number} stepIdx Target step index.
+     * @param {number} fieldIdx Target field index.
+     */
     EquivEditor.prototype.focusStep = function(stepIdx, fieldIdx) {
         var step = this.rows[stepIdx];
         var targetIdx = fieldIdx || 0;
@@ -482,6 +614,12 @@ define([
         step.fields[targetIdx].mq.focus();
     };
 
+    /**
+     * Find the step and field index for a MathQuill instance.
+     *
+     * @param {Object} mq MathQuill field instance.
+     * @returns {?Object} Step and field position.
+     */
     EquivEditor.prototype.indexOfField = function(mq) {
         var stepIdx;
         var fieldIdx;
@@ -499,6 +637,11 @@ define([
     };
 
 
+    /**
+     * Update controls and brace visibility for one step.
+     *
+     * @param {Object} stepData Step data object.
+     */
     EquivEditor.prototype.updateStepControls = function(stepData) {
         var isSystem = stepData.fields.length > 1;
 
@@ -519,6 +662,14 @@ define([
         }
     };
 
+    /**
+     * Create one MathQuill subrow inside a step.
+     *
+     * @param {Object} stepData Step data object.
+     * @param {string} maximaVal Initial maxima value.
+     * @param {number=} fieldIdx Optional insertion index.
+     * @returns {Object} Created field data object.
+     */
     EquivEditor.prototype.createStepField = function(stepData, maximaVal, fieldIdx) {
         var self = this;
         var $line = $('<div>').addClass('sme-equiv-line');
@@ -526,7 +677,8 @@ define([
         var $mqSpan = $('<span>');
         var $subdel = $('<button>')
             .attr('type', 'button')
-            .addClass('sme-equiv-subdel')
+            .addClass('btn btn-link sme-equiv-subdel')
+            .attr('aria-label', 'Remove equation row')
             .attr('title', 'Remove equation row')
             .text('×');
         var mq;
@@ -623,6 +775,14 @@ define([
         return fieldData;
     };
 
+    /**
+     * Add a new field to an existing step.
+     *
+     * @param {number} stepIdx Step index.
+     * @param {string} maximaVal Initial maxima value.
+     * @param {number=} atFieldIdx Optional insertion index.
+     * @returns {?Object} Created field data object.
+     */
     EquivEditor.prototype.addField = function(stepIdx, maximaVal, atFieldIdx) {
         var stepData = this.rows[stepIdx];
         var fieldData;
@@ -634,6 +794,12 @@ define([
         return fieldData;
     };
 
+    /**
+     * Remove a field from an existing step.
+     *
+     * @param {number} stepIdx Step index.
+     * @param {number} fieldIdx Field index.
+     */
     EquivEditor.prototype.removeField = function(stepIdx, fieldIdx) {
         var stepData = this.rows[stepIdx];
         var focusIdx;
@@ -648,6 +814,12 @@ define([
         this.focusStep(stepIdx, focusIdx);
     };
 
+    /**
+     * Add a new editor step.
+     *
+     * @param {string[]} stepVals Step values.
+     * @param {number=} atIdx Optional insertion index.
+     */
     EquivEditor.prototype.addStep = function(stepVals, atIdx) {
         var self = this;
         var idx = (typeof atIdx === 'number') ? atIdx : this.rows.length;
@@ -656,12 +828,14 @@ define([
         var $num = $('<div>').addClass('sme-equiv-num').text(idx + 1);
         var $step = $('<div>').addClass('sme-equiv-step');
         var $main = $('<div>').addClass('sme-equiv-step-main');
-        var $brace = $('<div>').addClass('sme-equiv-system-brace');
+        var $brace = $('<div>').addClass('sme-equiv-system-brace')
+            .append($('<span>'));
         var $lines = $('<div>').addClass('sme-equiv-step-lines');
         var $stepControls = $('<div>').addClass('sme-equiv-step-controls');
         var $subadd = $('<button>')
             .attr('type', 'button')
-            .addClass('sme-equiv-subadd')
+            .addClass('btn btn-link sme-equiv-subadd')
+            .attr('aria-label', 'Add equation row')
             .attr('title', 'Add equation row')
             .text('+');
         var $del = $('<button>')
@@ -696,7 +870,9 @@ define([
         });
 
         $subadd.on('click', function(e) {
-            var focusField = self.activeStepIdx === self.rows.indexOf(stepData) ? self.activeFieldIdx : (stepData.fields.length - 1);
+            var focusField = self.activeStepIdx === self.rows.indexOf(stepData)
+                ? self.activeFieldIdx
+                : (stepData.fields.length - 1);
             var templateValue = '';
             e.preventDefault();
             if (focusField >= 0 && stepData.fields[focusField]) {
@@ -726,6 +902,11 @@ define([
         this.renumber();
     };
 
+    /**
+     * Remove an editor step.
+     *
+     * @param {number} idx Step index to remove.
+     */
     EquivEditor.prototype.removeStep = function(idx) {
         if (idx < 0 || idx >= this.rows.length || this.rows.length <= 1) {
             return;
@@ -737,6 +918,9 @@ define([
         dbg('removed step ' + idx + ', ' + this.rows.length + ' left');
     };
 
+    /**
+     * Refresh visual step numbering.
+     */
     EquivEditor.prototype.renumber = function() {
         var i;
         for (i = 0; i < this.rows.length; i++) {
@@ -744,6 +928,9 @@ define([
         }
     };
 
+    /**
+     * Schedule a delayed sync from visible editors to the textarea value.
+     */
     EquivEditor.prototype.debouncedSync = function() {
         var self = this;
         if (this.syncTimer) {
@@ -754,6 +941,9 @@ define([
         }, 150);
     };
 
+    /**
+     * Sync all visible editor rows back into the hidden textarea.
+     */
     EquivEditor.prototype.syncNow = function() {
         var self = this;
         var lines = this.rows.map(function(step) {
