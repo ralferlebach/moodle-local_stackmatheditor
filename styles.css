@@ -61,6 +61,35 @@
 }
 
 /* ═══════════════════════════════════════════════════
+   STACK MathEditor – Mobile / small-screen toolbar
+   Groups with class .sme-tb-group-wrap (>3 members)
+   become line-breakable on narrow viewports.
+   ═══════════════════════════════════════════════════ */
+
+@media (max-width: 767px) {
+    .sme-toolbar {
+        gap: 4px;
+        padding: 6px;
+    }
+
+    .sme-tb-group-wrap {
+        flex-wrap: wrap;
+    }
+
+    .sme-tb-group {
+        margin-right: 4px;
+        padding-right: 4px;
+    }
+
+    .sme-tb-btn {
+        min-width: 36px;
+        min-height: 36px;
+        padding: 4px 8px;
+        font-size: 0.9em;
+    }
+}
+
+/* ═══════════════════════════════════════════════════
    Single-line Input Container
    Only styles OUR containers, never .mq-* classes
    ═══════════════════════════════════════════════════ */

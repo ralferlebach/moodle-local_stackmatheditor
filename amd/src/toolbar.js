@@ -308,6 +308,10 @@ define(['jquery'], function($) {
                 }
 
                 if ($grp.children().length > 0) {
+                    if ($grp.children().length > 3) {
+                        $grp.addClass(
+                            'sme-tb-group-wrap');
+                    }
                     $bar.append($grp);
                 }
             }

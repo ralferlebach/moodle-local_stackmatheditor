@@ -24,7 +24,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version      = 2026040700;
+$plugin->version      = 2026041100;
 $plugin->requires     = 2024042200;
 $plugin->component    = 'local_stackmatheditor';
 $plugin->maturity     = MATURITY_STABLE;

@@ -221,6 +221,64 @@ define([], function() {
     }
 
     /**
+     * Attempt to collapse a Maxima " or " expression back into a
+     * single LaTeX expression using \pm and \mp.
+     *
+     * Works on the final LaTeX output of convert(). Both sides of
+     * " or " must be equal length and differ only in "+" vs "-"
+     * positions.  Where variant 1 has "+" and variant 2 has "-",
+     * the result gets \pm; where variant 1 has "-" and variant 2
+     * has "+", the result gets \mp.
+     *
+     * @param {string} s Converted string that may contain " or ".
+     * @returns {string} Collapsed string or unmodified input.
+     */
+    function collapsePlusMinus(s) {
+        var orIdx = s.indexOf(' or ');
+        if (orIdx === -1) {
+            return s;
+        }
+
+        var v1 = s.substring(0, orIdx);
+        var v2 = s.substring(orIdx + 4);
+
+        // Only handle exactly two variants.
+        if (v2.indexOf(' or ') !== -1) {
+            return s;
+        }
+
+        // Both sides must have equal length for
+        // character-by-character comparison.
+        if (v1.length !== v2.length) {
+            return s;
+        }
+
+        var result = '';
+        var hasPm = false;
+        var i;
+
+        for (i = 0; i < v1.length; i++) {
+            if (v1[i] === v2[i]) {
+                result += v1[i];
+            } else if (v1[i] === '+' && v2[i] === '-') {
+                result += '\\pm ';
+                hasPm = true;
+            } else if (v1[i] === '-' && v2[i] === '+') {
+                result += '\\mp ';
+                hasPm = true;
+            } else {
+                // Non +/- difference — cannot collapse.
+                return s;
+            }
+        }
+
+        if (!hasPm) {
+            return s;
+        }
+        return result.replace(/\s+/g, ' ').trim();
+    }
+
+    /**
      * Main Maxima -> LaTeX conversion.
      *
      * @param {string} maxima Maxima expression.
@@ -459,6 +517,7 @@ define([], function() {
         }
 
         s = s.replace(/\s+/g, ' ').trim();
+        s = collapsePlusMinus(s);
         return s;
     }
 
@@ -473,7 +532,7 @@ define([], function() {
             return false;
         }
         // LaTeX indicators.
-        if (/\\frac|\\sqrt|\\sin|\\cos|\\pi|\\left/.test(s)) {
+        if (/\\frac|\\sqrt|\\sin|\\cos|\\pi|\\left|\\pm|\\mp/.test(s)) {
             return false;
         }
         // Maxima indicators.
