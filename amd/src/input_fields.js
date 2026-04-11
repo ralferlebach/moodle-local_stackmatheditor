@@ -524,7 +524,10 @@ define([
         if (systemParts) {
             var rows = [];
             var $systemWrap = $('<div>').addClass('sme-system-wrap');
-            var $brace = $('<div>').addClass('sme-system-brace').text('{');
+            var $brace = $('<div>').addClass('sme-system-brace')
+                .append($('<span>').addClass('sme-system-brace-top'))
+                .append($('<span>').addClass('sme-system-brace-mid'))
+                .append($('<span>').addClass('sme-system-brace-bottom'));
             var $rowsWrap = $('<div>').addClass('sme-system-rows');
             var $controls = $('<div>').addClass('sme-system-controls');
             var $add = $('<button>')

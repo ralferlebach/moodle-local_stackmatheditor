@@ -66,14 +66,14 @@ define([
             '  border: 1px solid #ced4da;',
             '  border-radius: 0 0 4px 4px;',
             '  background: #fff;',
-            '  padding: 4px;',
+            '  padding: 3px;',
             '  max-height: 500px;',
             '  overflow-y: auto;',
             '}',
             '.sme-equiv-row {',
             '  display: flex;',
             '  align-items: center;',
-            '  padding: 3px 4px;',
+            '  padding: 1px 4px;',
             '  border-bottom: 1px solid #f0f0f0;',
             '}',
             '.sme-equiv-row:last-child {',
@@ -188,6 +188,7 @@ define([
         this.rows = [];
         this.activeIdx = 0;
         this.syncTimer = null;
+        this.inputType = $ta.attr('data-stack-input-type') || 'textarea';
 
         dbg('Init: ' + name
             + ' (slot ' + this.slot
@@ -225,8 +226,9 @@ define([
                 + ' aria-hidden="true"></i>')
             .attr('title', 'Add line')
             .on('click', function(e) {
+                var seed = self.getAppendSeed();
                 e.preventDefault();
-                self.addRow('');
+                self.addRow(seed.maxima, undefined, seed.latex);
                 self.focusRow(self.rows.length - 1);
             });
         this.$wrap.append(this.$addBtn);
@@ -317,14 +319,61 @@ define([
         return -1;
     };
 
+
+    /**
+     * Determine whether new rows should clone the previous expression.
+     *
+     * @returns {boolean} True for equivalence reasoning.
+     */
+    EquivEditor.prototype.shouldClonePreviousRow = function() {
+        return this.inputType === 'equiv';
+    };
+
+    /**
+     * Build seed data for inserting a row after one index.
+     *
+     * @param {number} idx Current row index.
+     * @returns {{maxima: string, latex: string}} Seed values.
+     */
+    EquivEditor.prototype.getInsertSeed = function(idx) {
+        var row;
+        if (!this.shouldClonePreviousRow() || idx < 0 || idx >= this.rows.length) {
+            return {
+                maxima: '',
+                latex: ''
+            };
+        }
+        row = this.rows[idx];
+        return {
+            maxima: '',
+            latex: row.mq.latex() || ''
+        };
+    };
+
+    /**
+     * Build seed data for appending a row.
+     *
+     * @returns {{maxima: string, latex: string}} Seed values.
+     */
+    EquivEditor.prototype.getAppendSeed = function() {
+        if (!this.rows.length) {
+            return {
+                maxima: '',
+                latex: ''
+            };
+        }
+        return this.getInsertSeed(this.rows.length - 1);
+    };
+
     /**
      * Add a row.
      *
-     * @param {string} maximaVal Initial value.
+     * @param {string} maximaVal Initial maxima value.
      * @param {number} [atIdx] Position.
+     * @param {string} [latexVal] Initial LaTeX value.
      */
     EquivEditor.prototype.addRow = function(
-        maximaVal, atIdx) {
+        maximaVal, atIdx, latexVal) {
         var self = this;
         var idx = (typeof atIdx === 'number')
             ? atIdx : this.rows.length;
@@ -364,7 +413,8 @@ define([
                 enter: function() {
                     var i = self.indexOf(mq);
                     if (i >= 0) {
-                        self.addRow('', i + 1);
+                        var seed = self.getInsertSeed(i);
+                        self.addRow(seed.maxima, i + 1, seed.latex);
                         self.focusRow(i + 1);
                     }
                 }
@@ -415,7 +465,11 @@ define([
                 Math.min(i, self.rows.length - 1));
         });
 
-        if (maximaVal) {
+        if (typeof latexVal === 'string' && latexVal.trim()) {
+            mq.latex(latexVal);
+            dbg('row ' + idx + ': cloned LaTeX="'
+                + latexVal + '"');
+        } else if (maximaVal) {
             try {
                 var latex = max2tex.convert(maximaVal, {
                     defs: self.ctx.defs,
