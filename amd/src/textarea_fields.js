@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
-
 /**
  * Multi-line MathQuill editor for STACK textarea fields.
  *
@@ -34,23 +33,12 @@ define([
 
     var TYPES = ['equiv', 'textarea'];
 
-    /**
-     * Write a developer-level debug message to the browser console.
-     *
-     * Only active when Moodle developer debug mode is enabled
-     * (M.cfg.developerdebug is truthy). Silent on production sites.
-     *
-     * @param {string} msg Message to log.
-     */
     function dbg(msg) {
         if (window.M && window.M.cfg && window.M.cfg.developerdebug) {
             window.console.log('[SME-ta] ' + msg);
         }
     }
 
-    /**
-     * Inject minimal container styles.
-     */
     function ensureStyles() {
         if (document.getElementById('sme-ta-styles')) {
             return;
@@ -66,14 +54,14 @@ define([
             '  border: 1px solid #ced4da;',
             '  border-radius: 0 0 4px 4px;',
             '  background: #fff;',
-            '  padding: 4px;',
+            '  padding: 3px;',
             '  max-height: 500px;',
             '  overflow-y: auto;',
             '}',
             '.sme-equiv-row {',
             '  display: flex;',
-            '  align-items: center;',
-            '  padding: 3px 4px;',
+            '  align-items: stretch;',
+            '  padding: 2px 4px;',
             '  border-bottom: 1px solid #f0f0f0;',
             '}',
             '.sme-equiv-row:last-child {',
@@ -98,9 +86,35 @@ define([
             '  font-size: 0.82em;',
             '  user-select: none;',
             '  flex-shrink: 0;',
+            '  align-self: center;',
+            '}',
+            '.sme-equiv-step {',
+            '  flex: 1 1 auto;',
+            '  min-width: 100px;',
+            '  display: flex;',
+            '  align-items: stretch;',
+            '  gap: 6px;',
+            '}',
+            '.sme-equiv-system-brace {',
+            '  width: 10px;',
+            '  min-width: 10px;',
+            '  border-left: 2px solid #666;',
+            '  border-top: 2px solid #666;',
+            '  border-bottom: 2px solid #666;',
+            '  border-radius: 8px 0 0 8px;',
+            '  margin: 2px 0;',
+            '}',
+            '.sme-equiv-step-lines {',
+            '  flex: 1 1 auto;',
+            '  min-width: 100px;',
+            '  display: flex;',
+            '  flex-direction: column;',
+            '  gap: 2px;',
+            '}',
+            '.sme-equiv-line {',
+            '  display: block;',
             '}',
             '.sme-equiv-mqwrap {',
-            '  flex: 1 1 auto;',
             '  min-width: 100px;',
             '  cursor: text;',
             '}',
@@ -112,6 +126,7 @@ define([
             '  background: none;',
             '  cursor: pointer;',
             '  transition: opacity 0.12s;',
+            '  align-self: center;',
             '}',
             '.sme-equiv-row:hover .sme-equiv-del {',
             '  opacity: 0.5;',
@@ -123,170 +138,189 @@ define([
         document.head.appendChild(style);
     }
 
-    /**
-     * Build selector for supported types.
-     *
-     * @returns {string} Selector.
-     */
     function selector() {
         return TYPES.map(function(t) {
-            return 'textarea[data-stack-input-type="'
-                + t + '"]';
+            return 'textarea[data-stack-input-type="' + t + '"]';
         }).join(',');
     }
 
-    /**
-     * Split a string by top-level 'and' operators.
-     *
-     * Accepts compact forms such as ')and(' and tolerates
-     * unmatched edge parentheses in review-prefill values.
-     *
-     * @param {string} input Maxima input.
-     * @returns {Array} Parts.
-     */
-    function splitTopLevelAnd(input) {
-        var parts = [];
-        var depth = 0;
-        var start = 0;
-        var i;
-        var before;
-        var after;
-
-        for (i = 0; i < input.length; i++) {
-            if (input.charAt(i) === '(') {
-                depth++;
-                continue;
-            }
-            if (input.charAt(i) === ')') {
-                depth = Math.max(0, depth - 1);
-                continue;
-            }
-            if (input.substr(i, 3).toLowerCase() !== 'and') {
-                continue;
-            }
-            if (depth !== 0) {
-                continue;
-            }
-            before = i === 0 ? '' : input.charAt(i - 1);
-            after = (i + 3) >= input.length ? '' : input.charAt(i + 3);
-            if (!(/[\s\)]/.test(before) || before === '')) {
-                continue;
-            }
-            if (!(/[\s\(]/.test(after) || after === '')) {
-                continue;
-            }
-            parts.push(input.substring(start, i).trim());
-            start = i + 3;
-            i = i + 2;
-        }
-
-        parts.push(input.substring(start).trim());
-        return parts.filter(function(part) {
-            return part !== '';
-        });
-    }
-
-    /**
-     * Remove wrapper parentheses from a relation part.
-     *
-     * This is intentionally tolerant because some review-prefill
-     * values arrive with missing first/last parentheses.
-     *
-     * @param {string} part Candidate part.
-     * @returns {string} Normalised part.
-     */
-    function trimRelationPart(part) {
-        var value = (part || '').trim();
-
-        while (value.charAt(0) === '(') {
-            value = value.substring(1).trim();
-        }
-        while (value.charAt(value.length - 1) === ')') {
-            value = value.substring(0, value.length - 1).trim();
-        }
-
-        return value;
-    }
-
-    /**
-     * Whether a string looks like a simple relation.
-     *
-     * @param {string} value Candidate expression.
-     * @returns {boolean} True if it contains a relation operator.
-     */
-    function isRelationPart(value) {
-        return /(^|[^<>~:#])(?:<=|>=|~=|#|=|<|>)(?!=)/.test(value);
-    }
-
-    /**
-     * Expand one-line equiv prefills that encode a relation system.
-     *
-     * @param {string} value Original textarea value.
-     * @param {string} type STACK input type.
-     * @returns {Array} Row maxima values.
-     */
-    function normaliseInitialLines(value, type) {
-        var trimmed = (value || '').trim();
-        var parts;
-        var cleaned;
-
-        if (!trimmed) {
-            return [''];
-        }
-
-        if (trimmed.indexOf('\n') !== -1) {
-            return trimmed.split('\n').map(function(line) {
-                return line.trim();
-            });
-        }
-
-        if (type !== 'equiv') {
-            return [trimmed];
-        }
-
-        parts = splitTopLevelAnd(trimmed);
-        if (parts.length < 2) {
-            return [trimmed];
-        }
-
-        cleaned = parts.map(trimRelationPart);
-        if (!cleaned.every(isRelationPart)) {
-            return [trimmed];
-        }
-
-        return cleaned;
-    }
-
-    /**
-     * Trigger STACK validation on a textarea.
-     *
-     * @param {jQuery} $ta Hidden textarea.
-     */
     function triggerStackValidation($ta) {
         $ta.trigger('change');
         $ta.trigger('input');
         $ta.trigger('blur');
 
         var nativeInput = new Event('input', {
-            bubbles: true, cancelable: true
+            bubbles: true,
+            cancelable: true
         });
         $ta[0].dispatchEvent(nativeInput);
 
         var nativeChange = new Event('change', {
-            bubbles: true, cancelable: true
+            bubbles: true,
+            cancelable: true
         });
         $ta[0].dispatchEvent(nativeChange);
     }
 
-    // ── EquivEditor ─────────────────────────────────
+    function isAndBoundaryChar(ch) {
+        return !ch || /\s|[(){}\[\],;]/.test(ch);
+    }
 
-    /**
-     * Multi-line editor for one textarea.
-     *
-     * @param {HTMLTextAreaElement} textarea Original.
-     * @param {Object} ctx Shared context.
-     * @constructor
-     */
+    function splitTopLevelAnd(expr) {
+        var parts = [];
+        var depth = 0;
+        var start = 0;
+        var i;
+        var prev;
+        var next;
+
+        for (i = 0; i < expr.length; i++) {
+            if (expr.charAt(i) === '(') {
+                depth++;
+            } else if (expr.charAt(i) === ')') {
+                depth = Math.max(0, depth - 1);
+            }
+
+            if (depth === 0 && expr.substr(i, 3) === 'and') {
+                prev = i > 0 ? expr.charAt(i - 1) : '';
+                next = i + 3 < expr.length ? expr.charAt(i + 3) : '';
+                if (isAndBoundaryChar(prev) && isAndBoundaryChar(next)) {
+                    parts.push(expr.substring(start, i).trim());
+                    start = i + 3;
+                    i += 2;
+                }
+            }
+        }
+
+        parts.push(expr.substring(start).trim());
+        return parts.filter(function(part) {
+            return !!part;
+        });
+    }
+
+    function stripOuterParens(expr) {
+        var value = expr.trim();
+        var changed = true;
+        var depth;
+        var i;
+
+        while (changed && value.length >= 2
+                && value.charAt(0) === '('
+                && value.charAt(value.length - 1) === ')') {
+            changed = false;
+            depth = 0;
+            for (i = 0; i < value.length - 1; i++) {
+                if (value.charAt(i) === '(') {
+                    depth++;
+                } else if (value.charAt(i) === ')') {
+                    depth--;
+                    if (depth === 0 && i < value.length - 2) {
+                        return value;
+                    }
+                }
+            }
+            if (depth === 1) {
+                value = value.substring(1, value.length - 1).trim();
+                changed = true;
+            }
+        }
+
+        value = value.replace(/^\)+/, '').replace(/\(+$/, '');
+        value = value.replace(/^\(+/, '').replace(/\)+$/, '');
+        return value.trim();
+    }
+
+    function hasTopLevelRelation(expr) {
+        var depth = 0;
+        var i;
+        var ch;
+        var next;
+
+        for (i = 0; i < expr.length; i++) {
+            ch = expr.charAt(i);
+            next = expr.charAt(i + 1);
+            if (ch === '(') {
+                depth++;
+            } else if (ch === ')') {
+                depth = Math.max(0, depth - 1);
+            }
+            if (depth !== 0) {
+                continue;
+            }
+            if ((ch === '<' || ch === '>' || ch === '~') && next === '=') {
+                return true;
+            }
+            if (ch === '<' || ch === '>' || ch === '=' || ch === '#') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function parseEquivStep(raw) {
+        var value = (raw || '').trim();
+        var parts;
+        if (!value) {
+            return [''];
+        }
+        parts = splitTopLevelAnd(value).map(stripOuterParens).filter(function(part) {
+            return !!part;
+        });
+        if (parts.length > 1 && parts.every(hasTopLevelRelation)) {
+            return parts;
+        }
+        return [value];
+    }
+
+    function parseInitialSteps(value, inputType) {
+        var raw = (value || '').trim();
+        var lines;
+        if (!raw) {
+            return [['']];
+        }
+        lines = raw.split('\n').map(function(line) {
+            return line.trim();
+        });
+        if (inputType === 'equiv') {
+            return lines.map(parseEquivStep);
+        }
+        return lines.map(function(line) {
+            return [line];
+        });
+    }
+
+    function cloneStepValues(step) {
+        return step.fields.map(function(fieldData) {
+            return fieldData.maxima || '';
+        });
+    }
+
+    function maximaFromLatex(latex, convOpts) {
+        if (!latex || !latex.trim()) {
+            return '';
+        }
+        try {
+            return tex2max.convert(latex, convOpts);
+        } catch (e) {
+            return latex;
+        }
+    }
+
+    function latexFromMaxima(maximaVal, defs, varMode) {
+        if (!maximaVal) {
+            return '';
+        }
+        try {
+            return max2tex.convert(maximaVal, {
+                defs: defs,
+                variableMode: varMode
+            });
+        } catch (e) {
+            dbg('pre-fill error: ' + e.message);
+            return maximaVal;
+        }
+    }
+
     function EquivEditor(textarea, ctx) {
         var $ta = $(textarea);
         var name = $ta.attr('name') || '';
@@ -294,12 +328,10 @@ define([
         this.$ta = $ta;
         this.ctx = ctx;
         this.slot = ctx.extractSlot(name);
-        this.config = ctx.slotConfigs[this.slot]
-            || ctx.instanceDefaults;
-        this.varMode = ctx.slotVarModes[this.slot]
-            || ctx.instanceVarMode;
-        this.commaDecimal = ctx.isCommaDecimal(
-            $ta, ctx.localeComma);
+        this.config = ctx.slotConfigs[this.slot] || ctx.instanceDefaults;
+        this.varMode = ctx.slotVarModes[this.slot] || ctx.instanceVarMode;
+        this.inputType = $ta.attr('data-stack-input-type') || 'textarea';
+        this.commaDecimal = ctx.isCommaDecimal($ta, ctx.localeComma);
 
         this.convOpts = {
             commaDecimal: this.commaDecimal,
@@ -308,65 +340,57 @@ define([
         };
 
         this.rows = [];
-        this.activeIdx = 0;
+        this.activeStepIdx = 0;
+        this.activeFieldIdx = 0;
         this.syncTimer = null;
-        this.type = ($ta.attr('data-stack-input-type') || '').trim();
 
         dbg('Init: ' + name
             + ' (slot ' + this.slot
+            + ', type=' + this.inputType
             + ', varMode=' + this.varMode + ')');
 
         this.build();
     }
 
-    /**
-     * Build editor DOM.
-     */
     EquivEditor.prototype.build = function() {
         var self = this;
+        var startValue;
+        var steps;
+        var i;
 
-        this.$wrap = $('<div>')
-            .addClass('sme-equiv-wrap');
-
-        this.$tb = toolbar.build(
-            function() { return self.activeField(); },
-            this.config,
-            this.ctx.defs
-        );
+        this.$wrap = $('<div>').addClass('sme-equiv-wrap');
+        this.$tb = toolbar.build(function() {
+            return self.activeField();
+        }, this.config, this.ctx.defs);
         this.$wrap.append(this.$tb);
 
-        this.$rows = $('<div>')
-            .addClass('sme-equiv-rows');
+        this.$rows = $('<div>').addClass('sme-equiv-rows');
         this.$wrap.append(this.$rows);
 
         this.$addBtn = $('<button>')
             .attr('type', 'button')
-            .addClass(
-                'btn btn-sm btn-outline-secondary mt-1')
-            .html(
-                '<i class="fa fa-plus"'
-                + ' aria-hidden="true"></i>')
+            .addClass('btn btn-sm btn-outline-secondary mt-1')
+            .html('<i class="fa fa-plus" aria-hidden="true"></i>')
             .attr('title', 'Add line')
             .on('click', function(e) {
+                var template;
                 e.preventDefault();
-                var cloneVal = '';
-                if (self.type === 'equiv' && self.rows.length > 0) {
-                    cloneVal = self.rowToMaxima(self.rows[self.rows.length - 1]);
+                if (self.inputType === 'equiv' && self.rows.length) {
+                    template = cloneStepValues(self.rows[self.activeStepIdx] || self.rows[self.rows.length - 1]);
+                } else {
+                    template = [''];
                 }
-                self.addRow(cloneVal);
-                self.focusRow(self.rows.length - 1);
+                self.addStep(template);
+                self.focusStep(self.rows.length - 1, 0);
             });
         this.$wrap.append(this.$addBtn);
 
-        var initialValue = (this.$ta[0].defaultValue || this.$ta.val() || '').trim();
-        var lines = normaliseInitialLines(initialValue, this.type);
-        var i;
-        for (i = 0; i < lines.length; i++) {
-            this.addRow(lines[i].trim());
+        startValue = (this.$ta[0].defaultValue || this.$ta.val() || '').trim();
+        steps = parseInitialSteps(startValue, this.inputType);
+        for (i = 0; i < steps.length; i++) {
+            this.addStep(steps[i]);
         }
 
-        // Insert BEFORE textarea — keep textarea in
-        // its original DOM position for STACK feedback.
         this.$ta.before(this.$wrap);
         this.$ta.css({
             'position': 'absolute',
@@ -378,123 +402,88 @@ define([
         this.$ta.attr('data-sme-init', '1');
 
         toolbar.typeset(this.$tb);
-
         if (this.rows.length > 0) {
-            this.focusRow(0);
+            this.focusStep(0, 0);
         }
 
-        dbg('created: ' + this.rows.length
-            + ' rows, id=' + this.$ta.attr('id'));
+        dbg('created: ' + this.rows.length + ' steps, id=' + this.$ta.attr('id'));
+        this.syncNow();
     };
 
-    /**
-     * Return active MQ field.
-     *
-     * @returns {Object|null} MQ field.
-     */
     EquivEditor.prototype.activeField = function() {
-        if (this.activeIdx >= 0
-            && this.activeIdx < this.rows.length) {
-            return this.rows[this.activeIdx].mq;
+        var step = this.rows[this.activeStepIdx];
+        if (!step) {
+            return null;
         }
-        return this.rows.length > 0
-            ? this.rows[0].mq : null;
+        if (step.fields[this.activeFieldIdx]) {
+            return step.fields[this.activeFieldIdx].mq;
+        }
+        return step.fields.length ? step.fields[0].mq : null;
     };
 
-    /**
-     * Set active row.
-     *
-     * @param {number} idx Row index.
-     */
-    EquivEditor.prototype.setActive = function(idx) {
-        this.$rows.find('.sme-equiv-row')
-            .removeClass('sme-equiv-row-active');
-        this.activeIdx = idx;
-        if (idx >= 0 && idx < this.rows.length) {
-            this.rows[idx].$row
-                .addClass('sme-equiv-row-active');
+    EquivEditor.prototype.setActive = function(stepIdx, fieldIdx) {
+        this.$rows.find('.sme-equiv-row').removeClass('sme-equiv-row-active');
+        this.activeStepIdx = stepIdx;
+        this.activeFieldIdx = fieldIdx || 0;
+        if (this.rows[stepIdx]) {
+            this.rows[stepIdx].$row.addClass('sme-equiv-row-active');
         }
     };
 
-    /**
-     * Focus a row.
-     *
-     * @param {number} idx Row index.
-     */
-    EquivEditor.prototype.focusRow = function(idx) {
-        if (idx >= 0 && idx < this.rows.length) {
-            this.setActive(idx);
-            this.rows[idx].mq.focus();
+    EquivEditor.prototype.focusStep = function(stepIdx, fieldIdx) {
+        var step = this.rows[stepIdx];
+        var targetIdx = fieldIdx || 0;
+        if (!step || !step.fields[targetIdx]) {
+            return;
         }
+        this.setActive(stepIdx, targetIdx);
+        step.fields[targetIdx].mq.focus();
     };
 
-    /**
-     * Find row by MQ field.
-     *
-     * @param {Object} mq MathQuill field.
-     * @returns {number} Index or -1.
-     */
-    EquivEditor.prototype.indexOf = function(mq) {
-        var i;
-        for (i = 0; i < this.rows.length; i++) {
-            if (this.rows[i].mq === mq) {
-                return i;
+    EquivEditor.prototype.indexOfField = function(mq) {
+        var stepIdx;
+        var fieldIdx;
+        for (stepIdx = 0; stepIdx < this.rows.length; stepIdx++) {
+            for (fieldIdx = 0; fieldIdx < this.rows[stepIdx].fields.length; fieldIdx++) {
+                if (this.rows[stepIdx].fields[fieldIdx].mq === mq) {
+                    return {
+                        stepIdx: stepIdx,
+                        fieldIdx: fieldIdx
+                    };
+                }
             }
         }
-        return -1;
+        return null;
     };
 
-    /**
-     * Convert one row back to Maxima.
-     *
-     * @param {Object} rowData Row object.
-     * @returns {string} Maxima value.
-     */
-    EquivEditor.prototype.rowToMaxima = function(rowData) {
-        var latex = rowData.mq.latex();
-
-        if (!latex || !latex.trim()) {
-            return '';
-        }
-
-        try {
-            return tex2max.convert(latex, this.convOpts);
-        } catch (e) {
-            return latex;
-        }
-    };
-
-    /**
-     * Add a row.
-     *
-     * @param {string} maximaVal Initial value.
-     * @param {number} [atIdx] Position.
-     */
-    EquivEditor.prototype.addRow = function(
-        maximaVal, atIdx) {
+    EquivEditor.prototype.addStep = function(stepVals, atIdx) {
         var self = this;
-        var idx = (typeof atIdx === 'number')
-            ? atIdx : this.rows.length;
-
-        var $row = $('<div>')
-            .addClass('sme-equiv-row');
-        var $num = $('<div>')
-            .addClass('sme-equiv-num')
-            .text(idx + 1);
-        var $mqWrap = $('<div>')
-            .addClass('sme-equiv-mqwrap');
-        var $mqSpan = $('<span>');
-        $mqWrap.append($mqSpan);
-
+        var idx = (typeof atIdx === 'number') ? atIdx : this.rows.length;
+        var values = Array.isArray(stepVals) && stepVals.length ? stepVals : [''];
+        var $row = $('<div>').addClass('sme-equiv-row');
+        var $num = $('<div>').addClass('sme-equiv-num').text(idx + 1);
+        var $step = $('<div>').addClass('sme-equiv-step');
+        var $lines = $('<div>').addClass('sme-equiv-step-lines');
         var $del = $('<button>')
             .attr('type', 'button')
             .addClass('sme-equiv-del')
-            .html(
-                '<i class="fa fa-times text-danger"'
-                + ' aria-hidden="true"></i>')
+            .html('<i class="fa fa-times text-danger" aria-hidden="true"></i>')
             .attr('title', 'Remove line');
+        var stepData = {
+            $row: $row,
+            $num: $num,
+            $step: $step,
+            $lines: $lines,
+            fields: []
+        };
+        var hasSystem = values.length > 1;
+        var i;
 
-        $row.append($num).append($mqWrap).append($del);
+        if (hasSystem) {
+            $step.append($('<div>').addClass('sme-equiv-system-brace'));
+        }
+        $step.append($lines);
+        $row.append($num).append($step).append($del);
 
         if (idx < this.rows.length) {
             this.rows[idx].$row.before($row);
@@ -502,56 +491,72 @@ define([
             this.$rows.append($row);
         }
 
-        var mq = this.ctx.MQ.MathField($mqSpan[0], {
-            spaceBehavesLikeTab: true,
-            handlers: {
-                edit: function() {
-                    self.debouncedSync();
-                },
-                enter: function() {
-                    var i = self.indexOf(mq);
-                    if (i >= 0) {
-                        var cloneVal = '';
-                        if (self.type === 'equiv') {
-                            cloneVal = self.rowToMaxima(self.rows[i]);
+        values.forEach(function(maximaVal, fieldIdx) {
+            var $line = $('<div>').addClass('sme-equiv-line');
+            var $mqWrap = $('<div>').addClass('sme-equiv-mqwrap');
+            var $mqSpan = $('<span>');
+            var mq;
+            var fieldData;
+
+            $mqWrap.append($mqSpan);
+            $line.append($mqWrap);
+            $lines.append($line);
+
+            mq = self.ctx.MQ.MathField($mqSpan[0], {
+                spaceBehavesLikeTab: true,
+                handlers: {
+                    edit: function() {
+                        fieldData.maxima = maximaFromLatex(mq.latex(), self.convOpts);
+                        self.debouncedSync();
+                    },
+                    enter: function() {
+                        var pos = self.indexOfField(mq);
+                        var template;
+                        if (!pos) {
+                            return;
                         }
-                        self.addRow(cloneVal, i + 1);
-                        self.focusRow(i + 1);
+                        if (self.inputType === 'equiv') {
+                            template = cloneStepValues(self.rows[pos.stepIdx]);
+                        } else {
+                            template = [''];
+                        }
+                        self.addStep(template, pos.stepIdx + 1);
+                        self.focusStep(pos.stepIdx + 1, pos.fieldIdx < template.length ? pos.fieldIdx : 0);
                     }
                 }
-            }
-        });
+            });
 
-        $mqWrap.on('click', function() {
-            mq.focus();
-        });
+            fieldData = {
+                $line: $line,
+                $mqWrap: $mqWrap,
+                mq: mq,
+                maxima: maximaVal || ''
+            };
+            stepData.fields.push(fieldData);
 
-        var rowData = {
-            $row: $row,
-            $num: $num,
-            $mqWrap: $mqWrap,
-            mq: mq
-        };
+            $mqWrap.on('click', function() {
+                mq.focus();
+            });
+            $mqWrap.on('focusin', function() {
+                var pos = self.indexOfField(mq);
+                if (pos) {
+                    self.setActive(pos.stepIdx, pos.fieldIdx);
+                }
+            });
+            $mqWrap.on('keydown', function(e) {
+                var pos = self.indexOfField(mq);
+                if (!pos) {
+                    return;
+                }
+                if (e.key === 'Backspace' && (!mq.latex() || mq.latex().trim() === '') && self.rows.length > 1 && self.rows[pos.stepIdx].fields.length === 1) {
+                    e.preventDefault();
+                    self.removeStep(pos.stepIdx);
+                    self.focusStep(Math.max(0, pos.stepIdx - 1), 0);
+                }
+            });
 
-        if (idx < this.rows.length) {
-            this.rows.splice(idx, 0, rowData);
-        } else {
-            this.rows.push(rowData);
-        }
-
-        $mqWrap.on('focusin', function() {
-            self.setActive(self.indexOf(mq));
-        });
-
-        $mqWrap.on('keydown', function(e) {
-            if (e.key === 'Backspace'
-                && (!mq.latex()
-                    || mq.latex().trim() === '')
-                && self.rows.length > 1) {
-                e.preventDefault();
-                var i = self.indexOf(mq);
-                self.removeRow(i);
-                self.focusRow(Math.max(0, i - 1));
+            if (maximaVal) {
+                mq.latex(latexFromMaxima(maximaVal, self.ctx.defs, self.varMode));
             }
         });
 
@@ -560,52 +565,31 @@ define([
             if (self.rows.length <= 1) {
                 return;
             }
-            var i = self.indexOf(mq);
-            self.removeRow(i);
-            self.focusRow(
-                Math.min(i, self.rows.length - 1));
+            var removeIdx = self.rows.indexOf(stepData);
+            self.removeStep(removeIdx);
+            self.focusStep(Math.min(removeIdx, self.rows.length - 1), 0);
         });
 
-        if (maximaVal) {
-            try {
-                var latex = max2tex.convert(maximaVal, {
-                    defs: self.ctx.defs,
-                    variableMode: self.varMode
-                });
-                mq.latex(latex);
-                dbg('row ' + idx + ': "'
-                    + maximaVal + '" -> "'
-                    + latex + '"');
-            } catch (ex) {
-                dbg('pre-fill error: ' + ex.message);
-                mq.latex(maximaVal);
-            }
+        if (idx < this.rows.length) {
+            this.rows.splice(idx, 0, stepData);
+        } else {
+            this.rows.push(stepData);
         }
 
         this.renumber();
     };
 
-    /**
-     * Remove a row.
-     *
-     * @param {number} idx Row index.
-     */
-    EquivEditor.prototype.removeRow = function(idx) {
-        if (idx < 0 || idx >= this.rows.length
-            || this.rows.length <= 1) {
+    EquivEditor.prototype.removeStep = function(idx) {
+        if (idx < 0 || idx >= this.rows.length || this.rows.length <= 1) {
             return;
         }
         this.rows[idx].$row.remove();
         this.rows.splice(idx, 1);
         this.renumber();
         this.syncNow();
-        dbg('removed row ' + idx
-            + ', ' + this.rows.length + ' left');
+        dbg('removed step ' + idx + ', ' + this.rows.length + ' left');
     };
 
-    /**
-     * Update line numbers.
-     */
     EquivEditor.prototype.renumber = function() {
         var i;
         for (i = 0; i < this.rows.length; i++) {
@@ -613,9 +597,6 @@ define([
         }
     };
 
-    /**
-     * Debounced sync.
-     */
     EquivEditor.prototype.debouncedSync = function() {
         var self = this;
         if (this.syncTimer) {
@@ -626,62 +607,46 @@ define([
         }, 150);
     };
 
-    /**
-     * Sync all rows to hidden textarea.
-     */
     EquivEditor.prototype.syncNow = function() {
-        var lines = [];
         var self = this;
-        var i;
-        var latex;
-        var maxima;
-
-        for (i = 0; i < this.rows.length; i++) {
-            maxima = this.rowToMaxima(this.rows[i]);
-            lines.push(maxima);
-        }
-
+        var lines = this.rows.map(function(step) {
+            var parts = step.fields.map(function(fieldData) {
+                fieldData.maxima = maximaFromLatex(fieldData.mq.latex(), self.convOpts);
+                return fieldData.maxima;
+            });
+            if (parts.length > 1) {
+                return parts.map(function(part) {
+                    return '(' + part + ')';
+                }).join(' and ');
+            }
+            return parts[0] || '';
+        });
         var value = lines.join('\n');
         var oldVal = this.$ta.val();
         this.$ta.val(value);
-
         if (value !== oldVal) {
             triggerStackValidation(this.$ta);
-            dbg('sync: ' + lines.length + ' lines');
+            dbg('sync: ' + lines.length + ' steps');
         }
     };
 
-    return /** @alias module:local_stackmatheditor/textarea_fields */ {
-
-        /**
-         * Find and init all supported textareas.
-         *
-         * @param {Object} ctx Shared context.
-         */
+    return {
         init: function(ctx) {
             ensureStyles();
             var $areas = $(selector());
             if (!$areas.length) {
-                ctx.dbg(
-                    'No supported textareas found');
+                ctx.dbg('No supported textareas found');
                 return;
             }
-            ctx.dbg('Found ' + $areas.length
-                + ' textareas');
+            ctx.dbg('Found ' + $areas.length + ' textareas');
             $areas.each(function() {
-                if ($(this).attr('data-sme-init')
-                    === '1') {
+                if ($(this).attr('data-sme-init') === '1') {
                     return;
                 }
-                // Check per-slot enabled map before activating.
                 var aname = $(this).attr('name') || '';
                 var aslot = ctx.extractSlot(aname);
-                if (ctx.slotEnabled
-                        && ctx.slotEnabled.hasOwnProperty(aslot)
-                        && !ctx.slotEnabled[aslot]) {
-                    ctx.dbg('Textarea ' + aname
-                        + ' -> slot ' + aslot
-                        + ' disabled, skipping');
+                if (ctx.slotEnabled && ctx.slotEnabled.hasOwnProperty(aslot) && !ctx.slotEnabled[aslot]) {
+                    ctx.dbg('Textarea ' + aname + ' -> slot ' + aslot + ' disabled, skipping');
                     return;
                 }
                 new EquivEditor(this, ctx);
