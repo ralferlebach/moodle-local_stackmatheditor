@@ -395,6 +395,108 @@ define([], function() {
         return out;
     }
 
+
+
+    /**
+     * Split a string by a delimiter that is only recognised at top level.
+     *
+     * @param {string} s Input.
+     * @param {string} delimiter Delimiter.
+     * @returns {Array} Parts.
+     */
+    function splitTopLevel(s, delimiter) {
+        var parts = [];
+        var depthParen = 0;
+        var depthBrace = 0;
+        var start = 0;
+        var i;
+
+        for (i = 0; i < s.length; i++) {
+            if (s.charAt(i) === '(') {
+                depthParen++;
+                continue;
+            }
+            if (s.charAt(i) === ')' && depthParen > 0) {
+                depthParen--;
+                continue;
+            }
+            if (s.charAt(i) === '{') {
+                depthBrace++;
+                continue;
+            }
+            if (s.charAt(i) === '}' && depthBrace > 0) {
+                depthBrace--;
+                continue;
+            }
+            if (depthParen !== 0 || depthBrace !== 0) {
+                continue;
+            }
+            if (s.substring(i, i + delimiter.length) !== delimiter) {
+                continue;
+            }
+
+            parts.push(s.substring(start, i));
+            start = i + delimiter.length;
+            i = start - 1;
+        }
+
+        parts.push(s.substring(start));
+        return parts;
+    }
+
+    /**
+     * Strip one layer of outer braces around a row.
+     *
+     * @param {string} s Input.
+     * @returns {string} Row without outer braces.
+     */
+    function stripOuterBraces(s) {
+        var trimmed = s.trim();
+
+        if (trimmed.charAt(0) === '{' && trimmed.charAt(trimmed.length - 1) === '}') {
+            return trimmed.substring(1, trimmed.length - 1).trim();
+        }
+
+        return trimmed;
+    }
+
+    /**
+     * Convert a LaTeX cases environment to and-connected relation rows.
+     *
+     * @param {string} s Input.
+     * @returns {string} Converted string.
+     */
+    function convertCasesToAndRelations(s) {
+        return s.replace(
+            /(?:\\\[\s*)?\\begin\{cases\}([\s\S]*?)\\end\{cases\}(?:\s*\\\])?/g,
+            function(match, body) {
+                var rows = splitTopLevel(body, '\\\\');
+                var parts = [];
+                var i;
+                var row;
+
+                for (i = 0; i < rows.length; i++) {
+                    row = stripOuterBraces(rows[i]);
+                    if (!row) {
+                        continue;
+                    }
+                    row = row.replace(/\s*&\s*/g, '');
+                    row = row.replace(/\s+/g, ' ').trim();
+                    if (!row) {
+                        continue;
+                    }
+                    parts.push('(' + row + ')');
+                }
+
+                if (parts.length < 2) {
+                    return match;
+                }
+
+                return parts.join(' and ');
+            }
+        );
+    }
+
     /**
      * Expand plus-minus (±) and minus-plus (∓) markers into two Maxima
      * expressions joined by " or ".
@@ -435,6 +537,7 @@ define([], function() {
         var maxIter = 20;
 
         s = s.replace(/\s+/g, ' ').trim();
+        s = convertCasesToAndRelations(s);
         s = s.replace(/\\left/g, '');
         s = s.replace(/\\right/g, '');
 
