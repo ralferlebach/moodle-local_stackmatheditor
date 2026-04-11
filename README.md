@@ -6,6 +6,7 @@ The plugin injects a configurable toolbar for mathematical input, supports **LaT
 
 ## Key features ##
 
+### Version 1.0 ###
 - Adds a visual MathQuill editor to STACK answer inputs in supported quiz and preview pages.
 - Supports **automatic LaTeX-to-Maxima conversion** for common mathematical notation.
 - Provides configurable toolbar groups such as fractions, powers, roots, trigonometry, logarithms, constants, comparison operators, parentheses, calculus symbols, Greek letters, and matrices.
@@ -13,11 +14,15 @@ The plugin injects a configurable toolbar for mathematical input, supports **LaT
 - Adds a dedicated configuration UI for individual STACK questions inside a quiz context.
 - English and German language packs at the moment
 
+### Version 1.1 ###
+- support of **small an mobile displays** by automatic linebreaks of long blocks of buttons
+- added plus/minus and minus/plus functionality
+
 ## Requirements ##
 
-- Moodle **4.1 or later**
-- **qtype_stack** installed
-- A Moodle quiz context containing STACK questions for per-question configuration
+- Moodle **4.5 or later**
+- recent **qtype_stack** installed
+- a Moodle quiz context containing STACK questions for per-question configuration
 
 ## Installation via uploaded ZIP file ##
 
