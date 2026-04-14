@@ -165,13 +165,17 @@ class definitions {
                 ],
             ],
 
-            // 5. Absolute value.
+            // 5. Absolute value, plus-minus.
             'absolute' => [
                 'label'           => get_string('group_absolute', $p),
                 'default_enabled' => true,
                 'elements'        => [
                     ['display' => '|x|', 'write' => '\\left|\\right|',
                         'tooltip' => get_string('btn_abs', $p)],
+                    ['display' => '±', 'cmd' => '\\pm',
+                        'tooltip' => get_string('btn_pm', $p)],
+                    ['display' => '∓', 'cmd' => '\\mp',
+                        'tooltip' => get_string('btn_mp', $p)],
                 ],
             ],
 

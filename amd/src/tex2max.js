@@ -396,6 +396,27 @@ define([], function() {
     }
 
     /**
+     * Expand plus-minus (±) and minus-plus (∓) markers into two Maxima
+     * expressions joined by " or ".
+     *
+     * All ± are replaced synchronously: variant 1 uses +, variant 2 uses −.
+     * All ∓ flip in the opposite direction (variant 1 uses −, variant 2 uses +).
+     * This is non-recursive: no combinatorial explosion for multiple markers.
+     *
+     * @param {string} s Maxima string possibly containing ± or ∓.
+     * @returns {string} Expanded string or unmodified input.
+     */
+    function expandPlusMinus(s) {
+        if (s.indexOf('\u00b1') === -1
+                && s.indexOf('\u2213') === -1) {
+            return s;
+        }
+        var v1 = s.replace(/\u00b1/g, '+').replace(/\u2213/g, '-');
+        var v2 = s.replace(/\u00b1/g, '-').replace(/\u2213/g, '+');
+        return v1 + ' or ' + v2;
+    }
+
+    /**
      * Convert a MathQuill LaTeX string to Maxima CAS notation.
      *
      * @param {string} latex   LaTeX string from MathQuill.
@@ -481,6 +502,8 @@ define([], function() {
         s = s.replace(/\\neq?/g, '#');
         s = s.replace(/\\ne(?![a-zA-Z])/g, '#');
         s = s.replace(/\\approx(?![a-zA-Z])/g, '~=');
+        s = s.replace(/\\pm(?![a-zA-Z])\s?/g, '\u00b1');
+        s = s.replace(/\\mp(?![a-zA-Z])\s?/g, '\u2213');
         s = s.replace(/\\oint(?![a-zA-Z])/g, 'oint');
         s = s.replace(/\\int(?![a-zA-Z])/g, 'int');
         s = s.replace(/\\sum(?![a-zA-Z])/g, 'sum');
@@ -554,6 +577,7 @@ define([], function() {
         });
 
         s = s.replace(/\s+/g, ' ').trim();
+        s = expandPlusMinus(s);
         return s;
     }
 
