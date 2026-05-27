@@ -75,7 +75,10 @@ final class definitions_test extends advanced_testcase {
     }
 
     /**
-     * Every element must have either 'write' or 'cmd', and a 'display'.
+     * Every element must have either 'write' or 'cmd', and 'display' or 'display_html'.
+     *
+     * 'display_html' is allowed as an alternative to 'display' for elements
+     * that need HTML rendering (e.g. the fraction button uses '<sup>a</sup>/<sub>b</sub>').
      */
     public function test_elements_have_required_keys(): void {
         $groups = definitions::get_element_groups();
@@ -86,14 +89,14 @@ final class definitions_test extends advanced_testcase {
                     isset($el['write']) || isset($el['cmd']),
                     "$ref must have 'write' or 'cmd'"
                 );
-                $this->assertArrayHasKey(
-                    'display',
-                    $el,
-                    "$ref must have 'display'"
+                $this->assertTrue(
+                    isset($el['display']) || isset($el['display_html']),
+                    "$ref must have 'display' or 'display_html'"
                 );
+                $displayvalue = $el['display'] ?? $el['display_html'];
                 $this->assertIsString(
-                    $el['display'],
-                    "$ref 'display' must be a string"
+                    $displayvalue,
+                    "$ref 'display'/'display_html' must be a string"
                 );
             }
         }

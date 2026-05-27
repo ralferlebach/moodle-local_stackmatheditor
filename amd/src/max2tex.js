@@ -211,11 +211,11 @@ define([], function() {
      * @returns {string} Converted.
      */
     function cleanMultiplication(s) {
-        // Digit * letter → juxtapose.
+        // Digit * letter: juxtapose (remove *).
         s = s.replace(/(\d)\s*\*\s*([a-zA-Z\\])/g, '$1$2');
-        // Letter * letter → \cdot.
+        // Letter * letter: use \cdot.
         s = s.replace(/([a-zA-Z)\]])\s*\*\s*([a-zA-Z\\(])/g, '$1\\cdot $2');
-        // Remaining * → \cdot.
+        // Remaining *: use \cdot.
         s = s.replace(/\*/g, '\\cdot ');
         return s;
     }
@@ -248,7 +248,7 @@ define([], function() {
         }
 
         // Both sides must have equal length for
-        // character-by-character comparison.
+        // Character-by-character comparison.
         if (v1.length !== v2.length) {
             return s;
         }
@@ -277,6 +277,7 @@ define([], function() {
         }
         return result.replace(/\s+/g, ' ').trim();
     }
+
 
     /**
      * Strip one level of enclosing parentheses if they wrap the whole string.
@@ -615,6 +616,15 @@ define([], function() {
             s = processFractions(s);
         }
 
+        // Convert parenthesised mixed-fraction notation back to compact LaTeX.
+        // Matches (n+\frac{p}{q}) produced by tex2max and strips the outer parens.
+        // E.g. (2+\frac{1}{2}) → 2\frac{1}{2}
+        //      (2+\frac{1}{2})*a → 2\frac{1}{2}*a (cleanMultiplication adds \cdot)
+        s = s.replace(
+            /\((\d+)\+\\frac\{(\d+)\}\{(\d+)\}\)/g,
+            '$1\\frac{$2}{$3}'
+        );
+
         // N-th roots.
         prev = '';
         while (s !== prev) {
@@ -643,7 +653,7 @@ define([], function() {
                 continue;
             }
             // Use lookbehind to avoid matching inside longer words or
-            // already-converted \commands.
+            // Already-converted \commands.
             s = s.replace(
                 new RegExp('(?<![a-zA-Z\\\\])' + sortedGreek[k] + '(?![a-zA-Z])', 'g'),
                 '\\' + sortedGreek[k] + ' '

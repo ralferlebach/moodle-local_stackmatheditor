@@ -60,40 +60,6 @@
     text-align: center;
 }
 
-/* HTML-rendered button labels (e.g. fraction <sup>a</sup>/<sub>b</sub>).
-   Keeps sup/sub size proportional and vertically centred in the button. */
-.sme-tb-btn .sme-tb-lbl-html {
-    line-height: 1;
-    white-space: nowrap;
-}
-
-.sme-tb-btn .sme-tb-lbl-html sup,
-.sme-tb-btn .sme-tb-lbl-html sub {
-    font-size: 0.7em;
-    line-height: 0;
-    position: relative;
-    vertical-align: baseline;
-}
-
-.sme-tb-btn .sme-tb-lbl-html sup {
-    top: -0.4em;
-}
-
-.sme-tb-btn .sme-tb-lbl-html sub {
-    top: 0.2em;
-}
-
-/* Constrain MathJax-rendered button labels to button height (issues #28, #26).
-   Prevents fraction glyphs from inflating the toolbar row. */
-.sme-tb-btn .sme-tb-lbl mjx-container,
-.sme-tb-btn .sme-tb-lbl .MathJax {
-    font-size: 0.85em;
-    vertical-align: middle;
-    max-height: 1.6em;
-    overflow: hidden;
-    display: inline-block;
-}
-
 /* ═══════════════════════════════════════════════════
    STACK MathEditor – Mobile / small-screen toolbar
    Groups with class .sme-tb-group-wrap (>3 members)
@@ -445,4 +411,26 @@
 
 .sme-system-add {
     min-width: 2rem;
+}
+
+/* Fraction button label: <sup>a</sup>/<sub>b</sub> sizing (issue #28 / patch 13). */
+.sme-tb-btn .sme-tb-lbl-html {
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.sme-tb-btn .sme-tb-lbl-html sup,
+.sme-tb-btn .sme-tb-lbl-html sub {
+    font-size: 0.7em;
+    line-height: 0;
+    position: relative;
+    vertical-align: baseline;
+}
+
+.sme-tb-btn .sme-tb-lbl-html sup {
+    top: -0.4em;
+}
+
+.sme-tb-btn .sme-tb-lbl-html sub {
+    top: 0.2em;
 }

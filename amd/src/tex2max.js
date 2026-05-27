@@ -613,11 +613,15 @@ define([], function() {
         }
 
         // Handle mixed fractions (issue #29): a digit immediately before a simple
-        // integer fraction like '2(3)/(4)' must become '2+(3)/(4)', not '2*(3)/(4)'.
-        // Only simple integer numerator/denominator are matched to stay safe.
+        // integer fraction must become an addition wrapped in parentheses, not
+        // multiplication. Parentheses ensure correct precedence when the mixed
+        // fraction is adjacent to other factors or negated:
+        //   2\frac{1}{2}   → (2+(1)/(2))
+        //  -2\frac{1}{2}   → -(2+(1)/(2))
+        //   2\frac{1}{2}a  → (2+(1)/(2))*a  (via implicit multiplication)
         s = s.replace(
             /(\d)\((\d+)\)\s*\/\s*\((\d+)\)/g,
-            '$1+($2)/($3)'
+            '($1+($2)/($3))'
         );
 
         s = s.replace(
