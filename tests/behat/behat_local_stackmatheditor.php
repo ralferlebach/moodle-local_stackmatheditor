@@ -51,7 +51,7 @@ class behat_local_stackmatheditor extends behat_base {
         );
         $question = $qgenerator->create_question(
             'stack',
-            null,
+            'test1',
             ['name' => $questionname, 'category' => $cat->id]
         );
 
