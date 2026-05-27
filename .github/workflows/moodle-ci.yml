@@ -379,12 +379,13 @@ jobs:
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
 
-      # KEIN Plugin-Argument: install --plugin hat es bereits registriert.
       - name: Behat – all plugin scenarios
         run: |
           moodle-plugin-ci behat \
+            --plugin ./plugin \
             --profile chrome \
             --tags "@local_stackmatheditor and not @broken"
+            --selenium http://localhost:4444/wd/hub \
 
       - name: Upload failure screenshots
         if: failure()
