@@ -228,7 +228,6 @@ JS;
      * Navigate to the quiz view page and click the start-attempt button.
      *
      * @When I attempt the quiz :quizname
-     * @Given I attempt the quiz :quizname
      * @param string $quizname Quiz display name.
      */
     public function i_attempt_the_quiz(string $quizname): void {
@@ -459,7 +458,6 @@ JS;
      * Assert that the MathQuill editor wrapper is present for the named input.
      *
      * @Given the MathQuill editor is visible for :inputname
-     * @Then the MathQuill editor is visible for :inputname
      * @param string $inputname Name attribute of the hidden input element.
      */
     public function the_mathquill_editor_is_visible_for(string $inputname): void {
