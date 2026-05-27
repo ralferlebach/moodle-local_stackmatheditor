@@ -151,7 +151,7 @@ define(['jquery'], function($) {
      * @returns {Object} {html, needsTypeset}.
      */
     function resolveLabel(el) {
-        // display_latex or displayLatex → MathJax.
+        // Display_latex or displayLatex → render via MathJax.
         var dl = el.display_latex || el.displayLatex;
         if (dl) {
             return {
@@ -161,7 +161,7 @@ define(['jquery'], function($) {
             };
         }
 
-        // label containing backslash → treat as LaTeX.
+        // Label containing backslash → treat as LaTeX.
         if (el.label && el.label.indexOf('\\') >= 0) {
             return {
                 html: '<span class="sme-tb-lbl">'
@@ -170,13 +170,13 @@ define(['jquery'], function($) {
             };
         }
 
-        // display → plain text label.
+        // Display → plain text label.
         if (el.display) {
             return {html: null, text: el.display,
                 needsTypeset: false};
         }
 
-        // label → plain text.
+        // Label → plain text.
         if (el.label) {
             return {html: null, text: el.label,
                 needsTypeset: false};
@@ -345,6 +345,7 @@ define(['jquery'], function($) {
                         [$bar[0]]
                     ).then(function() {
                         dbg('MathJax typeset OK');
+                        return undefined;
                     }).catch(function(e) {
                         dbg('MathJax error: ' + e);
                     });

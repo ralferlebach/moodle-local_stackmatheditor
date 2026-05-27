@@ -20,6 +20,8 @@
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @param int $oldversion The old version number being upgraded from.
+ * @return bool True on success.
  */
 function xmldb_local_stackmatheditor_upgrade(int $oldversion): bool {
     global $DB;

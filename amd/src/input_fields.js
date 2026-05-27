@@ -478,7 +478,9 @@ define([
         // Toolbar — mqField doesn't exist yet.
         var mqField = null;
         var $tb = toolbar.build(
-            function() { return mqField; },
+            function() {
+                return mqField;
+            },
             config, ctx.defs);
         $wrap.append($tb);
 

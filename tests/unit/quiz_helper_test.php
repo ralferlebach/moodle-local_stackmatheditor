@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
-namespace local_stackmatheditor\tests\unit;
+namespace local_stackmatheditor\unit;
 
 use advanced_testcase;
 use local_stackmatheditor\quiz_helper;
@@ -22,7 +22,8 @@ use local_stackmatheditor\quiz_helper;
 /**
  * Unit tests for local_stackmatheditor\quiz_helper.
  *
- * DB-dependent tests require @group local_stackmatheditor_db.
+ * DB-dependent tests are tagged with group local_stackmatheditor_db
+ * and require Moodle's test DB infrastructure.
  *
  * @package    local_stackmatheditor
  * @covers     \local_stackmatheditor\quiz_helper

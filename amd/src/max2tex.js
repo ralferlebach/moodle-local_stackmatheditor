@@ -211,11 +211,11 @@ define([], function() {
      * @returns {string} Converted.
      */
     function cleanMultiplication(s) {
-        // digit * letter -> juxtapose.
+        // Digit * letter → juxtapose.
         s = s.replace(/(\d)\s*\*\s*([a-zA-Z\\])/g, '$1$2');
-        // letter * letter -> \cdot.
+        // Letter * letter → \cdot.
         s = s.replace(/([a-zA-Z)\]])\s*\*\s*([a-zA-Z\\(])/g, '$1\\cdot $2');
-        // remaining *.
+        // Remaining * → \cdot.
         s = s.replace(/\*/g, '\\cdot ');
         return s;
     }
@@ -277,8 +277,6 @@ define([], function() {
         }
         return result.replace(/\s+/g, ' ').trim();
     }
-
-
 
     /**
      * Strip one level of enclosing parentheses if they wrap the whole string.
@@ -428,6 +426,7 @@ define([], function() {
      * @param {Object} [options] Options.
      * @returns {string} LaTeX.
      */
+    // eslint-disable-next-line complexity
     function convert(maxima, options) {
         var opts = options || {};
         var commaDecimal = opts.commaDecimal || false;

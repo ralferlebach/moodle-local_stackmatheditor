@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
-namespace local_stackmatheditor\tests\unit;
+namespace local_stackmatheditor\unit;
 
 use advanced_testcase;
 use local_stackmatheditor\config_manager;
@@ -24,7 +24,7 @@ use local_stackmatheditor\definitions;
  * Unit tests for local_stackmatheditor\config_manager.
  *
  * Tests that can run without DB use data providers and in-memory logic.
- * Tests needing DB are tagged with @group local_stackmatheditor_db and
+ * Tests needing DB are tagged with group local_stackmatheditor_db and
  * require Moodle's test DB infrastructure (run via grunt/phpunit).
  *
  * @package    local_stackmatheditor

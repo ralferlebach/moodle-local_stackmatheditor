@@ -41,6 +41,7 @@
 define([], function() {
     'use strict';
 
+    // eslint-disable-next-line no-empty-function
     var noop = function() {};
 
     /**
@@ -53,11 +54,15 @@ define([], function() {
         if (window.MathJax && window.MathJax.typesetPromise) {
             try {
                 window.MathJax.typesetPromise(el ? [el] : []).catch(noop);
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+                // Ignore typeset errors silently.
+            }
         } else if (window.MathJax && window.MathJax.typeset) {
             try {
                 window.MathJax.typeset(el ? [el] : []);
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+                // Ignore typeset errors silently.
+            }
         }
     }
 
@@ -70,14 +75,20 @@ define([], function() {
         for (i = 0; i < arguments.length; i++) {
             item = arguments[i];
             if (typeof item === 'function') {
-                try { item(); } catch (e) { /* ignore */ }
+                try {
+                    item();
+                } catch (e) {
+                    // Ignore queue callback errors silently.
+                }
             } else if (Array.isArray(item)) {
                 if (item[0] === 'Typeset') {
                     typesetV3(item.length > 2 ? item[2] : null);
                 } else if (typeof item[0] === 'function') {
                     try {
                         item[0].apply(item[1] || null, item.slice(2));
-                    } catch (e) { /* ignore */ }
+                    } catch (e) {
+                        // Ignore queue callback errors silently.
+                    }
                 }
             }
         }
@@ -104,7 +115,11 @@ define([], function() {
             Register: {
                 StartupHook: function(h, cb) {
                     if (typeof cb === 'function') {
-                        try { cb(); } catch (e) { /* ignore */ }
+                        try {
+                            cb();
+                        } catch (e) {
+                            // Ignore startup hook errors silently.
+                        }
                     }
                 },
                 MessageHook: noop,
@@ -122,8 +137,12 @@ define([], function() {
                 TeX: {}
             },
             signal: {Interest: noop},
-            getAllJax: function() { return []; },
-            getJaxFor: function() { return null; },
+            getAllJax: function() {
+                return [];
+            },
+            getJaxFor: function() {
+                return null;
+            },
             Reprocess: noop,
             Rerender: noop,
             setRenderer: noop,
@@ -144,7 +163,7 @@ define([], function() {
      * Try to install the Hub shim.
      *
      * Skips if:
-     *   - window.MathJax is not yet present (returns false → caller will retry)
+     *   - window.MathJax is not yet present (returns false – caller will retry)
      *   - window.MathJax.Hub exists and does NOT carry the _sme marker,
      *     meaning a real v2 Hub or the full mathjax_compat shim is already there
      *
@@ -173,7 +192,11 @@ define([], function() {
                             var j;
                             for (j = 0; j < arguments.length; j++) {
                                 if (typeof arguments[j] === 'function') {
-                                    try { arguments[j](); } catch (e) { /* ignore */ }
+                                    try {
+                                        arguments[j]();
+                                    } catch (e) {
+                                        // Ignore callback errors silently.
+                                    }
                                 }
                             }
                         }
@@ -190,7 +213,9 @@ define([], function() {
         if (!window.MathJax.Ajax) {
             window.MathJax.Ajax = {
                 Require: function(f, cb) {
-                    if (typeof cb === 'function') { cb(); }
+                    if (typeof cb === 'function') {
+                        cb();
+                    }
                 },
                 config: {root: ''},
                 STATUS: {OK: 1},

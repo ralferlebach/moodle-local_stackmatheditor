@@ -320,6 +320,7 @@ define([], function() {
      * @param {Object} options Conversion options.
      * @returns {boolean} True if a multiplication sign should be inserted.
      */
+    // eslint-disable-next-line complexity
     function needsImplicitMultiplication(prev, curr, options) {
         var opts = options || {};
         var defs = opts.defs || {};
@@ -394,8 +395,6 @@ define([], function() {
 
         return out;
     }
-
-
 
     /**
      * Split a string by a delimiter that is only recognised at top level.
