@@ -381,11 +381,10 @@ jobs:
 
       - name: Behat – all plugin scenarios
         run: |
-          moodle-plugin-ci behat \
-            --plugin ./plugin \
+          moodle-plugin-ci behat ./plugin \
             --profile chrome \
-            --tags "@local_stackmatheditor and not @broken"
             --selenium http://localhost:4444/wd/hub \
+            --tags "@local_stackmatheditor"
 
       - name: Upload failure screenshots
         if: failure()
