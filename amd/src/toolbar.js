@@ -161,6 +161,17 @@ define(['jquery'], function($) {
             };
         }
 
+        // Display_html → safe HTML label (e.g. <sup>a</sup>/<sub>b</sub>).
+        // Only used for button definitions supplied by the plugin itself;
+        // Never populated from user input.
+        if (el.display_html) {
+            return {
+                html: '<span class="sme-tb-lbl sme-tb-lbl-html">'
+                    + el.display_html + '</span>',
+                needsTypeset: false
+            };
+        }
+
         // Display → plain text preferred over LaTeX label (issues #26, #28, #32).
         // Rendering a LaTeX label via MathJax depends on the MathJax URL config
         // And can produce an oversized glyph. A plain-text display is simpler,
