@@ -189,8 +189,13 @@ class hook_callbacks {
 
         // Editor injection (mod_quiz and mod_adaptivequiz).
         if ($iseditor) {
-            if (!config_manager::get_effective_enabled($cmid)) {
-                quiz_helper::dbg('editor: disabled for cmid=' . $cmid . ', skipping');
+            // Gate only on global mode 0 (disabled, no override possible).
+            // Modes 2 and 3 allow per-slot overrides: always inject so that
+            // editor_injector can build the correct per-slot slotEnabled map.
+            // Checking only the quiz-level default here would wrongly block
+            // slots that have individually enabled the editor (issue #25).
+            if (config_manager::get_instance_enabled_mode() === 0) {
+                quiz_helper::dbg('editor: disabled globally (mode 0), skipping');
             } else {
                 try {
                     mathjax_injector::inject();

@@ -60,6 +60,17 @@
     text-align: center;
 }
 
+/* Constrain MathJax-rendered button labels to button height (issues #28, #26).
+   Prevents fraction glyphs from inflating the toolbar row. */
+.sme-tb-btn .sme-tb-lbl mjx-container,
+.sme-tb-btn .sme-tb-lbl .MathJax {
+    font-size: 0.85em;
+    vertical-align: middle;
+    max-height: 1.6em;
+    overflow: hidden;
+    display: inline-block;
+}
+
 /* ═══════════════════════════════════════════════════
    STACK MathEditor – Mobile / small-screen toolbar
    Groups with class .sme-tb-group-wrap (>3 members)

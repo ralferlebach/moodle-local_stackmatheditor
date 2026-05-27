@@ -151,7 +151,7 @@ define(['jquery'], function($) {
      * @returns {Object} {html, needsTypeset}.
      */
     function resolveLabel(el) {
-        // Display_latex or displayLatex → render via MathJax.
+        // Display_latex or displayLatex → explicit MathJax rendering request.
         var dl = el.display_latex || el.displayLatex;
         if (dl) {
             return {
@@ -161,7 +161,15 @@ define(['jquery'], function($) {
             };
         }
 
-        // Label containing backslash → treat as LaTeX.
+        // Display → plain text preferred over LaTeX label (issues #26, #28, #32).
+        // Rendering a LaTeX label via MathJax depends on the MathJax URL config
+        // And can produce an oversized glyph. A plain-text display is simpler,
+        // Size-consistent, and works regardless of MathJax configuration.
+        if (el.display) {
+            return {html: null, text: el.display, needsTypeset: false};
+        }
+
+        // Label containing backslash → treat as LaTeX (no display fallback).
         if (el.label && el.label.indexOf('\\') >= 0) {
             return {
                 html: '<span class="sme-tb-lbl">'
@@ -170,16 +178,9 @@ define(['jquery'], function($) {
             };
         }
 
-        // Display → plain text label.
-        if (el.display) {
-            return {html: null, text: el.display,
-                needsTypeset: false};
-        }
-
         // Label → plain text.
         if (el.label) {
-            return {html: null, text: el.label,
-                needsTypeset: false};
+            return {html: null, text: el.label, needsTypeset: false};
         }
 
         return null;

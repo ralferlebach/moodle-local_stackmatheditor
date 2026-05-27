@@ -83,5 +83,13 @@ if ($hassiteconfig) {
         $grouplabels
     ));
 
+    // Pi constant notation: use '%pi' (Maxima) or plain 'pi' (default, issue #31).
+    $settings->add(new admin_setting_configcheckbox(
+        'local_stackmatheditor/usepercentpi',
+        get_string('setting_usepercentpi', 'local_stackmatheditor'),
+        get_string('setting_usepercentpi_desc', 'local_stackmatheditor'),
+        0
+    ));
+
     $ADMIN->add('localplugins', $settings);
 }

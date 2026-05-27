@@ -63,6 +63,25 @@ define([], function() {
     ];
 
     /**
+     * Maxima operator keywords that must never be treated as variable names
+     * or be subject to implicit multiplication.
+     *
+     * When a student types 'x = 3 or x = 6', the word 'or' must pass
+     * through as a logical operator, not be split into 'o*r'.
+     *
+     * @type {string[]}
+     */
+    var MAXIMA_OPERATOR_KEYWORDS = [
+        'or', 'and', 'not',
+        'mod', 'div',
+        'iff', 'implies', 'impliedby',
+        'notin', 'in',
+        'union', 'intersect', 'setdiff',
+        'subset', 'superset',
+        'forall', 'exists', 'nexists'
+    ];
+
+    /**
      * Build a fast-lookup set from an array of strings.
      *
      * @param {Array} list Array of strings.
@@ -239,24 +258,18 @@ define([], function() {
     }
 
     /**
-     * Expand multi-character identifiers into individual variables if required.
+     * Build the set of identifier strings that must not be split into
+     * individual characters: function names, constants, units, Greek
+     * letters, reserved words, percent-constants, and Maxima operator
+     * keywords (or, and, not, mod, …).
      *
-     * @param {Array}  tokens  Token array from tokenizeForImplicitMultiplication.
-     * @param {Object} options Conversion options.
-     * @returns {Array} Expanded token array.
+     * Extracted from expandIdentifiers to keep complexity within limits.
+     *
+     * @param {Object} defs Definition sets from the plugin configuration.
+     * @returns {Object} Fast-lookup word set.
      */
-    function expandIdentifiers(tokens, options) {
-        var opts = options || {};
-        var defs = opts.defs || {};
-        var mode = normaliseImplicitMode(opts.variableMode || 'stack');
-        var splitIdentifiers =
-            (mode === 'explicit_single' || mode === 'space_single');
+    function buildProtectedWords(defs) {
         var protectedWords = Object.create(null);
-        var out = [];
-        var i;
-        var tok;
-        var value;
-        var parts;
         var sets = [
             buildWordSet(defs.functionNames || defs.functions || []),
             buildWordSet(defs.constants || []),
@@ -275,6 +288,34 @@ define([], function() {
                 protectedWords[keys[ki]] = true;
             }
         }
+
+        // Always protect Maxima operator keywords regardless of defs.
+        for (ki = 0; ki < MAXIMA_OPERATOR_KEYWORDS.length; ki++) {
+            protectedWords[MAXIMA_OPERATOR_KEYWORDS[ki]] = true;
+        }
+
+        return protectedWords;
+    }
+
+    /**
+     * Expand multi-character identifiers into individual variables if required.
+     *
+     * @param {Array}  tokens  Token array from tokenizeForImplicitMultiplication.
+     * @param {Object} options Conversion options.
+     * @returns {Array} Expanded token array.
+     */
+    function expandIdentifiers(tokens, options) {
+        var opts = options || {};
+        var defs = opts.defs || {};
+        var mode = normaliseImplicitMode(opts.variableMode || 'stack');
+        var splitIdentifiers =
+            (mode === 'explicit_single' || mode === 'space_single');
+        var protectedWords = buildProtectedWords(defs);
+        var out = [];
+        var i;
+        var tok;
+        var value;
+        var parts;
 
         for (i = 0; i < tokens.length; i++) {
             tok = tokens[i];
@@ -385,10 +426,20 @@ define([], function() {
 
         tokens = expandIdentifiers(tokens, opts);
 
+        var kwSet = buildWordSet(MAXIMA_OPERATOR_KEYWORDS);
+
         for (i = 0; i < tokens.length; i++) {
-            if (i > 0
-                    && needsImplicitMultiplication(tokens[i - 1], tokens[i], opts)) {
-                out += separator;
+            if (i > 0) {
+                if (kwSet[tokens[i].value] || kwSet[tokens[i - 1].value]) {
+                    // Always insert a space around Maxima operator keywords;
+                    // Never insert an implicit multiplication sign next to them.
+                    out += ' ';
+                } else if (needsImplicitMultiplication(
+                        tokens[i - 1],
+                        tokens[i],
+                        opts)) {
+                    out += separator;
+                }
             }
             out += tokens[i].value;
         }
@@ -561,6 +612,14 @@ define([], function() {
             );
         }
 
+        // Handle mixed fractions (issue #29): a digit immediately before a simple
+        // integer fraction like '2(3)/(4)' must become '2+(3)/(4)', not '2*(3)/(4)'.
+        // Only simple integer numerator/denominator are matched to stay safe.
+        s = s.replace(
+            /(\d)\((\d+)\)\s*\/\s*\((\d+)\)/g,
+            '$1+($2)/($3)'
+        );
+
         s = s.replace(
             /\\sqrt\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
             'sqrt($1)'
@@ -591,7 +650,12 @@ define([], function() {
         s = s.replace(/\\ln(?![a-zA-Z])/g, 'log');
         s = s.replace(/\\log(?![a-zA-Z])/g, 'log');
         s = s.replace(/\\exp(?![a-zA-Z])/g, 'exp');
-        s = s.replace(/\\pi(?![a-zA-Z])/g, '%pi');
+        // Use '%pi' only when explicitly configured (issue #31).
+        // Default is plain 'pi' which is also valid in Maxima/STACK.
+        s = s.replace(
+            /\\pi(?![a-zA-Z])/g,
+            defs.usePercentPi ? '%pi' : 'pi'
+        );
         s = s.replace(/\\infty/g, 'inf');
         s = s.replace(/\\e(?![a-zA-Z])/g, '%e');
         s = s.replace(/\\cdot/g, '*');

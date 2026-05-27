@@ -179,8 +179,6 @@ class definitions {
                 ],
             ],
 
-            // @codingStandardsIgnoreStart
-            /*
             // 6. Set theory.
             'set_theory' => [
                 'label'           => get_string('group_set_theory', $p),
@@ -238,8 +236,6 @@ class definitions {
                         'tooltip' => get_string('btn_iff', $p)],
                 ],
             ],
-            */
-            // @codingStandardsIgnoreEn
 
             // 8. Brackets.
             'brackets' => [
@@ -718,6 +714,7 @@ class definitions {
             'functionNames'    => self::get_function_names(),
             'reservedWords'    => self::get_reserved_words(),
             'percentConstants' => self::get_percent_constants(),
+            'usePercentPi'     => (bool) get_config('local_stackmatheditor', 'usepercentpi'),
         ];
     }
 
