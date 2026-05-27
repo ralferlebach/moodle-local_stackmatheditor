@@ -58,6 +58,12 @@ class behat_local_stackmatheditor extends behat_base {
         quiz_add_quiz_question($question->id, $quiz, 1, 1);
         quiz_repaginate_questions($quiz->id, 0);
 
+        // Synchronise the quiz sumgrades so that attempts can be started.
+        // Without this the quiz grade (default 10) mismatches the question total (1).
+        quiz_update_sumgrades($quiz);
+        $quiz = $DB->get_record('quiz', ['id' => $quiz->id], '*', MUST_EXIST);
+        quiz_set_grade($quiz->sumgrades, $quiz);
+
         return $question;
     }
 
