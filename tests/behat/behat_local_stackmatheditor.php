@@ -25,7 +25,8 @@ use Behat\Mink\Exception\ExpectationException;
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class behat_local_stackmatheditor extends behat_base {
-    // Internal helpers.
+    // Internal helper methods used by multiple step definitions.
+
     /**
      * Create a minimal STACK question and add it to the named quiz.
      *
@@ -93,7 +94,8 @@ class behat_local_stackmatheditor extends behat_base {
         }
     }
 
-    // Data-setup steps.
+    // Data-setup step definitions.
+
     /**
      * Create a minimal STACK question and add it to the given quiz.
      *
@@ -220,7 +222,8 @@ JS;
         $this->getSession()->executeScript($js);
     }
 
-    // Navigation steps.
+    // Navigation step definitions.
+
     /**
      * Navigate to the quiz view page and click the start-attempt button.
      *
@@ -338,7 +341,8 @@ JS;
         $this->getSession()->wait(2000, "document.readyState === 'complete'");
     }
 
-    // Toolbar-group interaction steps.
+    // Toolbar interaction step definitions.
+
     /**
      * Deselect a named toolbar group from the multiselect on the config page.
      *
@@ -390,7 +394,8 @@ JS;
         $this->getSession()->wait(500, "document.readyState === 'complete'");
     }
 
-    // Assertion steps.
+    // Assertion step definitions.
+
     /**
      * Assert that a specific toolbar group is deselected in the multiselect.
      *
