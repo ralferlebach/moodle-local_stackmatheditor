@@ -189,7 +189,7 @@ jobs:
   phpunit:
     name: "PHPUnit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.db.engine }})"
     runs-on: ubuntu-24.04
-    needs: [lint-php, lint-js]
+    needs: [lint-php]
     strategy:
       fail-fast: false
       matrix:
@@ -294,7 +294,7 @@ jobs:
   behat:
     name: "Behat (${{ matrix.moodle }} / PHP 8.2 / Chrome)"
     runs-on: ubuntu-24.04
-    needs: [phpunit]
+    needs: [lint-php, lint-js]
     strategy:
       fail-fast: false
       matrix:
