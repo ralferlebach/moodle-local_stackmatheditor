@@ -90,6 +90,66 @@ define([], function() {
     }
 
     /**
+     * Convert mixed-fraction form (N+p/q) → N\frac{p}{q}.
+     *
+     * This reverses the tex2max mixed-fraction guard that converts
+     * N\frac{p}{q} → (N+p/q) to prevent implicit multiplication.
+     * Must run before processFractions() to avoid the parentheses
+     * being consumed by the fraction converter.
+     *
+     * @param {string} s Input.
+     * @returns {string} Converted.
+     */
+    function processMixedFractions(s) {
+        // Pattern: (N+p/q) where N, p, q are bare non-negative integers.
+        return s.replace(
+            /\((\d+)\+(\d+)\/(\d+)\)/g,
+            '$1\\frac{$2}{$3}'
+        );
+    }
+
+    /**
+     * Convert set-theory Maxima keywords to LaTeX commands.
+     *
+     * notin must be handled before in to avoid partial matching.
+     *
+     * @param {string} s Input.
+     * @returns {string} Converted.
+     */
+    function processSetTheoryKeywords(s) {
+        s = s.replace(/\bnotin\b/g, '\\notin ');
+        s = s.replace(/\bin\b/g, '\\in ');
+        s = s.replace(/\bunion\b/g, '\\cup ');
+        s = s.replace(/\bintersect\b/g, '\\cap ');
+        s = s.replace(/\bsetdiff\b/g, '\\setminus ');
+        s = s.replace(/\bsubset\b/g, '\\subset ');
+        s = s.replace(/\bsuperset\b/g, '\\supset ');
+        return s;
+    }
+
+    /**
+     * Convert logic Maxima keywords to LaTeX commands.
+     *
+     * nexists must be handled before exists to avoid partial matching.
+     * impliedby must be handled before implies.
+     *
+     * @param {string} s Input.
+     * @returns {string} Converted.
+     */
+    function processLogicKeywords(s) {
+        s = s.replace(/\bnexists\b/g, '\\nexists ');
+        s = s.replace(/\bforall\b/g, '\\forall ');
+        s = s.replace(/\bexists\b/g, '\\exists ');
+        s = s.replace(/\bnot\b/g, '\\neg ');
+        s = s.replace(/\band\b/g, '\\land ');
+        s = s.replace(/\bor\b/g, '\\lor ');
+        s = s.replace(/\bimpliedby\b/g, '\\Leftarrow ');
+        s = s.replace(/\bimplies\b/g, '\\Rightarrow ');
+        s = s.replace(/\biff\b/g, '\\Leftrightarrow ');
+        return s;
+    }
+
+    /**
      * Convert (a)/(b) -> \frac{a}{b}.
      *
      * @param {string} s Input.
@@ -211,11 +271,11 @@ define([], function() {
      * @returns {string} Converted.
      */
     function cleanMultiplication(s) {
-        // Digit * letter: juxtapose (remove *).
+        // Digit * letter — juxtapose (no explicit operator).
         s = s.replace(/(\d)\s*\*\s*([a-zA-Z\\])/g, '$1$2');
-        // Letter * letter: use \cdot.
+        // Letter * letter — use \cdot.
         s = s.replace(/([a-zA-Z)\]])\s*\*\s*([a-zA-Z\\(])/g, '$1\\cdot $2');
-        // Remaining *: use \cdot.
+        // Remaining * — use \cdot.
         s = s.replace(/\*/g, '\\cdot ');
         return s;
     }
@@ -224,11 +284,18 @@ define([], function() {
      * Attempt to collapse a Maxima " or " expression back into a
      * single LaTeX expression using \pm and \mp.
      *
+     * Handles two cases:
+     * 1. Symmetric: v1 and v2 have equal length and differ only in +/-.
+     * 2. Asymmetric: v1 is shorter by exactly one character because
+     *    tex2max stripped a leading unary '+' from the positive variant.
+     *    In this case a synthetic '+' is re-inserted at the divergence
+     *    point before doing the character-by-character comparison.
+     *
      * Works on the final LaTeX output of convert(). Both sides of
-     * " or " must be equal length and differ only in "+" vs "-"
-     * positions.  Where variant 1 has "+" and variant 2 has "-",
-     * the result gets \pm; where variant 1 has "-" and variant 2
-     * has "+", the result gets \mp.
+     * " or " must be equal length (after normalisation) and differ
+     * only in "+" vs "-" positions.  Where variant 1 has "+" and
+     * variant 2 has "-", the result gets \pm; where variant 1 has
+     * "-" and variant 2 has "+", the result gets \mp.
      *
      * @param {string} s Converted string that may contain " or ".
      * @returns {string} Collapsed string or unmodified input.
@@ -247,8 +314,25 @@ define([], function() {
             return s;
         }
 
-        // Both sides must have equal length for
-        // Character-by-character comparison.
+        // Handle asymmetric case: v1 is shorter by 1 because a leading
+        // unary '+' was stripped by tex2max's expandPlusMinus fix.
+        if (v1.length + 1 === v2.length) {
+            // Find the first position where v1 and v2 diverge.
+            var di = 0;
+            while (di < v1.length && v1[di] === v2[di]) {
+                di++;
+            }
+            // If v2[di] is '-' and the preceding character is a valid
+            // unary-prefix boundary (=, (, start of string), restore '+'.
+            if (di < v2.length && v2[di] === '-') {
+                var before = di > 0 ? v2[di - 1] : '';
+                if (!before || /[=(]/.test(before)) {
+                    v1 = v1.substring(0, di) + '+' + v1.substring(di);
+                }
+            }
+        }
+
+        // Both sides must have equal length for character comparison.
         if (v1.length !== v2.length) {
             return s;
         }
@@ -427,26 +511,20 @@ define([], function() {
      * @param {Object} [options] Options.
      * @returns {string} LaTeX.
      */
-    // eslint-disable-next-line complexity
-    function convert(maxima, options) {
-        var opts = options || {};
-        var commaDecimal = opts.commaDecimal || false;
-        var defs = opts.defs || {};
-        var s = convertRelationSystemToCases(maxima.trim());
-        var prev;
-        var k;
 
-        if (!s) {
-            return s;
-        }
-
-        // %-constants -> LaTeX (BEFORE Greek letter replacement).
-        var constants = defs.constants || [];
+    /**
+     * Apply %-constant definitions from defs to a Maxima string.
+     *
+     * @param {string} s         Maxima expression.
+     * @param {Array}  constants Constants array from defs.
+     * @returns {string} String with constants replaced.
+     */
+    function processConstantsList(s, constants) {
+        var k, con, conMaxima;
         for (k = 0; k < constants.length; k++) {
-            var con = constants[k];
-            var conMaxima = null;
+            con = constants[k];
+            conMaxima = null;
 
-            // Support both object-style definitions and plain string exports.
             if (con && typeof con === 'object') {
                 conMaxima = con.maxima || con.name || null;
             } else if (typeof con === 'string') {
@@ -463,6 +541,7 @@ define([], function() {
 
             if (conMaxima === '%pi' || conMaxima === 'pi') {
                 s = s.replace(/%pi/g, '\\pi ');
+                s = s.replace(/\bpi\b/g, '\\pi ');
             } else if (conMaxima === 'inf') {
                 s = s.replace(/\binf\b/g, '\\infty ');
             } else if (conMaxima === 'minf') {
@@ -473,6 +552,198 @@ define([], function() {
                 s = s.replace(/%i(?![a-zA-Z])/g, '\\mathrm{i}');
             }
         }
+        return s;
+    }
+
+    /**
+     * Apply comparison operator definitions from defs to a Maxima string.
+     *
+     * @param {string} s          Maxima expression.
+     * @param {Array}  comparison Comparison array from defs.
+     * @returns {string} String with comparisons replaced.
+     */
+    function processComparisonList(s, comparison) {
+        var k, cmpItem;
+        for (k = 0; k < comparison.length; k++) {
+            cmpItem = comparison[k];
+            if (!cmpItem || typeof cmpItem !== 'object' || !cmpItem.maxima) {
+                continue;
+            }
+            s = s.replace(
+                new RegExp(cmpItem.maxima.replace(/([<>=#])/g, '\\$1'), 'g'),
+                cmpItem.latex_write || cmpItem.maxima
+            );
+        }
+        return s;
+    }
+
+    /**
+     * Replace abs(expr) with \left|expr\right|.
+     *
+     * @param {string} s Maxima expression.
+     * @returns {string} String with abs() replaced.
+     */
+    function processAbsFunction(s) {
+        var absSearch = 'abs(';
+        var absResult = '';
+        var absI = 0;
+        var absIdx, absOpen, absClose, absArg;
+        var safety = 50;
+        while (absI < s.length && safety > 0) {
+            safety--;
+            absIdx = s.indexOf(absSearch, absI);
+            if (absIdx === -1) {
+                absResult += s.substring(absI);
+                break;
+            }
+            if (absIdx > 0 && /[a-zA-Z0-9_]/.test(s[absIdx - 1])) {
+                absResult += s.substring(absI, absIdx + 1);
+                absI = absIdx + 1;
+                continue;
+            }
+            absResult += s.substring(absI, absIdx);
+            absOpen = absIdx + 3;
+            absClose = findCloseParen(s, absOpen);
+            if (absClose === -1) {
+                absResult += s.substring(absIdx);
+                absI = s.length;
+                break;
+            }
+            absArg = s.substring(absOpen + 1, absClose);
+            absResult += '\\left|' + absArg + '\\right|';
+            absI = absClose + 1;
+        }
+        return absResult;
+    }
+
+    /**
+     * Apply the hardcoded standard function list to a Maxima string.
+     *
+     * @param {string} s Maxima expression.
+     * @returns {string} String with standard functions replaced.
+     */
+    function processStdFunctions(s) {
+        var fi, sf;
+        var stdFuncs = [
+            ['sqrt', '\\sqrt', 'brace'],
+            ['sin', '\\sin', 'paren'],
+            ['cos', '\\cos', 'paren'],
+            ['tan', '\\tan', 'paren'],
+            ['arcsin', '\\arcsin', 'paren'],
+            ['arccos', '\\arccos', 'paren'],
+            ['arctan', '\\arctan', 'paren'],
+            ['sinh', '\\sinh', 'paren'],
+            ['cosh', '\\cosh', 'paren'],
+            ['tanh', '\\tanh', 'paren'],
+            ['exp', '\\exp', 'paren'],
+            ['log', '\\ln', 'paren'],
+            ['abs', '\\left|', 'abs']
+        ];
+        for (fi = 0; fi < stdFuncs.length; fi++) {
+            sf = stdFuncs[fi];
+            if (s.indexOf(sf[0] + '(') >= 0) {
+                s = processFunc(s, sf[0], sf[1], sf[2]);
+            }
+        }
+        return s;
+    }
+
+
+    /**
+     * Apply function definitions from defs to convert named functions to LaTeX.
+     *
+     * @param {string} s        Maxima expression.
+     * @param {Array}  funcDefs Function definitions array from defs.
+     * @returns {string} String with named functions replaced.
+     */
+    function processFunctionDefsList(s, funcDefs) {
+        var k, def, wrapType;
+        for (k = 0; k < funcDefs.length; k++) {
+            def = funcDefs[k];
+            if (!def || typeof def !== 'object' || !def.maxima_name || !def.latex_cmd) {
+                continue;
+            }
+            wrapType = def.type === 'brace' ? 'brace' : 'paren';
+            s = processFunc(s, def.maxima_name, def.latex_cmd, wrapType);
+        }
+        return s;
+    }
+
+    /**
+     * Replace upper-case Greek letter names with LaTeX commands (fallback pass).
+     *
+     * @param {string} s Maxima expression.
+     * @returns {string} String with upper-case Greek letters replaced.
+     */
+    function processUpperGreekList(s) {
+        var ug, ugl;
+        var upperGreek = [
+            'Gamma', 'Delta', 'Theta', 'Lambda',
+            'Xi', 'Pi', 'Sigma', 'Upsilon',
+            'Phi', 'Psi', 'Omega'
+        ];
+        for (ug = 0; ug < upperGreek.length; ug++) {
+            ugl = upperGreek[ug];
+            s = s.replace(
+                new RegExp('(?<![a-zA-Z\\\\])' + ugl + '(?![a-zA-Z])', 'g'),
+                '\\' + ugl + ' '
+            );
+        }
+        return s;
+    }
+
+    /**
+     * Replace Greek letter names from defs with LaTeX commands.
+     * Sorts longest-first to prevent prefix matches (e.g. "e" inside "epsilon").
+     *
+     * @param {string} s     Maxima expression.
+     * @param {Array}  greek Greek letters array from defs.
+     * @returns {string} String with Greek letters replaced.
+     */
+    function processGreekLettersList(s, greek) {
+        var k;
+        var sorted = greek.slice().sort(function(a, b) {
+            return b.length - a.length;
+        });
+        for (k = 0; k < sorted.length; k++) {
+            if (typeof sorted[k] !== 'string' || !sorted[k]) {
+                continue;
+            }
+            s = s.replace(
+                new RegExp('(?<![a-zA-Z\\\\])' + sorted[k] + '(?![a-zA-Z])', 'g'),
+                '\\' + sorted[k] + ' '
+            );
+        }
+        return s;
+    }
+
+    /**
+     * Convert a Maxima expression string to LaTeX.
+     *
+     * @param {string} maxima  Maxima expression.
+     * @param {Object} options Conversion options (defs, commaDecimal).
+     * @returns {string} LaTeX string.
+     */
+    function convert(maxima, options) {
+        var opts = options || {};
+        var commaDecimal = opts.commaDecimal || false;
+        var defs = opts.defs || {};
+        var s = convertRelationSystemToCases(maxima.trim());
+        var prev;
+
+        if (!s) {
+            return s;
+        }
+
+        // Mixed fractions BEFORE fraction processing (order matters).
+        s = processMixedFractions(s);
+
+        // Set-theory and logic keywords BEFORE multiplication cleaning.
+        s = processSetTheoryKeywords(s);
+        s = processLogicKeywords(s);
+
+        // %-constants -> LaTeX (BEFORE Greek letter replacement).
+        s = processConstantsList(s, defs.constants || []);
 
         // Additional %-constants not in the constants list.
         s = s.replace(/%i(?![a-zA-Z])/g, '\\mathrm{i}');
@@ -481,6 +752,8 @@ define([], function() {
         if (s.indexOf('%pi') >= 0) {
             s = s.replace(/%pi/g, '\\pi ');
         }
+        // Bare "pi" → \pi (after logic keyword processing, "pi" no longer matches "implies" etc.).
+        s = s.replace(/\bpi\b/g, '\\pi ');
         if (s.indexOf('inf') >= 0) {
             s = s.replace(/\bminf\b/g, '-\\infty ');
             s = s.replace(/\binf\b/g, '\\infty ');
@@ -500,36 +773,10 @@ define([], function() {
         s = s.replace(/\bminf\b/g, '-\\infty ');
 
         // Comparison -> LaTeX.
-        var comparison = defs.comparison || [];
-        for (k = 0; k < comparison.length; k++) {
-            var cmpItem = comparison[k];
-
-            // Support only structured entries here.
-            // Plain string exports are already handled by hardcoded fallbacks above.
-            if (!cmpItem || typeof cmpItem !== 'object' || !cmpItem.maxima) {
-                continue;
-            }
-
-            s = s.replace(
-                new RegExp(cmpItem.maxima.replace(/([<>=#])/g, '\\$1'), 'g'),
-                cmpItem.latex_write || cmpItem.maxima
-            );
-        }
+        s = processComparisonList(s, defs.comparison || []);
 
         // Functions -> LaTeX.
-        var funcDefs = defs.functions || [];
-        for (k = 0; k < funcDefs.length; k++) {
-            var def = funcDefs[k];
-
-            // Support only structured entries here.
-            // Plain string exports are handled by hardcoded stdFuncs below.
-            if (!def || typeof def !== 'object' || !def.maxima_name || !def.latex_cmd) {
-                continue;
-            }
-
-            var wrapType = def.type === 'brace' ? 'brace' : 'paren';
-            s = processFunc(s, def.maxima_name, def.latex_cmd, wrapType);
-        }
+        s = processFunctionDefsList(s, defs.functions || []);
 
         // Binomial: binomial(n,k) -> \binom{n}{k}.
         s = s.replace(
@@ -538,76 +785,13 @@ define([], function() {
         );
 
         // Upper Greek fallback (if not handled by defs).
-        var upperGreek = [
-            'Gamma', 'Delta', 'Theta', 'Lambda',
-            'Xi', 'Pi', 'Sigma', 'Upsilon',
-            'Phi', 'Psi', 'Omega'
-        ];
-        for (var ug = 0; ug < upperGreek.length; ug++) {
-            var ugl = upperGreek[ug];
-            s = s.replace(
-                new RegExp('(?<![a-zA-Z\\\\])' + ugl + '(?![a-zA-Z])', 'g'),
-                '\\' + ugl + ' '
-            );
-        }
+        s = processUpperGreekList(s);
 
         // ── Absolute value: abs(expr) -> \left|expr\right| ──
-        var absSearch = 'abs(';
-        var absResult = '';
-        var absI = 0;
-        var absSafety = 50;
-        while (absI < s.length && absSafety > 0) {
-            absSafety--;
-            var absIdx = s.indexOf(absSearch, absI);
-            if (absIdx === -1) {
-                absResult += s.substring(absI);
-                break;
-            }
-            if (absIdx > 0 && /[a-zA-Z0-9_]/.test(s[absIdx - 1])) {
-                absResult += s.substring(absI, absIdx + 1);
-                absI = absIdx + 1;
-                continue;
-            }
-            absResult += s.substring(absI, absIdx);
-            var absOpen = absIdx + 3;
-            var absClose = findCloseParen(s, absOpen);
-            if (absClose === -1) {
-                absResult += s.substring(absIdx);
-                absI = s.length;
-                break;
-            }
-            var absArg = s.substring(absOpen + 1, absClose);
-            absResult += '\\left|' + absArg + '\\right|';
-            absI = absClose + 1;
-        }
-        s = absResult;
+        s = processAbsFunction(s);
 
         // ── Hardcoded function fallbacks ────────────
-        var stdFuncs = [
-            ['sqrt', '\\sqrt', 'brace'],
-            ['sin', '\\sin', 'paren'],
-            ['cos', '\\cos', 'paren'],
-            ['tan', '\\tan', 'paren'],
-            ['arcsin', '\\arcsin', 'paren'],
-            ['arccos', '\\arccos', 'paren'],
-            ['arctan', '\\arctan', 'paren'],
-            ['sinh', '\\sinh', 'paren'],
-            ['cosh', '\\cosh', 'paren'],
-            ['tanh', '\\tanh', 'paren'],
-            ['exp', '\\exp', 'paren'],
-            ['log', '\\ln', 'paren'],
-            ['abs', '\\left|', 'abs']
-        ];
-        for (var fi = 0; fi < stdFuncs.length; fi++) {
-            var sf = stdFuncs[fi];
-            if (s.indexOf(sf[0] + '(') >= 0) {
-                if (sf[2] === 'abs') {
-                    s = processFunc(s, sf[0], '\\left|', 'abs');
-                } else {
-                    s = processFunc(s, sf[0], sf[1], sf[2]);
-                }
-            }
-        }
+        s = processStdFunctions(s);
 
         // Fractions.
         prev = '';
@@ -615,15 +799,6 @@ define([], function() {
             prev = s;
             s = processFractions(s);
         }
-
-        // Convert parenthesised mixed-fraction notation back to compact LaTeX.
-        // Matches (n+\frac{p}{q}) produced by tex2max and strips the outer parens.
-        // E.g. (2+\frac{1}{2}) → 2\frac{1}{2}
-        //      (2+\frac{1}{2})*a → 2\frac{1}{2}*a (cleanMultiplication adds \cdot)
-        s = s.replace(
-            /\((\d+)\+\\frac\{(\d+)\}\{(\d+)\}\)/g,
-            '$1\\frac{$2}{$3}'
-        );
 
         // N-th roots.
         prev = '';
@@ -643,22 +818,7 @@ define([], function() {
         s = processSubscripts(s);
 
         // Greek letters: word -> \word.
-        // Sort longest first to prevent "epsilon" matching "e" + "psilon".
-        var greek = defs.greek || [];
-        var sortedGreek = greek.slice().sort(function(a, b) {
-            return b.length - a.length;
-        });
-        for (k = 0; k < sortedGreek.length; k++) {
-            if (typeof sortedGreek[k] !== 'string' || !sortedGreek[k]) {
-                continue;
-            }
-            // Use lookbehind to avoid matching inside longer words or
-            // Already-converted \commands.
-            s = s.replace(
-                new RegExp('(?<![a-zA-Z\\\\])' + sortedGreek[k] + '(?![a-zA-Z])', 'g'),
-                '\\' + sortedGreek[k] + ' '
-            );
-        }
+        s = processGreekLettersList(s, defs.greek || []);
 
         // Multiplication signs.
         s = cleanMultiplication(s);

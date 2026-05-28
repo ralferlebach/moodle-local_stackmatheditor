@@ -24,7 +24,7 @@ use local_stackmatheditor\definitions;
  * Unit tests for local_stackmatheditor\config_manager.
  *
  * Tests that can run without DB use data providers and in-memory logic.
- * Tests needing DB are tagged with group local_stackmatheditor_db and
+ * Tests needing DB are tagged with "local_stackmatheditor_db" group and
  * require Moodle's test DB infrastructure (run via grunt/phpunit).
  *
  * @package    local_stackmatheditor
@@ -237,7 +237,7 @@ final class config_manager_test extends advanced_testcase {
     /**
      * save_config() and get_config() round-trip.
      *
-     * @group local_stackmatheditor_db
+     * "local_stackmatheditor_db" group
      */
     public function test_save_and_get_config_roundtrip(): void {
         $this->resetAfterTest();
@@ -268,7 +268,7 @@ final class config_manager_test extends advanced_testcase {
     /**
      * save_quiz_default() stores a NULL-qbeid record.
      *
-     * @group local_stackmatheditor_db
+     * "local_stackmatheditor_db" group
      */
     public function test_save_and_get_quiz_default(): void {
         $this->resetAfterTest();
@@ -287,7 +287,7 @@ final class config_manager_test extends advanced_testcase {
      * get_config() follows the priority chain:
      * question-level → quiz-level default → instance default.
      *
-     * @group local_stackmatheditor_db
+     * "local_stackmatheditor_db" group
      */
     public function test_config_priority_chain(): void {
         $this->resetAfterTest();
@@ -313,7 +313,7 @@ final class config_manager_test extends advanced_testcase {
     /**
      * save_config() cleans up duplicate records (idempotent).
      *
-     * @group local_stackmatheditor_db
+     * "local_stackmatheditor_db" group
      */
     public function test_save_config_deduplication(): void {
         global $DB;
@@ -338,7 +338,7 @@ final class config_manager_test extends advanced_testcase {
     /**
      * get_effective_enabled() honours _enabled from quiz-level in mode 2.
      *
-     * @group local_stackmatheditor_db
+     * "local_stackmatheditor_db" group
      */
     public function test_effective_enabled_quiz_override_mode2(): void {
         $this->resetAfterTest();
@@ -355,7 +355,7 @@ final class config_manager_test extends advanced_testcase {
     /**
      * get_effective_enabled() honours _enabled from question-level in mode 3.
      *
-     * @group local_stackmatheditor_db
+     * "local_stackmatheditor_db" group
      */
     public function test_effective_enabled_question_override_mode3(): void {
         $this->resetAfterTest();

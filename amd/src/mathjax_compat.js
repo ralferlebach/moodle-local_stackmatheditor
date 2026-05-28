@@ -129,16 +129,14 @@ define([], function() {
              * @param {Function|null} callback Callback after typesetting.
              */
             Typeset: function(element, callback) {
-                var cb = (typeof callback === 'function') ? callback : null;
                 typesetElement(element).then(function() {
-                    if (cb) {
-                        cb(); // eslint-disable-line promise/no-callback-in-promise
+                    if (typeof callback === 'function') {
+                        // eslint-disable-next-line promise/no-callback-in-promise
+                        callback();
                     }
-                    return undefined;
+                    return null;
                 }).catch(function() {
-                    if (cb) {
-                        cb(); // eslint-disable-line promise/no-callback-in-promise
-                    }
+                    return null;
                 });
             },
 

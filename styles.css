@@ -413,24 +413,13 @@
     min-width: 2rem;
 }
 
-/* Fraction button label: <sup>a</sup>/<sub>b</sub> sizing (issue #28 / patch 13). */
-.sme-tb-btn .sme-tb-lbl-html {
-    line-height: 1;
-    white-space: nowrap;
-}
+/* ═══════════════════════════════════════════════════
+   HTML-literal button labels (display_html property)
+   e.g. fraction button: <sup>a</sup>⁄<sub>b</sub>
+   ═══════════════════════════════════════════════════ */
 
-.sme-tb-btn .sme-tb-lbl-html sup,
-.sme-tb-btn .sme-tb-lbl-html sub {
+.sme-tb-lbl-html sup,
+.sme-tb-lbl-html sub {
     font-size: 0.7em;
-    line-height: 0;
-    position: relative;
-    vertical-align: baseline;
-}
-
-.sme-tb-btn .sme-tb-lbl-html sup {
-    top: -0.4em;
-}
-
-.sme-tb-btn .sme-tb-lbl-html sub {
-    top: 0.2em;
+    line-height: 1;
 }

@@ -41,8 +41,9 @@
 define([], function() {
     'use strict';
 
-    // eslint-disable-next-line no-empty-function
-    var noop = function() {};
+    var noop = function() {
+        // Intentional no-op placeholder.
+    };
 
     /**
      * Typeset a DOM element using the MathJax v3 API.
@@ -55,13 +56,13 @@ define([], function() {
             try {
                 window.MathJax.typesetPromise(el ? [el] : []).catch(noop);
             } catch (e) {
-                // Ignore typeset errors silently.
+                // Ignored.
             }
         } else if (window.MathJax && window.MathJax.typeset) {
             try {
                 window.MathJax.typeset(el ? [el] : []);
             } catch (e) {
-                // Ignore typeset errors silently.
+                // Ignored.
             }
         }
     }
@@ -78,7 +79,7 @@ define([], function() {
                 try {
                     item();
                 } catch (e) {
-                    // Ignore queue callback errors silently.
+                    // Ignored.
                 }
             } else if (Array.isArray(item)) {
                 if (item[0] === 'Typeset') {
@@ -87,7 +88,7 @@ define([], function() {
                     try {
                         item[0].apply(item[1] || null, item.slice(2));
                     } catch (e) {
-                        // Ignore queue callback errors silently.
+                        // Ignored.
                     }
                 }
             }
@@ -118,7 +119,7 @@ define([], function() {
                         try {
                             cb();
                         } catch (e) {
-                            // Ignore startup hook errors silently.
+                            // Ignored.
                         }
                     }
                 },
@@ -163,7 +164,7 @@ define([], function() {
      * Try to install the Hub shim.
      *
      * Skips if:
-     *   - window.MathJax is not yet present (returns false – caller will retry)
+     *   - window.MathJax is not yet present (returns false → caller will retry)
      *   - window.MathJax.Hub exists and does NOT carry the _sme marker,
      *     meaning a real v2 Hub or the full mathjax_compat shim is already there
      *
@@ -195,7 +196,7 @@ define([], function() {
                                     try {
                                         arguments[j]();
                                     } catch (e) {
-                                        // Ignore callback errors silently.
+                                        // Ignored.
                                     }
                                 }
                             }

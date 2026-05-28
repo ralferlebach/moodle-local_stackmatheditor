@@ -22,8 +22,7 @@ use local_stackmatheditor\quiz_helper;
 /**
  * Unit tests for local_stackmatheditor\quiz_helper.
  *
- * DB-dependent tests are tagged with group local_stackmatheditor_db
- * and require Moodle's test DB infrastructure.
+ * DB-dependent tests require the "local_stackmatheditor_db" group tag.
  *
  * @package    local_stackmatheditor
  * @covers     \local_stackmatheditor\quiz_helper

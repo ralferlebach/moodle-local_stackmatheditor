@@ -298,62 +298,53 @@ JS;
         $this->getSession()->evaluateScript($js);
         $this->getSession()->getDriver()->keyDown('//body', $text);
     }
-
-    // Data-setup steps.
+    // Quiz / question creation.
 
     /**
-     * Create a quiz containing a minimal STACK algebraic-input question.
-     *
-     * The quiz is created in the specified course. A STACK question with one
-     * algebraic input named 'ans1' is generated and added as slot 1.
+     * Create a minimal STACK algebraic-input quiz and question in a course.
      *
      * @Given a STACK quiz :quizname with algebraic input exists in :shortname
-     * @param string $quizname  Name of the quiz to create.
+     * @param string $quizname  Quiz name to create.
      * @param string $shortname Course shortname.
      */
-    public function a_stack_quiz_with_algebraic_input_exists(
+    public function a_stack_quiz_with_algebraic_input_exists_in(
         string $quizname,
         string $shortname
     ): void {
-        global $DB;
+        global $DB, $CFG;
+        require_once($CFG->dirroot . '/mod/quiz/locallib.php');
 
         $course = $DB->get_record('course', ['shortname' => $shortname], '*', MUST_EXIST);
-        $qcat   = question_get_default_category(\context_course::instance($course->id)->id, true);
 
-        // Create a minimal STACK algebraic-input question.
-        $qdata = $this->make_stack_algebraic_question_data('Test STACK question', $qcat->id);
-        $question = question_bank::get_qtype('stack')->save_question(
-            (object) ['id' => 0, 'qtype' => 'stack', 'category' => $qcat->id],
-            $qdata
-        );
+        // Create quiz if it does not already exist.
+        $quiz = $DB->get_record('quiz', ['name' => $quizname, 'course' => $course->id]);
+        if (!$quiz) {
+            $gen      = testing_util::get_data_generator();
+            $quizdata = $gen->create_module('quiz', [
+                'course'    => $course->id,
+                'name'      => $quizname,
+                'grade'     => 10,
+                'sumgrades' => 1,
+            ]);
+            $quiz = $DB->get_record('quiz', ['id' => $quizdata->id], '*', MUST_EXIST);
+        }
 
-        // Create the quiz activity.
-        $generator = $this->get_data_generator();
-        $quiz = $generator->create_module('quiz', [
-            'course'     => $course->id,
-            'name'       => $quizname,
-            'preferredbehaviour' => 'adaptive',
-        ]);
-
-        // Add the question to the quiz.
-        quiz_add_quiz_question($question->id, $quiz, 0, 1);
-        \mod_quiz\quiz_settings::create($quiz->id)
-            ->get_grade_calculator()
-            ->recompute_quiz_sumgrades();
+        // Create a STACK question and add it to the quiz.
+        $this->ensure_stack_question_in_quiz($quizname, 'Test STACK Q');
     }
 
     /**
-     * Create a minimal STACK question in an existing quiz (unnamed).
+     * Create a STACK question (any name) and add it to the named quiz.
      *
      * @Given a STACK question exists in quiz :quizname
      * @param string $quizname Quiz name.
      */
     public function a_stack_question_exists_in_quiz(string $quizname): void {
-        $this->a_named_stack_question_exists_in_quiz('Test STACK question', $quizname);
+        $this->ensure_stack_question_in_quiz($quizname, 'Test STACK Q');
     }
 
     /**
-     * Create a minimal STACK question with a specific name in an existing quiz.
+     * Create a named STACK question and add it to the named quiz.
      *
      * @Given a STACK question :questionname exists in quiz :quizname
      * @param string $questionname Question name.
@@ -363,65 +354,305 @@ JS;
         string $questionname,
         string $quizname
     ): void {
-        global $DB;
+        $this->ensure_stack_question_in_quiz($quizname, $questionname);
+    }
+
+    /**
+     * Internal helper: find-or-create a STACK question in a quiz.
+     *
+     * Uses qtype_stack's 'algebraic' generator template.
+     *
+     * @param string $quizname     Quiz name.
+     * @param string $questionname Question name.
+     * @return stdClass The question record.
+     */
+    protected function ensure_stack_question_in_quiz(
+        string $quizname,
+        string $questionname
+    ): stdClass {
+        global $DB, $CFG;
+        require_once($CFG->dirroot . '/mod/quiz/locallib.php');
 
         $quiz = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
         $cm   = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
-        $qcat = question_get_default_category(\context_module::instance($cm->id)->id, true);
 
-        $qdata    = $this->make_stack_algebraic_question_data($questionname, $qcat->id);
-        $question = question_bank::get_qtype('stack')->save_question(
-            (object) ['id' => 0, 'qtype' => 'stack', 'category' => $qcat->id],
-            $qdata
-        );
+        // Check whether question already exists.
+        $existing = $DB->get_record('question', [
+            'name'  => $questionname,
+            'qtype' => 'stack',
+        ]);
+        if ($existing) {
+            return $existing;
+        }
 
+        // Resolve question category.
+        $ctx = context_module::instance($cm->id);
+        $cat = $DB->get_record('question_categories', ['contextid' => $ctx->id]);
+        if (!$cat) {
+            $coursecontext = context_course::instance($quiz->course);
+            $cat = $DB->get_record('question_categories', ['contextid' => $coursecontext->id]);
+        }
+        if (!$cat) {
+            $gen  = testing_util::get_data_generator();
+            $qgen = $gen->get_plugin_generator('core_question');
+            $cat  = $qgen->create_question_category(['contextid' => $ctx->id]);
+        }
+
+        // Create STACK question via the plugin generator.
+        $gen      = testing_util::get_data_generator();
+        $qgen     = $gen->get_plugin_generator('core_question');
+        $question = $qgen->create_question('stack', 'algebraic', [
+            'name'     => $questionname,
+            'category' => $cat->id,
+        ]);
+
+        // Add question to the quiz.
         quiz_add_quiz_question($question->id, $quiz, 0, 1);
-        \mod_quiz\quiz_settings::create($quiz->id)
-            ->get_grade_calculator()
-            ->recompute_quiz_sumgrades();
+
+        if (function_exists('quiz_update_sumgrades')) {
+            quiz_update_sumgrades($quiz);
+        } else {
+            // Moodle 5.x: quiz_update_sumgrades was removed.
+            $quizobj = mod_quiz\quiz_settings::create($quiz->id);
+            $quizobj->get_grade_calculator()->recompute_quiz_sumgrades();
+        }
+
+        return $DB->get_record('question', ['id' => $question->id], '*', MUST_EXIST);
     }
 
-    // Navigation and interaction steps.
+    // Navigation helpers.
 
     /**
-     * Start a new attempt on a quiz as the current user (When variant).
+     * Open the STACK MathQuill quiz configuration page directly by quiz name.
      *
+     * @Given I am on the STACK MathQuill quiz configuration page for :quizname
+     * @param string $quizname Quiz name.
+     */
+    public function i_am_on_quiz_config_page(string $quizname): void {
+        global $DB;
+        $quiz = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
+        $cm   = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
+        $url  = new moodle_url(
+            '/local/stackmatheditor/configure.php',
+            ['cmid' => $cm->id]
+        );
+        $this->getSession()->visit($url->out(false));
+        $this->getSession()->wait(2000, "document.readyState === 'complete'");
+    }
+
+    /**
+     * Open the MathQuill configuration page for a specific question inside a quiz.
+     *
+     * @Given I am on the MathQuill configuration page for question :questionname in :quizname
+     * @param string $questionname Question name.
+     * @param string $quizname     Quiz name.
+     */
+    public function i_am_on_question_config_page(
+        string $questionname,
+        string $quizname
+    ): void {
+        global $DB;
+
+        $quiz     = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
+        $cm       = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
+        $question = $DB->get_record(
+            'question',
+            ['name' => $questionname, 'qtype' => 'stack'],
+            '*',
+            MUST_EXIST
+        );
+
+        // Resolve question bank entry id (Moodle 4.1+).
+        $qbe = $DB->get_record('question_bank_entries', ['questionid' => $question->id]);
+        if (!$qbe) {
+            throw new ExpectationException(
+                "No question_bank_entry found for question '$questionname'.",
+                $this->getSession()
+            );
+        }
+
+        $url = new moodle_url(
+            '/local/stackmatheditor/configure.php',
+            ['cmid' => $cm->id, 'qbeid' => $qbe->id]
+        );
+        $this->getSession()->visit($url->out(false));
+        $this->getSession()->wait(2000, "document.readyState === 'complete'");
+    }
+
+    /**
+     * Start a quiz attempt as the currently logged-in user.
+     *
+     * @Given I attempt the quiz :quizname
      * @When I attempt the quiz :quizname
      * @param string $quizname Quiz name.
      */
     public function i_attempt_the_quiz(string $quizname): void {
-        $this->i_am_attempting_the_quiz($quizname);
+        global $DB;
+        $quiz = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
+        $cm   = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
+        $url  = new moodle_url('/mod/quiz/view.php', ['id' => $cm->id]);
+        $this->getSession()->visit($url->out(false));
+        $this->getSession()->wait(2000, "document.readyState === 'complete'");
+
+        // Click "Attempt quiz now" button (text varies by Moodle version / language).
+        $page   = $this->getSession()->getPage();
+        $button = $page->find(
+            'xpath',
+            '//button[contains(@class,"mod_quiz-start-attempt-button")]'
+            . ' | //input[@type="submit"][contains(@value,"Attempt")]'
+            . ' | //button[contains(text(),"Attempt")]'
+            . ' | //button[contains(text(),"Quiz starten")]'
+        );
+        if ($button) {
+            $button->click();
+            $this->getSession()->wait(3000, "document.readyState === 'complete'");
+        }
     }
 
     /**
-     * Start a new attempt on a quiz as the current user (Given variant).
+     * Alias for i_attempt_the_quiz for use in Given context.
      *
      * @Given I am attempting the quiz :quizname
      * @param string $quizname Quiz name.
      */
     public function i_am_attempting_the_quiz(string $quizname): void {
-        global $DB;
-
-        $quiz = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
-        $cm   = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
-
-        // Navigate to quiz view page and start attempt.
-        $url = new \moodle_url('/mod/quiz/view.php', ['id' => $cm->id]);
-        $this->getSession()->visit($this->locate_path($url->out_as_local_url(false)));
-        $this->find_button('Quizversuch starten')->press();
-        // If attempt already in progress, the button may not appear; navigate directly.
-        $this->getSession()->wait(3000, 'document.readyState === "complete"');
+        $this->i_attempt_the_quiz($quizname);
     }
 
     /**
-     * Submit an answer to the first question and leave the attempt open.
+     * Return to the quiz attempt page (re-open the current attempt).
      *
-     * @Given I have previously answered :answer in the quiz :quizname
-     * @param string $answer   Maxima-format answer string.
+     * @When I return to the quiz attempt page
+     */
+    public function i_return_to_the_quiz_attempt_page(): void {
+        $this->getSession()->back();
+        $this->getSession()->wait(2000, "document.readyState === 'complete'");
+    }
+
+    /**
+     * Navigate to next quiz page and back to simulate saving progress.
+     *
+     * @When I navigate to the next question and back
+     */
+    public function i_navigate_to_next_question_and_back(): void {
+        $page = $this->getSession()->getPage();
+        $next = $page->find(
+            'xpath',
+            '//input[@type="submit"][@name="next"]'
+            . ' | //button[@name="next"]'
+            . ' | //input[@type="submit"][contains(@value,"Next")]'
+        );
+        if ($next) {
+            $next->click();
+            $this->getSession()->wait(2000, "document.readyState === 'complete'");
+        }
+        $this->getSession()->back();
+        $this->getSession()->wait(2000, "document.readyState === 'complete'");
+    }
+
+    /**
+     * Enter an answer in a quiz, then navigate away and back to simulate persistence.
+     *
+     * @When I have previously answered :answer in the quiz :quizname
+     * @param string $answer   Maxima expression to set as the input value.
      * @param string $quizname Quiz name.
      */
-    public function i_have_previously_answered_in_quiz(
+    public function i_have_previously_answered(
         string $answer,
+        string $quizname
+    ): void {
+        $this->i_attempt_the_quiz($quizname);
+
+        // Set the first visible STACK algebraic input value via JS.
+        $safeanswer = addslashes($answer);
+        $js = <<<JS
+            (function() {
+                var input = document.querySelector('input[name*="ans"]');
+                if (!input) { return false; }
+                input.value = '{$safeanswer}';
+                input.dispatchEvent(new Event('change', {bubbles: true}));
+                return true;
+            })()
+JS;
+        $this->getSession()->evaluateScript($js);
+        $this->getSession()->wait(1000, 'true');
+
+        // Submit via the "Next" or save-without-submitting button.
+        $this->i_navigate_to_next_question_and_back();
+    }
+
+    // Configure form assertions.
+
+    /**
+     * Deselect a toolbar group option in the configure form select element.
+     *
+     * @When I deselect the :groupname toolbar group
+     * @param string $groupname Label text (or partial) of the group option to deselect.
+     */
+    public function i_deselect_the_toolbar_group(string $groupname): void {
+        $safegroup = addslashes($groupname);
+        $js = <<<JS
+            (function() {
+                var select = document.querySelector('select[name="groups"]');
+                if (!select) { return 'no-select'; }
+                var options = select.options;
+                for (var i = 0; i < options.length; i++) {
+                    if (options[i].text.indexOf('{$safegroup}') !== -1) {
+                        options[i].selected = false;
+                        return 'ok';
+                    }
+                }
+                return 'not-found';
+            })()
+JS;
+        $result = $this->getSession()->evaluateScript($js);
+        if ($result !== 'ok') {
+            throw new ExpectationException(
+                "Toolbar group '$groupname' not found in select (result: $result).",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Assert that a toolbar group option is currently not selected.
+     *
+     * @Then the :groupname toolbar group should be deselected
+     * @param string $groupname Label text (or partial) of the group option.
+     */
+    public function the_toolbar_group_should_be_deselected(string $groupname): void {
+        $safegroup = addslashes($groupname);
+        $js = <<<JS
+            (function() {
+                var select = document.querySelector('select[name="groups"]');
+                if (!select) { return 'no-select'; }
+                var options = select.options;
+                for (var i = 0; i < options.length; i++) {
+                    if (options[i].text.indexOf('{$safegroup}') !== -1) {
+                        return options[i].selected ? 'selected' : 'deselected';
+                    }
+                }
+                return 'not-found';
+            })()
+JS;
+        $result = $this->getSession()->evaluateScript($js);
+        if ($result !== 'deselected') {
+            throw new ExpectationException(
+                "Expected toolbar group '$groupname' to be deselected, but got: $result",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Set the quiz-level config so that a specific toolbar group is enabled.
+     *
+     * @Given the quiz-level config has :groupname enabled for :quizname
+     * @param string $groupname Group label or key to enable.
+     * @param string $quizname  Quiz name.
+     */
+    public function the_quiz_level_config_has_enabled_for(
+        string $groupname,
         string $quizname
     ): void {
         global $DB;
@@ -429,168 +660,83 @@ JS;
         $quiz = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
         $cm   = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
 
-        $url = new \moodle_url('/mod/quiz/view.php', ['id' => $cm->id]);
-        $this->getSession()->visit($this->locate_path($url->out_as_local_url(false)));
-
-        // Start or resume attempt.
-        try {
-            $this->find_button('Quizversuch starten')->press();
-        } catch (\Exception $e) {
-            $this->find_button('Versuch fortsetzen')->press();
+        // Find group key by label substring match.
+        $groups   = local_stackmatheditor\definitions::get_element_groups();
+        $groupkey = null;
+        foreach ($groups as $key => $group) {
+            if (
+                $key === $groupname
+                || strpos((string)($group['label'] ?? ''), $groupname) !== false
+            ) {
+                $groupkey = $key;
+                break;
+            }
         }
-
-        $this->getSession()->wait(3000, 'document.readyState === "complete"');
-
-        // Inject the answer directly into the hidden input.
-        $js = <<<JS
-            (function() {
-                var inputs = document.querySelectorAll('input[type="hidden"][name$="ans1"]');
-                if (!inputs.length) {
-                    inputs = document.querySelectorAll('input[name*="ans1"]');
-                }
-                inputs.forEach(function(el) { el.value = '{$answer}'; });
-            })();
-JS;
-        $this->getSession()->executeScript($js);
-
-        // Save without submitting so the attempt stays open.
-        try {
-            $this->find_button('Speichern, aber noch nicht abschicken')->press();
-        } catch (\Exception $e) {
-            // Already on the attempt page without a save button.
-            unset($e);
-        }
-        $this->getSession()->wait(2000, 'document.readyState === "complete"');
-    }
-
-    /**
-     * Navigate to the next question page and back to question 1.
-     *
-     * @When I navigate to the next question and back
-     */
-    public function i_navigate_to_next_question_and_back(): void {
-        $this->find_button('Nächste Seite')->press();
-        $this->getSession()->wait(2000, 'document.readyState === "complete"');
-        $this->find_button('Vorherige Seite')->press();
-        $this->getSession()->wait(2000, 'document.readyState === "complete"');
-    }
-
-    /**
-     * Return to the quiz attempt page (reload current URL).
-     *
-     * @When I return to the quiz attempt page
-     */
-    public function i_return_to_quiz_attempt_page(): void {
-        $this->getSession()->reload();
-        $this->getSession()->wait(3000, 'document.readyState === "complete"');
-    }
-
-    // Assertion steps.
-
-    /**
-     * Assert the original (non-MathQuill) STACK input field is hidden.
-     *
-     * The editor wraps the STACK input and hides it. After injection the
-     * wrapper class 'sme-mq-container' is present and the original input
-     * carries a hidden attribute or is inside a visually-hidden wrapper.
-     *
-     * @Then I should not see the original STACK input field
-     */
-    public function i_should_not_see_original_stack_input(): void {
-        // The original input is hidden by the editor. Check it has the
-        // CSS class that the editor adds to mark it as replaced.
-        $hidden = $this->getSession()->evaluateScript(
-            "return !!(document.querySelector('.sme-original-hidden')" .
-            "       || document.querySelector('.sme-mq-container'));"
-        );
-        if (!$hidden) {
+        if (!$groupkey) {
             throw new ExpectationException(
-                'Original STACK input is still visible (MathQuill editor not injected)',
+                "Unknown toolbar group: '$groupname'",
+                $this->getSession()
+            );
+        }
+
+        // Persist quiz-level config.
+        $existing = $DB->get_record(
+            'local_stackmatheditor_config',
+            ['cmid' => $cm->id, 'qbeid' => null]
+        );
+        if ($existing) {
+            $config = json_decode($existing->config ?? '{}', true) ?: [];
+            $config['groups'][$groupkey] = true;
+            $existing->config = json_encode($config);
+            $DB->update_record('local_stackmatheditor_config', $existing);
+        } else {
+            $record         = new stdClass();
+            $record->cmid   = $cm->id;
+            $record->qbeid  = null;
+            $record->config = json_encode(['groups' => [$groupkey => true]]);
+            $DB->insert_record('local_stackmatheditor_config', $record);
+        }
+    }
+
+    /**
+     * Assert that a question-level config override exists in the DB.
+     *
+     * @Then the question-level config for :questionname should override the quiz default
+     * @param string $questionname Question name.
+     */
+    public function the_question_level_config_should_override(string $questionname): void {
+        global $DB;
+
+        $question = $DB->get_record(
+            'question',
+            ['name' => $questionname, 'qtype' => 'stack'],
+            '*',
+            MUST_EXIST
+        );
+        $qbe = $DB->get_record(
+            'question_bank_entries',
+            ['questionid' => $question->id],
+            '*',
+            MUST_EXIST
+        );
+        $override = $DB->record_exists(
+            'local_stackmatheditor_config',
+            ['qbeid' => $qbe->id]
+        );
+        if (!$override) {
+            throw new ExpectationException(
+                "No question-level config override found for '$questionname'.",
                 $this->getSession()
             );
         }
     }
 
     /**
-     * Assert the MathQuill editor is visible for the given input name.
-     *
-     * @Given the MathQuill editor is visible for :inputname
-     * @param string $inputname STACK input name, e.g. "ans1".
-     */
-    public function the_mathquill_editor_is_visible_for(string $inputname): void {
-        $this->getSession()->wait(
-            5000,
-            "document.querySelector('.sme-mq-container[data-input=\"{$inputname}\"]"
-            . ", .sme-mq-container') !== null"
-        );
-        $visible = $this->getSession()->evaluateScript(
-            "return !!(document.querySelector('.sme-mq-container'));"
-        );
-        if (!$visible) {
-            throw new ExpectationException(
-                "MathQuill editor not visible for input '$inputname'",
-                $this->getSession()
-            );
-        }
-    }
-
-    /**
-     * Click a toolbar button identified by its title attribute.
-     *
-     * @When I click the toolbar button with title :title
-     * @param string $title The title attribute of the button to click.
-     */
-    public function i_click_toolbar_button_with_title(string $title): void {
-        $title   = addslashes($title);
-        $clicked = $this->getSession()->evaluateScript(
-            "var btn = document.querySelector('.sme-tb-btn[title=\"{$title}\"]');" .
-            "if (btn) { btn.click(); return true; } return false;"
-        );
-        if (!$clicked) {
-            throw new ExpectationException(
-                "Toolbar button with title '$title' not found",
-                $this->getSession()
-            );
-        }
-        $this->getSession()->wait(1000, 'true');
-    }
-
-    /**
-     * Assert the MathQuill field contains LaTeX that includes a given fragment.
-     *
-     * @Then the MathQuill field for :inputname should contain LaTeX containing :fragment
-     * @param string $inputname STACK input name, e.g. "ans1".
-     * @param string $fragment  LaTeX fragment that should appear in the content.
-     */
-    public function the_mathquill_field_should_contain_latex(
-        string $inputname,
-        string $fragment
-    ): void {
-        $latex = $this->getSession()->evaluateScript(
-            "(function() {" .
-            "  var c = document.querySelector('.sme-mq-container');" .
-            "  if (!c) { return ''; }" .
-            "  var mq = c.__mq;" .
-            "  return mq ? mq.latex() : c.getAttribute('data-latex') || '';" .
-            "})()"
-        );
-        if (strpos((string) $latex, $fragment) === false) {
-            throw new ExpectationException(
-                "MathQuill field for '$inputname' contains '$latex',"
-                . " expected to contain '$fragment'",
-                $this->getSession()
-            );
-        }
-    }
-
-    // Config-write steps.
-
-    /**
-     * Disable the editor at question-slot level for a given input/quiz pair.
+     * Mark a quiz STACK question slot as having the editor disabled.
      *
      * @Given the STACK question :inputname in :quizname has editor disabled
-     * @param string $inputname STACK input name (ignored, first question used).
-     * @param string $quizname  Quiz name.
+     * @param string $inputname  Input name (e.g. "ans1") used to locate the question slot.
+     * @param string $quizname   Quiz name.
      */
     public function the_stack_question_has_editor_disabled(
         string $inputname,
@@ -598,329 +744,237 @@ JS;
     ): void {
         global $DB;
 
-        $quiz  = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
-        $cm    = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
-        $qbeid = $this->get_first_stack_qbeid($quiz->id);
+        $quiz = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
+        $cm   = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
 
-        \local_stackmatheditor\config_manager::save_config(
-            (int) $cm->id,
-            (int) $qbeid,
-            ['_enabled' => false]
-        );
-    }
-
-    /**
-     * Enable a toolbar group at the quiz-level config.
-     *
-     * @Given the quiz-level config has :groupname enabled
-     * @param string $groupname Toolbar group name, e.g. "Trigonometrie".
-     */
-    public function the_quiz_level_config_has_group_enabled(string $groupname): void {
-        global $DB;
-
-        // Resolve quiz from current URL.
-        $cmid = $this->resolve_current_quiz_cmid();
-
-        // Map display name to group key.
-        $key  = $this->resolve_group_key_from_label($groupname);
-
-        \local_stackmatheditor\config_manager::save_quiz_default(
-            $cmid,
-            [$key => true]
-        );
-    }
-
-    /**
-     * Navigate to the question-level configure.php page.
-     *
-     * @When I am on the MathQuill configuration page for question :questionname in :quizname
-     * @param string $questionname Question name.
-     * @param string $quizname     Quiz name.
-     */
-    public function i_am_on_mathquill_config_page_for_question(
-        string $questionname,
-        string $quizname
-    ): void {
-        global $DB;
-
-        $quiz  = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
-        $cm    = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
-        $qbeid = $this->get_qbeid_by_name($quiz->id, $questionname);
-
-        $url = new \moodle_url('/local/stackmatheditor/configure.php', [
-            'cmid'  => $cm->id,
-            'qbeid' => $qbeid,
-        ]);
-        $this->getSession()->visit($this->locate_path($url->out_as_local_url(false)));
-        $this->getSession()->wait(3000, 'document.readyState === "complete"');
-    }
-
-    /**
-     * Assert that the question-level config overrides the quiz default for
-     * the named question.
-     *
-     * @Then the question-level config for :questionname should override the quiz default
-     * @param string $questionname Question name.
-     */
-    public function the_question_level_config_should_override_quiz_default(
-        string $questionname
-    ): void {
-        global $DB;
-
-        // Resolve quiz from current URL.
-        $cmid  = $this->resolve_current_quiz_cmid();
-        $quiz  = $DB->get_record(
-            'quiz',
-            ['id' => $DB->get_field('course_modules', 'instance', ['id' => $cmid])],
-            '*',
-            MUST_EXIST
-        );
-        $qbeid = $this->get_qbeid_by_name($quiz->id, $questionname);
-
-        $config = \local_stackmatheditor\config_manager::get_config($cmid, $qbeid);
-
-        // A question-level record exists when there is at least one key that
-        // differs from the raw quiz default (the merged config contains slot data).
-        $slotrecord = $DB->get_record(
-            'local_stackmatheditor',
-            ['cmid' => $cmid, 'questionbankentryid' => $qbeid]
-        );
-        if (!$slotrecord) {
-            throw new ExpectationException(
-                "No slot-level config record found for question '$questionname'",
-                $this->getSession()
-            );
-        }
-    }
-
-    /**
-     * Deselect a toolbar group checkbox by its visible label.
-     *
-     * @When I deselect the :groupname toolbar group
-     * @param string $groupname Visible group label, e.g. "Trigonometrie".
-     */
-    public function i_deselect_toolbar_group(string $groupname): void {
-        $key = $this->resolve_group_key_from_label($groupname);
-        $this->getSession()->executeScript(
-            "var el = document.querySelector(" .
-            "  'input[type=checkbox][name*=\"{$key}\"]," .
-            "   input[type=checkbox][id*=\"{$key}\"]'" .
-            "); if (el && el.checked) { el.click(); }"
-        );
-    }
-
-    /**
-     * Assert a toolbar group checkbox is unchecked.
-     *
-     * @Then the :groupname toolbar group should be deselected
-     * @param string $groupname Visible group label, e.g. "Trigonometrie".
-     */
-    public function the_toolbar_group_should_be_deselected(string $groupname): void {
-        $key     = $this->resolve_group_key_from_label($groupname);
-        $checked = $this->getSession()->evaluateScript(
-            "var el = document.querySelector(" .
-            "  'input[type=checkbox][name*=\"{$key}\"]," .
-            "   input[type=checkbox][id*=\"{$key}\"]'" .
-            "); return el ? el.checked : null;"
-        );
-        if ($checked !== false) {
-            throw new ExpectationException(
-                "Toolbar group '$groupname' (key: $key) should be deselected",
-                $this->getSession()
-            );
-        }
-    }
-
-    // Private helpers.
-
-    /**
-     * Build the minimal qtype_stack question data object for a single algebraic input.
-     *
-     * @param string $name       Question name.
-     * @param int    $categoryid Question category ID.
-     * @return object            Data suitable for question_bank::get_qtype('stack')->save_question().
-     */
-    private function make_stack_algebraic_question_data(string $name, int $categoryid): object {
-        return (object) [
-            'category'          => $categoryid,
-            'name'              => $name,
-            'questiontext'      => ['text' => '<p>Enter [[input:ans1]]</p><p>[[validation:ans1]]</p>', 'format' => FORMAT_HTML],
-            'questiontextformat' => FORMAT_HTML,
-            'generalfeedback'   => ['text' => '', 'format' => FORMAT_HTML],
-            'defaultmark'       => 1.0,
-            'penalty'           => 0.1,
-            'hidden'            => 0,
-            'questionvariables' => '',
-            'questionnote'      => ['text' => '{@ans1@}', 'format' => FORMAT_HTML],
-            'questiondescription' => ['text' => '', 'format' => FORMAT_HTML],
-            'specificfeedback'  => ['text' => '[[feedback:prt1]]', 'format' => FORMAT_HTML],
-            'markmode'          => \qtype_stack\question_definition::MARK_MODE_PENALTY,
-            'variantsselectionseed' => '',
-            'options'           => (object) [
-                'decimals'          => '.',
-                'scientificnotation' => '*10',
-                'multiplicationsign' => 'dot',
-                'complexno'          => 'i',
-                'inversetrig'        => 'cos-1',
-                'logicsymbol'        => 'lang',
-                'matrixparens'       => '[',
-                'simplify'           => 1,
-                'assumepositive'     => 0,
-                'assumereal'         => 0,
-                'sqrtsign'           => 1,
-                'floatprecision'     => 5,
-                'usecontextsession'  => 1,
-                'displayoptions'     => '',
-            ],
-            'inputs'            => [
-                'ans1' => (object) [
-                    'name'                => 'ans1',
-                    'type'                => 'algebraic',
-                    'tans'                => 'x^2',
-                    'boxsize'             => 15,
-                    'strictsyntax'        => 1,
-                    'insertstars'         => 0,
-                    'syntaxhint'          => '',
-                    'syntaxattribute'     => 0,
-                    'forbidwords'         => '',
-                    'allowwords'          => '',
-                    'forbidfloat'         => 1,
-                    'requirelowestterms'  => 0,
-                    'checkanswertype'     => 0,
-                    'mustverify'          => 1,
-                    'showvalidation'      => 1,
-                    'options'             => '',
-                ],
-            ],
-            'prts'              => [
-                'prt1' => (object) [
-                    'name'              => 'prt1',
-                    'value'             => 1.0,
-                    'autosimplify'      => 1,
-                    'feedbackstyle'     => 1,
-                    'feedbackvariables' => '',
-                    'firstnodename'     => '0',
-                    'nodes'             => [
-                        '0' => (object) [
-                            'nodename'         => '0',
-                            'description'      => '',
-                            'answertest'       => 'AlgEquiv',
-                            'sans'             => 'ans1',
-                            'tans'             => 'x^2',
-                            'testoptions'      => '',
-                            'quiet'            => 0,
-                            'truescoremode'    => '=',
-                            'truescore'        => 1.0,
-                            'truepenalty'      => null,
-                            'truenextnode'     => '-1',
-                            'trueanswernote'   => 'prt1-1-T',
-                            'truefeedback'     => ['text' => '<p>Correct.</p>', 'format' => FORMAT_HTML],
-                            'falsescoremode'   => '=',
-                            'falsescore'       => 0.0,
-                            'falsepenalty'     => null,
-                            'falsenextnode'    => '-1',
-                            'falseanswernote'  => 'prt1-1-F',
-                            'falsefeedback'    => ['text' => '<p>Incorrect.</p>', 'format' => FORMAT_HTML],
-                        ],
-                    ],
-                ],
-            ],
-        ];
-    }
-
-    /**
-     * Return the question bank entry ID of the first STACK question in a quiz.
-     *
-     * @param  int $quizid Quiz instance ID.
-     * @return int Question bank entry ID.
-     */
-    private function get_first_stack_qbeid(int $quizid): int {
-        global $DB;
-
-        $sql = 'SELECT qbe.id
-                  FROM {quiz_slots} qs
-                  JOIN {question_references} qr
-                       ON qr.component = \'mod_quiz\'
-                      AND qr.questionarea = \'slot\'
-                      AND qr.itemid = qs.id
-                  JOIN {question_bank_entries} qbe ON qbe.id = qr.questionbankentryid
-                  JOIN {question_versions} qv ON qv.questionbankentryid = qbe.id
-                  JOIN {question} q ON q.id = qv.questionid
-                 WHERE qs.quizid = :quizid AND q.qtype = \'stack\'
-              ORDER BY qs.slot ASC
-                 LIMIT 1';
-
-        $id = $DB->get_field_sql($sql, ['quizid' => $quizid]);
-        if (!$id) {
-            throw new \coding_exception("No STACK question found in quiz $quizid");
-        }
-        return (int) $id;
-    }
-
-    /**
-     * Return the question bank entry ID for a named question in a quiz.
-     *
-     * @param  int    $quizid       Quiz instance ID.
-     * @param  string $questionname Question name.
-     * @return int Question bank entry ID.
-     */
-    private function get_qbeid_by_name(int $quizid, string $questionname): int {
-        global $DB;
-
-        $sql = 'SELECT qbe.id
-                  FROM {quiz_slots} qs
-                  JOIN {question_references} qr
-                       ON qr.component = \'mod_quiz\'
-                      AND qr.questionarea = \'slot\'
-                      AND qr.itemid = qs.id
-                  JOIN {question_bank_entries} qbe ON qbe.id = qr.questionbankentryid
-                  JOIN {question_versions} qv ON qv.questionbankentryid = qbe.id
-                  JOIN {question} q ON q.id = qv.questionid
-                 WHERE qs.quizid = :quizid AND q.name = :name
-              ORDER BY qs.slot ASC
-                 LIMIT 1';
-
-        $id = $DB->get_field_sql($sql, ['quizid' => $quizid, 'name' => $questionname]);
-        if (!$id) {
-            throw new \coding_exception("Question '$questionname' not found in quiz $quizid");
-        }
-        return (int) $id;
-    }
-
-    /**
-     * Resolve the cmid from the current page URL.
-     *
-     * @return int Course-module ID.
-     */
-    private function resolve_current_quiz_cmid(): int {
-        $url = $this->getSession()->getCurrentUrl();
-        if (preg_match('/[?&](?:id|cmid)=(\d+)/', $url, $m)) {
-            return (int) $m[1];
+        // Find the question containing the given input name.
+        $slots = $DB->get_records('quiz_slots', ['quizid' => $quiz->id]);
+        foreach ($slots as $slot) {
+            $question = question_bank::load_question($slot->questionid, false);
+            if (!empty($question->inputs[$inputname])) {
+                $qbe = $DB->get_record(
+                    'question_bank_entries',
+                    ['questionid' => $slot->questionid]
+                );
+                if ($qbe) {
+                    $record         = new stdClass();
+                    $record->cmid   = $cm->id;
+                    $record->qbeid  = $qbe->id;
+                    $record->config = json_encode(['enabled' => 0]);
+                    $existing = $DB->get_record('local_stackmatheditor_config', [
+                        'cmid'  => $cm->id,
+                        'qbeid' => $qbe->id,
+                    ]);
+                    if ($existing) {
+                        $record->id = $existing->id;
+                        $DB->update_record('local_stackmatheditor_config', $record);
+                    } else {
+                        $DB->insert_record('local_stackmatheditor_config', $record);
+                    }
+                }
+                return;
+            }
         }
         throw new ExpectationException(
-            'Cannot determine cmid from URL: ' . $url,
+            "Could not find STACK input '$inputname' in quiz '$quizname'.",
             $this->getSession()
         );
     }
 
+    // MathQuill editor assertions.
+
     /**
-     * Map a visible toolbar-group label to its internal key.
+     * Assert that the MathQuill editor container is visible for an input.
      *
-     * The configure page uses the label returned by definitions::get_element_groups()
-     * for display. This helper does a reverse lookup. Falls back to the input
-     * string as-is when no match is found (allows passing the key directly).
-     *
-     * @param  string $label Visible label, e.g. "Trigonometrie".
-     * @return string Group key, e.g. "trigonometry".
+     * @Then the MathQuill editor is visible for :inputname
+     * @param string $inputname Name attribute of the hidden input element.
      */
-    private function resolve_group_key_from_label(string $label): string {
-        $groups = \local_stackmatheditor\definitions::get_element_groups();
-        foreach ($groups as $key => $group) {
-            if (isset($group['label']) && $group['label'] === $label) {
-                return $key;
-            }
+    public function the_mathquill_editor_is_visible_for(string $inputname): void {
+        $js = <<<JS
+            (function() {
+                var input = document.querySelector('input[name="{$inputname}"]');
+                if (!input) { return false; }
+                var wrap = input.previousElementSibling;
+                if (!wrap) { return false; }
+                return wrap.classList.contains('sme-input-wrap')
+                    || wrap.classList.contains('sme-mq-container');
+            })()
+JS;
+        $result = $this->getSession()->evaluateScript($js);
+        if (!$result) {
+            throw new ExpectationException(
+                "MathQuill editor is not visible for input '$inputname'.",
+                $this->getSession()
+            );
         }
-        // Label not matched — assume the caller passed the key directly.
-        return $label;
+    }
+
+    /**
+     * Assert that the original STACK input field is hidden.
+     *
+     * @Then I should not see the original STACK input field
+     */
+    public function i_should_not_see_the_original_stack_input_field(): void {
+        $js = <<<JS
+            (function() {
+                var inputs = document.querySelectorAll(
+                    '.stackinputfeedback, .que.stack input[type="text"]'
+                );
+                for (var i = 0; i < inputs.length; i++) {
+                    var style = window.getComputedStyle(inputs[i]);
+                    if (style.display !== 'none' && style.visibility !== 'hidden') {
+                        return false;
+                    }
+                }
+                return true;
+            })()
+JS;
+        $result = $this->getSession()->evaluateScript($js);
+        if (!$result) {
+            throw new ExpectationException(
+                "Original STACK input field is still visible.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Assert that the MathQuill LaTeX content for an input contains a fragment.
+     *
+     * @Then the MathQuill field for :inputname should contain LaTeX containing :fragment
+     * @param string $inputname Name attribute of the hidden input.
+     * @param string $fragment  Expected LaTeX fragment.
+     */
+    public function the_mathquill_field_should_contain_latex(
+        string $inputname,
+        string $fragment
+    ): void {
+        $safefragment = addslashes($fragment);
+        $js = <<<JS
+            (function() {
+                var input = document.querySelector('input[name="{$inputname}"]');
+                if (!input) { return null; }
+                var wrap = input.previousElementSibling;
+                if (!wrap) { return null; }
+                if (window.MathQuill) {
+                    var mq = MathQuill.getInterface(2);
+                    var field = mq(wrap.querySelector('.mq-editable-field'));
+                    if (field) { return field.latex(); }
+                }
+                var mqroot = wrap.querySelector('.mq-root-block');
+                return mqroot ? mqroot.getAttribute('aria-label') : null;
+            })()
+JS;
+        $actual = $this->getSession()->evaluateScript($js);
+        if ($actual === null || strpos($actual, $fragment) === false) {
+            throw new ExpectationException(
+                "MathQuill field for '$inputname' LaTeX '$actual'"
+                    . " does not contain '$fragment'.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Click a toolbar button that has the given title attribute.
+     *
+     * @When I click the toolbar button with title :title
+     * @param string $title Title attribute of the toolbar button.
+     */
+    public function i_click_the_toolbar_button_with_title(string $title): void {
+        $safetitle = addslashes($title);
+        $btn = $this->find(
+            'xpath',
+            '//button[contains(@class,"sme-tb-btn")][@title="' . $safetitle . '"]'
+        );
+        if (!$btn) {
+            throw new ExpectationException(
+                "Toolbar button with title '$title' not found.",
+                $this->getSession()
+            );
+        }
+        $btn->click();
+    }
+
+    // Tex2max JavaScript evaluation.
+
+    /**
+     * Evaluate a tex2max conversion in the browser AMD context and store the result.
+     *
+     * @When the tex2max output for latex :latex in variableMode :mode is evaluated
+     * @param string $latex LaTeX input string.
+     * @param string $mode  Variable mode string (e.g. "explicit_single").
+     */
+    public function the_tex2max_output_is_evaluated(
+        string $latex,
+        string $mode
+    ): void {
+        // Escape for safe embedding in a JS single-quoted string.
+        $jslatex = str_replace(['\\', "'", "\n"], ['\\\\', "\\'", '\\n'], $latex);
+        $jsmode  = str_replace("'", "\\'", $mode);
+
+        $js = <<<JS
+            window.__sme_t2m_result = null;
+            require(['local_stackmatheditor/tex2max'], function(t2m) {
+                window.__sme_t2m_result = t2m.convert('{$jslatex}', {variableMode: '{$jsmode}'});
+            });
+JS;
+        $this->getSession()->evaluateScript($js);
+        // Wait up to 5 s for the AMD callback to fire.
+        $this->getSession()->wait(5000, "window.__sme_t2m_result !== null");
+    }
+
+    /**
+     * Assert the tex2max result equals an expected string exactly.
+     *
+     * @Then the tex2max result should be :expected
+     * @param string $expected Expected Maxima output.
+     */
+    public function the_tex2max_result_should_be(string $expected): void {
+        $actual = $this->getSession()->evaluateScript(
+            'return window.__sme_t2m_result;'
+        );
+        if ($actual !== $expected) {
+            throw new ExpectationException(
+                "tex2max result '$actual' does not equal expected '$expected'.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Assert the tex2max result contains a substring.
+     *
+     * @Then the tex2max result should contain :text
+     * @param string $text Expected substring.
+     */
+    public function the_tex2max_result_should_contain(string $text): void {
+        $actual = $this->getSession()->evaluateScript(
+            'return window.__sme_t2m_result;'
+        );
+        if ($actual === null || strpos($actual, $text) === false) {
+            throw new ExpectationException(
+                "tex2max result '$actual' does not contain '$text'.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Assert the tex2max result does not contain a substring.
+     *
+     * @Then the tex2max result should not contain :text
+     * @param string $text String that must not appear in the result.
+     */
+    public function the_tex2max_result_should_not_contain(string $text): void {
+        $actual = $this->getSession()->evaluateScript(
+            'return window.__sme_t2m_result;'
+        );
+        if ($actual !== null && strpos($actual, $text) !== false) {
+            throw new ExpectationException(
+                "tex2max result '$actual' should not contain '$text'.",
+                $this->getSession()
+            );
+        }
     }
 }

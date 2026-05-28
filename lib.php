@@ -30,6 +30,7 @@
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+
 /**
  * Add a configure link to the activity settings navigation.
  *

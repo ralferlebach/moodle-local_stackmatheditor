@@ -93,7 +93,7 @@ define(['jquery'], function($) {
      * property name conventions:
      *
      * - {cmd: "\\sqrt"}           → cmd("\\sqrt")
-     * - {write: "\\frac{}{}"}     → write("\\frac{}{}")
+     * - {write: "\\frac{}{}")}    → write("\\frac{}{}")
      * - {latex: "\\pi"}           → cmd("\\pi")
      * - {keystroke: "Backspace"}  → keystroke(...)
      * - {action: "write", cmd: …} → explicit action
@@ -139,19 +139,32 @@ define(['jquery'], function($) {
     }
 
     /**
-     * Determine the button label from an element.
-     * Supports multiple property name conventions:
+     * Determine the button label from an element definition.
      *
-     * - display_latex → MathJax rendered
-     * - displayLatex  → MathJax rendered
-     * - display       → plain text
-     * - label         → may contain LaTeX or text
+     * Checks properties in this priority order: display_html (raw HTML,
+     * no MathJax), display (plain text), display_latex / displayLatex
+     * (MathJax rendered), label containing backslash (MathJax rendered),
+     * label (plain text).
      *
      * @param {Object} el Element definition.
-     * @returns {Object} {html, needsTypeset}.
+     * @returns {Object} {html, text, needsTypeset} or null.
      */
     function resolveLabel(el) {
-        // Display_latex or displayLatex → explicit MathJax rendering request.
+        // Property display_html: raw HTML label, highest priority, no MathJax.
+        if (el.display_html) {
+            return {
+                html: '<span class="sme-tb-lbl sme-tb-lbl-html">'
+                    + el.display_html + '</span>',
+                needsTypeset: false
+            };
+        }
+
+        // Property display: plain-text label.
+        if (el.display) {
+            return {html: null, text: el.display, needsTypeset: false};
+        }
+
+        // Property display_latex / displayLatex: MathJax-rendered label.
         var dl = el.display_latex || el.displayLatex;
         if (dl) {
             return {
@@ -161,26 +174,7 @@ define(['jquery'], function($) {
             };
         }
 
-        // Display_html → safe HTML label (e.g. <sup>a</sup>/<sub>b</sub>).
-        // Only used for button definitions supplied by the plugin itself;
-        // Never populated from user input.
-        if (el.display_html) {
-            return {
-                html: '<span class="sme-tb-lbl sme-tb-lbl-html">'
-                    + el.display_html + '</span>',
-                needsTypeset: false
-            };
-        }
-
-        // Display → plain text preferred over LaTeX label (issues #26, #28, #32).
-        // Rendering a LaTeX label via MathJax depends on the MathJax URL config
-        // And can produce an oversized glyph. A plain-text display is simpler,
-        // Size-consistent, and works regardless of MathJax configuration.
-        if (el.display) {
-            return {html: null, text: el.display, needsTypeset: false};
-        }
-
-        // Label containing backslash → treat as LaTeX (no display fallback).
+        // Label containing backslash: treat as LaTeX, render with MathJax.
         if (el.label && el.label.indexOf('\\') >= 0) {
             return {
                 html: '<span class="sme-tb-lbl">'
@@ -189,7 +183,7 @@ define(['jquery'], function($) {
             };
         }
 
-        // Label → plain text.
+        // Plain label: render as text.
         if (el.label) {
             return {html: null, text: el.label, needsTypeset: false};
         }
@@ -357,7 +351,7 @@ define(['jquery'], function($) {
                         [$bar[0]]
                     ).then(function() {
                         dbg('MathJax typeset OK');
-                        return undefined;
+                        return null;
                     }).catch(function(e) {
                         dbg('MathJax error: ' + e);
                     });

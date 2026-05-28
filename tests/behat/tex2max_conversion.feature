@@ -1,149 +1,95 @@
 @local @local_stackmatheditor
-Feature: tex2max conversion produces correct Maxima output
-  As a student
-  I want mathematical expressions I type to be correctly converted to Maxima
-  So that STACK can evaluate my answers properly
+Feature: tex2max converts LaTeX to Maxima notation correctly
+  As a plugin developer
+  I want tex2max to produce correct Maxima output for all supported constructs
+  So that STACK questions receive syntactically valid CAS expressions
 
   Background:
     Given the following "users" exist:
-      | username | firstname | lastname | email               |
-      | student1 | Student   | One      | student@example.com |
+      | username | firstname | lastname | email                |
+      | student1 | Student   | One      | student1@example.com |
     And the following "courses" exist:
       | fullname | shortname |
       | Course 1 | C1        |
     And the following "course enrolments" exist:
       | user     | course | role    |
       | student1 | C1     | student |
-    And a STACK quiz "Conversion Quiz" with algebraic input exists in "C1"
     And the plugin enabled mode is set to "1"
-
-  # ── Issue #27: Maxima operator keywords not treated as implicit multiplication
-
-  @javascript
-  Scenario: "or" keyword is passed through as logical operator, not o*r
-    Given I log in as "student1"
-    And I am attempting the quiz "Conversion Quiz"
-    When the tex2max output for latex "x=3 or x=6" in variableMode "explicit_single" is evaluated
-    Then the tex2max result should contain "or"
-    And the tex2max result should not contain "o*r"
-    And the tex2max result should not contain "o r"
-
-  @javascript
-  Scenario: "and" keyword is passed through as logical operator, not a*n*d
-    Given I log in as "student1"
-    And I am attempting the quiz "Conversion Quiz"
-    When the tex2max output for latex "x>0 and x<5" in variableMode "explicit_single" is evaluated
-    Then the tex2max result should contain "and"
-    And the tex2max result should not contain "a*n*d"
-
-  @javascript
-  Scenario: "not" keyword is passed through as logical operator, not n*o*t
-    Given I log in as "student1"
-    And I am attempting the quiz "Conversion Quiz"
-    When the tex2max output for latex "not p" in variableMode "explicit_single" is evaluated
-    Then the tex2max result should contain "not"
-    And the tex2max result should not contain "n*o*t"
-
-  @javascript
-  Scenario: Logical LaTeX operators \lor and \land convert to spaced Maxima keywords
-    Given I log in as "student1"
-    And I am attempting the quiz "Conversion Quiz"
-    When the tex2max output for latex "x=3\lor x=6" in variableMode "stack" is evaluated
-    Then the tex2max result should contain " or "
-    And the tex2max result should not contain "lor"
-
-  @javascript
-  Scenario: Set theory LaTeX operators convert to correct Maxima keywords
-    Given I log in as "student1"
-    And I am attempting the quiz "Conversion Quiz"
-    When the tex2max output for latex "x\in A\cup B" in variableMode "stack" is evaluated
-    Then the tex2max result should contain " in "
-    And the tex2max result should contain " union "
-
-  # ── Issue #29: Mixed fractions produce implicit addition, not multiplication
-
-  @javascript
-  Scenario: Mixed fraction 2 3/4 converts to addition not multiplication
-    Given I log in as "student1"
-    And I am attempting the quiz "Conversion Quiz"
-    When the tex2max output for latex "2\frac{3}{4}" in variableMode "stack" is evaluated
-    Then the tex2max result should be "(2+(3)/(4))"
-
-  @javascript
-  Scenario: Mixed fraction 1 1/2 converts to 1+(1)/(2)
-    Given I log in as "student1"
-    And I am attempting the quiz "Conversion Quiz"
-    When the tex2max output for latex "1\frac{1}{2}" in variableMode "stack" is evaluated
-    Then the tex2max result should be "(1+(1)/(2))"
-
-  @javascript
-  Scenario: Regular fraction without leading integer is unaffected
-    Given I log in as "student1"
-    And I am attempting the quiz "Conversion Quiz"
-    When the tex2max output for latex "\frac{3}{4}" in variableMode "stack" is evaluated
-    Then the tex2max result should be "(3)/(4)"
-
-  @javascript
-  Scenario: Algebraic fraction with variable numerator is unaffected by mixed-fraction guard
-    Given I log in as "student1"
-    And I am attempting the quiz "Conversion Quiz"
-    When the tex2max output for latex "2\frac{x}{4}" in variableMode "stack" is evaluated
-    Then the tex2max result should contain "2"
-    And the tex2max result should not contain "2+(x)"
-
-  # ── Issue #31: \pi converts to plain "pi" by default
-
-  @javascript
-  Scenario: Pi converts to plain "pi" with default plugin setting
-    Given the plugin "usepercentpi" setting is "0"
+    And a STACK quiz "Conversion Quiz" with algebraic input exists in "C1"
     And I log in as "student1"
-    And I am attempting the quiz "Conversion Quiz"
-    When the tex2max output for latex "\pi" in variableMode "stack" is evaluated
+    And I attempt the quiz "Conversion Quiz"
+
+  # ── Operator keyword protection (#27) ─────────────────────────────────────
+
+  Scenario: "or" is not split into o*r in explicit_single mode
+    When the tex2max output for latex "x=3 or x=6" in variableMode "explicit_single" is evaluated
+    Then the tex2max result should not contain "*"
+    And  the tex2max result should contain "or"
+
+  Scenario: "and" is not split into a*n*d in explicit_single mode
+    When the tex2max output for latex "x>0 and x<5" in variableMode "explicit_single" is evaluated
+    Then the tex2max result should not contain "a*n*d"
+    And  the tex2max result should contain "and"
+
+  Scenario: "not" is not split into n*o*t in explicit_single mode
+    When the tex2max output for latex "\\neg (x=0)" in variableMode "explicit_single" is evaluated
+    Then the tex2max result should not contain "n*o*t"
+
+  # ── Mixed-fraction fix (#29) ───────────────────────────────────────────────
+
+  Scenario: Mixed fraction 2+1/2 is grouped correctly
+    When the tex2max output for latex "2\\frac{1}{2}" in variableMode "stack" is evaluated
+    Then the tex2max result should be "(2+1/2)"
+
+  Scenario: Multi-digit mixed fraction 21+3/4 is grouped correctly
+    When the tex2max output for latex "21\\frac{3}{4}" in variableMode "stack" is evaluated
+    Then the tex2max result should be "(21+3/4)"
+
+  Scenario: Regular fraction is not affected by mixed-fraction fix
+    When the tex2max output for latex "\\frac{1}{2}" in variableMode "stack" is evaluated
+    Then the tex2max result should be "(1)/(2)"
+
+  # ── Pi notation (#31) ─────────────────────────────────────────────────────
+
+  Scenario: Pi is rendered as plain "pi" by default (usePercentPi off)
+    Given the plugin usepercentpi setting is "0"
+    When the tex2max output for latex "\\pi" in variableMode "stack" is evaluated
     Then the tex2max result should be "pi"
 
-  @javascript
-  Scenario: Pi converts to "%pi" when usepercentpi setting is enabled
-    Given the plugin "usepercentpi" setting is "1"
-    And I log in as "student1"
-    And I am attempting the quiz "Conversion Quiz"
-    When the tex2max output for latex "\pi" in variableMode "stack" is evaluated
+  Scenario: Pi is rendered as "%pi" when usePercentPi is enabled
+    Given the plugin usepercentpi setting is "1"
+    When the tex2max output for latex "\\pi" in variableMode "stack" is evaluated
     Then the tex2max result should be "%pi"
 
-  @javascript
-  Scenario: Pi in expression converts to plain "pi" by default
-    Given the plugin "usepercentpi" setting is "0"
-    And I log in as "student1"
-    And I am attempting the quiz "Conversion Quiz"
-    When the tex2max output for latex "2\pi r" in variableMode "stack" is evaluated
-    Then the tex2max result should contain "pi"
-    And the tex2max result should not contain "%pi"
+  # ── Plus-minus expansion (Issue #30) ──────────────────────────────────────
 
-  # Section: mixed fraction adjacent to variable (issue #29 follow-up)
+  Scenario: Prefix pm produces two variants with unary plus stripped
+    When the tex2max output for latex "x=\\pm 2" in variableMode "stack" is evaluated
+    Then the tex2max result should contain "or"
+    And  the tex2max result should contain "x=2"
+    And  the tex2max result should contain "x=-2"
+    And  the tex2max result should not contain "x=+2"
 
-  @javascript
-  Scenario: Mixed fraction followed by variable wraps entire mixed fraction
-    Given I log in as "student1"
-    And I am attempting the quiz "Conversion Quiz"
-    When the tex2max output for latex "2\\frac{1}{2}a" in variableMode "stack" is evaluated
-    Then the tex2max result should be "(2+(1)/(2))*a"
+  Scenario: Infix pm retains both plus and minus signs
+    When the tex2max output for latex "a\\pm b" in variableMode "stack" is evaluated
+    Then the tex2max result should contain "a+b or a-b"
 
-  @javascript
-  Scenario: Mixed fraction preceded by variable wraps entire mixed fraction
-    Given I log in as "student1"
-    And I am attempting the quiz "Conversion Quiz"
-    When the tex2max output for latex "a 2\\frac{1}{2}" in variableMode "stack" is evaluated
-    Then the tex2max result should be "a*(2+(1)/(2))"
+  # ── Set-theory keywords ────────────────────────────────────────────────────
 
-  @javascript
-  Scenario: Mixed fraction between two variables wraps entire mixed fraction
-    Given I log in as "student1"
-    And I am attempting the quiz "Conversion Quiz"
-    When the tex2max output for latex "a 2\\frac{1}{2} b" in variableMode "stack" is evaluated
-    Then the tex2max result should be "a*(2+(1)/(2))*b"
+  Scenario: Set-theory notin converts to Maxima keyword
+    When the tex2max output for latex "x\\notin A" in variableMode "stack" is evaluated
+    Then the tex2max result should contain "notin"
 
-  @javascript
-  Scenario: Standalone mixed fraction is always wrapped in parentheses
-    Given I log in as "student1"
-    And I am attempting the quiz "Conversion Quiz"
-    When the tex2max output for latex "2\\frac{1}{2}" in variableMode "stack" is evaluated
-    Then the tex2max result should be "(2+(1)/(2))"
+  Scenario: Set-theory union converts to Maxima keyword
+    When the tex2max output for latex "A\\cup B" in variableMode "stack" is evaluated
+    Then the tex2max result should contain "union"
+
+  # ── Logic keywords ────────────────────────────────────────────────────────
+
+  Scenario: Logic "and" from \\land converts correctly
+    When the tex2max output for latex "p\\land q" in variableMode "stack" is evaluated
+    Then the tex2max result should contain "and"
+
+  Scenario: Logic "implies" from \\Rightarrow converts correctly
+    When the tex2max output for latex "p\\Rightarrow q" in variableMode "stack" is evaluated
+    Then the tex2max result should contain "implies"

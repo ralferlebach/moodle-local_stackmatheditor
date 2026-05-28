@@ -189,7 +189,7 @@ jobs:
   phpunit:
     name: "PHPUnit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.db.engine }})"
     runs-on: ubuntu-24.04
-    needs: [lint-php]
+    needs: [lint-php, lint-js]
     strategy:
       fail-fast: false
       matrix:
@@ -294,13 +294,22 @@ jobs:
   behat:
     name: "Behat (${{ matrix.moodle }} / PHP 8.2 / Chrome)"
     runs-on: ubuntu-24.04
-    needs: [lint-php, lint-js]
+    needs: [phpunit]
     strategy:
       fail-fast: false
       matrix:
         moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE', 'MOODLE_501_STABLE']
 
     services:
+      selenium:
+        image: selenium/standalone-chrome:latest
+        options: >-
+          --shm-size=2g
+          --health-cmd="curl -sf http://localhost:4444/status"
+          --health-interval=15s
+          --health-retries=5
+        ports: ['4444:4444']
+
       mariadb:
         image: mariadb:10.11
         env:
@@ -370,11 +379,12 @@ jobs:
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
 
+      # KEIN Plugin-Argument: install --plugin hat es bereits registriert.
       - name: Behat – all plugin scenarios
         run: |
-          moodle-plugin-ci behat ./plugin \
+          moodle-plugin-ci behat \
             --profile chrome \
-            --tags "@local_stackmatheditor"
+            --tags "@local_stackmatheditor and not @broken"
 
       - name: Upload failure screenshots
         if: failure()

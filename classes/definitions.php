@@ -114,8 +114,8 @@ class definitions {
                     ['display' => '÷', 'cmd'   => '\\div',
                         'tooltip' => get_string('btn_div', $p)],
                     ['label'        => '\\frac{a}{b}', 'write' => '\\frac{}{}',
-                        'display_html' => '<sup>a</sup>⁄<sub>b</sub>',
-                        'tooltip'      => get_string('btn_fraction', $p)],
+                        'display_html'  => '<sup>a</sup>&#x2044;<sub>b</sub>',
+                        'tooltip'       => get_string('btn_fraction', $p)],
                     ['display' => '%', 'write' => '\\%',
                         'tooltip' => get_string('btn_percent', $p)],
                 ],
@@ -198,6 +198,9 @@ class definitions {
                         'tooltip' => get_string('btn_subset', $p)],
                     ['display' => '⊃', 'cmd'   => '\\supset',
                         'tooltip' => get_string('btn_supset', $p)],
+                    // @codingStandardsIgnoreStart
+                    /*
+                    // Number sets: deferred until MathQuill write support is verified.
                     ['display' => 'ℕ', 'write' => '\\mathbb{N}',
                         'tooltip' => get_string('btn_naturals', $p)],
                     ['display' => 'ℤ', 'write' => '\\mathbb{Z}',
@@ -208,6 +211,8 @@ class definitions {
                         'tooltip' => get_string('btn_reals', $p)],
                     ['display' => 'ℂ', 'write' => '\\mathbb{C}',
                         'tooltip' => get_string('btn_complex', $p)],
+                    */
+                    // @codingStandardsIgnoreEnd
                 ],
             ],
 
@@ -714,7 +719,7 @@ class definitions {
             'functionNames'    => self::get_function_names(),
             'reservedWords'    => self::get_reserved_words(),
             'percentConstants' => self::get_percent_constants(),
-            'usePercentPi'     => (bool) get_config('local_stackmatheditor', 'usepercentpi'),
+            'usePercentPi'     => (bool)(int)get_config('local_stackmatheditor', 'usepercentpi'),
         ];
     }
 
