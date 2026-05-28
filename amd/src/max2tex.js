@@ -278,6 +278,149 @@ define([], function() {
         return result.replace(/\s+/g, ' ').trim();
     }
 
+
+
+    /**
+     * Strip one level of enclosing parentheses if they wrap the whole string.
+     *
+     * @param {string} s Input.
+     * @returns {string} Trimmed string.
+     */
+    function stripEnclosingParens(s) {
+        var trimmed = s.trim();
+        var changed = true;
+
+        while (changed && trimmed.charAt(0) === '(' && trimmed.charAt(trimmed.length - 1) === ')') {
+            changed = false;
+            if (findCloseParen(trimmed, 0) === trimmed.length - 1) {
+                trimmed = trimmed.substring(1, trimmed.length - 1).trim();
+                changed = true;
+            }
+        }
+
+        return trimmed;
+    }
+
+    /**
+     * Split an expression by a top-level keyword.
+     *
+     * @param {string} s Input.
+     * @param {string} keyword Keyword to split by.
+     * @returns {Array} Parts.
+     */
+    function splitTopLevelKeyword(s, keyword) {
+        var parts = [];
+        var depth = 0;
+        var start = 0;
+        var i;
+        var before;
+        var after;
+        var boundaryBefore;
+        var boundaryAfter;
+
+        for (i = 0; i < s.length; i++) {
+            if (s.charAt(i) === '(') {
+                depth++;
+                continue;
+            }
+            if (s.charAt(i) === ')') {
+                depth--;
+                continue;
+            }
+            if (depth !== 0) {
+                continue;
+            }
+            if (s.substring(i, i + keyword.length) !== keyword) {
+                continue;
+            }
+
+            before = i > 0 ? s.charAt(i - 1) : ' ';
+            after = i + keyword.length < s.length ? s.charAt(i + keyword.length) : ' ';
+            boundaryBefore = /\s|\(/.test(before);
+            boundaryAfter = /\s|\)/.test(after);
+
+            if (!boundaryBefore || !boundaryAfter) {
+                continue;
+            }
+
+            parts.push(s.substring(start, i).trim());
+            start = i + keyword.length;
+            i = start - 1;
+        }
+
+        parts.push(s.substring(start).trim());
+        return parts;
+    }
+
+    /**
+     * Find a top-level relation operator.
+     *
+     * @param {string} s Input.
+     * @returns {?Object} Relation parts or null.
+     */
+    function parseTopLevelRelation(s) {
+        var operators = ['<=', '>=', '~=', '#', '=', '<', '>'];
+        var depth = 0;
+        var i;
+        var op;
+        var oi;
+
+        for (i = 0; i < s.length; i++) {
+            if (s.charAt(i) === '(') {
+                depth++;
+                continue;
+            }
+            if (s.charAt(i) === ')') {
+                depth--;
+                continue;
+            }
+            if (depth !== 0) {
+                continue;
+            }
+            for (oi = 0; oi < operators.length; oi++) {
+                op = operators[oi];
+                if (s.substring(i, i + op.length) === op) {
+                    return {
+                        lhs: s.substring(0, i).trim(),
+                        operator: op,
+                        rhs: s.substring(i + op.length).trim()
+                    };
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Convert top-level and-connected relations to a LaTeX cases environment.
+     *
+     * @param {string} s Maxima input.
+     * @returns {string} Cases environment or original input.
+     */
+    function convertRelationSystemToCases(s) {
+        var normalized = stripEnclosingParens(s);
+        var parts = splitTopLevelKeyword(normalized, 'and');
+        var rows = [];
+        var i;
+        var relation;
+
+        if (parts.length < 2) {
+            return s;
+        }
+
+        for (i = 0; i < parts.length; i++) {
+            parts[i] = stripEnclosingParens(parts[i]);
+            relation = parseTopLevelRelation(parts[i]);
+            if (!relation || !relation.lhs || !relation.rhs) {
+                return s;
+            }
+            rows.push('{' + relation.lhs + ' &' + relation.operator + ' ' + relation.rhs + '}');
+        }
+
+        return '\\begin{cases} ' + rows.join(' \\\\ ') + ' \\end{cases}';
+    }
+
     /**
      * Main Maxima -> LaTeX conversion.
      *
@@ -289,7 +432,7 @@ define([], function() {
         var opts = options || {};
         var commaDecimal = opts.commaDecimal || false;
         var defs = opts.defs || {};
-        var s = maxima.trim();
+        var s = convertRelationSystemToCases(maxima.trim());
         var prev;
         var k;
 
