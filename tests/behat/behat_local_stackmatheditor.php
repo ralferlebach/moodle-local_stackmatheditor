@@ -878,6 +878,16 @@ JS;
         $btn->click();
     }
 
+    /**
+     * Set the plugin usepercentpi config option directly in the database.
+     *
+     * @Given the plugin usepercentpi setting is :value
+     * @param string $value Config value: "0" to disable, "1" to enable.
+     */
+    public function the_plugin_usepercentpi_setting_is(string $value): void {
+        set_config('usepercentpi', (int) $value, 'local_stackmatheditor');
+    }
+
     // Tex2max JavaScript evaluation.
 
     /**
