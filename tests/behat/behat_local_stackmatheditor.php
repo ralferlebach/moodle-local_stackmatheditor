@@ -423,24 +423,6 @@ JS;
     // Navigation helpers.
 
     /**
-     * Open the STACK MathQuill quiz configuration page directly by quiz name.
-     *
-     * @Given I am on the STACK MathQuill quiz configuration page for :quizname
-     * @param string $quizname Quiz name.
-     */
-    public function i_am_on_quiz_config_page(string $quizname): void {
-        global $DB;
-        $quiz = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
-        $cm   = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
-        $url  = new moodle_url(
-            '/local/stackmatheditor/configure.php',
-            ['cmid' => $cm->id]
-        );
-        $this->getSession()->visit($url->out(false));
-        $this->getSession()->wait(2000, "document.readyState === 'complete'");
-    }
-
-    /**
      * Open the MathQuill configuration page for a specific question inside a quiz.
      *
      * @Given I am on the MathQuill configuration page for question :questionname in :quizname
