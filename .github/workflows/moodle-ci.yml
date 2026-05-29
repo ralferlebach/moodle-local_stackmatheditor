@@ -384,7 +384,7 @@ jobs:
         run: |
           moodle-plugin-ci behat \
             --profile chrome \
-            --tags "@local_stackmatheditor and not @broken"
+            --tags "@local_stackmatheditor&&~@broken"
 
       - name: Upload failure screenshots
         if: failure()
