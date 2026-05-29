@@ -496,6 +496,20 @@ JS;
             );
         }
 
+        // Validate question_references record exists (Moodle 4.5+ schema requirement).
+        $slot      = reset($slots);
+        $reference = $DB->get_record('question_references', [
+            'component'    => 'mod_quiz',
+            'questionarea' => 'slot',
+            'itemid'       => $slot->id,
+        ]);
+        if (!$reference) {
+            throw new ExpectationException(
+                "Quiz slot {$slot->id} has no question_references record.",
+                $this->getSession()
+            );
+        }
+
         $this->update_quiz_sumgrades_compat($quiz);
 
         return $DB->get_record('question', ['id' => $question->id], '*', MUST_EXIST);

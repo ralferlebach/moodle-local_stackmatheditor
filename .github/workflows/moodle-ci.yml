@@ -374,17 +374,39 @@ jobs:
       # KEIN Plugin-Argument: install --plugin hat es bereits registriert.
       - name: Behat – all plugin scenarios
         run: |
+          set -o pipefail
           moodle-plugin-ci behat \
             --profile chrome \
             --start-servers \
-            --dump \
             --auto-rerun 0 \
-            --tags "@local_stackmatheditor&&~@broken"
+            --tags "@local_stackmatheditor&&~@broken" \
+            2>&1 | tee behat.log
 
-      - name: Upload failure screenshots
+      # Extract PHP exceptions and failed steps from the log
+      # (--dump floods the log with HTML; faildump is uploaded as artifact instead)
+      - name: Show Behat failure summary
+        if: failure()
+        run: |
+          echo '===== Behat failure summary ====='
+          grep -n -E \
+            'Scenario:|Step:|Exception|Error|Failed|Coding error|Moodle exception|'\
+            'Fatal error|Table.*does not exist|Unknown column|Stack trace' \
+            behat.log || true
+
+      - name: Upload Behat faildump
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: behat-screenshots-${{ matrix.moodle }}
-          path: ${{ github.workspace }}/moodle/behatfaildumps/
+          name: behat-faildump-${{ matrix.moodle }}
+          path: ${{ github.workspace }}/moodledata/behat_faildump/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload Behat log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: behat-log-${{ matrix.moodle }}
+          path: behat.log
+          if-no-files-found: ignore
           retention-days: 7
