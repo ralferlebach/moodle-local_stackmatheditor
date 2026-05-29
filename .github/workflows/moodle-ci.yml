@@ -388,10 +388,7 @@ jobs:
         if: failure()
         run: |
           echo '===== Behat failure summary ====='
-          grep -n -E \
-            'Scenario:|Step:|Exception|Error|Failed|Coding error|Moodle exception|'\
-            'Fatal error|Table.*does not exist|Unknown column|Stack trace' \
-            behat.log || true
+          grep -n -E 'Scenario:|Step:|Exception|Error|Failed|Coding error|Moodle exception|Fatal error|Table.*does not exist|Unknown column|Stack trace' behat.log || true
 
       - name: Upload Behat faildump
         if: failure()

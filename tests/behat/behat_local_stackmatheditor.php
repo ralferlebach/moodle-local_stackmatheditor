@@ -479,7 +479,7 @@ JS;
         // Create STACK question via the plugin generator.
         $gen      = testing_util::get_data_generator();
         $qgen     = $gen->get_plugin_generator('core_question');
-        $question = $qgen->create_question('stack', 'algebraic', [
+        $question = $qgen->create_question('stack', 'algebraic_input', [
             'name'     => $questionname,
             'category' => $cat->id,
         ]);
@@ -592,7 +592,7 @@ JS;
      * @param string $quizname Quiz name.
      */
     public function i_am_on_the_stack_mathquill_quiz_attempt_for(string $quizname): void {
-        $this->i_attempt_the_quiz($quizname);
+        $this->i_start_the_stack_mathquill_quiz_attempt($quizname);
     }
 
     /**
@@ -637,7 +637,7 @@ JS;
         string $answer,
         string $quizname
     ): void {
-        $this->i_attempt_the_quiz($quizname);
+        $this->i_start_the_stack_mathquill_quiz_attempt($quizname);
 
         // Set the first visible STACK algebraic input value via JS.
         $safeanswer = addslashes($answer);
