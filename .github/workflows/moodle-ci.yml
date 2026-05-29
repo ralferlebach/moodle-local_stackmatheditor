@@ -189,7 +189,7 @@ jobs:
   phpunit:
     name: "PHPUnit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.db.engine }})"
     runs-on: ubuntu-24.04
-    needs: [lint-php]
+    needs: [lint-php, lint-js]
     strategy:
       fail-fast: false
       matrix:
@@ -295,7 +295,7 @@ jobs:
   behat:
     name: "Behat (${{ matrix.moodle }} / PHP 8.2 / Chrome)"
     runs-on: ubuntu-24.04
-    needs: [lint-php, lint-js]
+    needs: [phpunit]
     strategy:
       fail-fast: false
       matrix:
@@ -383,6 +383,21 @@ jobs:
         env:
           MOODLE_BEHAT_WWWROOT: "http://host.docker.internal:8000"
           MOODLE_BEHAT_SELENIUMURL: "http://127.0.0.1:4444"
+
+      # host.docker.internal does not resolve on Linux runners by default.
+      # Adding the mapping lets Moodle's availability check pass on the host
+      # while Chrome in the Selenium container reaches it via the gateway IP.
+      - name: Map host.docker.internal on runner
+        run: echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+
+      # PHP's built-in server must bind to 0.0.0.0 so the Selenium Docker
+      # container can reach it via the Docker bridge gateway IP.
+      - name: Start PHP web server for Behat
+        run: |
+          php -S 0.0.0.0:8000 -t "${{ github.workspace }}/moodle" &
+          timeout 30 bash -c \
+            'until curl -sf http://127.0.0.1:8000; do sleep 1; done'
+          echo "PHP web server ready on 0.0.0.0:8000"
 
       # KEIN Plugin-Argument: install --plugin hat es bereits registriert.
       - name: Behat – all plugin scenarios
