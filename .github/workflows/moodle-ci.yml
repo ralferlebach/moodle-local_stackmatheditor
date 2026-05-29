@@ -419,6 +419,16 @@ jobs:
           echo '===== Behat failure summary ====='
           grep -n -E 'Scenario:|Step:|Exception|Error|Failed|Coding error|Moodle exception|Fatal error|Table.*does not exist|Unknown column|Stack trace' behat.log || true
 
+      # Find where Moodle actually wrote faildumps/screenshots.
+      - name: Locate Behat faildump files
+        if: failure()
+        run: |
+          echo '=== Searching for screenshot/faildump files ==='
+          find "$GITHUB_WORKSPACE" -name '*.png' -o -name '*.html' 2>/dev/null \
+            | grep -iE 'fail|dump|screen|behat' | head -20 || true
+          echo '=== Contents of moodledata/ ==='
+          ls -la "$GITHUB_WORKSPACE/moodledata/" 2>/dev/null || true
+
       # Behat faildumps (moodle-plugin-ci writes to moodledata/behat_faildump).
       - name: Upload Behat faildump
         if: failure()

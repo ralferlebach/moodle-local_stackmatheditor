@@ -14,6 +14,7 @@ Feature: MathQuill editor renders in quiz attempts
     And the following "course enrolments" exist:
       | user     | course | role    |
       | student1 | C1     | student |
+    And the plugin enabled mode is set to "1"
     And a STACK quiz "Math Quiz" with algebraic input exists in "C1"
 
   @javascript

@@ -249,9 +249,12 @@ class behat_local_stackmatheditor extends behat_base {
      * @param string $inputname Name attribute of the hidden input element.
      */
     public function the_mathquill_field_should_not_be_empty(string $inputname): void {
+        $safeinput = addslashes($inputname);
         $js = <<<JS
             (function() {
-                var input = document.querySelector('input[name="{$inputname}"]');
+                var inputname = '{$safeinput}';
+                var input = document.querySelector('input[name="' + inputname + '"]')
+                         || document.querySelector('input[name$="_' + inputname + '"]');
                 if (!input) { return false; }
                 var wrap = input.previousElementSibling;
                 if (!wrap) { return false; }
@@ -280,8 +283,16 @@ JS;
         string $inputname,
         string $value
     ): void {
-        $js = "return document.querySelector('input[name=\"{$inputname}\"]').value;";
-        $actual = $this->getSession()->evaluateScript($js);
+        $safeinput = addslashes($inputname);
+        $js = <<<JS
+            (function() {
+                var n  = '{$safeinput}';
+                var el = document.querySelector('input[name="' + n + '"]')
+                      || document.querySelector('input[name$="_' + n + '"]');
+                return el ? el.value : null;
+            })()
+JS;
+        $actual = (string) $this->getSession()->evaluateScript($js);
         if ($actual !== $value) {
             throw new ExpectationException(
                 "Input '$inputname' contains '$actual', expected '$value'.",
@@ -297,8 +308,16 @@ JS;
      * @param string $inputname Name attribute.
      */
     public function the_hidden_input_should_be_nonempty(string $inputname): void {
-        $js = "return document.querySelector('input[name=\"{$inputname}\"]').value;";
-        $actual = $this->getSession()->evaluateScript($js);
+        $safeinput = addslashes($inputname);
+        $js = <<<JS
+            (function() {
+                var n  = '{$safeinput}';
+                var el = document.querySelector('input[name="' + n + '"]')
+                      || document.querySelector('input[name$="_' + n + '"]');
+                return el ? el.value : null;
+            })()
+JS;
+        $actual = (string) $this->getSession()->evaluateScript($js);
         if (empty($actual)) {
             throw new ExpectationException(
                 "Input '$inputname' is empty; expected a Maxima expression.",
@@ -323,7 +342,9 @@ JS;
         $safetext  = json_encode($text);
         $js = <<<JS
             (function() {
-                var input = document.querySelector('input[name=' + {$safeinput} + ']');
+                var n     = {$safeinput};
+                var input = document.querySelector('input[name="' + n + '"]')
+                         || document.querySelector('input[name$="_' + n + '"]');
                 if (!input) { return 'no-input'; }
                 var wrap = input.previousElementSibling;
                 if (!wrap) { return 'no-wrap'; }
@@ -1119,15 +1140,21 @@ JS;
         $jslatex = str_replace(['\\', "'", "\n"], ['\\\\', "\\'", '\\n'], $latex);
         $jsmode  = str_replace("'", "\\'", $mode);
 
+        // Use a sentinel so we can distinguish 'not yet called' from 'returned null'.
         $js = <<<JS
-            window.__sme_t2m_result = null;
+            window.__sme_t2m_result = '__waiting__';
             require(['local_stackmatheditor/tex2max'], function(t2m) {
-                window.__sme_t2m_result = t2m.convert('{$jslatex}', {variableMode: '{$jsmode}'});
+                try {
+                    var r = t2m.convert('{$jslatex}', {variableMode: '{$jsmode}'});
+                    window.__sme_t2m_result = (r !== null && r !== undefined) ? String(r) : '__null__';
+                } catch (e) {
+                    window.__sme_t2m_result = '__error__: ' + e.message;
+                }
             });
 JS;
         $this->getSession()->evaluateScript($js);
-        // Wait up to 5 s for the AMD callback to fire.
-        $this->getSession()->wait(5000, "window.__sme_t2m_result !== null");
+        // Wait up to 8 s for the AMD callback to fire.
+        $this->getSession()->wait(8000, "window.__sme_t2m_result !== '__waiting__'");
     }
 
     /**
