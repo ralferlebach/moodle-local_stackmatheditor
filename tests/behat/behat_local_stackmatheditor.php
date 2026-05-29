@@ -116,8 +116,19 @@ class behat_local_stackmatheditor extends behat_base {
     public function i_should_see_the_class(string $cssclass): void {
         $el = $this->find('css', '.' . $cssclass);
         if (!$el) {
+            $diag = $this->getSession()->evaluateScript(
+                '(function(){'
+                . 'var inp=Array.from(document.querySelectorAll("input[name],textarea[name]"))'
+                . '.map(function(e){return e.tagName+"["+e.name+"]";}).join(",").substring(0,300);'
+                . 'return JSON.stringify({'
+                . '  sme:document.body.getAttribute("data-sme-init")||"none",'
+                . '  mq:typeof window.MathQuill,'
+                . '  M:typeof window.M,'
+                . '  inputs:inp||"none"'
+                . '});})()'
+            );
             throw new ExpectationException(
-                "Expected element with class '$cssclass' not found.",
+                "CSS class '.$cssclass' not found. DOM: $diag",
                 $this->getSession()
             );
         }
@@ -344,8 +355,15 @@ JS;
             (function() {
                 var n     = {$safeinput};
                 var input = document.querySelector('input[name="' + n + '"]')
-                         || document.querySelector('input[name$="_' + n + '"]');
-                if (!input) { return 'no-input'; }
+                         || document.querySelector('input[name$="_' + n + '"]')
+                         || document.querySelector('textarea[name="' + n + '"]')
+                         || document.querySelector('textarea[name$="_' + n + '"]');
+                if (!input) {
+                    var allNames = Array.from(
+                        document.querySelectorAll('input[name],textarea[name]')
+                    ).map(function(e){return e.name;}).join('|').substring(0,200);
+                    return 'no-input|all-inputs:' + allNames;
+                }
                 var wrap = input.previousElementSibling;
                 if (!wrap) { return 'no-wrap'; }
                 var mathEl = wrap.querySelector('.mq-math-mode');
@@ -1143,14 +1161,25 @@ JS;
         // Use a sentinel so we can distinguish 'not yet called' from 'returned null'.
         $js = <<<JS
             window.__sme_t2m_result = '__waiting__';
-            require(['local_stackmatheditor/tex2max'], function(t2m) {
-                try {
-                    var r = t2m.convert('{$jslatex}', {variableMode: '{$jsmode}'});
-                    window.__sme_t2m_result = (r !== null && r !== undefined) ? String(r) : '__null__';
-                } catch (e) {
-                    window.__sme_t2m_result = '__error__: ' + e.message;
+            require(
+                ['local_stackmatheditor/tex2max'],
+                function(t2m) {
+                    try {
+                        var r = t2m.convert('{$jslatex}', {variableMode: '{$jsmode}'});
+                        window.__sme_t2m_result = (r !== null && r !== undefined)
+                            ? String(r) : '__null__';
+                    } catch (e) {
+                        window.__sme_t2m_result = '__error__: ' + e.message;
+                    }
+                },
+                function(reqErr) {
+                    // RequireJS error callback – module failed to load.
+                    var t = reqErr && reqErr.requireType ? reqErr.requireType : 'unknown';
+                    var m = reqErr && reqErr.requireModules
+                        ? reqErr.requireModules.join(',') : '';
+                    window.__sme_t2m_result = '__require-error__:' + t + ':' + m;
                 }
-            });
+            );
 JS;
         $this->getSession()->evaluateScript($js);
         // Wait up to 8 s for the AMD callback to fire.

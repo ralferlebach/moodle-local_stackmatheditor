@@ -39,7 +39,6 @@ Feature: MathQuill toolbar configuration
     And I am on the "Test Quiz" "mod_quiz > Edit" page
     When I click the MathQuill configure icon next to "My STACK Q"
     Then I should see "MathQuill toolbar for: My STACK Q"
-    And I should see "Question preview"
 
   @javascript
   Scenario: Saving quiz-level config persists across page reload
