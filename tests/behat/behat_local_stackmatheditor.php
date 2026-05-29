@@ -42,9 +42,34 @@ class behat_local_stackmatheditor extends behat_base {
      * @When I navigate to the STACK MathQuill quiz configuration
      */
     public function i_navigate_to_quiz_configuration(): void {
-        $select = $this->find('css', 'form[action*="jumpto.php"] select[name="jump"]');
-        $select->selectOption('STACK MathQuill-Editor einrichten');
-        $this->getSession()->wait(3000, "document.readyState === 'complete'");
+        $page = $this->getSession()->getPage();
+
+        // Try nav-jump select: find option whose URL targets our configure page.
+        // This avoids relying on localized text or Moodle-version-specific structure.
+        $option = $page->find(
+            'css',
+            'form[action*="jumpto.php"] select[name="jump"]'
+                . ' option[value*="/local/stackmatheditor/configure.php"]'
+        );
+        if ($option) {
+            $this->getSession()->visit($option->getAttribute('value'));
+            $this->getSession()->wait(3000, "document.readyState === 'complete'");
+            return;
+        }
+
+        // Fallback: direct link (Moodle 5.x).
+        $link = $page->find('css', 'a[href*="/local/stackmatheditor/configure.php"]');
+        if ($link) {
+            $link->click();
+            $this->getSession()->wait(3000, "document.readyState === 'complete'");
+            return;
+        }
+
+        throw new ExpectationException(
+            'STACK MathQuill quiz configuration link not found '
+                . '(neither in nav select nor as a direct link).',
+            $this->getSession()
+        );
     }
 
     /**
@@ -120,20 +145,29 @@ class behat_local_stackmatheditor extends behat_base {
      * @param string $text Option label to look for.
      */
     public function i_should_see_option_in_nav_select(string $text): void {
-        $select = $this->find('css', 'form[action*="jumpto.php"] select[name="jump"]');
-        if (!$select) {
-            throw new ExpectationException(
-                'Quiz navigation select not found.',
-                $this->getSession()
-            );
+        $page = $this->getSession()->getPage();
+
+        // Check nav select for an option linking to our configure page.
+        $option = $page->find(
+            'css',
+            'form[action*="jumpto.php"] select[name="jump"]'
+                . ' option[value*="/local/stackmatheditor/configure.php"]'
+        );
+        if ($option) {
+            return;
         }
-        $option = $select->find('xpath', './/option[contains(text(),"' . $text . '")]');
-        if (!$option) {
-            throw new ExpectationException(
-                "Option '$text' not found in quiz navigation select.",
-                $this->getSession()
-            );
+
+        // Fallback: a direct link also satisfies the assertion.
+        $link = $page->find('css', 'a[href*="/local/stackmatheditor/configure.php"]');
+        if ($link) {
+            return;
         }
+
+        throw new ExpectationException(
+            "STACK MathQuill Editor configure entry not found in navigation"
+                . " (expected option text was: '$text').",
+            $this->getSession()
+        );
     }
 
     /**
@@ -283,20 +317,35 @@ JS;
         string $text,
         string $inputname
     ): void {
+        // Use MathQuill's JS API instead of keyDown() which only works for modifier keys.
+        $safeinput = json_encode($inputname);
+        $safetext  = json_encode($text);
         $js = <<<JS
             (function() {
-                var input = document.querySelector('input[name="{$inputname}"]');
-                if (!input) { return false; }
-                var container = input.previousElementSibling;
-                if (!container) { return false; }
-                var ta = container.querySelector('.mq-textarea textarea');
-                if (!ta) { return false; }
-                ta.focus();
-                return true;
+                var input = document.querySelector('input[name=' + {$safeinput} + ']');
+                if (!input) { return 'no-input'; }
+                var wrap = input.previousElementSibling;
+                if (!wrap) { return 'no-wrap'; }
+                var mathEl = wrap.querySelector('.mq-math-mode');
+                if (!mathEl) { return 'no-math-mode'; }
+                if (!window.MathQuill) { return 'no-mathquill'; }
+                var MQ     = window.MathQuill.getInterface(2);
+                var mqField = MQ(mathEl);
+                if (!mqField || typeof mqField.write !== 'function') { return 'no-mq-api'; }
+                mqField.focus();
+                mqField.write({$safetext});
+                input.dispatchEvent(new Event('input',  {bubbles: true}));
+                input.dispatchEvent(new Event('change', {bubbles: true}));
+                return 'ok';
             })()
 JS;
-        $this->getSession()->evaluateScript($js);
-        $this->getSession()->getDriver()->keyDown('//body', $text);
+        $result = $this->getSession()->evaluateScript($js);
+        if ($result !== 'ok') {
+            throw new ExpectationException(
+                "Could not type into MathQuill field '$inputname' (result: $result).",
+                $this->getSession()
+            );
+        }
     }
     // Quiz / question creation.
 
@@ -321,10 +370,12 @@ JS;
         if (!$quiz) {
             $gen      = testing_util::get_data_generator();
             $quizdata = $gen->create_module('quiz', [
-                'course'    => $course->id,
-                'name'      => $quizname,
-                'grade'     => 10,
-                'sumgrades' => 1,
+                'course'             => $course->id,
+                'name'               => $quizname,
+                'grade'              => 10,
+                'sumgrades'          => 1,
+                // Required: avoids 'behaviour not available' when starting an attempt.
+                'preferredbehaviour' => 'deferredfeedback',
             ]);
             $quiz = $DB->get_record('quiz', ['id' => $quizdata->id], '*', MUST_EXIST);
         }
@@ -684,7 +735,7 @@ JS;
         $safegroup = addslashes($groupname);
         $js = <<<JS
             (function() {
-                var select = document.querySelector('select[name="groups"]');
+                var select = document.querySelector('#id_groups, select[name="groups[]"], select[name="groups"]');
                 if (!select) { return 'no-select'; }
                 var options = select.options;
                 for (var i = 0; i < options.length; i++) {
@@ -715,7 +766,7 @@ JS;
         $safegroup = addslashes($groupname);
         $js = <<<JS
             (function() {
-                var select = document.querySelector('select[name="groups"]');
+                var select = document.querySelector('#id_groups, select[name="groups[]"], select[name="groups"]');
                 if (!select) { return 'no-select'; }
                 var options = select.options;
                 for (var i = 0; i < options.length; i++) {

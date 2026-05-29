@@ -297,7 +297,24 @@ jobs:
 
       # KEIN Plugin-Argument: install --plugin hat es bereits registriert.
       - name: PHPUnit – all tests
-        run: moodle-plugin-ci phpunit
+        run: |
+          set -o pipefail
+          moodle-plugin-ci phpunit 2>&1 | tee phpunit.log
+
+      - name: Show PHPUnit failure summary
+        if: failure()
+        run: |
+          echo '===== PHPUnit failure summary ====='
+          grep -n -E 'FAILURES|ERRORS|Error|Exception|Failed asserting|There was [0-9]+ failure|There were [0-9]+ failures' phpunit.log || true
+
+      - name: Upload PHPUnit log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phpunit-log-${{ matrix.moodle }}-php${{ matrix.php }}
+          path: phpunit.log
+          if-no-files-found: ignore
+          retention-days: 7
 
   # ── 3. Behat ──────────────────────────────────────────────────────────────
   behat:
@@ -407,7 +424,20 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: behat-faildump-${{ matrix.moodle }}
-          path: ${{ github.workspace }}/moodledata/behat_faildump/
+          path: |
+            ${{ github.workspace }}/moodledata/behat_faildump/
+            ${{ github.workspace }}/moodle/behatfaildumps/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: behat-screenshots-${{ matrix.moodle }}
+          path: |
+            ${{ github.workspace }}/moodle/behatfaildumps/
+            ${{ github.workspace }}/moodledata/behat_faildump/
           if-no-files-found: ignore
           retention-days: 7
 
