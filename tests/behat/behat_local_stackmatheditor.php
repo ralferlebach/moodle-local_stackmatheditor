@@ -723,17 +723,37 @@ JS;
     /**
      * Set the quiz-level config so that a specific toolbar group is enabled.
      *
+     * Both forms are accepted:
+     *   without quiz name → uses first quiz found in the current fixture
+     *   with quiz name    → targets the named quiz explicitly
+     *
+     * @Given the quiz-level config has :groupname enabled
      * @Given the quiz-level config has :groupname enabled for :quizname
      * @param string $groupname Group label or key to enable.
-     * @param string $quizname  Quiz name.
+     * @param string $quizname  Optional quiz name; first quiz used when empty.
      */
     public function the_quiz_level_config_has_enabled_for(
         string $groupname,
-        string $quizname
+        string $quizname = ''
     ): void {
         global $DB;
 
-        $quiz = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
+        // Resolve quiz: explicit name or first quiz in fixture.
+        if ($quizname !== '') {
+            $quiz = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
+        } else {
+            $quiz = $DB->get_record_sql(
+                'SELECT * FROM {quiz} ORDER BY id ASC',
+                [],
+                IGNORE_MULTIPLE
+            );
+            if (!$quiz) {
+                throw new ExpectationException(
+                    'No quiz found in fixture for quiz-level config step.',
+                    $this->getSession()
+                );
+            }
+        }
         $cm   = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
 
         // Find group key by label substring match.

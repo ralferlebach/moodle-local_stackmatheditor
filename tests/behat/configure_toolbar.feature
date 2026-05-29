@@ -53,7 +53,7 @@ Feature: MathQuill toolbar configuration
   @javascript
   Scenario: Question-level config overrides quiz-level default
     Given a STACK question "Q1" exists in quiz "Test Quiz"
-    And the quiz-level config has "Trigonometrie" enabled for "Test Quiz"
+    And the quiz-level config has "Trigonometrie" enabled
     And I am on the MathQuill configuration page for question "Q1" in "Test Quiz"
     When I deselect the "Trigonometrie" toolbar group
     And I press "Konfiguration speichern"
