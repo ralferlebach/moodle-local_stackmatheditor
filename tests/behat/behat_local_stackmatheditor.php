@@ -421,17 +421,15 @@ JS;
      * @param stdClass $quiz Quiz DB record.
      */
     private function update_quiz_sumgrades_compat(stdClass $quiz): void {
-        if (function_exists('quiz_update_sumgrades')) {
-            quiz_update_sumgrades($quiz);
-            return;
-        }
-        // Moodle 5.x fallback.
+        // Quiz_update_sumgrades() was deprecated in Moodle 4.2 (MDL-76897) and
+        // throws a coding_exception in Behat since Moodle 5.0+.
+        // Always use the grade_calculator API (available from Moodle 4.1+).
         try {
             $quizobj = \mod_quiz\quiz_settings::create($quiz->id);
             $quizobj->get_grade_calculator()->recompute_quiz_sumgrades();
         } catch (\Throwable $e) {
             // Non-fatal: quiz still works for Behat purposes.
-            debugging('quiz sumgrades update failed: ' . $e->getMessage(), DEBUG_DEVELOPER);
+            debugging('Quiz sumgrades update failed: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }
     }
 
@@ -463,12 +461,29 @@ JS;
             return $existing;
         }
 
-        // Resolve question category.
-        $ctx = context_module::instance($cm->id);
-        $cat = $DB->get_record('question_categories', ['contextid' => $ctx->id]);
+        // Resolve question category — use get_records with limit to avoid
+        // 'found more than one record' when multiple categories exist per context.
+        $ctx  = context_module::instance($cm->id);
+        $cats = $DB->get_records(
+            'question_categories',
+            ['contextid' => $ctx->id],
+            'id ASC',
+            '*',
+            0,
+            1
+        );
+        $cat = reset($cats) ?: null;
         if (!$cat) {
             $coursecontext = context_course::instance($quiz->course);
-            $cat = $DB->get_record('question_categories', ['contextid' => $coursecontext->id]);
+            $cats = $DB->get_records(
+                'question_categories',
+                ['contextid' => $coursecontext->id],
+                'id ASC',
+                '*',
+                0,
+                1
+            );
+            $cat = reset($cats) ?: null;
         }
         if (!$cat) {
             $gen  = testing_util::get_data_generator();

@@ -142,6 +142,10 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
+      # Required STACK dependency: adaptive multi-part question behaviour.
+      - name: Register qbehaviour_adaptivemultipart
+        run: moodle-plugin-ci add-plugin --branch master maths/moodle-qbehaviour_adaptivemultipart
+
       - name: Install Moodle (grunt-Config)
         run: |
           moodle-plugin-ci install \
@@ -275,6 +279,10 @@ jobs:
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
+      # Required STACK dependency: adaptive multi-part question behaviour.
+      - name: Register qbehaviour_adaptivemultipart
+        run: moodle-plugin-ci add-plugin --branch master maths/moodle-qbehaviour_adaptivemultipart
+
       - name: Install Moodle ${{ matrix.moodle }}
         run: |
           moodle-plugin-ci install \
@@ -358,6 +366,10 @@ jobs:
 
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
+
+      # Required STACK dependency: adaptive multi-part question behaviour.
+      - name: Register qbehaviour_adaptivemultipart
+        run: moodle-plugin-ci add-plugin --branch master maths/moodle-qbehaviour_adaptivemultipart
 
       - name: Install Moodle ${{ matrix.moodle }}
         run: |
