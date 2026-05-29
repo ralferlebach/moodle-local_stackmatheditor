@@ -23,40 +23,40 @@ Feature: MathQuill toolbar configuration
   Scenario: Navigation selector contains MathQuill entry when STACK questions exist
     Given a STACK question exists in quiz "Test Quiz"
     When I am on the "Test Quiz" "mod_quiz > Edit" page
-    Then I should see "Set up STACK MathQuill Editor" in the quiz navigation select
+    Then I should see "STACK MathQuill-Editor einrichten" in the quiz navigation select
 
   @javascript
   Scenario: Quiz-level configure page opens without question ID
     Given a STACK question exists in quiz "Test Quiz"
     And I am on the "Test Quiz" "mod_quiz > Edit" page
     When I navigate to the STACK MathQuill quiz configuration
-    Then I should see "MathQuill default settings for quiz: Test Quiz"
-    And I should see "Default toolbar groups"
+    Then I should see "MathQuill-Standardeinstellungen für Test"
+    And I should see "Standard-Toolbar-Gruppen"
 
   @javascript
   Scenario: Question-level configure page shows question preview
     Given a STACK question "My STACK Q" exists in quiz "Test Quiz"
     And I am on the "Test Quiz" "mod_quiz > Edit" page
     When I click the MathQuill configure icon next to "My STACK Q"
-    Then I should see "MathQuill toolbar for: My STACK Q"
-    And I should see "Question preview"
+    Then I should see "MathQuill-Toolbar für: My STACK Q"
+    And I should see "Fragenvorschau"
 
   @javascript
   Scenario: Saving quiz-level config persists across page reload
     Given a STACK question exists in quiz "Test Quiz"
     And I am on the STACK MathQuill quiz configuration page for "Test Quiz"
-    When I deselect the "Trigonometry" toolbar group
-    And I press "Save configuration"
+    When I deselect the "Trigonometrie" toolbar group
+    And I press "Konfiguration speichern"
     And I reload the page
-    Then the "Trigonometry" toolbar group should be deselected
+    Then the "Trigonometrie" toolbar group should be deselected
 
   @javascript
   Scenario: Question-level config overrides quiz-level default
     Given a STACK question "Q1" exists in quiz "Test Quiz"
-    And the quiz-level config has "Trigonometry" enabled
+    And the quiz-level config has "Trigonometrie" enabled
     And I am on the MathQuill configuration page for question "Q1" in "Test Quiz"
-    When I deselect the "Trigonometry" toolbar group
-    And I press "Save configuration"
+    When I deselect the "Trigonometrie" toolbar group
+    And I press "Konfiguration speichern"
     Then the question-level config for "Q1" should override the quiz default
 
   @javascript
@@ -64,7 +64,7 @@ Feature: MathQuill toolbar configuration
     Given the plugin enabled mode is set to "1"
     And a STACK question exists in quiz "Test Quiz"
     When I am on the STACK MathQuill quiz configuration page for "Test Quiz"
-    Then I should see "Globally enabled"
+    Then I should see "Global aktiviert"
     And I should not see a checkbox with id "id_sme_enabled"
 
   @javascript

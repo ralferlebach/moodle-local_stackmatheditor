@@ -17,7 +17,7 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
     And the plugin enabled mode is set to "1"
     And a STACK quiz "Conversion Quiz" with algebraic input exists in "C1"
     And I log in as "student1"
-    And I attempt the quiz "Conversion Quiz"
+    And I start the STACK MathQuill quiz attempt "Conversion Quiz"
 
   # ── Operator keyword protection (#27) ─────────────────────────────────────
 

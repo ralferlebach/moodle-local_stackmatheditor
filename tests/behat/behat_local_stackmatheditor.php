@@ -357,6 +357,84 @@ JS;
         $this->ensure_stack_question_in_quiz($quizname, $questionname);
     }
 
+
+    /**
+     * Add a question to a quiz in a version-safe way.
+     *
+     * Moodle 4.x: uses quiz_add_quiz_question() from locallib.php.
+     * Moodle 5.x: creates quiz_slots + question_references directly.
+     *
+     * @param int      $questionid Question ID to add.
+     * @param stdClass $quiz       Quiz DB record.
+     * @param stdClass $cm         Course module DB record.
+     */
+    private function add_question_to_quiz_compat(
+        int $questionid,
+        stdClass $quiz,
+        stdClass $cm
+    ): void {
+        global $DB, $CFG;
+        require_once($CFG->dirroot . '/mod/quiz/locallib.php');
+
+        // Moodle 4.x: the function still exists.
+        if (function_exists('quiz_add_quiz_question')) {
+            quiz_add_quiz_question($questionid, $quiz, 0, 1);
+            return;
+        }
+
+        // Moodle 5.x: insert quiz_slots + question_references directly.
+        $qbeid = \local_stackmatheditor\config_manager::resolve_qbeid($questionid);
+        if (!$qbeid) {
+            throw new ExpectationException(
+                "Cannot resolve QBEID for question ID $questionid.",
+                $this->getSession()
+            );
+        }
+
+        $nextslot = (int) $DB->get_field_sql(
+            'SELECT COALESCE(MAX(slot), 0) + 1 FROM {quiz_slots} WHERE quizid = :qid',
+            ['qid' => $quiz->id]
+        );
+
+        $slotobj = new stdClass();
+        $slotobj->quizid          = $quiz->id;
+        $slotobj->slot            = $nextslot;
+        $slotobj->page            = 1;
+        $slotobj->displaynumber   = (string)$nextslot;
+        $slotobj->requireprevious = 0;
+        $slotobj->maxmark         = 1.0;
+        $slotid = $DB->insert_record('quiz_slots', $slotobj);
+
+        $refobj = new stdClass();
+        $refobj->usingcontextid    = context_module::instance($cm->id)->id;
+        $refobj->component         = 'mod_quiz';
+        $refobj->questionarea      = 'slot';
+        $refobj->itemid            = $slotid;
+        $refobj->questionbankentryid = $qbeid;
+        $refobj->version           = null;
+        $DB->insert_record('question_references', $refobj);
+    }
+
+    /**
+     * Update quiz sum of grades in a version-safe way.
+     *
+     * @param stdClass $quiz Quiz DB record.
+     */
+    private function update_quiz_sumgrades_compat(stdClass $quiz): void {
+        if (function_exists('quiz_update_sumgrades')) {
+            quiz_update_sumgrades($quiz);
+            return;
+        }
+        // Moodle 5.x fallback.
+        try {
+            $quizobj = \mod_quiz\quiz_settings::create($quiz->id);
+            $quizobj->get_grade_calculator()->recompute_quiz_sumgrades();
+        } catch (\Throwable $e) {
+            // Non-fatal: quiz still works for Behat purposes.
+            debugging('quiz sumgrades update failed: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+    }
+
     /**
      * Internal helper: find-or-create a STACK question in a quiz.
      *
@@ -406,16 +484,19 @@ JS;
             'category' => $cat->id,
         ]);
 
-        // Add question to the quiz.
-        quiz_add_quiz_question($question->id, $quiz, 0, 1);
+        // Add question to the quiz (version-safe).
+        $this->add_question_to_quiz_compat((int)$question->id, $quiz, $cm);
 
-        if (function_exists('quiz_update_sumgrades')) {
-            quiz_update_sumgrades($quiz);
-        } else {
-            // Moodle 5.x: quiz_update_sumgrades was removed.
-            $quizobj = mod_quiz\quiz_settings::create($quiz->id);
-            $quizobj->get_grade_calculator()->recompute_quiz_sumgrades();
+        // Validate the slot was actually created.
+        $slots = $DB->get_records('quiz_slots', ['quizid' => $quiz->id]);
+        if (empty($slots)) {
+            throw new ExpectationException(
+                "Question was created but no quiz slot was added for quiz '$quizname'.",
+                $this->getSession()
+            );
         }
+
+        $this->update_quiz_sumgrades_compat($quiz);
 
         return $DB->get_record('question', ['id' => $question->id], '*', MUST_EXIST);
     }
@@ -464,10 +545,10 @@ JS;
     /**
      * Start a quiz attempt as the currently logged-in user.
      *
-     * @Given I attempt the quiz :quizname
+     * @Given I start the STACK MathQuill quiz attempt :quizname
      * @param string $quizname Quiz name.
      */
-    public function i_attempt_the_quiz(string $quizname): void {
+    public function i_start_the_stack_mathquill_quiz_attempt(string $quizname): void {
         global $DB;
         $quiz = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
         $cm   = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
@@ -493,10 +574,10 @@ JS;
     /**
      * Alias for i_attempt_the_quiz for use in Given context.
      *
-     * @Given I am attempting the quiz :quizname
+     * @Given I am on the STACK MathQuill quiz attempt for :quizname
      * @param string $quizname Quiz name.
      */
-    public function i_am_attempting_the_quiz(string $quizname): void {
+    public function i_am_on_the_stack_mathquill_quiz_attempt_for(string $quizname): void {
         $this->i_attempt_the_quiz($quizname);
     }
 
@@ -717,21 +798,35 @@ JS;
         $quiz = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
         $cm   = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
 
-        // Find the question containing the given input name.
-        $slots = $DB->get_records('quiz_slots', ['quizid' => $quiz->id]);
+        // Find the question via question_references (Moodle 4.5+: no quiz_slots.questionid).
+        $slots = $DB->get_records('quiz_slots', ['quizid' => $quiz->id], 'slot ASC');
         foreach ($slots as $slot) {
-            $question = question_bank::load_question($slot->questionid, false);
+            $qbeid = $DB->get_field('question_references', 'questionbankentryid', [
+                'component'    => 'mod_quiz',
+                'questionarea' => 'slot',
+                'itemid'       => $slot->id,
+            ]);
+            if (!$qbeid) {
+                continue;
+            }
+            $questionid = $DB->get_field_sql(
+                'SELECT qv.questionid
+                   FROM {question_versions} qv
+                  WHERE qv.questionbankentryid = :qbeid
+               ORDER BY qv.version DESC',
+                ['qbeid' => $qbeid],
+                IGNORE_MULTIPLE
+            );
+            if (!$questionid) {
+                continue;
+            }
+            $question = question_bank::load_question((int)$questionid, false);
             if (!empty($question->inputs[$inputname])) {
-                $qbeid = \local_stackmatheditor\config_manager::resolve_qbeid(
-                    (int)$slot->questionid
+                \local_stackmatheditor\config_manager::save_config(
+                    (int)$cm->id,
+                    (int)$qbeid,
+                    ['_enabled' => false]
                 );
-                if ($qbeid) {
-                    \local_stackmatheditor\config_manager::save_config(
-                        (int)$cm->id,
-                        $qbeid,
-                        ['_enabled' => false]
-                    );
-                }
                 return;
             }
         }

@@ -19,7 +19,7 @@ Feature: MathQuill editor renders in quiz attempts
   @javascript
   Scenario: MathQuill editor appears on quiz attempt page
     Given I log in as "student1"
-    When I attempt the quiz "Math Quiz"
+    When I start the STACK MathQuill quiz attempt "Math Quiz"
     Then I should see the class "sme-mq-container"
     And I should see the class "sme-toolbar"
     And I should not see the original STACK input field
@@ -27,7 +27,7 @@ Feature: MathQuill editor renders in quiz attempts
   @javascript
   Scenario: Typing in MathQuill field populates the hidden input
     Given I log in as "student1"
-    And I am attempting the quiz "Math Quiz"
+    And I am on the STACK MathQuill quiz attempt for "Math Quiz"
     When I type "x^2" into the MathQuill field for "ans1"
     Then the hidden input "ans1" should contain a non-empty Maxima value
 
@@ -49,7 +49,7 @@ Feature: MathQuill editor renders in quiz attempts
   @javascript
   Scenario: Toolbar buttons insert correct LaTeX
     Given I log in as "student1"
-    And I am attempting the quiz "Math Quiz"
+    And I am on the STACK MathQuill quiz attempt for "Math Quiz"
     And the MathQuill editor is visible for "ans1"
     When I click the toolbar button with title "Quadratwurzel (√)"
     Then the MathQuill field for "ans1" should contain LaTeX containing "sqrt"
@@ -58,7 +58,7 @@ Feature: MathQuill editor renders in quiz attempts
   Scenario: Editor is absent when plugin is globally disabled
     Given the plugin enabled mode is set to "0"
     And I log in as "student1"
-    When I attempt the quiz "Math Quiz"
+    When I start the STACK MathQuill quiz attempt "Math Quiz"
     Then I should not see the class "sme-mq-container"
     And I should not see the class "sme-toolbar"
 
@@ -67,5 +67,5 @@ Feature: MathQuill editor renders in quiz attempts
     Given the plugin enabled mode is set to "3"
     And the STACK question "ans1" in "Math Quiz" has editor disabled
     And I log in as "student1"
-    When I attempt the quiz "Math Quiz"
+    When I start the STACK MathQuill quiz attempt "Math Quiz"
     Then I should not see the class "sme-mq-container"
