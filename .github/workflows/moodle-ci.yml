@@ -419,25 +419,23 @@ jobs:
           echo '===== Behat failure summary ====='
           grep -n -E 'Scenario:|Step:|Exception|Error|Failed|Coding error|Moodle exception|Fatal error|Table.*does not exist|Unknown column|Stack trace' behat.log || true
 
+      # Behat faildumps (moodle-plugin-ci writes to moodledata/behat_faildump).
       - name: Upload Behat faildump
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: behat-faildump-${{ matrix.moodle }}
-          path: |
-            ${{ github.workspace }}/moodledata/behat_faildump/
-            ${{ github.workspace }}/moodle/behatfaildumps/
+          path: ${{ github.workspace }}/moodledata/behat_faildump/
           if-no-files-found: ignore
           retention-days: 7
 
+      # Behat screenshots (Selenium/Chrome screenshots on browser-level failure).
       - name: Upload failure screenshots
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: behat-screenshots-${{ matrix.moodle }}
-          path: |
-            ${{ github.workspace }}/moodle/behatfaildumps/
-            ${{ github.workspace }}/moodledata/behat_faildump/
+          path: ${{ github.workspace }}/moodle/behatfaildumps/
           if-no-files-found: ignore
           retention-days: 7
 

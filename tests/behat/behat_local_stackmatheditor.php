@@ -57,10 +57,11 @@ class behat_local_stackmatheditor extends behat_base {
             return;
         }
 
-        // Fallback: direct link (Moodle 5.x).
+        // Fallback: direct link — visit the href to avoid ElementNotInteractableException
+        // in Moodle 5.2 where nav links may be rendered but not clickable.
         $link = $page->find('css', 'a[href*="/local/stackmatheditor/configure.php"]');
         if ($link) {
-            $link->click();
+            $this->getSession()->visit($link->getAttribute('href'));
             $this->getSession()->wait(3000, "document.readyState === 'complete'");
             return;
         }
@@ -374,10 +375,12 @@ JS;
                 'name'               => $quizname,
                 'grade'              => 10,
                 'sumgrades'          => 1,
-                // Required: avoids 'behaviour not available' when starting an attempt.
-                'preferredbehaviour' => 'deferredfeedback',
+                // STACK questions use qbehaviour_adaptivemultipart internally;
+                // using 'adaptive' here makes STACK route to it via make_behaviour().
+                'preferredbehaviour' => 'adaptive',
             ]);
             $quiz = $DB->get_record('quiz', ['id' => $quizdata->id], '*', MUST_EXIST);
+            $this->assert_quiz_behaviour_is_available($quiz);
         }
 
         // Create a STACK question and add it to the quiz.
@@ -481,6 +484,44 @@ JS;
         } catch (\Throwable $e) {
             // Non-fatal: quiz still works for Behat purposes.
             debugging('Quiz sumgrades update failed: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+    }
+
+    /**
+     * Fail early with a clear message if a quiz behaviour or its dependencies are missing.
+     *
+     * STACK questions use qbehaviour_adaptivemultipart regardless of the quiz's
+     * preferredbehaviour. If the plugin is absent, every quiz attempt produces
+     * a cryptic "behaviour not available" error. This assertion catches that
+     * situation at fixture-setup time with a human-readable message.
+     *
+     * @param stdClass $quiz Quiz DB record.
+     */
+    private function assert_quiz_behaviour_is_available(stdClass $quiz): void {
+        global $DB;
+
+        // Reload from DB to get the normalised record.
+        $stored = $DB->get_record('quiz', ['id' => $quiz->id], 'id, name, preferredbehaviour', MUST_EXIST);
+
+        if (empty($stored->preferredbehaviour)) {
+            throw new ExpectationException(
+                "Quiz '{$stored->name}' has empty preferredbehaviour in the database.",
+                $this->getSession()
+            );
+        }
+
+        // STACK questions require qbehaviour_adaptivemultipart (MDL-79926).
+        $pluginman = core_plugin_manager::instance();
+        $installed = $pluginman->get_plugins_of_type('qbehaviour');
+        $names     = array_keys($installed);
+
+        if (!in_array('adaptivemultipart', $names)) {
+            throw new ExpectationException(
+                'qbehaviour_adaptivemultipart is not installed. '
+                    . 'STACK questions require it for quiz attempts. '
+                    . 'Installed qbehaviours: ' . implode(', ', $names),
+                $this->getSession()
+            );
         }
     }
 
