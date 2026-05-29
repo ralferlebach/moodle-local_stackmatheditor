@@ -465,7 +465,6 @@ JS;
      * Start a quiz attempt as the currently logged-in user.
      *
      * @Given I attempt the quiz :quizname
-     * @When I attempt the quiz :quizname
      * @param string $quizname Quiz name.
      */
     public function i_attempt_the_quiz(string $quizname): void {

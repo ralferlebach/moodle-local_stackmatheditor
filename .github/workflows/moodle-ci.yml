@@ -193,7 +193,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE', 'MOODLE_501_STABLE']
+        moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE', 'MOODLE_501_STABLE', 'MOODLE_502_STABLE']
         php:    ['8.2', '8.3', '8.4']
         db:
           - { engine: mariadb, type: mariadb, port: 3306, user: root,   pass: root   }
@@ -201,6 +201,7 @@ jobs:
         exclude:
           - { moodle: MOODLE_405_STABLE, php: '8.4' }
           - { moodle: MOODLE_500_STABLE, php: '8.4' }
+          - { moodle: MOODLE_502_STABLE, php: '8.2' }
 
     services:
       mariadb:
@@ -298,13 +299,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE', 'MOODLE_501_STABLE']
+        moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE', 'MOODLE_501_STABLE', 'MOODLE_502_STABLE']
 
     services:
       selenium:
         image: selenium/standalone-chrome:latest
         options: >-
           --shm-size=2g
+          --add-host=host.docker.internal:host-gateway
           --health-cmd="curl -sf http://localhost:4444/status"
           --health-interval=15s
           --health-retries=5
@@ -378,6 +380,9 @@ jobs:
             --db-pass  root \
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
+        env:
+          MOODLE_BEHAT_WWWROOT: "http://host.docker.internal:8000"
+          MOODLE_BEHAT_SELENIUMURL: "http://127.0.0.1:4444"
 
       # KEIN Plugin-Argument: install --plugin hat es bereits registriert.
       - name: Behat – all plugin scenarios
