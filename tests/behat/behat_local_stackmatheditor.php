@@ -444,18 +444,18 @@ JS;
             MUST_EXIST
         );
 
-        // Resolve question bank entry id (Moodle 4.1+).
-        $qbe = $DB->get_record('question_bank_entries', ['questionid' => $question->id]);
-        if (!$qbe) {
+        // Resolve QBEID via question_versions (Moodle 4.1+ schema).
+        $qbeid = \local_stackmatheditor\config_manager::resolve_qbeid($question->id);
+        if (!$qbeid) {
             throw new ExpectationException(
-                "No question_bank_entry found for question '$questionname'.",
+                "Cannot resolve question bank entry for question '$questionname'.",
                 $this->getSession()
             );
         }
 
-        $url = new moodle_url(
+        $url = new \moodle_url(
             '/local/stackmatheditor/configure.php',
-            ['cmid' => $cm->id, 'qbeid' => $qbe->id]
+            ['cmid' => $cm->id, 'qbeid' => $qbeid]
         );
         $this->getSession()->visit($url->out(false));
         $this->getSession()->wait(2000, "document.readyState === 'complete'");
@@ -660,23 +660,11 @@ JS;
             );
         }
 
-        // Persist quiz-level config.
-        $existing = $DB->get_record(
-            'local_stackmatheditor_config',
-            ['cmid' => $cm->id, 'qbeid' => null]
-        );
-        if ($existing) {
-            $config = json_decode($existing->config ?? '{}', true) ?: [];
-            $config['groups'][$groupkey] = true;
-            $existing->config = json_encode($config);
-            $DB->update_record('local_stackmatheditor_config', $existing);
-        } else {
-            $record         = new stdClass();
-            $record->cmid   = $cm->id;
-            $record->qbeid  = null;
-            $record->config = json_encode(['groups' => [$groupkey => true]]);
-            $DB->insert_record('local_stackmatheditor_config', $record);
-        }
+        // Persist quiz-level config via plugin API.
+        $config = \local_stackmatheditor\config_manager::get_quiz_default((int)$cm->id)
+            ?? \local_stackmatheditor\config_manager::get_instance_base_config();
+        $config[$groupkey] = true;
+        \local_stackmatheditor\config_manager::save_quiz_default((int)$cm->id, $config);
     }
 
     /**
@@ -694,15 +682,16 @@ JS;
             '*',
             MUST_EXIST
         );
-        $qbe = $DB->get_record(
-            'question_bank_entries',
-            ['questionid' => $question->id],
-            '*',
-            MUST_EXIST
-        );
+        $qbeid = \local_stackmatheditor\config_manager::resolve_qbeid($question->id);
+        if (!$qbeid) {
+            throw new ExpectationException(
+                "Cannot resolve QBEID for question '$questionname'.",
+                $this->getSession()
+            );
+        }
         $override = $DB->record_exists(
-            'local_stackmatheditor_config',
-            ['qbeid' => $qbe->id]
+            'local_stackmatheditor',
+            ['questionbankentryid' => $qbeid]
         );
         if (!$override) {
             throw new ExpectationException(
@@ -733,25 +722,15 @@ JS;
         foreach ($slots as $slot) {
             $question = question_bank::load_question($slot->questionid, false);
             if (!empty($question->inputs[$inputname])) {
-                $qbe = $DB->get_record(
-                    'question_bank_entries',
-                    ['questionid' => $slot->questionid]
+                $qbeid = \local_stackmatheditor\config_manager::resolve_qbeid(
+                    (int)$slot->questionid
                 );
-                if ($qbe) {
-                    $record         = new stdClass();
-                    $record->cmid   = $cm->id;
-                    $record->qbeid  = $qbe->id;
-                    $record->config = json_encode(['enabled' => 0]);
-                    $existing = $DB->get_record('local_stackmatheditor_config', [
-                        'cmid'  => $cm->id,
-                        'qbeid' => $qbe->id,
-                    ]);
-                    if ($existing) {
-                        $record->id = $existing->id;
-                        $DB->update_record('local_stackmatheditor_config', $record);
-                    } else {
-                        $DB->insert_record('local_stackmatheditor_config', $record);
-                    }
+                if ($qbeid) {
+                    \local_stackmatheditor\config_manager::save_config(
+                        (int)$cm->id,
+                        $qbeid,
+                        ['_enabled' => false]
+                    );
                 }
                 return;
             }
