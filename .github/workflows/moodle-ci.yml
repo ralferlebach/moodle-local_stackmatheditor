@@ -364,17 +364,38 @@ jobs:
       # PHPUnit init runs first and creates this file in phpu_moodledata.
       - name: Export STACK Maxima optimised image
         run: |
-          DEST="$GITHUB_WORKSPACE/maxima_opt_auto"
-          FOUND=$(find "$GITHUB_WORKSPACE/moodledata" -name 'maxima_opt_auto' 2>/dev/null | head -1)
-          if [ -n "$FOUND" ]; then
-            cp "$FOUND" "$DEST"
-            chmod +x "$DEST"
-            echo "Copied $FOUND → $DEST ✓"
-          else
-            echo "WARNING: maxima_opt_auto not found – Behat CAS will cold-start"
-          fi
-          # Constant value uses double-quoted PHP string so single quotes are safe.
-          moodle-plugin-ci add-config "define('QTYPE_STACK_TEST_CONFIG_MAXIMACOMMANDOPT', \"timeout --kill-after=10s 10s ${DEST} -eval '(cl-user::run)'\");"
+          # STACK's create_auto_maxima_image() (run during moodle-plugin-ci install)
+          # auto-detects the Lisp backend and writes the correct DB command:
+          #   GCL:  timeout 30s ./maxima_opt_auto -eval '(cl-user::run)'
+          #   SBCL: timeout 30s ./maxima_opt_auto   (no -eval! self-contained)
+          #   CLISP: lisp.run -q -M maxima_opt_auto.mem
+          #
+          # NEVER override QTYPE_STACK_TEST_CONFIG_MAXIMACOMMANDOPT – it would
+          # use the wrong format for the installed backend and breaks SBCL setups.
+          # Instead: increase the shell timeout from 30s to 60s in the DB command.
+          MOODLE_PHP="$GITHUB_WORKSPACE/moodle"
+          php -r "
+          define('CLI_SCRIPT', true);
+          require_once('${MOODLE_PHP}/config.php');
+          \$cmd = get_config('qtype_stack', 'maximacommandopt');
+          echo 'Current maximacommandopt: ' . \$cmd . PHP_EOL;
+          if (empty(\$cmd)) {
+              echo 'WARNING: maximacommandopt is empty – CAS may use cold start.' . PHP_EOL;
+          } else {
+              // Increase shell-level timeout from 30s to 60s for slow CI runners.
+              \$new = str_replace(
+                  'timeout --kill-after=30s 30s',
+                  'timeout --kill-after=60s 60s',
+                  \$cmd
+              );
+              if (\$new !== \$cmd) {
+                  set_config('maximacommandopt', \$new, 'qtype_stack');
+                  echo 'Updated to 60s: ' . \$new . PHP_EOL;
+              } else {
+                  echo 'Timeout already OK or not found in command.' . PHP_EOL;
+              }
+          }
+          "
 
       - name: Behat – all plugin scenarios
         run: |
