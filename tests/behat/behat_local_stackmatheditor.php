@@ -1307,7 +1307,7 @@ JS;
         $field = $page->findById($fieldid);
         if (!$field) {
             // Try as a select element.
-            $field = $page->find('css', "select[name="{$fieldid}"]");
+            $field = $page->find('css', "select[name='{$fieldid}']");
         }
         if (!$field) {
             throw new ExpectationException(
@@ -1335,8 +1335,8 @@ JS;
         $fieldid = 's_qtype_stack_' . $setting;
         $page    = $this->getSession()->getPage();
         $field   = $page->findById($fieldid)
-               ?? $page->find('css', "input[name="{$fieldid}"]")
-               ?? $page->find('css', "select[name="{$fieldid}"]");
+               ?? $page->find('css', "input[name='{$fieldid}']")
+               ?? $page->find('css', "select[name='{$fieldid}']");
         if (!$field) {
             throw new ExpectationException(
                 "STACK setting field '{$fieldid}' not found.",
