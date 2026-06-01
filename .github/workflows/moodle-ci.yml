@@ -358,7 +358,7 @@ jobs:
       - name: Initialise STACK CAS for Behat
         working-directory: ${{ github.workspace }}/moodle
         run: |
-          php - << 'PHP'
+          cat > /tmp/stack_behat_init.php << 'PHPEOF'
           <?php
           define('BEHAT_UTIL', true);
           define('CLI_SCRIPT', true);
@@ -383,7 +383,8 @@ jobs:
           stack_cas_configuration::create_maximalocal();
           echo 'STACK maximalocal.mac created in: ' . $CFG->dataroot . PHP_EOL;
           echo 'STACK platform: ' . get_config('qtype_stack', 'platform') . PHP_EOL;
-          PHP
+          PHPEOF
+          php /tmp/stack_behat_init.php
 
       - name: Behat – all plugin scenarios
         run: |
