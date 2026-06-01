@@ -401,21 +401,13 @@ jobs:
             --branch   ${{ matrix.moodle }}
 
       # KEIN Plugin-Argument: install --plugin hat es bereits registriert.
-      # STACK requires Maxima CAS to render question forms in quiz attempts.
-      # Without Maxima, STACK shows 'CAS failed' and never renders input fields.
+      # STACK requires Maxima CAS to render question forms.
+      # Config is set in Behat Background via 'the following config values are set as admin'.
+      # That runs AFTER the Moodle DB is fully installed, avoiding cfg.php DB-not-found errors.
       - name: Install Maxima for STACK CAS
         run: |
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends maxima
           maxima --version
-
-      - name: Configure STACK to use Maxima
-        working-directory: ${{ github.workspace }}/moodle
-        run: |
-          php admin/cli/cfg.php --component=qtype_stack --name=platform --set=unix
-          php admin/cli/cfg.php --component=qtype_stack --name=maximacommand --set=maxima
-          php admin/cli/cfg.php --component=qtype_stack --name=castimeout --set=30
-          php admin/cli/cfg.php --component=qtype_stack --name=casdebugging --set=0
-          echo 'STACK Maxima configured.'
 
       - name: Behat – all plugin scenarios
         run: |
