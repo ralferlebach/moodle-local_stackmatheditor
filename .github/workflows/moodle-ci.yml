@@ -113,18 +113,6 @@ jobs:
           sudo locale-gen en_AU.UTF-8
           sudo update-locale
 
-      - name: Install Maxima (≥ 5.46) and gnuplot
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y maxima gnuplot
-          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
-          echo "Installed Maxima $VER"
-          python3 -c "
-          v = tuple(int(x) for x in '${VER}'.split('.'))
-          assert v >= (5, 46), f'Maxima {v} < required (5, 46)'
-          print(f'Maxima {v}: OK')
-          "
-
       - name: Install moodle-plugin-ci
         run: |
           composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci ${{ env.MOODLE_CI }}
@@ -401,27 +389,6 @@ jobs:
             --branch   ${{ matrix.moodle }}
 
       # KEIN Plugin-Argument: install --plugin hat es bereits registriert.
-      # STACK requires Maxima (CAS) + gnuplot. Platform must be 'linux', not 'unix'.
-      # Config is set via Behat Background (runs in the installed Moodle DB context).
-      - name: Install Maxima and gnuplot for STACK CAS
-        run: |
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends maxima gnuplot
-          maxima --version
-          gnuplot --version
-
-      # Generate STACK maximalocal.mac so CAS can connect on first call.
-      # Runs after install so the Moodle DB and dataroot are fully initialised.
-      - name: Generate STACK maximalocal.mac
-        working-directory: ${{ github.workspace }}/moodle
-        run: |
-          php -r '
-            define("CLI_SCRIPT", true);
-            require_once("config.php");
-            require_once($CFG->dirroot . "/question/type/stack/stack/cas/installhelper.class.php");
-            stack_cas_configuration::create_maximalocal();
-            echo "STACK maximalocal.mac created.\n";
-          '
-
       - name: Behat – all plugin scenarios
         run: |
           set -o pipefail
