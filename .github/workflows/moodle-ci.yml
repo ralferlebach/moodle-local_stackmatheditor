@@ -1,32 +1,3 @@
-##############################################################################
-# GitHub Actions CI – local_stackmatheditor
-#
-# Matrix:
-#   Moodle: MOODLE_405_STABLE, MOODLE_500_STABLE, MOODLE_501_STABLE
-#   PHP:    8.2, 8.3, 8.4  (8.4 nur für Moodle ≥ 5.1, siehe exclude)
-#   DB:     MariaDB 10.11  |  PostgreSQL 16
-#
-# Abhängigkeiten:
-#   qtype_stack  → branch master
-#   Maxima ≥ 5.46 via apt + Versionscheck
-#   gnuplot       → für STACK-Plot-Rendering
-#
-# WICHTIG:
-#   - moodle-plugin-ci install --plugin ./plugin registriert das Plugin.
-#     Nachfolgende Subcommands (phpunit, behat, grunt) werden OHNE
-#     Plugin-Argument aufgerufen – sie kennen das Plugin bereits.
-#   - Ab Moodle 4.5 verlangt MariaDB den Treiber "mariadb" (NICHT "mysqli").
-#   - MariaDB-Service OHNE MYSQL_DATABASE → moodle-plugin-ci erstellt
-#     die DB selbst.
-#   - PostgreSQL-Service mit POSTGRES_DB=postgres → DB "moodle" wird
-#     NICHT vorab erstellt.
-#   - max_input_vars=5000 via ini-values (Moodle-Mindestanforderung).
-#   - --branch (nicht --moodle!) übergibt den Moodle-Branch.
-#   - Maxima + gnuplot in ALLEN Jobs mit qtype_stack.
-#   - en_AU.UTF-8 Locale muss installiert werden (Moodle-Core-
-#     Anforderung für PHPUnit/Behat Test-Suite-Initialisierung).
-##############################################################################
-
 name: Moodle Plugin CI
 
 on:
@@ -36,10 +7,11 @@ on:
 
 env:
   MOODLE_CI: '^4'
+  COMPOSER_PROCESS_TIMEOUT: 0
+  COMPOSER_NO_INTERACTION: 1
+  COMPOSER_NO_AUDIT: 1
 
 jobs:
-
-  # ── 1a. PHP Lint ──────────────────────────────────────────────────────────
   lint-php:
     name: "PHP Lint – ${{ matrix.php }}"
     runs-on: ubuntu-24.04
@@ -56,16 +28,17 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
+          extensions: mbstring, gd, xml, zip, intl
           ini-values: max_input_vars=5000
           coverage: none
 
       - name: Install moodle-plugin-ci
         run: |
           composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci ${{ env.MOODLE_CI }}
-          echo "$GITHUB_WORKSPACE/ci/bin"        >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/ci/bin" >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
 
-      - name: PHP CodeSniffer (Moodle coding style)
+      - name: PHP CodeSniffer
         run: moodle-plugin-ci phpcs plugin
 
       - name: PHP Copy/Paste Detector
@@ -74,7 +47,6 @@ jobs:
       - name: PHP Mess Detector
         run: moodle-plugin-ci phpmd plugin || true
 
-  # ── 1b. JS / CSS Lint ────────────────────────────────────────────────────
   lint-js:
     name: "JS/CSS Lint"
     runs-on: ubuntu-24.04
@@ -103,46 +75,48 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      # Moodle Core benötigt en_AU.UTF-8 für Test-Suite-Initialisierung
       - name: Install required locale
         run: |
           sudo locale-gen en_AU.UTF-8
           sudo update-locale
 
-      - name: Install Maxima (≥ 5.46) and gnuplot
+      # qtype_stack is a declared dependency of this plugin. Even JS lint uses
+      # moodle-plugin-ci install to get a Moodle tree, so Maxima must be present
+      # before any qtype_stack test-site initialisation can happen.
+      # Maxima must be installed before moodle-plugin-ci install:
+      # qtype_stack calls Maxima during PHPUnit/Behat test-site initialisation.
+      - name: Install Maxima and gnuplot
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y maxima gnuplot
-          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
+          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.[0-9]+)?' | head -1)
           echo "Installed Maxima $VER"
           python3 -c "
           v = tuple(int(x) for x in '${VER}'.split('.'))
           assert v >= (5, 46), f'Maxima {v} < required (5, 46)'
           print(f'Maxima {v}: OK')
           "
+          command -v gnuplot
+          gnuplot --version
 
       - name: Install moodle-plugin-ci
         run: |
           composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci ${{ env.MOODLE_CI }}
-          echo "$GITHUB_WORKSPACE/ci/bin"        >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/ci/bin" >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
 
       - name: Set TRAVIS_BRANCH for moodle-plugin-ci
         run: |
           BRANCH_NAME=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
-          if [ -z "$BRANCH_NAME" ]; then
-            BRANCH_NAME="default-branch"
-          fi
-          echo "TRAVIS_BRANCH=$BRANCH_NAME" >> "$GITHUB_ENV"
+          echo "TRAVIS_BRANCH=${BRANCH_NAME:-default-branch}" >> "$GITHUB_ENV"
 
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
 
-      - name: Install Moodle (grunt-Config)
+      # JS/CSS linting does not need PHPUnit or Behat initialisation. Using
+      # --no-init prevents admin/tool/behat/cli/util_single_run.php --install
+      # from being run in this job, avoiding STACK/Maxima side effects here.
+      - name: Install Moodle for Grunt only
         run: |
           moodle-plugin-ci install \
             --plugin   ./plugin \
@@ -152,14 +126,12 @@ jobs:
             --db-user  root \
             --db-pass  root \
             --db-name  moodle \
-            --branch   MOODLE_405_STABLE
+            --branch   MOODLE_405_STABLE \
+            --no-init
 
       - name: Install Node dependencies
         run: npm install
         working-directory: ${{ github.workspace }}/moodle
-
-      - name: Fix .git pack permissions for grunt backup/restore
-        run: chmod -R u+w plugin/.git/ 2>/dev/null || true
 
       - name: ESLint – AMD JS
         run: moodle-plugin-ci grunt -m "$GITHUB_WORKSPACE/moodle" -t eslint
@@ -180,27 +152,27 @@ jobs:
             }
           done
           if [ "$MISSING" -gt 0 ]; then
-            echo "ERROR: $MISSING AMD build file(s) fehlen – 'grunt amd' ausführen."
+            echo "ERROR: $MISSING AMD build file(s) missing – run 'grunt amd'."
             exit 1
           fi
-          echo "AMD build OK: $(ls plugin/amd/src/*.js | wc -l) Datei(en) verifiziert."
+          echo "AMD build OK."
 
-  # ── 2. PHPUnit ────────────────────────────────────────────────────────────
   phpunit:
     name: "PHPUnit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.db.engine }})"
     runs-on: ubuntu-24.04
-    needs: [lint-php, lint-js]
+    needs: [lint-php]
     strategy:
       fail-fast: false
       matrix:
-        moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE', 'MOODLE_501_STABLE']
-        php:    ['8.2', '8.3', '8.4']
+        moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE', 'MOODLE_501_STABLE', 'MOODLE_502_STABLE']
+        php: ['8.2', '8.3', '8.4']
         db:
-          - { engine: mariadb, type: mariadb, port: 3306, user: root,   pass: root   }
-          - { engine: pgsql,   type: pgsql,   port: 5432, user: moodle, pass: moodle }
+          - { engine: mariadb, type: mariadb, port: 3306, user: root, pass: root }
+          - { engine: pgsql, type: pgsql, port: 5432, user: moodle, pass: moodle }
         exclude:
           - { moodle: MOODLE_405_STABLE, php: '8.4' }
           - { moodle: MOODLE_500_STABLE, php: '8.4' }
+          - { moodle: MOODLE_502_STABLE, php: '8.2' }
 
     services:
       mariadb:
@@ -217,9 +189,9 @@ jobs:
       pgsql:
         image: postgres:16
         env:
-          POSTGRES_USER:     moodle
+          POSTGRES_USER: moodle
           POSTGRES_PASSWORD: moodle
-          POSTGRES_DB:       postgres
+          POSTGRES_DB: postgres
         ports: ['5432:5432']
         options: >-
           --health-cmd="pg_isready -U moodle"
@@ -239,37 +211,30 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
-      # Moodle Core benötigt en_AU.UTF-8 für PHPUnit-Initialisierung
       - name: Install required locale
         run: |
           sudo locale-gen en_AU.UTF-8
           sudo update-locale
 
-      - name: Install Maxima (≥ 5.46) and gnuplot
+      # Maxima must be installed before moodle-plugin-ci install:
+      # qtype_stack calls Maxima during PHPUnit/Behat test-site initialisation.
+      - name: Install Maxima and gnuplot
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y maxima gnuplot
           VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
           echo "Installed Maxima $VER"
-          python3 -c "
-          v = tuple(int(x) for x in '${VER}'.split('.'))
-          assert v >= (5, 46), f'Maxima {v} < required (5, 46)'
-          print(f'Maxima {v}: OK')
-          "
-
+          command -v gnuplot && gnuplot --version
       - name: Install moodle-plugin-ci
         run: |
           composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci ${{ env.MOODLE_CI }}
-          echo "$GITHUB_WORKSPACE/ci/bin"        >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/ci/bin" >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
 
       - name: Set TRAVIS_BRANCH for moodle-plugin-ci
         run: |
           BRANCH_NAME=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
-          if [ -z "$BRANCH_NAME" ]; then
-            BRANCH_NAME="default-branch"
-          fi
-          echo "TRAVIS_BRANCH=$BRANCH_NAME" >> "$GITHUB_ENV"
+          echo "TRAVIS_BRANCH=${BRANCH_NAME:-default-branch}" >> "$GITHUB_ENV"
 
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
@@ -286,30 +251,24 @@ jobs:
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
 
-      # KEIN Plugin-Argument: install --plugin hat es bereits registriert.
+
       - name: PHPUnit – all tests
         run: moodle-plugin-ci phpunit
 
-  # ── 3. Behat ──────────────────────────────────────────────────────────────
   behat:
-    name: "Behat (${{ matrix.moodle }} / PHP 8.2 / Chrome)"
+    name: "Behat (${{ matrix.moodle }} / PHP ${{ matrix.php }} / Chrome)"
     runs-on: ubuntu-24.04
-    needs: [phpunit]
+    needs: [lint-php, lint-js]
     strategy:
       fail-fast: false
       matrix:
-        moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE', 'MOODLE_501_STABLE']
+        include:
+          - { moodle: MOODLE_405_STABLE, php: '8.2' }
+          - { moodle: MOODLE_500_STABLE, php: '8.2' }
+          - { moodle: MOODLE_501_STABLE, php: '8.2' }
+          - { moodle: MOODLE_502_STABLE, php: '8.3' }
 
     services:
-      selenium:
-        image: selenium/standalone-chrome:latest
-        options: >-
-          --shm-size=2g
-          --health-cmd="curl -sf http://localhost:4444/status"
-          --health-interval=15s
-          --health-retries=5
-        ports: ['4444:4444']
-
       mariadb:
         image: mariadb:10.11
         env:
@@ -318,6 +277,7 @@ jobs:
         options: >-
           --health-cmd="mysqladmin ping --silent"
           --health-interval=10s
+          --health-timeout=5s
           --health-retries=10
 
     steps:
@@ -327,45 +287,51 @@ jobs:
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: ${{ matrix.php }}
           extensions: mbstring, pdo, pdo_mysql, gd, xml, zip, intl
           ini-values: max_input_vars=5000
           coverage: none
 
-      # Moodle Core benötigt en_AU.UTF-8 für Behat-Initialisierung
       - name: Install required locale
         run: |
           sudo locale-gen en_AU.UTF-8
           sudo update-locale
 
-      - name: Install Maxima (≥ 5.46) and gnuplot
+      # Must run before moodle-plugin-ci install. qtype_stack auto-runs
+      # Maxima during PHPUnit/Behat test-site installation.
+      # Maxima must be installed before moodle-plugin-ci install:
+      # qtype_stack calls Maxima during PHPUnit/Behat test-site initialisation.
+      - name: Install Maxima and gnuplot
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y maxima gnuplot
-          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
+          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.[0-9]+)?' | head -1)
           echo "Installed Maxima $VER"
           python3 -c "
           v = tuple(int(x) for x in '${VER}'.split('.'))
           assert v >= (5, 46), f'Maxima {v} < required (5, 46)'
           print(f'Maxima {v}: OK')
           "
+          command -v gnuplot
+          gnuplot --version
 
       - name: Install moodle-plugin-ci
         run: |
           composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci ${{ env.MOODLE_CI }}
-          echo "$GITHUB_WORKSPACE/ci/bin"        >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/ci/bin" >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
 
       - name: Set TRAVIS_BRANCH for moodle-plugin-ci
         run: |
           BRANCH_NAME=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
-          if [ -z "$BRANCH_NAME" ]; then
-            BRANCH_NAME="default-branch"
-          fi
-          echo "TRAVIS_BRANCH=$BRANCH_NAME" >> "$GITHUB_ENV"
+          echo "TRAVIS_BRANCH=${BRANCH_NAME:-default-branch}" >> "$GITHUB_ENV"
 
       - name: Register qtype_stack
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
+
+      # STACK requires adaptivemultipart behaviour for quiz attempts.
+      - name: Register qbehaviour_adaptivemultipart
+        run: moodle-plugin-ci add-plugin --branch master maths/moodle-qbehaviour_adaptivemultipart
 
       - name: Install Moodle ${{ matrix.moodle }}
         run: |
@@ -379,17 +345,100 @@ jobs:
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
 
-      # KEIN Plugin-Argument: install --plugin hat es bereits registriert.
+
+      # ── Strategie C: STACK constants + optimised Maxima image ───────────
+      # QTYPE_STACK_TEST_CONFIG_* constants override get_config() at PHP level.
+      # install.php reads these, bypassing the 30s DB default castimeout.
+      # 'linux-optimised' uses the pre-built frozen image → CAS starts in <2s.
+      - name: Configure STACK via config.php constants
+        run: |
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_PLATFORM",        "linux-optimised");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMAVERSION",   "default");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMACOMMAND",   "maxima");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASTIMEOUT",      "100");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASRESULTSCACHE", "db");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASDEBUGGING",    "0");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMALIBRARIES", "");'
+
+      # Find the maxima_opt_auto image created during moodle-plugin-ci install.
+      # PHPUnit init runs first and creates this file in phpu_moodledata.
+      - name: Export STACK Maxima optimised image
+        run: |
+          # STACK's create_auto_maxima_image() (run during moodle-plugin-ci install)
+          # auto-detects the Lisp backend and writes the correct DB command:
+          #   GCL:  timeout 30s ./maxima_opt_auto -eval '(cl-user::run)'
+          #   SBCL: timeout 30s ./maxima_opt_auto   (no -eval! self-contained)
+          #   CLISP: lisp.run -q -M maxima_opt_auto.mem
+          #
+          # NEVER override QTYPE_STACK_TEST_CONFIG_MAXIMACOMMANDOPT – it would
+          # use the wrong format for the installed backend and breaks SBCL setups.
+          # Instead: increase the shell timeout from 30s to 60s in the DB command.
+          MOODLE_PHP="$GITHUB_WORKSPACE/moodle"
+          php -r "
+          define('CLI_SCRIPT', true);
+          require_once('${MOODLE_PHP}/config.php');
+          \$cmd = get_config('qtype_stack', 'maximacommandopt');
+          echo 'Current maximacommandopt: ' . \$cmd . PHP_EOL;
+          if (empty(\$cmd)) {
+              echo 'WARNING: maximacommandopt is empty – CAS may use cold start.' . PHP_EOL;
+          } else {
+              // Increase shell-level timeout from 30s to 60s for slow CI runners.
+              \$new = str_replace(
+                  'timeout --kill-after=30s 30s',
+                  'timeout --kill-after=60s 60s',
+                  \$cmd
+              );
+              if (\$new !== \$cmd) {
+                  set_config('maximacommandopt', \$new, 'qtype_stack');
+                  echo 'Updated to 60s: ' . \$new . PHP_EOL;
+              } else {
+                  echo 'Timeout already OK or not found in command.' . PHP_EOL;
+              }
+          }
+          "
+
       - name: Behat – all plugin scenarios
         run: |
+          set -o pipefail
           moodle-plugin-ci behat \
             --profile chrome \
-            --tags "@local_stackmatheditor and not @broken"
+            --start-servers \
+            --auto-rerun 0 \
+            --tags "@local_stackmatheditor&&~@broken" \
+            2>&1 | tee behat.log
 
-      - name: Upload failure screenshots
+      - name: Show relevant Behat failures
+        if: failure()
+        run: |
+          echo "===== Behat failure summary ====="
+          grep -n -E 'Scenario:|Step:|Exception|Error|Failed|Coding error|Moodle exception|stack_cas_connection|Fatal error|Table.*does not exist|Unknown column|Stack trace|Css matching locator|not found|does not equal' behat.log || true
+
+      - name: Search for screenshot/faildump files
+        if: failure()
+        run: |
+          echo "=== Searching for screenshot/faildump files ==="
+          find "$GITHUB_WORKSPACE" -type f \( -name '*.png' -o -name '*.html' \) \
+            | grep -E 'behat_dump|behat_faildump' \
+            | head -200 || true
+          echo "=== Contents of moodledata/ ==="
+          ls -la "$GITHUB_WORKSPACE/moodledata" || true
+
+      - name: Upload Behat faildump
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: behat-screenshots-${{ matrix.moodle }}
-          path: ${{ github.workspace }}/moodle/behatfaildumps/
+          name: behat-faildump-${{ matrix.moodle }}
+          path: |
+            ${{ github.workspace }}/moodledata/behat_dump/**
+            ${{ github.workspace }}/moodledata/behat_faildump/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload Behat log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: behat-log-${{ matrix.moodle }}
+          path: behat.log
+          if-no-files-found: ignore
           retention-days: 7

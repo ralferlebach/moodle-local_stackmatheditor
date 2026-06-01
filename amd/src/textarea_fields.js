@@ -259,7 +259,7 @@ define([
      * @returns {boolean} True when the character is a boundary.
      */
     function isAndBoundaryChar(ch) {
-        return !ch || /\s|[(){}\[\],;]/.test(ch);
+        return !ch || /\s|[(){}[\],;]/.test(ch);
     }
 
     /**

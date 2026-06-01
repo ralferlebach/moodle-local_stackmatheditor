@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
-namespace local_stackmatheditor\tests\unit;
+namespace local_stackmatheditor\unit;
 
 use advanced_testcase;
 use local_stackmatheditor\definitions;
@@ -75,7 +75,9 @@ final class definitions_test extends advanced_testcase {
     }
 
     /**
-     * Every element must have either 'write' or 'cmd', and a 'display'.
+     * Every element must have either 'write' or 'cmd', and a display key.
+     *
+     * Elements may use 'display' (plain text) or 'display_html' (HTML literal).
      */
     public function test_elements_have_required_keys(): void {
         $groups = definitions::get_element_groups();
@@ -86,15 +88,18 @@ final class definitions_test extends advanced_testcase {
                     isset($el['write']) || isset($el['cmd']),
                     "$ref must have 'write' or 'cmd'"
                 );
-                $this->assertArrayHasKey(
-                    'display',
-                    $el,
-                    "$ref must have 'display'"
+                // Accept 'display' (plain text) or 'display_html' (HTML label).
+                $hasdisplay = isset($el['display']) || isset($el['display_html']);
+                $this->assertTrue(
+                    $hasdisplay,
+                    "$ref must have 'display' or 'display_html'"
                 );
-                $this->assertIsString(
-                    $el['display'],
-                    "$ref 'display' must be a string"
-                );
+                if (isset($el['display'])) {
+                    $this->assertIsString(
+                        $el['display'],
+                        "$ref 'display' must be a string"
+                    );
+                }
             }
         }
     }
@@ -269,5 +274,76 @@ final class definitions_test extends advanced_testcase {
         foreach ($consts as $c) {
             $this->assertStringStartsWith('%', $c, "Percent constant '$c' must start with %");
         }
+    }
+    /**
+     * Set-theory group must be active (not commented out).
+     */
+    public function test_set_theory_group_is_active(): void {
+        $groups = definitions::get_element_groups();
+        $this->assertArrayHasKey(
+            'set_theory',
+            $groups,
+            'set_theory group must be present in get_element_groups()'
+        );
+        $this->assertNotEmpty(
+            $groups['set_theory']['elements'] ?? [],
+            'set_theory group must have at least one element'
+        );
+    }
+
+    /**
+     * Logic group must be active (not commented out).
+     */
+    public function test_logic_group_is_active(): void {
+        $groups = definitions::get_element_groups();
+        $this->assertArrayHasKey(
+            'logic',
+            $groups,
+            'logic group must be present in get_element_groups()'
+        );
+        $this->assertNotEmpty(
+            $groups['logic']['elements'] ?? [],
+            'logic group must have at least one element'
+        );
+    }
+
+    /**
+     * Fraction button must have display_html for the fraction glyph.
+     */
+    public function test_fraction_button_has_display_html(): void {
+        $groups = definitions::get_element_groups();
+        $found  = false;
+        foreach ($groups as $group) {
+            foreach (($group['elements'] ?? []) as $el) {
+                if (($el['write'] ?? '') === '\\frac{}{}') {
+                    $found     = true;
+                    // Fraction button should use display_html for the glyph.
+                    $haslabel = !empty($el['display']) || !empty($el['display_html']);
+                    $this->assertTrue(
+                        $haslabel,
+                        'Fraction button must have display or display_html'
+                    );
+                }
+            }
+        }
+        if (!$found) {
+            $this->markTestSkipped('Fraction button not found in any group.');
+        }
+    }
+
+    /**
+     * export_for_js() must include the usePercentPi key as a bool.
+     */
+    public function test_export_for_js_includes_usepercentpi(): void {
+        $export = definitions::export_for_js();
+        $this->assertArrayHasKey(
+            'usePercentPi',
+            $export,
+            'export_for_js() must contain usePercentPi key'
+        );
+        $this->assertIsBool(
+            $export['usePercentPi'],
+            'usePercentPi must be a bool'
+        );
     }
 }

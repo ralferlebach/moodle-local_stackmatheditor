@@ -17,6 +17,8 @@
 /**
  * Upgrade script for local_stackmatheditor.
  *
+ * @param int $oldversion The version the plugin is upgrading from.
+ * @return bool True on success.
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
