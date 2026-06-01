@@ -1384,14 +1384,10 @@ JS;
         if (!$clearbtn) {
             throw new ExpectationException(
                 "STACK clear-cache button not found on healthcheck page. " .
-                "Expected a POST form with input[name="clearcache"] and a button.",
+                "Expected a POST form with input[name=\"clearcache\"] and a button.",
                 $this->getSession()
             );
         }
-        $this->getSession()->getDriver()->executeScript(
-            "arguments[0].scrollIntoView(true);",
-            [$clearbtn->getXpath()]
-        );
         $clearbtn->click();
         $this->wait_for_pending_js();
 
