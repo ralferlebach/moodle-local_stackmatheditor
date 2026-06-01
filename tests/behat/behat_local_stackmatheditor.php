@@ -1162,6 +1162,8 @@ JS;
 
         // Use a sentinel so we can distinguish 'not yet called' from 'returned null'.
         $js = <<<JS
+            // tex2max module has no dependencies and exports { convert: convert }.
+            // mathquill_init exports init() only – it cannot do conversion.
             window.__sme_t2m_result = '__waiting__';
             (function() {
                 var amdReq = window.requirejs || window.require || null;
@@ -1169,33 +1171,35 @@ JS;
                     window.__sme_t2m_result = '__no-amd__';
                     return;
                 }
-                // Try loading mathquill_init which contains the tex2max converter.
-                // The standalone local_stackmatheditor/tex2max module may not exist.
+                // Prefer synchronous access if module is already cached.
+                if (typeof amdReq.defined === 'function'
+                        && amdReq.defined('local_stackmatheditor/tex2max')) {
+                    try {
+                        var mod = amdReq('local_stackmatheditor/tex2max');
+                        var cfg = {variableMode: '{$jsmode}'};
+                        var r = (typeof mod.convert === 'function')
+                            ? mod.convert('{$jslatex}', cfg)
+                            : '__api__:' + Object.keys(mod).join(',');
+                        window.__sme_t2m_result = (r !== null && r !== undefined)
+                            ? String(r) : '__null__';
+                    } catch (ex) {
+                        window.__sme_t2m_result = '__error__:' + ex.message;
+                    }
+                    return;
+                }
+                // Async load – tex2max has no dependencies so this is near-instant.
                 amdReq(
-                    ['local_stackmatheditor/mathquill_init'],
-                    function(mqi) {
+                    ['local_stackmatheditor/tex2max'],
+                    function(mod) {
                         try {
                             var cfg = {variableMode: '{$jsmode}'};
-                            // Try the exported conversion functions in order.
-                            var r;
-                            if (typeof mqi.convert === 'function') {
-                                r = mqi.convert('{$jslatex}', cfg);
-                            } else if (typeof mqi.tex2max === 'function') {
-                                r = mqi.tex2max('{$jslatex}', cfg);
-                            } else if (typeof mqi.parseTex === 'function') {
-                                r = mqi.parseTex('{$jslatex}', cfg);
-                            } else {
-                                // Report exported API for debugging.
-                                var api = Object.keys(mqi)
-                                    .filter(function(k) { return typeof mqi[k] === 'function'; })
-                                    .join(',');
-                                window.__sme_t2m_result = '__api__:' + api;
-                                return;
-                            }
+                            var r = (typeof mod.convert === 'function')
+                                ? mod.convert('{$jslatex}', cfg)
+                                : '__api__:' + Object.keys(mod).join(',');
                             window.__sme_t2m_result = (r !== null && r !== undefined)
                                 ? String(r) : '__null__';
-                        } catch (e) {
-                            window.__sme_t2m_result = '__error__:' + e.message;
+                        } catch (ex) {
+                            window.__sme_t2m_result = '__error__:' + ex.message;
                         }
                     },
                     function(reqErr) {
@@ -1206,8 +1210,8 @@ JS;
             })();
 JS;
         $this->getSession()->evaluateScript($js);
-        // Wait up to 8 s for the AMD callback to fire.
-        $this->getSession()->wait(8000, "window.__sme_t2m_result !== '__waiting__'");
+        // Wait up to 3 s for the AMD callback to fire.
+        $this->getSession()->wait(3000, "window.__sme_t2m_result !== '__waiting__'");
     }
 
     /**
@@ -1365,21 +1369,30 @@ JS;
         $page = $this->getSession()->getPage();
 
         // The clear-cache form posts to the same page with clearcache=1 + sesskey.
-        $clearlink = $page->find('css', 'a[href*="clearcache=1"]');
-        if (!$clearlink) {
-            $clearlink = $page->find('css', 'form[action*="healthcheck"] [name="clearcache"]');
+        // The clear-cache is a POST form button, not a GET link.
+        // Find the submit button inside the form that has a clearcache hidden input.
+        $clearbtn = $page->find(
+            'xpath',
+            '//input[@name="clearcache"]/ancestor::form//button'
+        );
+        if (!$clearbtn) {
+            $clearbtn = $page->find(
+                'xpath',
+                '//input[@name="clearcache"]/following::button[1]'
+            );
         }
-        if (!$clearlink) {
-            // Try to find the link by text (multi-language fallback).
-            $clearlink = $page->find('xpath', '//a[contains(@href,"clearcache=1")] | //input[@name="clearcache"]');
-        }
-        if (!$clearlink) {
+        if (!$clearbtn) {
             throw new ExpectationException(
-                "STACK clear-cache link/button not found on healthcheck page.",
+                "STACK clear-cache button not found on healthcheck page. " .
+                "Expected a POST form with input[name="clearcache"] and a button.",
                 $this->getSession()
             );
         }
-        $clearlink->click();
+        $this->getSession()->getDriver()->executeScript(
+            "arguments[0].scrollIntoView(true);",
+            [$clearbtn->getXpath()]
+        );
+        $clearbtn->click();
         $this->wait_for_pending_js();
 
         // Moodle progress pages show a "Continue" button (id="id_continue" or
