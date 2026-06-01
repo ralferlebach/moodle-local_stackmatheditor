@@ -1542,11 +1542,4 @@ JS;
             );
         }
     }
-
-    /**
-     * Helper: wait for pending JS (AMD + RequireJS).
-     */
-    protected function wait_for_pending_js(): void {
-        $this->getSession()->wait(5000, 'document.readyState === "complete"');
-    }
 }
