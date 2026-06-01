@@ -238,13 +238,16 @@ jobs:
           sudo locale-gen en_AU.UTF-8
           sudo update-locale
 
-      # Install Maxima and gnuplot BEFORE moodle-plugin-ci install —
-      # STACK's db/install.php runs during behat site init and requires maxima.
+      # Install Maxima BEFORE moodle-plugin-ci install.
+      # STACK's db/install.php tries to connect to maxima during behat init.
+      # We capture the full path and use it so PHP subprocesses find maxima.
       - name: Install Maxima and gnuplot
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y maxima gnuplot
-          which maxima
+          MAXIMA_BIN=$(which maxima)
+          echo "MAXIMA_PATH=$MAXIMA_BIN" >> "$GITHUB_ENV"
+          echo "Maxima installed at: $MAXIMA_BIN"
           maxima --version
 
       - name: Install moodle-plugin-ci
@@ -340,13 +343,16 @@ jobs:
           sudo locale-gen en_AU.UTF-8
           sudo update-locale
 
-      # Install Maxima and gnuplot BEFORE moodle-plugin-ci install —
-      # STACK's db/install.php runs during behat site init and requires maxima.
+      # Install Maxima BEFORE moodle-plugin-ci install.
+      # STACK's db/install.php tries to connect to maxima during behat init.
+      # We capture the full path and use it so PHP subprocesses find maxima.
       - name: Install Maxima and gnuplot
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y maxima gnuplot
-          which maxima
+          MAXIMA_BIN=$(which maxima)
+          echo "MAXIMA_PATH=$MAXIMA_BIN" >> "$GITHUB_ENV"
+          echo "Maxima installed at: $MAXIMA_BIN"
           maxima --version
 
       - name: Install moodle-plugin-ci
@@ -380,7 +386,18 @@ jobs:
             --db-user  root \
             --db-pass  root \
             --db-name  moodle \
-            --branch   ${{ matrix.moodle }}
+            --branch   ${{ matrix.moodle }} \
+            --no-init
+
+      # Configure STACK AFTER main install (DB exists) but BEFORE behat init.
+      # Use full maxima path so PHP subprocesses find it regardless of PATH restrictions.
+      - name: Configure STACK before behat init
+        working-directory: ${{ github.workspace }}/moodle
+        run: |
+          php admin/cli/cfg.php --component=qtype_stack --name=platform --set=linux
+          php admin/cli/cfg.php --component=qtype_stack --name=maximacommand --set=${{ env.MAXIMA_PATH }}
+          php admin/cli/cfg.php --component=qtype_stack --name=castimeout --set=30
+          echo "STACK configured: platform=linux maximacommand=${{ env.MAXIMA_PATH }}"
 
       # KEIN Plugin-Argument: install --plugin hat es bereits registriert.
       - name: Behat – all plugin scenarios
