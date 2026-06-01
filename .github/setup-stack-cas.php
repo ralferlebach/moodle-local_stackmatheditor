@@ -48,13 +48,13 @@ if (!file_exists($stackroot . '/stack/cas/installhelper.class.php')) {
 require_once($stackroot . '/stack/cas/installhelper.class.php');
 require_once($stackroot . '/stack/cas/connectorhelper.class.php');
 
-set_config('platform',        'linux',   'qtype_stack');
-set_config('maximacommand',   'maxima',  'qtype_stack');
-set_config('maximaversion',   'default', 'qtype_stack');
-set_config('casresultscache', 'db',      'qtype_stack');
-set_config('casdebugging',    '0',       'qtype_stack');
-set_config('castimeout',      '30',      'qtype_stack');
-set_config('maximalibraries', '',        'qtype_stack');
+set_config('platform', 'linux', 'qtype_stack');
+set_config('maximacommand', 'maxima', 'qtype_stack');
+set_config('maximaversion', 'default', 'qtype_stack');
+set_config('casresultscache', 'db', 'qtype_stack');
+set_config('casdebugging', '0', 'qtype_stack');
+set_config('castimeout', '30', 'qtype_stack');
+set_config('maximalibraries', '', 'qtype_stack');
 
 purge_all_caches();
 
