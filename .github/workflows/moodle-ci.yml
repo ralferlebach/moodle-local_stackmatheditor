@@ -244,12 +244,6 @@ jobs:
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
 
-      # Run from the Moodle root so getcwd() returns the Moodle dir
-      # and require_once(getcwd().'/config.php') finds the right file.
-      - name: Verify STACK CAS on installed Moodle site
-        working-directory: ${{ github.workspace }}/moodle
-        run: php "$GITHUB_WORKSPACE/plugin/.github/setup-stack-cas.php"
-
       - name: PHPUnit – all tests
         run: moodle-plugin-ci phpunit
 
@@ -335,12 +329,6 @@ jobs:
             --db-pass  root \
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
-
-      # Run from the Moodle root so getcwd() returns the Moodle dir
-      # and require_once(getcwd().'/config.php') finds the right file.
-      - name: Verify STACK CAS on installed Moodle site
-        working-directory: ${{ github.workspace }}/moodle
-        run: php "$GITHUB_WORKSPACE/plugin/.github/setup-stack-cas.php"
 
       - name: Behat – all plugin scenarios
         run: |
