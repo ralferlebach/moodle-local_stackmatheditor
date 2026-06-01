@@ -15,7 +15,7 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
       | user     | course | role    |
       | student1 | C1     | student |
     And the following config values are set as admin:
-      | platform      | unix   | qtype_stack |
+      | platform      | linux  | qtype_stack |
       | maximacommand | maxima | qtype_stack |
       | castimeout    | 30     | qtype_stack |
     And the plugin enabled mode is set to "1"
