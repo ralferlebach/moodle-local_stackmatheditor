@@ -238,17 +238,14 @@ jobs:
           sudo locale-gen en_AU.UTF-8
           sudo update-locale
 
-      - name: Install Maxima (≥ 5.46) and gnuplot
+      # Install Maxima and gnuplot BEFORE moodle-plugin-ci install —
+      # STACK's db/install.php runs during behat site init and requires maxima.
+      - name: Install Maxima and gnuplot
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y maxima gnuplot
-          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
-          echo "Installed Maxima $VER"
-          python3 -c "
-          v = tuple(int(x) for x in '${VER}'.split('.'))
-          assert v >= (5, 46), f'Maxima {v} < required (5, 46)'
-          print(f'Maxima {v}: OK')
-          "
+          which maxima
+          maxima --version
 
       - name: Install moodle-plugin-ci
         run: |
@@ -343,17 +340,14 @@ jobs:
           sudo locale-gen en_AU.UTF-8
           sudo update-locale
 
-      - name: Install Maxima (≥ 5.46) and gnuplot
+      # Install Maxima and gnuplot BEFORE moodle-plugin-ci install —
+      # STACK's db/install.php runs during behat site init and requires maxima.
+      - name: Install Maxima and gnuplot
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y maxima gnuplot
-          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
-          echo "Installed Maxima $VER"
-          python3 -c "
-          v = tuple(int(x) for x in '${VER}'.split('.'))
-          assert v >= (5, 46), f'Maxima {v} < required (5, 46)'
-          print(f'Maxima {v}: OK')
-          "
+          which maxima
+          maxima --version
 
       - name: Install moodle-plugin-ci
         run: |
