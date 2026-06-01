@@ -91,8 +91,11 @@ jobs:
           sudo apt-get install -y maxima gnuplot
           VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.[0-9]+)?' | head -1)
           echo "Installed Maxima $VER"
-          python3 -c "\
-v = tuple(int(x) for x in '${VER}'.split('.'))\nassert v >= (5, 46), f'Maxima {v} < required (5, 46)'\nprint(f'Maxima {v}: OK')\n"
+          python3 -c "
+          v = tuple(int(x) for x in '${VER}'.split('.'))
+          assert v >= (5, 46), f'Maxima {v} < required (5, 46)'
+          print(f'Maxima {v}: OK')
+          "
           command -v gnuplot
           gnuplot --version
 
@@ -221,8 +224,11 @@ v = tuple(int(x) for x in '${VER}'.split('.'))\nassert v >= (5, 46), f'Maxima {v
           sudo apt-get install -y maxima gnuplot
           VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.[0-9]+)?' | head -1)
           echo "Installed Maxima $VER"
-          python3 -c "\
-v = tuple(int(x) for x in '${VER}'.split('.'))\nassert v >= (5, 46), f'Maxima {v} < required (5, 46)'\nprint(f'Maxima {v}: OK')\n"
+          python3 -c "
+          v = tuple(int(x) for x in '${VER}'.split('.'))
+          assert v >= (5, 46), f'Maxima {v} < required (5, 46)'
+          print(f'Maxima {v}: OK')
+          "
           command -v gnuplot
           gnuplot --version
 
@@ -308,8 +314,11 @@ v = tuple(int(x) for x in '${VER}'.split('.'))\nassert v >= (5, 46), f'Maxima {v
           sudo apt-get install -y maxima gnuplot
           VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.[0-9]+)?' | head -1)
           echo "Installed Maxima $VER"
-          python3 -c "\
-v = tuple(int(x) for x in '${VER}'.split('.'))\nassert v >= (5, 46), f'Maxima {v} < required (5, 46)'\nprint(f'Maxima {v}: OK')\n"
+          python3 -c "
+          v = tuple(int(x) for x in '${VER}'.split('.'))
+          assert v >= (5, 46), f'Maxima {v} < required (5, 46)'
+          print(f'Maxima {v}: OK')
+          "
           command -v gnuplot
           gnuplot --version
 
