@@ -14,7 +14,7 @@ env:
 jobs:
   lint-php:
     name: "PHP Lint – ${{ matrix.php }}"
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -49,7 +49,7 @@ jobs:
 
   lint-js:
     name: "JS/CSS Lint"
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     services:
       mariadb:
@@ -159,7 +159,7 @@ jobs:
 
   phpunit:
     name: "PHPUnit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.db.engine }})"
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: [lint-php]
     strategy:
       fail-fast: false
@@ -218,20 +218,13 @@ jobs:
 
       # Maxima must be installed before moodle-plugin-ci install:
       # qtype_stack calls Maxima during PHPUnit/Behat test-site initialisation.
-      - name: Install Maxima 5.42.2 GCL + gnuplot
+      - name: Install Maxima and gnuplot
         run: |
-          # Use same SourceForge DEBs as STACK's own CI (ubuntu-22.04 + GCL 5.42.2).
-          # Ubuntu apt maxima = SBCL backend; ./maxima_opt_auto -eval '(cl-user::run)'
-          # only works with GCL standalone binaries, not SBCL core files.
-          wget -q             http://mirrors.kernel.org/ubuntu/pool/main/r/readline/libreadline7_7.0-3_amd64.deb             https://sourceforge.net/projects/maxima/files/Maxima-Linux-RPM/5.42.2-Linux/maxima-common_5.42.2-1_all.deb             https://sourceforge.net/projects/maxima/files/Maxima-Linux-RPM/5.42.2-Linux/maxima-gcl_5.42.2-1_amd64.deb
-          sudo apt-get install -y libtinfo5 gnuplot
-          sudo dpkg -i             libreadline7_7.0-3_amd64.deb             maxima-common_5.42.2-1_all.deb             maxima-gcl_5.42.2-1_amd64.deb
-          # Warm up – loads Lisp libraries into OS page cache so first real CAS call is faster.
-          echo "adjust_external_format();" | maxima
-          echo "diff(x^2,x);"             | maxima
-          echo "build_info();"            | maxima
+          sudo apt-get update -qq
+          sudo apt-get install -y maxima gnuplot
+          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
+          echo "Installed Maxima $VER"
           command -v gnuplot && gnuplot --version
-
       - name: Install moodle-plugin-ci
         run: |
           composer create-project -n --no-dev moodlehq/moodle-plugin-ci ci ${{ env.MOODLE_CI }}
@@ -264,7 +257,7 @@ jobs:
 
   behat:
     name: "Behat (${{ matrix.moodle }} / PHP ${{ matrix.php }} / Chrome)"
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: [lint-php, lint-js]
     strategy:
       fail-fast: false
