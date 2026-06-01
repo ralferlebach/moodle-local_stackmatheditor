@@ -362,41 +362,21 @@ jobs:
 
       # Find the maxima_opt_auto image created during moodle-plugin-ci install.
       # PHPUnit init runs first and creates this file in phpu_moodledata.
-      - name: Export STACK Maxima optimised image
+      - name: Verify STACK Maxima image (diagnostic)
         run: |
-          # STACK's create_auto_maxima_image() (run during moodle-plugin-ci install)
-          # auto-detects the Lisp backend and writes the correct DB command:
-          #   GCL:  timeout 30s ./maxima_opt_auto -eval '(cl-user::run)'
-          #   SBCL: timeout 30s ./maxima_opt_auto   (no -eval! self-contained)
-          #   CLISP: lisp.run -q -M maxima_opt_auto.mem
-          #
-          # NEVER override QTYPE_STACK_TEST_CONFIG_MAXIMACOMMANDOPT – it would
-          # use the wrong format for the installed backend and breaks SBCL setups.
-          # Instead: increase the shell timeout from 30s to 60s in the DB command.
-          MOODLE_PHP="$GITHUB_WORKSPACE/moodle"
-          php -r "
-          define('CLI_SCRIPT', true);
-          require_once('${MOODLE_PHP}/config.php');
-          \$cmd = get_config('qtype_stack', 'maximacommandopt');
-          echo 'Current maximacommandopt: ' . \$cmd . PHP_EOL;
-          if (empty(\$cmd)) {
-              echo 'WARNING: maximacommandopt is empty – CAS may use cold start.' . PHP_EOL;
-          } else {
-              // Increase shell-level timeout from 30s to 60s for slow CI runners.
-              \$new = str_replace(
-                  'timeout --kill-after=30s 30s',
-                  'timeout --kill-after=60s 60s',
-                  \$cmd
-              );
-              if (\$new !== \$cmd) {
-                  set_config('maximacommandopt', \$new, 'qtype_stack');
-                  echo 'Updated to 60s: ' . \$new . PHP_EOL;
-              } else {
-                  echo 'Timeout already OK or not found in command.' . PHP_EOL;
-              }
-          }
-          "
-
+          # The correct maximacommandopt (with backend-specific format) was written to the
+          # Behat DB by STACK's create_auto_maxima_image() during moodle-plugin-ci install.
+          # QTYPE_STACK_TEST_CONFIG_CASTIMEOUT=100 (set above) gives PHP 100s to wait.
+          # The 30s shell timeout in the DB command is sufficient for a frozen image.
+          # No DB patching needed: we must not touch the Behat DB from this shell context.
+          echo "=== STACK maxima_opt_auto diagnostic ==="
+          FOUND=$(find "$GITHUB_WORKSPACE/moodledata" -name 'maxima_opt_auto' 2>/dev/null | head -5)
+          if [ -n "$FOUND" ]; then
+            echo "$FOUND" | xargs ls -lh
+          else
+            echo "WARNING: maxima_opt_auto not found – CAS will use cold start"
+          fi
+          echo "Maxima version: $(maxima --version 2>&1 | head -1 || echo 'not found')"
       - name: Behat – all plugin scenarios
         run: |
           set -o pipefail
