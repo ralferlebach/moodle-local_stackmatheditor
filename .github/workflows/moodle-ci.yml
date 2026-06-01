@@ -83,12 +83,16 @@ jobs:
       # qtype_stack is a declared dependency of this plugin. Even JS lint uses
       # moodle-plugin-ci install to get a Moodle tree, so Maxima must be present
       # before any qtype_stack test-site initialisation can happen.
+      # Maxima must be installed before moodle-plugin-ci install:
+      # qtype_stack calls Maxima during PHPUnit/Behat test-site initialisation.
       - name: Install Maxima and gnuplot
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y maxima gnuplot
-          command -v maxima
-          maxima --version
+          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.[0-9]+)?' | head -1)
+          echo "Installed Maxima $VER"
+          python3 -c "\
+v = tuple(int(x) for x in '${VER}'.split('.'))\nassert v >= (5, 46), f'Maxima {v} < required (5, 46)'\nprint(f'Maxima {v}: OK')\n"
           command -v gnuplot
           gnuplot --version
 
@@ -184,7 +188,7 @@ jobs:
         env:
           POSTGRES_USER: moodle
           POSTGRES_PASSWORD: moodle
-          POSTGRES_DB: moodle
+          POSTGRES_DB: postgres
         ports: ['5432:5432']
         options: >-
           --health-cmd="pg_isready -U moodle"
@@ -209,12 +213,16 @@ jobs:
           sudo locale-gen en_AU.UTF-8
           sudo update-locale
 
+      # Maxima must be installed before moodle-plugin-ci install:
+      # qtype_stack calls Maxima during PHPUnit/Behat test-site initialisation.
       - name: Install Maxima and gnuplot
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y maxima gnuplot
-          command -v maxima
-          maxima --version
+          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.[0-9]+)?' | head -1)
+          echo "Installed Maxima $VER"
+          python3 -c "\
+v = tuple(int(x) for x in '${VER}'.split('.'))\nassert v >= (5, 46), f'Maxima {v} < required (5, 46)'\nprint(f'Maxima {v}: OK')\n"
           command -v gnuplot
           gnuplot --version
 
@@ -243,6 +251,7 @@ jobs:
             --db-pass  ${{ matrix.db.pass }} \
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
+
 
       - name: PHPUnit – all tests
         run: moodle-plugin-ci phpunit
@@ -291,12 +300,16 @@ jobs:
 
       # Must run before moodle-plugin-ci install. qtype_stack auto-runs
       # Maxima during PHPUnit/Behat test-site installation.
+      # Maxima must be installed before moodle-plugin-ci install:
+      # qtype_stack calls Maxima during PHPUnit/Behat test-site initialisation.
       - name: Install Maxima and gnuplot
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y maxima gnuplot
-          command -v maxima
-          maxima --version
+          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.[0-9]+)?' | head -1)
+          echo "Installed Maxima $VER"
+          python3 -c "\
+v = tuple(int(x) for x in '${VER}'.split('.'))\nassert v >= (5, 46), f'Maxima {v} < required (5, 46)'\nprint(f'Maxima {v}: OK')\n"
           command -v gnuplot
           gnuplot --version
 
@@ -329,6 +342,7 @@ jobs:
             --db-pass  root \
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
+
 
       - name: Behat – all plugin scenarios
         run: |
