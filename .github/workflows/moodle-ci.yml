@@ -352,6 +352,38 @@ jobs:
             --db-name  moodle \
             --branch   ${{ matrix.moodle }}
 
+      # Run in BEHAT_UTIL context: switches Moodle to behat DB + behat dataroot.
+      # This ensures maximalocal.mac is written to the correct behat dataroot
+      # and STACK CAS uses the correct config (platform=linux, castimeout=300).
+      - name: Initialise STACK CAS for Behat
+        working-directory: ${{ github.workspace }}/moodle
+        run: |
+          php - << 'PHP'
+          <?php
+          define('BEHAT_UTIL', true);
+          define('CLI_SCRIPT', true);
+          require_once(getcwd() . '/config.php');
+          global $CFG, $DB;
+          if (!$DB->get_manager()->table_exists('config')) {
+              fwrite(STDERR, "Behat DB has no {config} table.\n");
+              exit(1);
+          }
+          $stackroot = $CFG->dirroot . '/question/type/stack';
+          if (!file_exists($stackroot . '/stack/cas/installhelper.class.php')) {
+              fwrite(STDERR, "qtype_stack not found at {$stackroot}.\n");
+              exit(1);
+          }
+          require_once($stackroot . '/stack/cas/installhelper.class.php');
+          set_config('platform',        'linux',   'qtype_stack');
+          set_config('maximacommand',   'maxima',  'qtype_stack');
+          set_config('maximaversion',   'default', 'qtype_stack');
+          set_config('castimeout',      '300',     'qtype_stack');
+          set_config('casresultscache', 'db',      'qtype_stack');
+          purge_all_caches();
+          stack_cas_configuration::create_maximalocal();
+          echo 'STACK maximalocal.mac created in: ' . $CFG->dataroot . PHP_EOL;
+          echo 'STACK platform: ' . get_config('qtype_stack', 'platform') . PHP_EOL;
+          PHP
 
       - name: Behat – all plugin scenarios
         run: |
