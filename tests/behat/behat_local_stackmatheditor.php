@@ -1164,29 +1164,43 @@ JS;
         $js = <<<JS
             window.__sme_t2m_result = '__waiting__';
             (function() {
-                // Identify the AMD require function (prefer window.requirejs).
-                var amdRequire = window.requirejs || window.require || null;
-                if (!amdRequire || typeof amdRequire !== 'function') {
-                    window.__sme_t2m_result = '__no-amd__:rjs=' + typeof window.requirejs
-                        + ':req=' + typeof window.require;
+                var amdReq = window.requirejs || window.require || null;
+                if (!amdReq || typeof amdReq !== 'function') {
+                    window.__sme_t2m_result = '__no-amd__';
                     return;
                 }
-                amdRequire(
-                    ['local_stackmatheditor/tex2max'],
-                    function(t2m) {
+                // Try loading mathquill_init which contains the tex2max converter.
+                // The standalone local_stackmatheditor/tex2max module may not exist.
+                amdReq(
+                    ['local_stackmatheditor/mathquill_init'],
+                    function(mqi) {
                         try {
-                            var r = t2m.convert('{$jslatex}', {variableMode: '{$jsmode}'});
+                            var cfg = {variableMode: '{$jsmode}'};
+                            // Try the exported conversion functions in order.
+                            var r;
+                            if (typeof mqi.convert === 'function') {
+                                r = mqi.convert('{$jslatex}', cfg);
+                            } else if (typeof mqi.tex2max === 'function') {
+                                r = mqi.tex2max('{$jslatex}', cfg);
+                            } else if (typeof mqi.parseTex === 'function') {
+                                r = mqi.parseTex('{$jslatex}', cfg);
+                            } else {
+                                // Report exported API for debugging.
+                                var api = Object.keys(mqi)
+                                    .filter(function(k) { return typeof mqi[k] === 'function'; })
+                                    .join(',');
+                                window.__sme_t2m_result = '__api__:' + api;
+                                return;
+                            }
                             window.__sme_t2m_result = (r !== null && r !== undefined)
                                 ? String(r) : '__null__';
                         } catch (e) {
-                            window.__sme_t2m_result = '__error__: ' + e.message;
+                            window.__sme_t2m_result = '__error__:' + e.message;
                         }
                     },
                     function(reqErr) {
                         var t = reqErr && reqErr.requireType ? reqErr.requireType : 'unknown';
-                        var m = reqErr && reqErr.requireModules
-                            ? reqErr.requireModules.join(',') : '';
-                        window.__sme_t2m_result = '__require-error__:' + t + ':' + m;
+                        window.__sme_t2m_result = '__require-error__:' + t;
                     }
                 );
             })();
