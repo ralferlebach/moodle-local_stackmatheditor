@@ -41,7 +41,9 @@
 define([], function() {
     'use strict';
 
-    var noop = function() {};
+    var noop = function() {
+        // Intentional no-op placeholder.
+    };
 
     /**
      * Typeset a DOM element using the MathJax v3 API.
@@ -53,11 +55,15 @@ define([], function() {
         if (window.MathJax && window.MathJax.typesetPromise) {
             try {
                 window.MathJax.typesetPromise(el ? [el] : []).catch(noop);
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+                // Ignored.
+            }
         } else if (window.MathJax && window.MathJax.typeset) {
             try {
                 window.MathJax.typeset(el ? [el] : []);
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+                // Ignored.
+            }
         }
     }
 
@@ -70,14 +76,20 @@ define([], function() {
         for (i = 0; i < arguments.length; i++) {
             item = arguments[i];
             if (typeof item === 'function') {
-                try { item(); } catch (e) { /* ignore */ }
+                try {
+                    item();
+                } catch (e) {
+                    // Ignored.
+                }
             } else if (Array.isArray(item)) {
                 if (item[0] === 'Typeset') {
                     typesetV3(item.length > 2 ? item[2] : null);
                 } else if (typeof item[0] === 'function') {
                     try {
                         item[0].apply(item[1] || null, item.slice(2));
-                    } catch (e) { /* ignore */ }
+                    } catch (e) {
+                        // Ignored.
+                    }
                 }
             }
         }
@@ -104,7 +116,11 @@ define([], function() {
             Register: {
                 StartupHook: function(h, cb) {
                     if (typeof cb === 'function') {
-                        try { cb(); } catch (e) { /* ignore */ }
+                        try {
+                            cb();
+                        } catch (e) {
+                            // Ignored.
+                        }
                     }
                 },
                 MessageHook: noop,
@@ -122,8 +138,12 @@ define([], function() {
                 TeX: {}
             },
             signal: {Interest: noop},
-            getAllJax: function() { return []; },
-            getJaxFor: function() { return null; },
+            getAllJax: function() {
+                return [];
+            },
+            getJaxFor: function() {
+                return null;
+            },
             Reprocess: noop,
             Rerender: noop,
             setRenderer: noop,
@@ -173,7 +193,11 @@ define([], function() {
                             var j;
                             for (j = 0; j < arguments.length; j++) {
                                 if (typeof arguments[j] === 'function') {
-                                    try { arguments[j](); } catch (e) { /* ignore */ }
+                                    try {
+                                        arguments[j]();
+                                    } catch (e) {
+                                        // Ignored.
+                                    }
                                 }
                             }
                         }
@@ -190,7 +214,9 @@ define([], function() {
         if (!window.MathJax.Ajax) {
             window.MathJax.Ajax = {
                 Require: function(f, cb) {
-                    if (typeof cb === 'function') { cb(); }
+                    if (typeof cb === 'function') {
+                        cb();
+                    }
                 },
                 config: {root: ''},
                 STATUS: {OK: 1},

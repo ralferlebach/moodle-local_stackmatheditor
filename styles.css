@@ -412,3 +412,14 @@
 .sme-system-add {
     min-width: 2rem;
 }
+
+/* ═══════════════════════════════════════════════════
+   HTML-literal button labels (display_html property)
+   e.g. fraction button: <sup>a</sup>⁄<sub>b</sub>
+   ═══════════════════════════════════════════════════ */
+
+.sme-tb-lbl-html sup,
+.sme-tb-lbl-html sub {
+    font-size: 0.7em;
+    line-height: 1;
+}

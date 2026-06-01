@@ -328,6 +328,7 @@ define([
             loadScript(mqJsUrl).then(function() {
                 dbg('MathQuill loaded successfully.');
                 boot(params, defs, localeComma);
+                return null;
             }).fail(function(err) {
                 dbg('Failed to load MathQuill: '
                     + (err && err.message
