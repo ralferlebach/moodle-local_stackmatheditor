@@ -1263,4 +1263,290 @@ JS;
             );
         }
     }
+
+    // Stack CAS diagnostic steps (tag stack_init).
+
+    /**
+     * Navigate to the STACK plugin settings page in site administration.
+     *
+     * @When I navigate to the STACK settings page
+     */
+    public function i_navigate_to_stack_settings_page(): void {
+        $url = new moodle_url('/admin/settings.php', ['section' => 'qtypesettingstack']);
+        $this->getSession()->visit($this->locate_path($url->out(false)));
+        $this->wait_for_pending_js();
+    }
+
+    /**
+     * Navigate to the STACK healthcheck admin page.
+     *
+     * @When I navigate to the STACK healthcheck page
+     */
+    public function i_navigate_to_stack_healthcheck_page(): void {
+        $url = new moodle_url('/question/type/stack/adminui/healthcheck.php');
+        $this->getSession()->visit($this->locate_path($url->out(false)));
+        $this->wait_for_pending_js();
+    }
+
+    /**
+     * Assert a STACK config setting contains an expected value.
+     * Reads the admin settings form field value (not the DB directly).
+     *
+     * @Then the STACK :setting setting should contain :expected
+     * @param string $setting  Config key, e.g. "platform" or "maximacommand".
+     * @param string $expected Expected substring.
+     */
+    public function the_stack_setting_should_contain(
+        string $setting,
+        string $expected
+    ): void {
+        // Settings form field id pattern: s_qtype_stack_<setting>.
+        $fieldid = 's_qtype_stack_' . $setting;
+        $page    = $this->getSession()->getPage();
+
+        $field = $page->findById($fieldid);
+        if (!$field) {
+            // Try as a select element.
+            $field = $page->find('css', "select[name="{$fieldid}"]");
+        }
+        if (!$field) {
+            throw new ExpectationException(
+                "STACK setting field '{$fieldid}' not found on settings page. " .
+                "Ensure STACK is installed and the settings page is loaded.",
+                $this->getSession()
+            );
+        }
+        $actual = $field->getValue();
+        if (strpos((string)$actual, $expected) === false) {
+            throw new ExpectationException(
+                "STACK setting '{$setting}' = '{$actual}' does not contain '{$expected}'.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Assert a STACK config setting is not empty.
+     *
+     * @Then the STACK :setting setting should not be empty
+     * @param string $setting Config key, e.g. "maximacommand".
+     */
+    public function the_stack_setting_should_not_be_empty(string $setting): void {
+        $fieldid = 's_qtype_stack_' . $setting;
+        $page    = $this->getSession()->getPage();
+        $field   = $page->findById($fieldid)
+               ?? $page->find('css', "input[name="{$fieldid}"]")
+               ?? $page->find('css', "select[name="{$fieldid}"]");
+        if (!$field) {
+            throw new ExpectationException(
+                "STACK setting field '{$fieldid}' not found.",
+                $this->getSession()
+            );
+        }
+        $val = trim((string)$field->getValue());
+        if ($val === '') {
+            throw new ExpectationException(
+                "STACK setting '{$setting}' is empty – expected a non-empty value " .
+                "(e.g. /usr/bin/maxima).",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Clear the STACK CAS result cache on the healthcheck page.
+     * Handles the redirect to the progress page and clicks Continue.
+     *
+     * Order: FIRST clear cache, THEN rebuild image – not the other way round.
+     *
+     * @When I clear the STACK CAS cache
+     */
+    public function i_clear_the_stack_cas_cache(): void {
+        $page = $this->getSession()->getPage();
+
+        // The clear-cache form posts to the same page with clearcache=1 + sesskey.
+        $clearlink = $page->find('css', 'a[href*="clearcache=1"]');
+        if (!$clearlink) {
+            $clearlink = $page->find('css', 'form[action*="healthcheck"] [name="clearcache"]');
+        }
+        if (!$clearlink) {
+            // Try to find the link by text (multi-language fallback).
+            $clearlink = $page->find('xpath', '//a[contains(@href,"clearcache=1")] | //input[@name="clearcache"]');
+        }
+        if (!$clearlink) {
+            throw new ExpectationException(
+                "STACK clear-cache link/button not found on healthcheck page.",
+                $this->getSession()
+            );
+        }
+        $clearlink->click();
+        $this->wait_for_pending_js();
+
+        // Moodle progress pages show a "Continue" button (id="id_continue" or
+        // role="button" with text "Continue" / "Weiter").
+        $this->handle_moodle_progress_page();
+    }
+
+    /**
+     * Rebuild the STACK Maxima optimised image via the healthcheck page.
+     * Handles the progress page and Continue button.
+     *
+     * @When I rebuild the STACK Maxima image
+     */
+    public function i_rebuild_the_stack_maxima_image(): void {
+        $page = $this->getSession()->getPage();
+
+        // The create-image link/form element.
+        $btn = $page->find('css', 'a[href*="createmaximaimage=1"]');
+        if (!$btn) {
+            $btn = $page->find('css', '[name="createmaximaimage"]');
+        }
+        if (!$btn) {
+            $btn = $page->find('xpath', '//a[contains(@href,"createmaximaimage")] | //input[@name="createmaximaimage"]');
+        }
+        if (!$btn) {
+            throw new ExpectationException(
+                "STACK 'Create Maxima image' button not found on healthcheck page. " .
+                "Is the CAS connection working?",
+                $this->getSession()
+            );
+        }
+        $btn->click();
+        $this->wait_for_pending_js();
+        $this->handle_moodle_progress_page();
+    }
+
+    /**
+     * Clicks the Moodle "Continue" / "Weiter" button on progress redirect pages.
+     * If no such button is present, returns silently (page might have been a
+     * direct redirect without a progress page).
+     */
+    protected function handle_moodle_progress_page(): void {
+        $page   = $this->getSession()->getPage();
+        // Moodle progress pages contain a form with id="id_continue".
+        $continue = $page->find('css', '#id_continue');
+        if (!$continue) {
+            $xp = '//button[contains(.,"Continue")] | //button[contains(.,"Weiter")]';
+            $continue = $page->find('xpath', $xp);
+        }
+        if ($continue) {
+            $continue->click();
+            $this->wait_for_pending_js();
+        }
+    }
+
+    /**
+     * Assert success indicators on the STACK healthcheck page.
+     *
+     * @Then I should see the STACK healthcheck success indicators
+     */
+    public function i_should_see_stack_healthcheck_success_indicators(): void {
+        $page   = $this->getSession()->getPage();
+        $source = $page->getContent();
+
+        // STACK renders a health-summary table; each passing check uses a CSS
+        // class "stackprogress" or similar, or a ✓ icon.  We check for the
+        // absence of the hard-error class and presence of the success strings.
+        $errorclass = 'class="stackerror"';
+        $successhint = ['healthcheckpass', 'casconnect', 'linux-optimised',
+            'maxima_opt_auto', 'CAS gibt', 'CAS returns'];
+
+        if (strpos($source, $errorclass) !== false) {
+            throw new ExpectationException(
+                "STACK healthcheck page shows at least one error (class='stackerror'). " .
+                "Check the healthcheck page manually.",
+                $this->getSession()
+            );
+        }
+
+        $found = false;
+        foreach ($successhint as $hint) {
+            if (strpos($source, $hint) !== false) {
+                $found = true;
+                break;
+            }
+        }
+        if (!$found) {
+            throw new ExpectationException(
+                "STACK healthcheck success indicators not found on page. " .
+                "The page may still be showing an error or the CAS is not connected.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Assert the STACK healthcheck page reports the CAS connection as working.
+     *
+     * @Then the STACK CAS connection should be reported as working
+     */
+    public function the_stack_cas_connection_should_be_reported_as_working(): void {
+        $page   = $this->getSession()->getPage();
+        $source = $page->getContent();
+
+        // STACK healthcheck outputs specific text when the CAS is connected.
+        // We check for multiple variants to be language-independent.
+        $ok = ['casconnect', 'stehende Verbindung', 'standing connection',
+               'CAS returns data', 'CAS gibt Daten'];
+
+        foreach ($ok as $needle) {
+            if (strpos($source, $needle) !== false) {
+                return; // Passed.
+            }
+        }
+
+        throw new ExpectationException(
+            "STACK CAS connection is NOT reported as working on the healthcheck page. " .
+            "Possible causes: maxima_opt_auto not found, platform constant missing, " .
+            "or QTYPE_STACK_TEST_CONFIG_MAXIMACOMMANDOPT not set.",
+            $this->getSession()
+        );
+    }
+
+    /**
+     * Assert the STACK healthcheck page reports a specific platform.
+     *
+     * @Then the STACK platform should be reported as :platform
+     * @param string $platform Expected platform identifier, e.g. "linux-optimised".
+     */
+    public function the_stack_platform_should_be_reported_as(string $platform): void {
+        $page   = $this->getSession()->getPage();
+        $source = $page->getContent();
+
+        if (strpos($source, $platform) === false) {
+            throw new ExpectationException(
+                "Expected STACK platform '{$platform}' not found on healthcheck page. " .
+                "Check QTYPE_STACK_TEST_CONFIG_PLATFORM constant in config.php.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Assert the STACK healthcheck page reports a valid Maxima library version.
+     * The version is an integer like 2026010500.
+     *
+     * @Then the STACK Maxima library version should be valid
+     */
+    public function the_stack_maxima_library_version_should_be_valid(): void {
+        $page   = $this->getSession()->getPage();
+        $source = $page->getContent();
+
+        // STACK outputs the stackmaximaversion as a 10-digit number.
+        if (!preg_match('/\b20\d{8}\b/', $source)) {
+            throw new ExpectationException(
+                "STACK Maxima library version (10-digit timestamp like 2026010500) " .
+                "not found on healthcheck page. " .
+                "The STACK libraries may not have been installed correctly.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Helper: wait for pending JS (AMD + RequireJS).
+     */
+    protected function wait_for_pending_js(): void {
+        $this->getSession()->wait(5000, 'document.readyState === "complete"');
+    }
 }
