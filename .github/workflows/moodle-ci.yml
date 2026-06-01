@@ -429,13 +429,13 @@ jobs:
           echo '=== Contents of moodledata/ ==='
           ls -la "$GITHUB_WORKSPACE/moodledata/" 2>/dev/null || true
 
-      # Behat faildumps (moodle-plugin-ci writes to moodledata/behat_faildump).
+      # Behat faildumps (moodle-plugin-ci writes to moodledata/behat_dump/).
       - name: Upload Behat faildump
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: behat-faildump-${{ matrix.moodle }}
-          path: ${{ github.workspace }}/moodledata/behat_faildump/
+          path: ${{ github.workspace }}/moodledata/behat_dump/
           if-no-files-found: ignore
           retention-days: 7
 
@@ -445,7 +445,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: behat-screenshots-${{ matrix.moodle }}
-          path: ${{ github.workspace }}/moodle/behatfaildumps/
+          path: ${{ github.workspace }}/moodledata/behat_dump/
           if-no-files-found: ignore
           retention-days: 7
 
