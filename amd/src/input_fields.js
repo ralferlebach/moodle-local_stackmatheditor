@@ -39,11 +39,15 @@ define([
      *
      * @returns {string} Selector.
      */
-    function selector() {
-        return TYPES.map(function(t) {
-            return 'input[data-stack-input-type="'
-                + t + '"]';
-        }).join(',');
+        function selector() {
+        // Primary: STACK attribute selectors.
+        var attrSelectors = TYPES.map(function(t) {
+            return 'input[data-stack-input-type="' + t + '"]';
+        });
+        // Fallback: STACK-typical *_ansN name/id patterns for STACK versions
+        // that do not emit data-stack-input-type.
+        attrSelectors.push('input[name*="_ans"]', 'input[id*="_ans"]');
+        return attrSelectors.join(',');
     }
 
     /**
@@ -437,6 +441,18 @@ define([
         }
 
         var name = $input.attr('name') || '';
+        var inputid = $input.attr('id') || '';
+        var hasattr = !!$input.attr('data-stack-input-type');
+
+        // Skip inputs that matched *_ans patterns but are not STACK inputs.
+        // A genuine STACK algebraic input name ends with _ansN (one or more digits).
+        if (!hasattr
+                && !/(^|_)ans\d+$/.test(name)
+                && !/(^|_)ans\d+$/.test(inputid)) {
+            ctx.dbg('Skipping non-STACK input: ' + name);
+            return;
+        }
+
         var slot = ctx.extractSlot(name);
 
         // Check per-slot enabled map.

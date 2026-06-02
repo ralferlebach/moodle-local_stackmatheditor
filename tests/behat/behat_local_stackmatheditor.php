@@ -1290,6 +1290,7 @@ JS;
     }
 
 
+
     // Stack CAS diagnostic steps (tag stack_init).
 
     /**
@@ -1351,7 +1352,7 @@ JS;
      */
     public function i_rebuild_the_stack_maxima_image(): void {
         $page = $this->getSession()->getPage();
-        $btn = $page->find(
+        $btn  = $page->find(
             'xpath',
             '//input[@name="createmaximaimage"]/ancestor::form//button'
         );
@@ -1484,8 +1485,36 @@ JS;
     }
 
     /**
+     * Assert the STACK optimised Maxima image file exists and is executable.
+     * Uses PHP file system checks (not browser JS) since this is server-side state.
+     *
+     * @Then the STACK optimised Maxima image should be executable
+     */
+    public function the_stack_optimised_maxima_image_should_be_executable(): void {
+        global $CFG;
+
+        $image = $CFG->dataroot . '/stack/maxima_opt_auto';
+
+        if (!is_file($image)) {
+            throw new ExpectationException(
+                "Expected STACK optimised Maxima image does not exist: {$image}. " .
+                "Run stack-behat-init.php before Behat to create it.",
+                $this->getSession()
+            );
+        }
+
+        if (!is_executable($image)) {
+            throw new ExpectationException(
+                "STACK optimised Maxima image is not executable: {$image}. " .
+                "Apply chmod 0755.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
      * Enter LaTeX into the MathQuill field for a given STACK input name.
-     * This drives the full UI path: MathQuill → tex2max → STACK input value.
+     * Drives the full UI path: MathQuill write → tex2max → STACK hidden input.
      *
      * @When I enter latex :latex into the MathQuill field for :inputname
      * @param string $latex     LaTeX string to enter.
@@ -1506,32 +1535,20 @@ JS;
         || document.querySelector('[id="' + n + '"]')
         || document.querySelector('[id$="_' + n + '"]');
 
-    if (!input) {
-        return 'no-stack-input';
-    }
+    if (!input) { return 'no-stack-input'; }
 
-    var container = (input.closest('.que') || document)
-        .querySelector('.sme-mq-container');
+    var que = input.closest('.que') || document;
+    var container = que.querySelector('.sme-mq-container');
 
-    if (!container) {
-        return 'no-sme-container';
-    }
+    if (!container) { return 'no-sme-container'; }
 
     var editable = container.querySelector('.mq-editable-field');
-    if (!editable) {
-        return 'no-mq-editable';
-    }
-
-    if (!window.MathQuill) {
-        return 'no-mathquill';
-    }
+    if (!editable)  { return 'no-mq-editable'; }
+    if (!window.MathQuill) { return 'no-mathquill'; }
 
     var MQ    = window.MathQuill.getInterface(2);
     var field = MQ(editable);
-
-    if (!field) {
-        return 'no-mq-field';
-    }
+    if (!field)     { return 'no-mq-field'; }
 
     field.latex('');
     field.write({$jslatex});
@@ -1554,7 +1571,7 @@ JS);
     }
 
     /**
-     * Assert the underlying STACK hidden input contains an expected value.
+     * Assert the underlying hidden STACK input contains an expected substring.
      *
      * @Then the underlying STACK input for :inputname should contain :expected
      * @param string $inputname STACK input name.
@@ -1586,7 +1603,7 @@ JS);
     }
 
     /**
-     * Assert the underlying STACK hidden input does not contain a given string.
+     * Assert the underlying hidden STACK input does not contain a given string.
      *
      * @Then the underlying STACK input for :inputname should not contain :text
      * @param string $inputname STACK input name.
@@ -1612,6 +1629,38 @@ JS);
             throw new ExpectationException(
                 "STACK input \'{$inputname}\' value \'{$actual}\' " .
                 "unexpectedly contains \'{$text}\'.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Assert the underlying hidden STACK input equals an expected string exactly.
+     *
+     * @Then the underlying STACK input for :inputname should be :expected
+     * @param string $inputname STACK input name.
+     * @param string $expected  Expected exact value of the input.
+     */
+    public function the_underlying_stack_input_should_be(
+        string $inputname,
+        string $expected
+    ): void {
+        $jsinput = json_encode($inputname);
+        $actual  = $this->getSession()->evaluateScript(<<<JS
+(function() {
+    var n = {$jsinput};
+    var input = document.querySelector('[name="' + n + '"]')
+        || document.querySelector('[name$="_' + n + '"]')
+        || document.querySelector('[id="' + n + '"]')
+        || document.querySelector('[id$="_' + n + '"]');
+    return input ? input.value : '__missing_input__';
+})()
+JS);
+
+        if ((string)$actual !== $expected) {
+            throw new ExpectationException(
+                "STACK input \'{$inputname}\' value \'{$actual}\' " .
+                "does not equal \'{$expected}\'.",
                 $this->getSession()
             );
         }
