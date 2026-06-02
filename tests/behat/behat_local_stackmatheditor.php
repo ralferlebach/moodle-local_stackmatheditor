@@ -1482,8 +1482,8 @@ JS;
         // class "stackprogress" or similar, or a ✓ icon.  We check for the
         // absence of the hard-error class and presence of the success strings.
         $errorclass = 'class="stackerror"';
-        $successhint = ['healthcheckpass', 'casconnect', 'linux-optimised',
-            'maxima_opt_auto', 'CAS gibt', 'CAS returns'];
+        $successhint = ['stackmaximaversion', 'CAS gibt Daten', 'CAS returns data',
+            'STACK_SETUP_OK', 'stehende Verbindung', 'standing connection'];
 
         if (strpos($source, $errorclass) !== false) {
             throw new ExpectationException(

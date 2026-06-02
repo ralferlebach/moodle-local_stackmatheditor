@@ -357,26 +357,47 @@ jobs:
           moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMACOMMAND",   "maxima");'
           moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASTIMEOUT",      "100");'
           moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASRESULTSCACHE", "db");'
-          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASDEBUGGING",    "0");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASDEBUGGING",    "1");'
           moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMALIBRARIES", "");'
 
       # Find the maxima_opt_auto image created during moodle-plugin-ci install.
       # PHPUnit init runs first and creates this file in phpu_moodledata.
-      - name: Verify STACK Maxima image (diagnostic)
+      - name: Ensure STACK Maxima image is present and executable
         run: |
-          # The correct maximacommandopt (with backend-specific format) was written to the
-          # Behat DB by STACK's create_auto_maxima_image() during moodle-plugin-ci install.
-          # QTYPE_STACK_TEST_CONFIG_CASTIMEOUT=100 (set above) gives PHP 100s to wait.
-          # The 30s shell timeout in the DB command is sufficient for a frozen image.
-          # No DB patching needed: we must not touch the Behat DB from this shell context.
-          echo "=== STACK maxima_opt_auto diagnostic ==="
-          FOUND=$(find "$GITHUB_WORKSPACE/moodledata" -name 'maxima_opt_auto' 2>/dev/null | head -5)
-          if [ -n "$FOUND" ]; then
-            echo "$FOUND" | xargs ls -lh
-          else
-            echo "WARNING: maxima_opt_auto not found – CAS will use cold start"
+          MAC=$(find "$GITHUB_WORKSPACE/moodledata" -name 'maximalocal.mac' 2>/dev/null | head -1)
+          if [ -z "$MAC" ]; then
+            echo "WARNING: maximalocal.mac not found"; exit 0
           fi
-          echo "Maxima version: $(maxima --version 2>&1 | head -1 || echo 'not found')"
+          STACK_DIR=$(dirname "$MAC")
+          IMAGE="$STACK_DIR/maxima_opt_auto"
+          echo "STACK dir:   $STACK_DIR"
+          echo "Image path:  $IMAGE"
+          BACKEND=$(echo "build_info();" | timeout 30s maxima 2>&1 | grep -oE 'GCL|SBCL|CLISP' | head -1 || echo "GCL")
+          echo "Backend:     $BACKEND"
+          echo "Maxima:      $(maxima --version 2>&1 | head -1)"
+          if [ -f "$IMAGE" ]; then
+            chmod +x "$IMAGE"
+            echo "Existing image: $(ls -lh "$IMAGE")"
+          else
+            echo "Image missing – creating..."
+            TMPBATCH=$(mktemp /tmp/stack_save.XXXXXX.mac)
+            if [ "$BACKEND" = "SBCL" ]; then
+              echo "load("$MAC"); :lisp (sb-ext:save-lisp-and-die "$IMAGE" :toplevel #'run :executable t)" > "$TMPBATCH"
+            elif [ "$BACKEND" = "CLISP" ]; then
+              echo "load("$MAC"); :lisp (ext:saveinitmem "$IMAGE.mem" :init-function (quote user::run))" > "$TMPBATCH"
+            else
+              echo "load("$MAC"); :lisp (si::save-system "$IMAGE")" > "$TMPBATCH"
+            fi
+            echo "quit();" >> "$TMPBATCH"
+            timeout 120s maxima --batch="$TMPBATCH" || true
+            rm -f "$TMPBATCH"
+            if [ -f "$IMAGE" ]; then
+              chmod +x "$IMAGE"
+              echo "Created: $(ls -lh "$IMAGE")"
+            else
+              echo "WARNING: Image creation failed – CAS will cold-start"
+            fi
+          fi
       - name: Behat – all plugin scenarios
         run: |
           set -o pipefail
