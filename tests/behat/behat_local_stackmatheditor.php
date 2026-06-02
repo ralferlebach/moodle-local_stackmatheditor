@@ -15,6 +15,7 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 use Behat\Mink\Exception\ExpectationException;
+use Behat\Behat\Hook\Scope\BeforeScenarioScope;
 
 /**
  * Behat step definitions for local_stackmatheditor.
@@ -1742,5 +1743,63 @@ JS);
                 $this->getSession()
             );
         }
+    }
+
+    /**
+     * Ensure STACK CAS uses a stable direct Maxima connection before each scenario.
+     *
+     * moodle-plugin-ci behat --start-servers re-runs util_single_run.php which
+     * resets the Behat DB; STACK install.php then writes platform=linux-optimised
+     * back into the DB.  This hook forces platform=linux at Behat runtime so
+     * every scenario starts with a working cold-start CAS, regardless of what
+     * install.php wrote.
+     *
+     * @BeforeScenario @local_stackmatheditor
+     * @param BeforeScenarioScope $scope Behat scenario scope.
+     */
+    public function prepare_stack_cas_for_scenario(BeforeScenarioScope $scope): void {
+        global $CFG, $DB;
+
+        if (!$DB->get_manager()->table_exists('config')) {
+            return;
+        }
+
+        $candidates = [
+            $CFG->dirroot . '/question/type/stack',
+            $CFG->dirroot . '/public/question/type/stack',
+        ];
+        $stackroot = null;
+        foreach ($candidates as $c) {
+            if (file_exists($c . '/stack/cas/installhelper.class.php')) {
+                $stackroot = $c;
+                break;
+            }
+        }
+        if (!$stackroot) {
+            return;
+        }
+
+        require_once($stackroot . '/stack/cas/installhelper.class.php');
+
+        set_config('platform', 'linux', 'qtype_stack');
+        set_config('maximacommand', 'maxima', 'qtype_stack');
+        set_config('maximacommandopt', '', 'qtype_stack');
+        set_config('maximaversion', 'default', 'qtype_stack');
+        set_config('castimeout', '300', 'qtype_stack');
+        set_config('casresultscache', 'db', 'qtype_stack');
+        set_config('casdebugging', '0', 'qtype_stack');
+        set_config('maximalibraries', '', 'qtype_stack');
+
+        // Reset stack_cas_configuration singleton so it re-reads fresh settings.
+        if (class_exists('stack_cas_configuration')) {
+            $ref  = new ReflectionClass('stack_cas_configuration');
+            $prop = $ref->hasProperty('instance') ? $ref->getProperty('instance') : null;
+            if ($prop !== null) {
+                $prop->setAccessible(true);
+                $prop->setValue(null, null);
+            }
+        }
+
+        stack_cas_configuration::create_maximalocal();
     }
 }
