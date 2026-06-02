@@ -1482,6 +1482,9 @@ JS;
         // class "stackprogress" or similar, or a ✓ icon.  We check for the
         // absence of the hard-error class and presence of the success strings.
         $errorclass = 'class="stackerror"';
+        // Note: 'maxima_opt_auto' also appears in error text; use more specific indicators.
+        // The stackmaximaversion (10-digit) only appears when CAS returned data.
+        // Note: 'CAS gibt' / 'CAS returns' only appear on successful connection.
         $successhint = ['stackmaximaversion', 'CAS gibt Daten', 'CAS returns data',
             'STACK_SETUP_OK', 'stehende Verbindung', 'standing connection'];
 

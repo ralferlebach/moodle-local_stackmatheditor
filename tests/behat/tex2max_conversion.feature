@@ -5,22 +5,10 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
   So that STACK questions receive syntactically valid CAS expressions
 
   Background:
-    Given the following "users" exist:
-      | username | firstname | lastname | email                |
-      | student1 | Student   | One      | student1@example.com |
-    And the following "courses" exist:
-      | fullname | shortname |
-      | Course 1 | C1        |
-    And the following "course enrolments" exist:
-      | user     | course | role    |
-      | student1 | C1     | student |
-    And the following config values are set as admin:
-      | maximacommand | maxima | qtype_stack |
-      | castimeout    | 100    | qtype_stack |
-    And the plugin enabled mode is set to "1"
-    And a STACK quiz "Conversion Quiz" with algebraic input exists in "C1"
-    And I log in as "student1"
-    And I start the STACK MathQuill quiz attempt "Conversion Quiz"
+    # tex2max is pure JavaScript; it does not need STACK CAS or a quiz page.
+    # Any Moodle page where RequireJS is available is sufficient.
+    Given I log in as "admin"
+    And I am on site homepage
 
   # ── Operator keyword protection (#27) ─────────────────────────────────────
 
