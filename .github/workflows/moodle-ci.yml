@@ -351,9 +351,24 @@ jobs:
       # (BEHAT_UTIL=true), sets castimeout=300, runs a genuine CAS connect
       # (Phase A), creates the frozen Maxima image (Phase B = linux-optimised).
       # Exits 1 if Phase A fails so Behat never starts against a broken CAS.
-      - name: Initialise STACK CAS for Behat
+      - name: Configure STACK CAS for Behat via config.php constants
+        run: |
+          # Constants in config.php persist through moodle-plugin-ci behat --start-servers.
+          # STACK install.php sets platform=linux-optimised in DB; these constants
+          # override it at PHP runtime without touching the DB.
+          # MAXIMACOMMANDOPT is deliberately NOT set: platform=linux uses maximacommand
+          # (cold-start) and ignores the frozen-image command entirely.
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_PLATFORM",        "linux");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMACOMMAND",   "maxima");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASTIMEOUT",      "300");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASRESULTSCACHE", "db");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASDEBUGGING",    "0");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMALIBRARIES", "");'
+
+      - name: Verify STACK CAS baseline (CLI pre-flight)
         working-directory: ${{ github.workspace }}/moodle
         run: php "$GITHUB_WORKSPACE/plugin/.github/stack-behat-init.php"
+
 
       - name: Behat – STACK CAS preflight (@stack_init first)
         run: |

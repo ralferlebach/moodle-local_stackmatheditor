@@ -15,17 +15,19 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * CI helper: initialises STACK CAS for the Behat test site.
+ * CI helper: verifies that STACK CAS works before the Behat suite starts.
  *
- * Run from the Moodle root after moodle-plugin-ci install:
+ * Run from the Moodle root after moodle-plugin-ci add-config has added the
+ * QTYPE_STACK_TEST_CONFIG_* constants to config.php:
  *   working-directory: ${{ github.workspace }}/moodle
  *   run: php "$GITHUB_WORKSPACE/plugin/.github/stack-behat-init.php"
  *
- * Uses platform=linux with castimeout=300 (Strategie C).  No frozen image
- * is created here: maxima_opt_auto is volatile between CI steps because
- * moodle-plugin-ci behat --start-servers resets parts of the Behat dataroot.
- * Cold-start Maxima with a 300 s timeout is safe; results are cached in the
- * DB after the first call, so subsequent scenarios run instantly.
+ * The constants override whatever STACK install.php wrote to the DB.
+ * moodle-plugin-ci behat --start-servers re-runs util_single_run.php which
+ * may reset the Behat DB; the constants survive this reset because they live
+ * in config.php, not in the DB.
+ *
+ * This script just refreshes maximalocal.mac and proves CAS works.
  *
  * @package   local_stackmatheditor
  * @copyright 2026, Ralf Erlebach
@@ -35,18 +37,16 @@
 define('BEHAT_UTIL', true);
 define('CLI_SCRIPT', true);
 
-// Working directory must be the Moodle root (see CI working-directory).
 require_once(getcwd() . '/config.php');
 
 global $CFG, $DB;
 
 if (!$DB->get_manager()->table_exists('config')) {
     fwrite(STDERR, "ERROR: {config} table not found in Behat DB.\n");
-    fwrite(STDERR, "Run this script after moodle-plugin-ci install.\n");
     exit(1);
 }
 
-// Locate qtype_stack (Moodle 4.x: question/type/stack; 5.x: public/...).
+// Locate qtype_stack (Moodle 4.x / 5.x).
 $candidates = [
     $CFG->dirroot . '/question/type/stack',
     $CFG->dirroot . '/public/question/type/stack',
@@ -68,38 +68,22 @@ require_once($stackroot . '/stack/cas/connectorhelper.class.php');
 
 echo "STACK root:     $stackroot\n";
 echo "Behat dataroot: {$CFG->dataroot}\n";
+echo "platform:       " . get_config('qtype_stack', 'platform') . " (may be overridden by constant)\n";
 
-// Set a stable platform=linux baseline.  No frozen image (linux-optimised)
-// because moodle-plugin-ci resets behat dataroot contents between steps.
-// The first CAS call cold-starts Maxima (~60-90 s) and caches the result in
-// the DB; all subsequent calls for the same question are instant.
-echo "\n=== STACK CAS baseline: platform=linux, castimeout=300 ===\n";
-
-set_config('platform', 'linux', 'qtype_stack');
-set_config('maximacommand', 'maxima', 'qtype_stack');
-set_config('maximacommandopt', '', 'qtype_stack');
-set_config('maximaversion', 'default', 'qtype_stack');
-set_config('castimeout', '300', 'qtype_stack');
-set_config('casresultscache', 'db', 'qtype_stack');
-set_config('casdebugging', '0', 'qtype_stack');
-set_config('maximalibraries', '', 'qtype_stack');
-
-purge_all_caches();
+// Refresh maximalocal.mac so Moodle/Behat CAS sessions can load library paths.
 stack_cas_configuration::create_maximalocal();
-echo "maximalocal.mac written to: {$CFG->dataroot}/stack/\n";
+echo "maximalocal.mac refreshed.\n";
 
-// Verify CAS baseline works before Behat starts.
-[$msgbaseline, $debugbaseline, $okbaseline] = stack_connection_helper::stackmaxima_genuine_connect();
+// Hard verify: STACK CAS must respond.  The QTYPE_STACK_TEST_CONFIG_* constants
+// loaded from config.php ensure platform=linux and castimeout=300 are used.
+[$msg, $debug, $ok] = stack_connection_helper::stackmaxima_genuine_connect();
 
-if (!$okbaseline) {
-    fwrite(STDERR, "\nSTACK CAS baseline FAILED.\n");
-    fwrite(STDERR, "platform:   " . get_config('qtype_stack', 'platform') . "\n");
-    fwrite(STDERR, "castimeout: " . get_config('qtype_stack', 'castimeout') . "\n");
-    fwrite(STDERR, "message:    $msgbaseline\n");
-    fwrite(STDERR, "debug:\n$debugbaseline\n");
+if (!$ok) {
+    fwrite(STDERR, "\nSTACK CAS verification FAILED.\n");
+    fwrite(STDERR, "message: $msg\n");
+    fwrite(STDERR, "debug:\n$debug\n");
     exit(1);
 }
 
-echo "STACK CAS baseline OK: $msgbaseline\n";
-echo "  platform:   " . get_config('qtype_stack', 'platform') . "\n";
-echo "  castimeout: " . get_config('qtype_stack', 'castimeout') . " s\n";
+echo "STACK CAS OK: $msg\n";
+echo "  castimeout: " . get_config('qtype_stack', 'castimeout') . " s (may be overridden by constant)\n";
