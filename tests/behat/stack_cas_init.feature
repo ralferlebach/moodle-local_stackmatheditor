@@ -4,23 +4,17 @@ Feature: STACK CAS is configured and operational
   I want to verify that STACK CAS is correctly initialised
   So that failures in other tests can be attributed to the right cause
 
-  # Execution order matters:
-  #   1. Verify platform is linux-optimised  (runtime constant check)
-  #   2. Clear cache, then rebuild image     (cache before image, not vice versa)
-  #   3. Verify CAS connection works
+  # Scenario order matters:
+  #   1. Clear cache   (remove stale entries before rebuilding)
+  #   2. Rebuild image (creates linux-optimised if not yet done)
+  #   3. Baseline CAS  (verify the CAS connection actually works)
+  #   4. linux-optimised (only meaningful AFTER image creation in step 2)
   #
-  # Note: the admin settings form shows database values, not PHP constants.
-  # install.php sets maximacommand='' (empty) in the DB by design; the constant
-  # QTYPE_STACK_TEST_CONFIG_MAXIMACOMMAND overrides this at runtime only.
-  # The healthcheck page reflects the actual runtime configuration.
+  # stack-behat-init.php (run from CI before Behat) already tries Phase A + B.
+  # These scenarios verify the result and repair it when possible.
 
   Background:
     Given I log in as "admin"
-
-  @javascript
-  Scenario: STACK is running with linux-optimised platform at runtime
-    When I navigate to the STACK healthcheck page
-    Then the STACK platform should be reported as "linux-optimised"
 
   @javascript
   Scenario: STACK CAS cache cleared and Maxima image rebuilt successfully
@@ -34,3 +28,8 @@ Feature: STACK CAS is configured and operational
     When I navigate to the STACK healthcheck page
     Then the STACK CAS connection should be reported as working
     And the STACK Maxima library version should be valid
+
+  @javascript
+  Scenario: STACK is running with linux-optimised platform after image creation
+    When I navigate to the STACK healthcheck page
+    Then the STACK platform should be reported as "linux-optimised"

@@ -1289,6 +1289,7 @@ JS;
         }
     }
 
+
     // Stack CAS diagnostic steps (tag stack_init).
 
     /**
@@ -1314,84 +1315,13 @@ JS;
     }
 
     /**
-     * Assert a STACK config setting contains an expected value.
-     * Reads the admin settings form field value (not the DB directly).
-     *
-     * @Then the STACK :setting setting should contain :expected
-     * @param string $setting  Config key, e.g. "platform" or "maximacommand".
-     * @param string $expected Expected substring.
-     */
-    public function the_stack_setting_should_contain(
-        string $setting,
-        string $expected
-    ): void {
-        // Settings form field id pattern: s_qtype_stack_<setting>.
-        $fieldid = 's_qtype_stack_' . $setting;
-        $page    = $this->getSession()->getPage();
-
-        $field = $page->findById($fieldid);
-        if (!$field) {
-            // Try as a select element.
-            $field = $page->find('css', "select[name='{$fieldid}']");
-        }
-        if (!$field) {
-            throw new ExpectationException(
-                "STACK setting field '{$fieldid}' not found on settings page. " .
-                "Ensure STACK is installed and the settings page is loaded.",
-                $this->getSession()
-            );
-        }
-        $actual = $field->getValue();
-        if (strpos((string)$actual, $expected) === false) {
-            throw new ExpectationException(
-                "STACK setting '{$setting}' = '{$actual}' does not contain '{$expected}'.",
-                $this->getSession()
-            );
-        }
-    }
-
-    /**
-     * Assert a STACK config setting is not empty.
-     *
-     * @Then the STACK :setting setting should not be empty
-     * @param string $setting Config key, e.g. "maximacommand".
-     */
-    public function the_stack_setting_should_not_be_empty(string $setting): void {
-        $fieldid = 's_qtype_stack_' . $setting;
-        $page    = $this->getSession()->getPage();
-        $field   = $page->findById($fieldid)
-               ?? $page->find('css', "input[name='{$fieldid}']")
-               ?? $page->find('css', "select[name='{$fieldid}']");
-        if (!$field) {
-            throw new ExpectationException(
-                "STACK setting field '{$fieldid}' not found.",
-                $this->getSession()
-            );
-        }
-        $val = trim((string)$field->getValue());
-        if ($val === '') {
-            throw new ExpectationException(
-                "STACK setting '{$setting}' is empty – expected a non-empty value " .
-                "(e.g. /usr/bin/maxima).",
-                $this->getSession()
-            );
-        }
-    }
-
-    /**
      * Clear the STACK CAS result cache on the healthcheck page.
-     * Handles the redirect to the progress page and clicks Continue.
-     *
-     * Order: FIRST clear cache, THEN rebuild image – not the other way round.
+     * Order: FIRST clear cache, THEN rebuild image.
      *
      * @When I clear the STACK CAS cache
      */
     public function i_clear_the_stack_cas_cache(): void {
         $page = $this->getSession()->getPage();
-
-        // The clear-cache form posts to the same page with clearcache=1 + sesskey.
-        // The clear-cache is a POST form button, not a GET link.
-        // Find the submit button inside the form that has a clearcache hidden input.
         $clearbtn = $page->find(
             'xpath',
             '//input[@name="clearcache"]/ancestor::form//button'
@@ -1411,23 +1341,16 @@ JS;
         }
         $clearbtn->click();
         $this->wait_for_pending_js();
-
-        // Moodle progress pages show a "Continue" button (id="id_continue" or
-        // role="button" with text "Continue" / "Weiter").
         $this->handle_moodle_progress_page();
     }
 
     /**
      * Rebuild the STACK Maxima optimised image via the healthcheck page.
-     * Handles the progress page and Continue button.
      *
      * @When I rebuild the STACK Maxima image
      */
     public function i_rebuild_the_stack_maxima_image(): void {
         $page = $this->getSession()->getPage();
-
-        // The create-image action uses a POST form (same pattern as clear-cache).
-        // Find the submit button inside the form containing the hidden input.
         $btn = $page->find(
             'xpath',
             '//input[@name="createmaximaimage"]/ancestor::form//button'
@@ -1440,7 +1363,7 @@ JS;
         }
         if (!$btn) {
             throw new ExpectationException(
-                "STACK 'Create Maxima image' button not found on healthcheck page. " .
+                "STACK \'Create Maxima image\' button not found on healthcheck page. " .
                 "Expected a POST form with input[name=\"createmaximaimage\"] and a button.",
                 $this->getSession()
             );
@@ -1451,13 +1374,10 @@ JS;
     }
 
     /**
-     * Clicks the Moodle "Continue" / "Weiter" button on progress redirect pages.
-     * If no such button is present, returns silently (page might have been a
-     * direct redirect without a progress page).
+     * Clicks the Moodle Continue/Weiter button on progress redirect pages.
      */
     protected function handle_moodle_progress_page(): void {
-        $page   = $this->getSession()->getPage();
-        // Moodle progress pages contain a form with id="id_continue".
+        $page     = $this->getSession()->getPage();
         $continue = $page->find('css', '#id_continue');
         if (!$continue) {
             $xp = '//button[contains(.,"Continue")] | //button[contains(.,"Weiter")]';
@@ -1478,23 +1398,18 @@ JS;
         $page   = $this->getSession()->getPage();
         $source = $page->getContent();
 
-        // STACK renders a health-summary table; each passing check uses a CSS
-        // class "stackprogress" or similar, or a ✓ icon.  We check for the
-        // absence of the hard-error class and presence of the success strings.
-        $errorclass = 'class="stackerror"';
+        if (strpos($source, 'class="stackerror"') !== false) {
+            throw new ExpectationException(
+                "STACK healthcheck page shows at least one error.",
+                $this->getSession()
+            );
+        }
+
         // Note: 'maxima_opt_auto' also appears in error text; use more specific indicators.
         // The stackmaximaversion (10-digit) only appears when CAS returned data.
         // Note: 'CAS gibt' / 'CAS returns' only appear on successful connection.
         $successhint = ['stackmaximaversion', 'CAS gibt Daten', 'CAS returns data',
             'STACK_SETUP_OK', 'stehende Verbindung', 'standing connection'];
-
-        if (strpos($source, $errorclass) !== false) {
-            throw new ExpectationException(
-                "STACK healthcheck page shows at least one error (class='stackerror'). " .
-                "Check the healthcheck page manually.",
-                $this->getSession()
-            );
-        }
 
         $found = false;
         foreach ($successhint as $hint) {
@@ -1505,33 +1420,27 @@ JS;
         }
         if (!$found) {
             throw new ExpectationException(
-                "STACK healthcheck success indicators not found on page. " .
-                "The page may still be showing an error or the CAS is not connected.",
+                "STACK healthcheck success indicators not found on page.",
                 $this->getSession()
             );
         }
     }
 
     /**
-     * Assert the STACK healthcheck page reports the CAS connection as working.
+     * Assert the healthcheck page reports the CAS connection as working.
      *
      * @Then the STACK CAS connection should be reported as working
      */
     public function the_stack_cas_connection_should_be_reported_as_working(): void {
         $page   = $this->getSession()->getPage();
         $source = $page->getContent();
-
-        // STACK healthcheck outputs specific text when the CAS is connected.
-        // We check for multiple variants to be language-independent.
-        $ok = ['casconnect', 'stehende Verbindung', 'standing connection',
-               'CAS returns data', 'CAS gibt Daten'];
-
+        $ok     = ['casconnect', 'stehende Verbindung', 'standing connection',
+                   'CAS returns data', 'CAS gibt Daten'];
         foreach ($ok as $needle) {
             if (strpos($source, $needle) !== false) {
-                return; // Passed.
+                return;
             }
         }
-
         throw new ExpectationException(
             "STACK CAS connection is NOT reported as working on the healthcheck page. " .
             "Possible causes: maxima_opt_auto not found, platform constant missing, " .
@@ -1541,7 +1450,7 @@ JS;
     }
 
     /**
-     * Assert the STACK healthcheck page reports a specific platform.
+     * Assert the healthcheck page reports a specific platform.
      *
      * @Then the STACK platform should be reported as :platform
      * @param string $platform Expected platform identifier, e.g. "linux-optimised".
@@ -1549,32 +1458,160 @@ JS;
     public function the_stack_platform_should_be_reported_as(string $platform): void {
         $page   = $this->getSession()->getPage();
         $source = $page->getContent();
-
         if (strpos($source, $platform) === false) {
             throw new ExpectationException(
-                "Expected STACK platform '{$platform}' not found on healthcheck page. " .
-                "Check QTYPE_STACK_TEST_CONFIG_PLATFORM constant in config.php.",
+                "Expected STACK platform \'{$platform}\' not found on healthcheck page.",
                 $this->getSession()
             );
         }
     }
 
     /**
-     * Assert the STACK healthcheck page reports a valid Maxima library version.
-     * The version is an integer like 2026010500.
+     * Assert the healthcheck page reports a valid Maxima library version.
      *
      * @Then the STACK Maxima library version should be valid
      */
     public function the_stack_maxima_library_version_should_be_valid(): void {
         $page   = $this->getSession()->getPage();
         $source = $page->getContent();
-
-        // STACK outputs the stackmaximaversion as a 10-digit number.
         if (!preg_match('/\b20\d{8}\b/', $source)) {
             throw new ExpectationException(
-                "STACK Maxima library version (10-digit timestamp like 2026010500) " .
-                "not found on healthcheck page. " .
-                "The STACK libraries may not have been installed correctly.",
+                "STACK Maxima library version (10-digit timestamp) not found " .
+                "on healthcheck page.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Enter LaTeX into the MathQuill field for a given STACK input name.
+     * This drives the full UI path: MathQuill → tex2max → STACK input value.
+     *
+     * @When I enter latex :latex into the MathQuill field for :inputname
+     * @param string $latex     LaTeX string to enter.
+     * @param string $inputname STACK input name (e.g. "ans1").
+     */
+    public function i_enter_latex_into_mathquill_field(
+        string $latex,
+        string $inputname
+    ): void {
+        $jslatex = json_encode($latex);
+        $jsinput = json_encode($inputname);
+
+        $result = $this->getSession()->evaluateScript(<<<JS
+(function() {
+    var n = {$jsinput};
+    var input = document.querySelector('[name="' + n + '"]')
+        || document.querySelector('[name$="_' + n + '"]')
+        || document.querySelector('[id="' + n + '"]')
+        || document.querySelector('[id$="_' + n + '"]');
+
+    if (!input) {
+        return 'no-stack-input';
+    }
+
+    var container = (input.closest('.que') || document)
+        .querySelector('.sme-mq-container');
+
+    if (!container) {
+        return 'no-sme-container';
+    }
+
+    var editable = container.querySelector('.mq-editable-field');
+    if (!editable) {
+        return 'no-mq-editable';
+    }
+
+    if (!window.MathQuill) {
+        return 'no-mathquill';
+    }
+
+    var MQ    = window.MathQuill.getInterface(2);
+    var field = MQ(editable);
+
+    if (!field) {
+        return 'no-mq-field';
+    }
+
+    field.latex('');
+    field.write({$jslatex});
+    field.blur();
+
+    input.dispatchEvent(new Event('input',  {bubbles: true}));
+    input.dispatchEvent(new Event('change', {bubbles: true}));
+
+    return 'ok';
+})()
+JS);
+
+        if ($result !== 'ok') {
+            throw new ExpectationException(
+                "Could not enter LaTeX into MathQuill field \'{$inputname}\' " .
+                "(result: {$result}).",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Assert the underlying STACK hidden input contains an expected value.
+     *
+     * @Then the underlying STACK input for :inputname should contain :expected
+     * @param string $inputname STACK input name.
+     * @param string $expected  Expected substring in the input value.
+     */
+    public function the_underlying_stack_input_should_contain(
+        string $inputname,
+        string $expected
+    ): void {
+        $jsinput = json_encode($inputname);
+        $actual  = $this->getSession()->evaluateScript(<<<JS
+(function() {
+    var n = {$jsinput};
+    var input = document.querySelector('[name="' + n + '"]')
+        || document.querySelector('[name$="_' + n + '"]')
+        || document.querySelector('[id="' + n + '"]')
+        || document.querySelector('[id$="_' + n + '"]');
+    return input ? input.value : '__missing_input__';
+})()
+JS);
+
+        if (strpos((string)$actual, $expected) === false) {
+            throw new ExpectationException(
+                "STACK input \'{$inputname}\' value \'{$actual}\' " .
+                "does not contain \'{$expected}\'.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Assert the underlying STACK hidden input does not contain a given string.
+     *
+     * @Then the underlying STACK input for :inputname should not contain :text
+     * @param string $inputname STACK input name.
+     * @param string $text      String that must NOT appear in the input value.
+     */
+    public function the_underlying_stack_input_should_not_contain(
+        string $inputname,
+        string $text
+    ): void {
+        $jsinput = json_encode($inputname);
+        $actual  = $this->getSession()->evaluateScript(<<<JS
+(function() {
+    var n = {$jsinput};
+    var input = document.querySelector('[name="' + n + '"]')
+        || document.querySelector('[name$="_' + n + '"]')
+        || document.querySelector('[id="' + n + '"]')
+        || document.querySelector('[id$="_' + n + '"]');
+    return input ? input.value : '__missing_input__';
+})()
+JS);
+
+        if (strpos((string)$actual, $text) !== false) {
+            throw new ExpectationException(
+                "STACK input \'{$inputname}\' value \'{$actual}\' " .
+                "unexpectedly contains \'{$text}\'.",
                 $this->getSession()
             );
         }
