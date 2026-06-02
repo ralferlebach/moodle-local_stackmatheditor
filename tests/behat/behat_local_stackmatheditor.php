@@ -1177,11 +1177,21 @@ JS;
                     try {
                         var mod = amdReq('local_stackmatheditor/tex2max');
                         var cfg = {variableMode: '{$jsmode}'};
-                        var r = (typeof mod.convert === 'function')
-                            ? mod.convert('{$jslatex}', cfg)
-                            : '__api__:' + Object.keys(mod).join(',');
-                        window.__sme_t2m_result = (r !== null && r !== undefined)
-                            ? String(r) : '__null__';
+                        var sApi = Object.keys(mod)
+                            .filter(function(k) { return typeof mod[k] === 'function'; })
+                            .join(',');
+                        if (typeof mod.convert !== 'function') {
+                            window.__sme_t2m_result = '__api__:' + sApi;
+                            return;
+                        }
+                        var r = mod.convert('{$jslatex}', cfg);
+                        if (r === null || r === undefined) {
+                            window.__sme_t2m_result = '__null__';
+                        } else if (String(r) === '') {
+                            window.__sme_t2m_result = '__empty__:api=' + sApi;
+                        } else {
+                            window.__sme_t2m_result = String(r);
+                        }
                     } catch (ex) {
                         window.__sme_t2m_result = '__error__:' + ex.message;
                     }
@@ -1193,11 +1203,22 @@ JS;
                     function(mod) {
                         try {
                             var cfg = {variableMode: '{$jsmode}'};
-                            var r = (typeof mod.convert === 'function')
-                                ? mod.convert('{$jslatex}', cfg)
-                                : '__api__:' + Object.keys(mod).join(',');
-                            window.__sme_t2m_result = (r !== null && r !== undefined)
-                                ? String(r) : '__null__';
+                            var api = Object.keys(mod)
+                                .filter(function(k) { return typeof mod[k] === 'function'; })
+                                .join(',');
+                            if (typeof mod.convert !== 'function') {
+                                window.__sme_t2m_result = '__api__:' + api;
+                                return;
+                            }
+                            var r = mod.convert('{$jslatex}', cfg);
+                            if (r === null || r === undefined) {
+                                window.__sme_t2m_result = '__null__';
+                            } else if (String(r) === '') {
+                                // Empty result: report the module API for debugging.
+                                window.__sme_t2m_result = '__empty__:api=' + api;
+                            } else {
+                                window.__sme_t2m_result = String(r);
+                            }
                         } catch (ex) {
                             window.__sme_t2m_result = '__error__:' + ex.message;
                         }
@@ -1405,18 +1426,22 @@ JS;
     public function i_rebuild_the_stack_maxima_image(): void {
         $page = $this->getSession()->getPage();
 
-        // The create-image link/form element.
-        $btn = $page->find('css', 'a[href*="createmaximaimage=1"]');
+        // The create-image action uses a POST form (same pattern as clear-cache).
+        // Find the submit button inside the form containing the hidden input.
+        $btn = $page->find(
+            'xpath',
+            '//input[@name="createmaximaimage"]/ancestor::form//button'
+        );
         if (!$btn) {
-            $btn = $page->find('css', '[name="createmaximaimage"]');
-        }
-        if (!$btn) {
-            $btn = $page->find('xpath', '//a[contains(@href,"createmaximaimage")] | //input[@name="createmaximaimage"]');
+            $btn = $page->find(
+                'xpath',
+                '//input[@name="createmaximaimage"]/following::button[1]'
+            );
         }
         if (!$btn) {
             throw new ExpectationException(
                 "STACK 'Create Maxima image' button not found on healthcheck page. " .
-                "Is the CAS connection working?",
+                "Expected a POST form with input[name=\"createmaximaimage\"] and a button.",
                 $this->getSession()
             );
         }
