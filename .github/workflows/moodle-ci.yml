@@ -369,6 +369,16 @@ jobs:
           echo 'exists: '     . (is_file(\$img) ? 'YES' : 'NO') . PHP_EOL;
           echo 'executable: ' . (is_executable(\$img) ? 'YES' : 'NO') . PHP_EOL;"
 
+      - name: Behat – STACK CAS preflight (@stack_init first)
+        run: |
+          set -o pipefail
+          moodle-plugin-ci behat \
+            --profile chrome \
+            --start-servers \
+            --auto-rerun 0 \
+            --tags "@stack_init&&~@broken" \
+            2>&1 | tee behat-stack-init.log
+
       - name: Behat – all plugin scenarios
         run: |
           set -o pipefail
@@ -376,7 +386,7 @@ jobs:
             --profile chrome \
             --start-servers \
             --auto-rerun 0 \
-            --tags "@local_stackmatheditor&&~@broken" \
+            --tags "@local_stackmatheditor&&~@broken&&~@stack_init" \
             2>&1 | tee behat.log
 
       - name: Show relevant Behat failures

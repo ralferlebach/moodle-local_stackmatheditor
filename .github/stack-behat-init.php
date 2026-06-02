@@ -151,3 +151,21 @@ echo "\nSTACK init complete.\n";
 echo "  platform:     $finalplatform\n";
 echo "  castimeout:   " . get_config('qtype_stack', 'castimeout') . " s\n";
 echo "  maximacommandopt: " . (get_config('qtype_stack', 'maximacommandopt') ?: '(empty)') . "\n";
+
+// Final hard check: prove CAS works in the state we leave behind.
+echo "\n=== Final STACK CAS verification ===\n";
+[$msgfinal, $debugfinal, $okfinal] = stack_connection_helper::stackmaxima_genuine_connect();
+
+if (!$okfinal) {
+    fwrite(STDERR, "\nFinal STACK CAS check FAILED.\n");
+    fwrite(STDERR, "platform:         $finalplatform\n");
+    fwrite(STDERR, "castimeout:       " . get_config('qtype_stack', 'castimeout') . "\n");
+    fwrite(STDERR, "maximacommandopt: " . get_config('qtype_stack', 'maximacommandopt') . "\n");
+    fwrite(STDERR, "message:          $msgfinal\n");
+    fwrite(STDERR, "debug:\n$debugfinal\n");
+    exit(1);
+}
+
+echo "Final CAS OK: $msgfinal\n";
+echo "  platform:         $finalplatform\n";
+echo "  maximacommandopt: " . (get_config('qtype_stack', 'maximacommandopt') ?: '(empty)') . "\n";

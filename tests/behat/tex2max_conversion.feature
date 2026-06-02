@@ -21,7 +21,7 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
       | student1 | C1     | student |
     And the following config values are set as admin:
       | maximacommand | maxima | qtype_stack |
-      | castimeout    | 100    | qtype_stack |
+      | castimeout    | 300    | qtype_stack |
     And the plugin enabled mode is set to "1"
     And a STACK quiz "Conversion Quiz" with algebraic input exists in "C1"
     And I log in as "student1"

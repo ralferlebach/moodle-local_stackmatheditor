@@ -756,13 +756,21 @@ JS;
         return 'ok:' + field.tagName + ':' + (field.name || field.id || '');
     }
 
+    // Collect full STACK runtime-error details (timeout message, question vars, etc).
     var err = document.querySelector('.stackruntimeerrror, .stackruntimeerror');
+    var errText = 'no';
+    if (err) {
+        var container = err.closest('.formulation') || err.parentElement;
+        errText = container
+            ? container.textContent.trim()
+            : err.textContent.trim();
+    }
+
     var inputs = Array.from(
         document.querySelectorAll('input[name], textarea[name]')
     ).map(function(e) { return e.tagName + '[' + e.name + ']'; }).join('|');
 
-    return 'missing:runtimeError='
-        + (err ? err.textContent.trim().substring(0, 200) : 'no')
+    return 'missing:runtimeError=' + errText.substring(0, 1500)
         + ':inputs=' + inputs.substring(0, 800);
 })()
 JS);
@@ -1479,17 +1487,43 @@ JS;
     public function the_stack_cas_connection_should_be_reported_as_working(): void {
         $page   = $this->getSession()->getPage();
         $source = $page->getContent();
-        $ok     = ['casconnect', 'stehende Verbindung', 'standing connection',
-                   'CAS returns data', 'CAS gibt Daten'];
+
+        // First reject explicit failure markers.
+        $failmarkers = [
+            'overallresult fail',
+            'CAS failed',
+            'The healthcheck detected serious problems',
+            'No such file or directory',
+        ];
+        foreach ($failmarkers as $fail) {
+            if (stripos($source, $fail) !== false) {
+                throw new ExpectationException(
+                    "STACK healthcheck reports a CAS failure (found: \'{$fail}\').",
+                    $this->getSession()
+                );
+            }
+        }
+
+        // Accept any recognised success indicator from STACK's healthcheck output.
+        $ok = [
+            'overallresult pass',
+            'You have a live connection to the CAS',
+            'CAS returned data as expected',
+            'The healthcheck passed without detecting any issues',
+            'Correct and expected STACK-Maxima library version',
+            'CAS gibt Daten',
+            'stehende Verbindung',
+            'standing connection',
+        ];
         foreach ($ok as $needle) {
-            if (strpos($source, $needle) !== false) {
+            if (stripos($source, $needle) !== false) {
                 return;
             }
         }
+
         throw new ExpectationException(
             "STACK CAS connection is NOT reported as working on the healthcheck page. " .
-            "Possible causes: maxima_opt_auto not found, platform constant missing, " .
-            "or QTYPE_STACK_TEST_CONFIG_MAXIMACOMMANDOPT not set.",
+            "Neither a success indicator nor a failure marker was found.",
             $this->getSession()
         );
     }
