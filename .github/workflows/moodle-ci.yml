@@ -355,6 +355,20 @@ jobs:
         working-directory: ${{ github.workspace }}/moodle
         run: php "$GITHUB_WORKSPACE/plugin/.github/stack-behat-init.php"
 
+      - name: Diagnose STACK Behat config
+        if: always()
+        run: |
+          cd "$GITHUB_WORKSPACE/moodle"
+          php -r "define('BEHAT_UTIL',true); define('CLI_SCRIPT',true); require_once('config.php');
+          global \$CFG;
+          echo 'dataroot: ' . \$CFG->dataroot . PHP_EOL;
+          foreach (['platform','maximacommand','maximacommandopt','castimeout'] as \$k)
+              echo \$k . ': ' . get_config('qtype_stack', \$k) . PHP_EOL;
+          \$img = \$CFG->dataroot . '/stack/maxima_opt_auto';
+          echo 'image: ' . \$img . PHP_EOL;
+          echo 'exists: '     . (is_file(\$img) ? 'YES' : 'NO') . PHP_EOL;
+          echo 'executable: ' . (is_executable(\$img) ? 'YES' : 'NO') . PHP_EOL;"
+
       - name: Behat – all plugin scenarios
         run: |
           set -o pipefail

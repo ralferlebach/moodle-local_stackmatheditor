@@ -731,6 +731,50 @@ JS;
             $button->click();
             $this->getSession()->wait(3000, "document.readyState === 'complete'");
         }
+        // Verify the STACK question rendered ans1 (CAS must be working).
+        $this->assert_stack_input_present('ans1');
+    }
+
+    /**
+     * Assert that a STACK input field is present on the attempt page.
+     * Fails with a detailed message if CAS rendered a runtime error instead.
+     *
+     * @param string $inputname STACK input name (e.g. "ans1").
+     */
+    protected function assert_stack_input_present(string $inputname = 'ans1'): void {
+        $jsinput = json_encode($inputname);
+
+        $result = $this->getSession()->evaluateScript(<<<JS
+(function() {
+    var n = {$jsinput};
+    var field = document.querySelector('[name="' + n + '"]')
+        || document.querySelector('[name$="_' + n + '"]')
+        || document.querySelector('[id="'  + n + '"]')
+        || document.querySelector('[id$="_' + n + '"]');
+
+    if (field) {
+        return 'ok:' + field.tagName + ':' + (field.name || field.id || '');
+    }
+
+    var err = document.querySelector('.stackruntimeerrror, .stackruntimeerror');
+    var inputs = Array.from(
+        document.querySelectorAll('input[name], textarea[name]')
+    ).map(function(e) { return e.tagName + '[' + e.name + ']'; }).join('|');
+
+    return 'missing:runtimeError='
+        + (err ? err.textContent.trim().substring(0, 200) : 'no')
+        + ':inputs=' + inputs.substring(0, 800);
+})()
+JS);
+
+        if (strpos($result, 'ok:') !== 0) {
+            throw new ExpectationException(
+                "STACK input \'{$inputname}\' not found on attempt page. " .
+                "This is usually caused by a STACK CAS failure. Details: " .
+                $result,
+                $this->getSession()
+            );
+        }
     }
 
     /**

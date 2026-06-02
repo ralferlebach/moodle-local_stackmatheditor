@@ -4,12 +4,10 @@ Feature: STACK CAS is configured and operational
   I want to verify that STACK CAS is correctly initialised
   So that failures in other tests can be attributed to the right cause
 
-  # These scenarios are INDEPENDENT diagnostic checks, not a setup sequence.
-  # stack-behat-init.php (run by CI before Behat) establishes the linux-optimised
-  # state.  Each scenario verifies one aspect of that state in isolation.
-  #
-  # Behat resets DB/dataroot state between scenarios; never rely on a previous
-  # scenario having prepared state for the next one.
+  # These scenarios are independent diagnostic checks.
+  # stack-behat-init.php (run by CI before Behat) establishes a working CAS
+  # state: linux-optimised if the frozen image could be created, otherwise linux.
+  # Scenarios must not assume a specific platform: only that CAS works.
 
   Background:
     Given I log in as "admin"
@@ -19,12 +17,6 @@ Feature: STACK CAS is configured and operational
     When I navigate to the STACK healthcheck page
     Then the STACK CAS connection should be reported as working
     And the STACK Maxima library version should be valid
-
-  @javascript
-  Scenario: STACK optimised Maxima image is present and executable
-    When I navigate to the STACK healthcheck page
-    Then the STACK platform should be reported as "linux-optimised"
-    And the STACK optimised Maxima image should be executable
 
   @javascript
   Scenario: STACK CAS cache can be cleared and Maxima image rebuilt

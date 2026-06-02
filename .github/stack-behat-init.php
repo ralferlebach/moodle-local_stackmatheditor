@@ -22,13 +22,14 @@
  *   run: php "$GITHUB_WORKSPACE/plugin/.github/stack-behat-init.php"
  *
  * BEHAT_UTIL must be defined before bootstrapping Moodle so that the framework
- * switches to the Behat database prefix and data root.  Both set_config() calls
- * and file writes therefore target the correct Behat-test-site context.
+ * switches to the Behat database prefix and data root.
  *
- * Phase A: stable baseline (platform=linux, genuine connect).  Fatal on failure.
- * Phase B: frozen image (linux-optimised, fast CAS).  Also fatal: Behat must
- * not start against a broken linux-optimised state (platform points at a
- * non-existent maxima_opt_auto file).
+ * Phase A: stable baseline with platform=linux and genuine connect.  Fatal.
+ * Phase B: attempt linux-optimised frozen image.  Non-fatal: on failure the
+ * script explicitly reverts to platform=linux and verifies Phase A again.
+ *
+ * This implements Strategie B: linux suffices for CI; linux-optimised is an
+ * optimisation.  The Behat suite therefore must not assert linux-optimised.
  *
  * @package   local_stackmatheditor
  * @copyright 2026, Ralf Erlebach
@@ -49,7 +50,7 @@ if (!$DB->get_manager()->table_exists('config')) {
     exit(1);
 }
 
-// Locate qtype_stack (Moodle 4.x: question/type/stack; 5.x: public/...).
+// Locate qtype_stack (Moodle 4.x layout; 5.x: public/...).
 $candidates = [
     $CFG->dirroot . '/question/type/stack',
     $CFG->dirroot . '/public/question/type/stack',
@@ -77,6 +78,7 @@ echo "\n=== Phase A: STACK CAS baseline (platform=linux) ===\n";
 
 set_config('platform', 'linux', 'qtype_stack');
 set_config('maximacommand', 'maxima', 'qtype_stack');
+set_config('maximacommandopt', '', 'qtype_stack');
 set_config('maximaversion', 'default', 'qtype_stack');
 set_config('castimeout', '300', 'qtype_stack');
 set_config('casresultscache', 'db', 'qtype_stack');
@@ -97,60 +99,55 @@ if (!$okbaseline) {
 }
 echo "Phase A OK: $msgbaseline\n";
 
-// Phase B: frozen image (platform = linux-optimised).
-echo "\n=== Phase B: STACK frozen Maxima image (linux-optimised) ===\n";
+// Phase B: attempt frozen image (platform = linux-optimised).
+// Non-fatal: reverts to linux on any failure.
+echo "\n=== Phase B: STACK frozen Maxima image attempt (linux-optimised) ===\n";
 
-// Create_auto_maxima_image() runs genuine_connect with castimeout=300,
-// saves the frozen image, and sets platform=linux-optimised in the DB.
 [$okimage, $msgimage] = stack_cas_configuration::create_auto_maxima_image();
 
-if (!$okimage) {
-    fwrite(STDERR, "\nPhase B FAILED: create_auto_maxima_image() failed.\n");
-    fwrite(STDERR, "Message: $msgimage\n");
-    exit(1);
-}
-
 $image = $CFG->dataroot . '/stack/maxima_opt_auto';
+$phasebworked = false;
 
-if (!is_file($image)) {
-    fwrite(STDERR, "\nPhase B FAILED: expected Maxima image does not exist.\n");
-    fwrite(STDERR, "Expected path:    $image\n");
-    fwrite(STDERR, "Current platform: " . get_config('qtype_stack', 'platform') . "\n");
-    fwrite(STDERR, "maximacommandopt: " . get_config('qtype_stack', 'maximacommandopt') . "\n");
-    exit(1);
+if (!$okimage) {
+    echo "Phase B: create_auto_maxima_image() failed: $msgimage\n";
+} else if (!is_file($image)) {
+    echo "Phase B: image missing after creation ($image)\n";
+} else {
+    chmod($image, 0755);
+    if (!is_executable($image)) {
+        echo "Phase B: image not executable after chmod: $image\n";
+    } else {
+        purge_all_caches();
+        [$msgopt, , $okopt] = stack_connection_helper::stackmaxima_genuine_connect();
+        if (!$okopt) {
+            echo "Phase B: linux-optimised connect failed: $msgopt\n";
+        } else {
+            $phasebworked = true;
+            echo "Phase B OK: linux-optimised ($msgopt)\n";
+            echo "Image: $image (" . filesize($image) . " bytes)\n";
+        }
+    }
 }
 
-// Ensure GCL image binary has executable bit set.
-chmod($image, 0755);
+if (!$phasebworked) {
+    // Revert to safe linux baseline.
+    echo "Phase B failed – reverting to platform=linux for Behat tests.\n";
+    set_config('platform', 'linux', 'qtype_stack');
+    set_config('maximacommand', 'maxima', 'qtype_stack');
+    set_config('maximacommandopt', '', 'qtype_stack');
+    purge_all_caches();
+    stack_cas_configuration::create_maximalocal();
 
-if (!is_executable($image)) {
-    fwrite(STDERR, "\nPhase B FAILED: Maxima image is not executable after chmod.\n");
-    fwrite(STDERR, "Image: $image\n");
-    exit(1);
+    [$msgrevert, , $okrevert] = stack_connection_helper::stackmaxima_genuine_connect();
+    if (!$okrevert) {
+        fwrite(STDERR, "\nRevert to platform=linux FAILED: $msgrevert\n");
+        exit(1);
+    }
+    echo "Reverted: platform=linux, CAS OK ($msgrevert)\n";
 }
 
-if (get_config('qtype_stack', 'platform') !== 'linux-optimised') {
-    fwrite(STDERR, "\nPhase B FAILED: platform is not linux-optimised after image creation.\n");
-    fwrite(STDERR, "Current platform: " . get_config('qtype_stack', 'platform') . "\n");
-    exit(1);
-}
-
-purge_all_caches();
-
-// Verify the frozen image actually works with a genuine connect.
-[$msgopt, $debugopt, $okopt] = stack_connection_helper::stackmaxima_genuine_connect();
-
-if (!$okopt) {
-    fwrite(STDERR, "\nPhase B FAILED: linux-optimised CAS connection failed.\n");
-    fwrite(STDERR, "Message: $msgopt\n");
-    fwrite(STDERR, "Debug:\n$debugopt\n");
-    exit(1);
-}
-
-echo "Phase B OK: linux-optimised CAS works.\n";
-echo "Image:   $image (" . filesize($image) . " bytes)\n";
-echo "Command: " . get_config('qtype_stack', 'maximacommandopt') . "\n";
-
+$finalplatform = get_config('qtype_stack', 'platform');
 echo "\nSTACK init complete.\n";
-echo "  platform:     " . get_config('qtype_stack', 'platform') . "\n";
+echo "  platform:     $finalplatform\n";
 echo "  castimeout:   " . get_config('qtype_stack', 'castimeout') . " s\n";
+echo "  maximacommandopt: " . (get_config('qtype_stack', 'maximacommandopt') ?: '(empty)') . "\n";
