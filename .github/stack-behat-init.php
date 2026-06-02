@@ -21,15 +21,11 @@
  *   working-directory: ${{ github.workspace }}/moodle
  *   run: php "$GITHUB_WORKSPACE/plugin/.github/stack-behat-init.php"
  *
- * BEHAT_UTIL must be defined before bootstrapping Moodle so that the framework
- * switches to the Behat database prefix and data root.
- *
- * Phase A: stable baseline with platform=linux and genuine connect.  Fatal.
- * Phase B: attempt linux-optimised frozen image.  Non-fatal: on failure the
- * script explicitly reverts to platform=linux and verifies Phase A again.
- *
- * This implements Strategie B: linux suffices for CI; linux-optimised is an
- * optimisation.  The Behat suite therefore must not assert linux-optimised.
+ * Uses platform=linux with castimeout=300 (Strategie C).  No frozen image
+ * is created here: maxima_opt_auto is volatile between CI steps because
+ * moodle-plugin-ci behat --start-servers resets parts of the Behat dataroot.
+ * Cold-start Maxima with a 300 s timeout is safe; results are cached in the
+ * DB after the first call, so subsequent scenarios run instantly.
  *
  * @package   local_stackmatheditor
  * @copyright 2026, Ralf Erlebach
@@ -50,7 +46,7 @@ if (!$DB->get_manager()->table_exists('config')) {
     exit(1);
 }
 
-// Locate qtype_stack (Moodle 4.x layout; 5.x: public/...).
+// Locate qtype_stack (Moodle 4.x: question/type/stack; 5.x: public/...).
 $candidates = [
     $CFG->dirroot . '/question/type/stack',
     $CFG->dirroot . '/public/question/type/stack',
@@ -70,11 +66,14 @@ if (!$stackroot) {
 require_once($stackroot . '/stack/cas/installhelper.class.php');
 require_once($stackroot . '/stack/cas/connectorhelper.class.php');
 
-echo "STACK root:      $stackroot\n";
-echo "Behat dataroot:  {$CFG->dataroot}\n";
+echo "STACK root:     $stackroot\n";
+echo "Behat dataroot: {$CFG->dataroot}\n";
 
-// Phase A: stable CAS baseline (platform = linux).
-echo "\n=== Phase A: STACK CAS baseline (platform=linux) ===\n";
+// Set a stable platform=linux baseline.  No frozen image (linux-optimised)
+// because moodle-plugin-ci resets behat dataroot contents between steps.
+// The first CAS call cold-starts Maxima (~60-90 s) and caches the result in
+// the DB; all subsequent calls for the same question are instant.
+echo "\n=== STACK CAS baseline: platform=linux, castimeout=300 ===\n";
 
 set_config('platform', 'linux', 'qtype_stack');
 set_config('maximacommand', 'maxima', 'qtype_stack');
@@ -89,83 +88,18 @@ purge_all_caches();
 stack_cas_configuration::create_maximalocal();
 echo "maximalocal.mac written to: {$CFG->dataroot}/stack/\n";
 
+// Verify CAS baseline works before Behat starts.
 [$msgbaseline, $debugbaseline, $okbaseline] = stack_connection_helper::stackmaxima_genuine_connect();
 
 if (!$okbaseline) {
-    fwrite(STDERR, "\nPhase A FAILED: CAS baseline not available.\n");
-    fwrite(STDERR, "Message: $msgbaseline\n");
-    fwrite(STDERR, "Debug:\n$debugbaseline\n");
-    exit(1);
-}
-echo "Phase A OK: $msgbaseline\n";
-
-// Phase B: attempt frozen image (platform = linux-optimised).
-// Non-fatal: reverts to linux on any failure.
-echo "\n=== Phase B: STACK frozen Maxima image attempt (linux-optimised) ===\n";
-
-[$okimage, $msgimage] = stack_cas_configuration::create_auto_maxima_image();
-
-$image = $CFG->dataroot . '/stack/maxima_opt_auto';
-$phasebworked = false;
-
-if (!$okimage) {
-    echo "Phase B: create_auto_maxima_image() failed: $msgimage\n";
-} else if (!is_file($image)) {
-    echo "Phase B: image missing after creation ($image)\n";
-} else {
-    chmod($image, 0755);
-    if (!is_executable($image)) {
-        echo "Phase B: image not executable after chmod: $image\n";
-    } else {
-        purge_all_caches();
-        [$msgopt, , $okopt] = stack_connection_helper::stackmaxima_genuine_connect();
-        if (!$okopt) {
-            echo "Phase B: linux-optimised connect failed: $msgopt\n";
-        } else {
-            $phasebworked = true;
-            echo "Phase B OK: linux-optimised ($msgopt)\n";
-            echo "Image: $image (" . filesize($image) . " bytes)\n";
-        }
-    }
-}
-
-if (!$phasebworked) {
-    // Revert to safe linux baseline.
-    echo "Phase B failed – reverting to platform=linux for Behat tests.\n";
-    set_config('platform', 'linux', 'qtype_stack');
-    set_config('maximacommand', 'maxima', 'qtype_stack');
-    set_config('maximacommandopt', '', 'qtype_stack');
-    purge_all_caches();
-    stack_cas_configuration::create_maximalocal();
-
-    [$msgrevert, , $okrevert] = stack_connection_helper::stackmaxima_genuine_connect();
-    if (!$okrevert) {
-        fwrite(STDERR, "\nRevert to platform=linux FAILED: $msgrevert\n");
-        exit(1);
-    }
-    echo "Reverted: platform=linux, CAS OK ($msgrevert)\n";
-}
-
-$finalplatform = get_config('qtype_stack', 'platform');
-echo "\nSTACK init complete.\n";
-echo "  platform:     $finalplatform\n";
-echo "  castimeout:   " . get_config('qtype_stack', 'castimeout') . " s\n";
-echo "  maximacommandopt: " . (get_config('qtype_stack', 'maximacommandopt') ?: '(empty)') . "\n";
-
-// Final hard check: prove CAS works in the state we leave behind.
-echo "\n=== Final STACK CAS verification ===\n";
-[$msgfinal, $debugfinal, $okfinal] = stack_connection_helper::stackmaxima_genuine_connect();
-
-if (!$okfinal) {
-    fwrite(STDERR, "\nFinal STACK CAS check FAILED.\n");
-    fwrite(STDERR, "platform:         $finalplatform\n");
-    fwrite(STDERR, "castimeout:       " . get_config('qtype_stack', 'castimeout') . "\n");
-    fwrite(STDERR, "maximacommandopt: " . get_config('qtype_stack', 'maximacommandopt') . "\n");
-    fwrite(STDERR, "message:          $msgfinal\n");
-    fwrite(STDERR, "debug:\n$debugfinal\n");
+    fwrite(STDERR, "\nSTACK CAS baseline FAILED.\n");
+    fwrite(STDERR, "platform:   " . get_config('qtype_stack', 'platform') . "\n");
+    fwrite(STDERR, "castimeout: " . get_config('qtype_stack', 'castimeout') . "\n");
+    fwrite(STDERR, "message:    $msgbaseline\n");
+    fwrite(STDERR, "debug:\n$debugbaseline\n");
     exit(1);
 }
 
-echo "Final CAS OK: $msgfinal\n";
-echo "  platform:         $finalplatform\n";
-echo "  maximacommandopt: " . (get_config('qtype_stack', 'maximacommandopt') ?: '(empty)') . "\n";
+echo "STACK CAS baseline OK: $msgbaseline\n";
+echo "  platform:   " . get_config('qtype_stack', 'platform') . "\n";
+echo "  castimeout: " . get_config('qtype_stack', 'castimeout') . " s\n";
