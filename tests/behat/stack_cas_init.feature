@@ -11,6 +11,7 @@ Feature: STACK CAS is configured and operational
 
   Background:
     Given I log in as "admin"
+    And the STACK CAS platform is reset to direct Maxima
 
   @javascript
   Scenario: STACK CAS connection is functional

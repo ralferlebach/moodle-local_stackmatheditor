@@ -17,6 +17,7 @@ Feature: MathQuill editor renders in quiz attempts
     And the following config values are set as admin:
       | maximacommand | maxima | qtype_stack |
       | castimeout    | 300    | qtype_stack |
+    And the STACK CAS platform is reset to direct Maxima
     And the plugin enabled mode is set to "1"
     And a STACK quiz "Math Quiz" with algebraic input exists in "C1"
 

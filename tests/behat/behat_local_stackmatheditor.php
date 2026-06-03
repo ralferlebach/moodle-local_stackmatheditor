@@ -1746,22 +1746,26 @@ JS);
     }
 
     /**
-     * Ensure STACK CAS uses a stable direct Maxima connection before each scenario.
+     * Force STACK CAS to a direct (non-optimised) Maxima connection at Behat runtime.
      *
-     * moodle-plugin-ci behat --start-servers re-runs util_single_run.php which
-     * resets the Behat DB; STACK install.php then writes platform=linux-optimised
-     * back into the DB.  This hook forces platform=linux at Behat runtime so
-     * every scenario starts with a working cold-start CAS, regardless of what
-     * install.php wrote.
+     * moodle-plugin-ci behat --start-servers re-runs util_single_run.php, which
+     * re-triggers STACK install.php and writes platform=linux-optimised plus a
+     * volatile maxima_opt_auto image path back into the Behat DB.  The frozen
+     * image is then removed by the dataroot reset, so any CAS call fails with
+     * "No such file or directory".  Setting platform=linux makes STACK invoke the
+     * plain "maxima" binary directly (cold start, no frozen image required).
      *
-     * @BeforeScenario @local_stackmatheditor
-     * @param BeforeScenarioScope $scope Behat scenario scope.
+     * @param bool $verify When true, run a genuine CAS connect and fail loudly
+     *                      if the connection does not actually work.
      */
-    public function prepare_stack_cas_for_scenario(BeforeScenarioScope $scope): void {
+    private function reset_stack_cas_to_direct_maxima(bool $verify = false): void {
         global $CFG, $DB;
 
         if (!$DB->get_manager()->table_exists('config')) {
-            return;
+            throw new ExpectationException(
+                'Cannot reset STACK CAS: the Moodle {config} table does not exist.',
+                $this->getSession()
+            );
         }
 
         $candidates = [
@@ -1769,17 +1773,21 @@ JS);
             $CFG->dirroot . '/public/question/type/stack',
         ];
         $stackroot = null;
-        foreach ($candidates as $c) {
-            if (file_exists($c . '/stack/cas/installhelper.class.php')) {
-                $stackroot = $c;
+        foreach ($candidates as $candidate) {
+            if (file_exists($candidate . '/stack/cas/installhelper.class.php')) {
+                $stackroot = $candidate;
                 break;
             }
         }
         if (!$stackroot) {
-            return;
+            throw new ExpectationException(
+                'Cannot reset STACK CAS: qtype_stack was not found under dirroot.',
+                $this->getSession()
+            );
         }
 
         require_once($stackroot . '/stack/cas/installhelper.class.php');
+        require_once($stackroot . '/stack/cas/connectorhelper.class.php');
 
         set_config('platform', 'linux', 'qtype_stack');
         set_config('maximacommand', 'maxima', 'qtype_stack');
@@ -1790,16 +1798,56 @@ JS);
         set_config('casdebugging', '0', 'qtype_stack');
         set_config('maximalibraries', '', 'qtype_stack');
 
-        // Reset stack_cas_configuration singleton so it re-reads fresh settings.
+        // Force every process (test runner and web server) to re-read fresh config.
+        purge_all_caches();
+
+        // Reset the stack_cas_configuration singleton so it re-reads the new values.
         if (class_exists('stack_cas_configuration')) {
-            $ref  = new ReflectionClass('stack_cas_configuration');
-            $prop = $ref->hasProperty('instance') ? $ref->getProperty('instance') : null;
-            if ($prop !== null) {
+            $ref = new ReflectionClass('stack_cas_configuration');
+            if ($ref->hasProperty('instance')) {
+                $prop = $ref->getProperty('instance');
                 $prop->setAccessible(true);
                 $prop->setValue(null, null);
             }
         }
 
         stack_cas_configuration::create_maximalocal();
+
+        if ($verify) {
+            [$message, $debug, $ok] = stack_connection_helper::stackmaxima_genuine_connect();
+            if (!$ok) {
+                throw new ExpectationException(
+                    'STACK CAS direct-Maxima connection failed. '
+                        . 'Message: ' . $message . ' Debug: ' . $debug,
+                    $this->getSession()
+                );
+            }
+        }
+    }
+
+    /**
+     * Reset STACK CAS to a working direct Maxima connection and verify it.
+     *
+     * Makes the runtime CAS repair explicit and verifiable inside the scenario,
+     * rather than relying on the (silent) @BeforeScenario hook alone.
+     *
+     * @Given the STACK CAS platform is reset to direct Maxima
+     */
+    public function the_stack_cas_platform_is_reset_to_direct_maxima(): void {
+        $this->reset_stack_cas_to_direct_maxima(true);
+    }
+
+    /**
+     * Safety-net hook: reset STACK CAS before every plugin scenario.
+     *
+     * CAS-dependent features additionally call the explicit step above (with
+     * verification).  This hook guarantees a sane baseline even for scenarios
+     * that do not invoke the step (e.g. toolbar configuration).
+     *
+     * @BeforeScenario @local_stackmatheditor
+     * @param BeforeScenarioScope $scope Behat scenario scope.
+     */
+    public function prepare_stack_cas_for_scenario(BeforeScenarioScope $scope): void {
+        $this->reset_stack_cas_to_direct_maxima(false);
     }
 }

@@ -333,14 +333,14 @@ jobs:
       - name: Register qbehaviour_adaptivemultipart
         run: moodle-plugin-ci add-plugin --branch master maths/moodle-qbehaviour_adaptivemultipart
 
-      # Prevent STACK from auto-creating a linux-optimised maxima_opt_auto image
-      # during Behat test-site install (BEHAT_UTIL context).  With platform=none
-      # STACK skips create_auto_maxima_image() in db/install.php.
-      # Our stack-behat-init.php and the @BeforeScenario hook set platform=linux
-      # afterwards so tests still use a working cold-start Maxima connection.
-      - name: Prevent STACK auto-image creation during install
-        run: moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_PLATFORM", "none");'
-
+      # NOTE: We deliberately do NOT inject QTYPE_STACK_TEST_CONFIG_PLATFORM here.
+      # 'moodle-plugin-ci add-config' requires an existing config.php and therefore
+      # cannot run before 'moodle-plugin-ci install' (fails with "Failed to find
+      # Moodle config.php file").  A persistent constant in config.php would also
+      # override the runtime DB platform setting and defeat the linux fallback.
+      # STACK's install-time linux-optimised image is irrelevant because every
+      # CAS-dependent scenario forces platform=linux at runtime via the explicit
+      # step "the STACK CAS platform is reset to direct Maxima".
       - name: Install Moodle ${{ matrix.moodle }}
         run: |
           moodle-plugin-ci install \
