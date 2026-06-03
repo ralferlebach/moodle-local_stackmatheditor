@@ -27,6 +27,26 @@ use Behat\Behat\Hook\Scope\BeforeScenarioScope;
  */
 class behat_local_stackmatheditor extends behat_base {
     /**
+     * URL of the quiz view page most recently visited by the attempt-start helper.
+     *
+     * Used by pre-fill steps to navigate back to a known page without relying
+     * on browser history (getSession()->back() is non-deterministic with bfcache).
+     *
+     * @var string|null
+     */
+    private $lastquizviewurl = null;
+
+    /**
+     * URL of the attempt page opened most recently by the attempt-start helper.
+     *
+     * Stored after assert_stack_input_present() confirms the attempt is live.
+     * Used by i_return_to_the_quiz_attempt_page and i_navigate_to_next_question_and_back
+     * to re-open the same attempt deterministically.
+     *
+     * @var string|null
+     */
+    private $lastquizattempturl = null;
+    /**
      * Set the plugin enabled mode in Moodle config.
      *
      * @Given the plugin enabled mode is set to :mode
@@ -719,6 +739,9 @@ JS;
         $this->getSession()->visit($url->out(false));
         $this->getSession()->wait(2000, "document.readyState === 'complete'");
 
+        // Store the quiz view URL so navigation helpers can return to it without back().
+        $this->lastquizviewurl = $url->out(false);
+
         // Click "Attempt quiz now" button (text varies by Moodle version / language).
         $page   = $this->getSession()->getPage();
         $button = $page->find(
@@ -734,6 +757,9 @@ JS;
         }
         // Verify the STACK question rendered ans1 (CAS must be working).
         $this->assert_stack_input_present('ans1');
+
+        // Store the attempt URL for deterministic re-open by pre-fill helpers.
+        $this->lastquizattempturl = $this->getSession()->getCurrentUrl();
     }
 
     /**
@@ -813,17 +839,30 @@ JS);
     }
 
     /**
-     * Return to the quiz attempt page (re-open the current attempt).
+     * Return to the quiz attempt page by re-visiting the stored attempt URL.
+     *
+     * Uses the URL stored by i_start_the_stack_mathquill_quiz_attempt rather than
+     * getSession()->back() which is non-deterministic due to browser bfcache and
+     * does not work reliably for single-question quizzes (no "Next" button present).
      *
      * @When I return to the quiz attempt page
      */
     public function i_return_to_the_quiz_attempt_page(): void {
-        $this->getSession()->back();
-        $this->getSession()->wait(2000, "document.readyState === 'complete'");
+        if ($this->lastquizattempturl) {
+            $this->getSession()->visit($this->lastquizattempturl);
+        }
+        $this->assert_stack_input_present('ans1');
     }
 
     /**
-     * Navigate to next quiz page and back to simulate saving progress.
+     * Navigate to next quiz page (if present) and back, to simulate quiz navigation.
+     *
+     * In a single-question quiz there is no "Next" button, so this simply re-visits
+     * the stored attempt URL, which re-renders the page with any server-saved answer.
+     * In a multi-page quiz it clicks "Next", then re-opens the first page.
+     *
+     * Uses the URL stored by i_start_the_stack_mathquill_quiz_attempt to avoid the
+     * non-deterministic getSession()->back() behaviour (bfcache).
      *
      * @When I navigate to the next question and back
      */
@@ -837,17 +876,27 @@ JS);
         );
         if ($next) {
             $next->click();
-            $this->getSession()->wait(2000, "document.readyState === 'complete'");
+            $this->getSession()->wait(3000, "document.readyState === 'complete'");
         }
-        $this->getSession()->back();
-        $this->getSession()->wait(2000, "document.readyState === 'complete'");
+        // Re-open the stored attempt URL (first page) rather than calling back().
+        if ($this->lastquizattempturl) {
+            $this->getSession()->visit($this->lastquizattempturl);
+        }
+        $this->assert_stack_input_present('ans1');
     }
 
     /**
-     * Enter an answer in a quiz, then navigate away and back to simulate persistence.
+     * Enter an answer in a quiz and persist it server-side via a real form submit.
+     *
+     * Submits the Moodle quiz responseform without a named button so that
+     * processattempt.php performs a "save" action and redirects back to the same
+     * attempt page.  The step then navigates to the quiz view page so that
+     * subsequent "return to attempt" or "navigate and back" steps can visit
+     * the stored attempt URL and verify that the server-rendered answer value
+     * pre-populates the MathQuill field on reload.
      *
      * @When I have previously answered :answer in the quiz :quizname
-     * @param string $answer   Maxima expression to set as the input value.
+     * @param string $answer   Maxima expression to save as the input value.
      * @param string $quizname Quiz name.
      */
     public function i_have_previously_answered(
@@ -856,22 +905,36 @@ JS);
     ): void {
         $this->i_start_the_stack_mathquill_quiz_attempt($quizname);
 
-        // Set the first visible STACK algebraic input value via JS.
-        $safeanswer = addslashes($answer);
-        $js = <<<JS
-            (function() {
-                var input = document.querySelector('input[name*="ans"]');
-                if (!input) { return false; }
-                input.value = '{$safeanswer}';
-                input.dispatchEvent(new Event('change', {bubbles: true}));
-                return true;
-            })()
-JS;
-        $this->getSession()->evaluateScript($js);
-        $this->getSession()->wait(1000, 'true');
+        // Set the STACK algebraic input directly on the hidden form field.
+        // Using json_encode avoids any special-character quoting issues.
+        $jsinput  = json_encode($answer);
+        $setvalue = "(function() {"
+            . "var i = document.querySelector('[name\$=\"_ans1\"]')"
+            . " || document.querySelector('[name*=\"ans1\"]');"
+            . "if (!i) { return false; }"
+            . "i.value = {$jsinput};"
+            . "return true;"
+            . "})()";
+        $this->getSession()->evaluateScript($setvalue);
 
-        // Submit via the "Next" or save-without-submitting button.
-        $this->i_navigate_to_next_question_and_back();
+        // Submit the responseform without a named button.  processattempt.php
+        // interprets this as a "save" action: it saves the answers and redirects
+        // back to the attempt page.  The redirect destination is irrelevant —
+        // we navigate explicitly to the quiz view page afterwards.
+        $this->getSession()->evaluateScript(
+            "(function() { var f=document.getElementById('responseform');"
+            . " if (f) { f.submit(); } })()"
+        );
+
+        // Wait for processattempt redirect to complete.
+        $this->getSession()->wait(15000, "document.readyState === 'complete'");
+
+        // Navigate to the quiz view page so that subsequent steps can visit
+        // the stored attempt URL and observe the pre-filled MathQuill field.
+        if ($this->lastquizviewurl) {
+            $this->getSession()->visit($this->lastquizviewurl);
+            $this->getSession()->wait(5000, "document.readyState === 'complete'");
+        }
     }
 
     // Configure form assertions.
@@ -1217,13 +1280,26 @@ JS;
     }
 
     /**
-     * Set the plugin usepercentpi config option directly in the database.
+     * Set the plugin usepercentpi config option and reload the attempt page.
+     *
+     * The sme-definitions JSON element (which carries usePercentPi to the AMD
+     * runtime) is rendered at page-load time.  Simply calling set_config() after
+     * the attempt page has already loaded has no effect on the running JS.
+     * This step purges the MUC cache so the web server re-reads the updated value
+     * on the next request, then reloads the current page so the AMD module picks
+     * up the new usePercentPi setting.
      *
      * @Given the plugin usepercentpi setting is :value
      * @param string $value Config value: "0" to disable, "1" to enable.
      */
     public function the_plugin_usepercentpi_setting_is(string $value): void {
         set_config('usepercentpi', (int) $value, 'local_stackmatheditor');
+        // Force the web-server process to re-read the config from the DB.
+        purge_all_caches();
+        // Reload the current page so the AMD module receives the updated value
+        // in the freshly-rendered sme-definitions JSON element.
+        $this->getSession()->reload();
+        $this->assert_stack_input_present('ans1');
     }
 
     // Tex2max JavaScript evaluation.

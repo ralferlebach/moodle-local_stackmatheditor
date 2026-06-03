@@ -753,7 +753,8 @@ define([], function() {
         s = s.replace(/\\forall(?![a-zA-Z])/g, ' forall ');
         s = s.replace(/\\exists(?![a-zA-Z])/g, ' exists ');
         s = s.replace(/\\neg(?![a-zA-Z])/g, ' not ');
-        s = s.replace(/\\land(?![a-zA-Z])/g, ' and ');
+        // MathQuill normalises \\land to \\wedge; handle both forms.
+        s = s.replace(/\\(?:land|wedge)(?![a-zA-Z])/g, ' and ');
         s = s.replace(/\\lor(?![a-zA-Z])/g, ' or ');
         s = s.replace(/\\Rightarrow(?![a-zA-Z])/g, ' implies ');
         s = s.replace(/\\Leftarrow(?![a-zA-Z])/g, ' impliedby ');
