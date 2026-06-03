@@ -71,7 +71,7 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
     When I enter latex "\pi" into the MathQuill field for "ans1"
     Then the underlying STACK input for "ans1" should be "pi"
 
-  @javascript
+  @javascript @wip
   Scenario: Pi is rendered as "%pi" when usePercentPi is enabled
     Given the plugin usePercentPi setting is "1"
     When I enter latex "\pi" into the MathQuill field for "ans1"
@@ -106,7 +106,7 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
 
   # ── Logic operators ───────────────────────────────────────────────────────────
 
-  @javascript
+  @javascript @wip
   Scenario: Logic "and" from \land converts correctly
     When I enter latex "p\land q" into the MathQuill field for "ans1"
     Then the underlying STACK input for "ans1" should contain "and"

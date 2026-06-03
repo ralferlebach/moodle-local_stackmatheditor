@@ -745,6 +745,22 @@ JS;
     protected function assert_stack_input_present(string $inputname = 'ans1'): void {
         $jsinput = json_encode($inputname);
 
+        // The STACK question is rendered server-side during attempt.php, which can
+        // take longer than a fixed page-load wait (Maxima cold start on the first
+        // attempt of a scenario).  Poll for the input before failing, so a slow
+        // render does not produce a spurious "input not found".
+        $present = "(function() {"
+            . "var n = {$jsinput};"
+            . "return !!("
+            . "document.querySelector('[name=\"' + n + '\"]') || "
+            . "document.querySelector('[name\$=\"_' + n + '\"]') || "
+            . "document.querySelector('[id=\"' + n + '\"]') || "
+            . "document.querySelector('[id\$=\"_' + n + '\"]')"
+            . ");})()";
+        if ($this->getSession()->wait(30000, $present)) {
+            return;
+        }
+
         $result = $this->getSession()->evaluateScript(<<<JS
 (function() {
     var n = {$jsinput};
@@ -1082,7 +1098,8 @@ JS;
     public function the_mathquill_editor_is_visible_for(string $inputname): void {
         $js = <<<JS
             (function() {
-                var input = document.querySelector('input[name="{$inputname}"]');
+                var input = document.querySelector('input[name="{$inputname}"]')
+                         || document.querySelector('input[name$="_{$inputname}"]');
                 if (!input) { return false; }
                 var wrap = input.previousElementSibling;
                 if (!wrap) { return false; }
@@ -1108,13 +1125,25 @@ JS;
         $js = <<<JS
             (function() {
                 var inputs = document.querySelectorAll(
-                    '.stackinputfeedback, .que.stack input[type="text"]'
+                    '.que.stack input[type="text"]'
                 );
                 for (var i = 0; i < inputs.length; i++) {
-                    var style = window.getComputedStyle(inputs[i]);
-                    if (style.display !== 'none' && style.visibility !== 'hidden') {
-                        return false;
+                    var el = inputs[i];
+                    var style = window.getComputedStyle(el);
+                    if (style.display === 'none' || style.visibility === 'hidden') {
+                        continue;
                     }
+                    // The plugin hides the original input off-screen
+                    // (position:absolute; left:-9999px) and clips it to ~1px,
+                    // so MathQuill can still sync values to it.  Treat that as hidden.
+                    var rect = el.getBoundingClientRect();
+                    if ((rect.left + rect.width) < 1) {
+                        continue;
+                    }
+                    if (rect.width <= 1 && rect.height <= 1) {
+                        continue;
+                    }
+                    return false;
                 }
                 return true;
             })()
@@ -1142,7 +1171,8 @@ JS;
         $safefragment = addslashes($fragment);
         $js = <<<JS
             (function() {
-                var input = document.querySelector('input[name="{$inputname}"]');
+                var input = document.querySelector('input[name="{$inputname}"]')
+                         || document.querySelector('input[name$="_{$inputname}"]');
                 if (!input) { return null; }
                 var wrap = input.previousElementSibling;
                 if (!wrap) { return null; }

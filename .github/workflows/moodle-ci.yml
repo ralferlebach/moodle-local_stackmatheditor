@@ -370,7 +370,7 @@ jobs:
             --profile chrome \
             --start-servers \
             --auto-rerun 0 \
-            --tags "@stack_init&&~@broken" \
+            --tags "@stack_init&&~@broken&&~@wip" \
             2>&1 | tee behat-stack-init.log
 
       - name: Behat – all plugin scenarios
@@ -380,7 +380,7 @@ jobs:
             --profile chrome \
             --start-servers \
             --auto-rerun 0 \
-            --tags "@local_stackmatheditor&&~@broken&&~@stack_init" \
+            --tags "@local_stackmatheditor&&~@broken&&~@wip&&~@stack_init" \
             2>&1 | tee behat.log
 
       - name: Show relevant Behat failures

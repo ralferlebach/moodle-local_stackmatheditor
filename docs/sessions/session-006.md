@@ -2,8 +2,9 @@
 
 **Branch:** `develop`
 **Date:** 2026-06-03
-**Plugin version:** 2026060300
-**Status:** Infrastructure fix applied; awaiting CI confirmation of `@stack_init`.
+**Plugin version:** 2026060301
+**Status:** Preflight green; main suite 24/29. Patch-2 fixes 3 test-harness
+bugs; 2 AMD integration tasks tagged `@wip` for the next iteration.
 
 ---
 
@@ -165,9 +166,54 @@ moodle-plugin-ci behat --profile chrome --start-servers --auto-rerun 0 \
 
 ---
 
-## 8. Known open issues (unchanged from session-005)
+## 8. Run 1 result (patch 2026060300) and the patch-2 fixes
 
-1. tex2max mixed-fraction (#29): `convert('2\frac{1}{2}') → (2+1/2)` — needs
-   source-level work in `tex2max.js`.
-2. tex2max `usePercentPi` (#31): per-quiz config path.
-3. pm/± expansion (#30) and set-theory keywords (#28) exact-output scenarios.
+The infrastructure fix worked. `@stack_init` preflight: **1 scenario / 5 steps,
+all passed.** Main suite: **29 scenarios, 24 passed, 5 failed.** All 5 failures
+occur on a fully rendered `mod/quiz/attempt.php` page, so they are no longer
+CAS/infrastructure problems. They split into two groups.
+
+### Group A – test-harness bugs (fixed in patch 2026060301)
+
+1. *"I should not see the original STACK input field"* failed: the plugin hides
+   the original input **off-screen** (`position:absolute; left:-9999px;
+   width:1px; height:1px; overflow:hidden`), not via `display:none`. The step
+   only checked `display`/`visibility`. → Now also treats off-screen/clipped
+   (`getBoundingClientRect`) inputs as hidden.
+2. *"Pre-fill restores previous answer on page reload"* failed at the attempt
+   start with `ans1 not found`, yet the faildump shows `ans1` present — a race:
+   `assert_stack_input_present` checked once, immediately, before the
+   (occasionally slower) attempt render finished. → Now polls up to 30 s for the
+   input before failing. This also hardens every other attempt-starting scenario.
+3. *"Toolbar buttons insert correct LaTeX"* failed: `the MathQuill editor is
+   visible for "ans1"` used an exact `input[name="ans1"]` selector, but STACK
+   names inputs `q<qaid>:1_ans1`. → Now uses the `[name$="_ans1"]` fallback (same
+   fix applied to *"…should contain LaTeX containing…"*).
+
+### Group B – real AMD tasks, deferred (tagged `@wip`, excluded in CI)
+
+These are **not** missing features in `tex2max.js`; the source already has both.
+They are integration/normalisation gaps that require `amd/src` edits **and** a
+`grunt amd` build regeneration, so they are deferred to the next iteration per
+the "infrastructure first" strategy.
+
+4. *Pi as `%pi` when usePercentPi enabled* (#31): `tex2max.js` honours
+   `defs.usePercentPi` (line ~691), but `input_fields.js` never sets it in
+   `convOpts.defs`, so `convert()` always emits `pi`. The Behat step sets the
+   server config `local_stackmatheditor/usepercentpi=1`; the JS init must pass
+   that through to `convOpts.defs.usePercentPi`.
+5. *Logic `\land → and`*: `tex2max.js` maps `\land` (line ~756), but MathQuill
+   normalises `\land` → `\wedge`, which has no rule. The observed hidden value
+   was the raw `p\wedge q`. → Add a `\wedge` rule (and review other MathQuill
+   symbol normalisations) in the next AMD iteration.
+
+## 9. Known open issues / next AMD work package
+
+1. Wire `usePercentPi` from plugin config into `input_fields.js` `convOpts.defs`
+   (#31), then untag the `@wip` scenario.
+2. Add `\wedge` (and audit other MathQuill normalisations) to `tex2max.js`, then
+   untag the `@wip` scenario.
+3. Both require `amd/src/*.js` changes plus regenerated `amd/build/*.min.js`
+   (`grunt amd`) shipped in the same patch.
+4. Remaining conversion FRs from session-005 (#28 set-theory, #29 mixed
+   fractions, #30 pm/±) currently pass in the suite; keep them covered.
