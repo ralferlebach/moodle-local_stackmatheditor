@@ -36,7 +36,7 @@ Feature: MathQuill editor renders in quiz attempts
     When I type "x^2" into the MathQuill field for "ans1"
     Then the hidden input "ans1" should contain a non-empty Maxima value
 
-  @javascript @wip
+  @javascript
   Scenario: Pre-fill restores previous answer on page reload
     Given I log in as "student1"
     And I have previously answered "sin(x)" in the quiz "Math Quiz"
@@ -44,7 +44,7 @@ Feature: MathQuill editor renders in quiz attempts
     Then the MathQuill field for "ans1" should not be empty
     And the hidden input "ans1" should contain "sin(x)"
 
-  @javascript @wip
+  @javascript
   Scenario: Pre-fill restores previous answer after navigating away and back
     Given I log in as "student1"
     And I have previously answered "x^2+1" in the quiz "Math Quiz"
