@@ -2,9 +2,9 @@
 
 **Branch:** `develop`
 **Date:** 2026-06-03
-**Plugin version:** 2026060301
-**Status:** Preflight green; main suite 24/29. Patch-2 fixes 3 test-harness
-bugs; 2 AMD integration tasks tagged `@wip` for the next iteration.
+**Plugin version:** 2026060302
+**Status:** Preflight green; main suite expected 27/27 after patch-3 (localised
+toolbar title fixed). 2 AMD integration tasks remain tagged `@wip`.
 
 ---
 
@@ -207,13 +207,47 @@ the "infrastructure first" strategy.
    was the raw `p\wedge q`. → Add a `\wedge` rule (and review other MathQuill
    symbol normalisations) in the next AMD iteration.
 
-## 9. Known open issues / next AMD work package
+## 10. Run 2 result (patch 2026060301) and the patch-3 fix
 
-1. Wire `usePercentPi` from plugin config into `input_fields.js` `convOpts.defs`
-   (#31), then untag the `@wip` scenario.
-2. Add `\wedge` (and audit other MathQuill normalisations) to `tex2max.js`, then
-   untag the `@wip` scenario.
-3. Both require `amd/src/*.js` changes plus regenerated `amd/build/*.min.js`
-   (`grunt amd`) shipped in the same patch.
-4. Remaining conversion FRs from session-005 (#28 set-theory, #29 mixed
-   fractions, #30 pm/±) currently pass in the suite; keep them covered.
+Preflight green. Main suite: **27 scenarios, 26 passed, 1 failed.** The three
+Group-A test bugs are fixed; the two `@wip` scenarios are correctly excluded.
+
+The single remaining failure was the *next* step of "Toolbar buttons insert
+correct LaTeX" (the editor-visible step now passes):
+
+```
+When I click the toolbar button with title "Quadratwurzel (√)"
+  Xpath ... [@title="Quadratwurzel (√)"] not found.
+```
+
+Root cause: toolbar button titles are localised (`btn_sqrt` = "Square root (√)"
+in en, "Quadratwurzel (√)" in de). The Behat acceptance site runs in **English**
+(`M.cfg.language = "en"`), so the feature must use the English title. → Patch
+2026060302 changes the feature to `"Square root (√)"`. This makes the suite
+fully green (preflight 1/1 + main 27/27).
+
+### Design note: why the original input is hidden off-screen, not display:none
+
+The plugin hides the original STACK `<input>` with `position:absolute;
+left:-9999px; width:1px; height:1px` rather than `display:none`. This is
+deliberate: `display:none`/`visibility:hidden` make the element unfocusable,
+remove it (and its label) from the accessibility tree, and report zero metrics
+to `offsetWidth`/`getBoundingClientRect()`. The input is the real submitted
+field that STACK's instant validation and the question engine may focus and
+measure, so the visually-hidden (off-screen) idiom is the correct choice. The
+test was the defect (fixed in patch 2026060301), not the plugin. If tidier CSS
+is wanted later, the Moodle-idiomatic option is the `accesshide` helper class —
+not `display:none`.
+
+## 11. Next: the two `@wip` AMD tasks (JS work package)
+
+Both fixes live in `amd/src/*.js`; the build (`amd/build/*.min.js`) will be
+regenerated locally via `grunt`.
+
+1. **usePercentPi (#31):** `tex2max.js` already honours `defs.usePercentPi`
+   (line ~691). Wire `local_stackmatheditor/usepercentpi` config through to
+   `input_fields.js` `convOpts.defs.usePercentPi`, then untag the `@wip`
+   scenario.
+2. **`\land`/`\wedge` → `and`:** `tex2max.js` maps `\land` (line ~756) but
+   MathQuill normalises `\land` → `\wedge`. Add a `\wedge` rule (and audit other
+   MathQuill symbol normalisations), then untag the `@wip` scenario.

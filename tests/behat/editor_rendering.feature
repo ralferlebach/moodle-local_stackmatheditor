@@ -56,7 +56,7 @@ Feature: MathQuill editor renders in quiz attempts
     Given I log in as "student1"
     And I am on the STACK MathQuill quiz attempt for "Math Quiz"
     And the MathQuill editor is visible for "ans1"
-    When I click the toolbar button with title "Quadratwurzel (√)"
+    When I click the toolbar button with title "Square root (√)"
     Then the MathQuill field for "ans1" should contain LaTeX containing "sqrt"
 
   @javascript
