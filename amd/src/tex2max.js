@@ -21,6 +21,8 @@
  * - Standard LaTeX → Maxima conversion
  * - Locale-aware decimal separator (comma → dot)
  * - Implicit multiplication handling with configurable modes
+ * - Operator keyword protection (or, and, not, …)
+ * - Configurable pi notation (pi / %pi)
  *
  * @module     local_stackmatheditor/tex2max
  * @package
@@ -63,6 +65,21 @@ define([], function() {
     ];
 
     /**
+     * Maxima operator keywords that must never be split into individual
+     * characters in single-variable mode and must be surrounded by spaces
+     * rather than implicit-multiplication separators.
+     *
+     * @type {string[]}
+     */
+    var MAXIMA_OPERATOR_KEYWORDS = [
+        'or', 'and', 'not', 'mod', 'div', 'iff',
+        'implies', 'impliedby', 'notin', 'in',
+        'union', 'intersect', 'setdiff',
+        'subset', 'superset',
+        'forall', 'exists', 'nexists'
+    ];
+
+    /**
      * Build a fast-lookup set from an array of strings.
      *
      * @param {Array} list Array of strings.
@@ -94,6 +111,42 @@ define([], function() {
             return buildWordSet(defs.units);
         }
         return buildWordSet(UNITS);
+    }
+
+    /**
+     * Build the combined protected-words set for identifier splitting.
+     *
+     * Merges MAXIMA_OPERATOR_KEYWORDS with all runtime definition sets
+     * (function names, constants, Greek letters, reserved words, units,
+     * %-constants). Any word in this set is kept intact and never split
+     * into individual characters by expandIdentifiers().
+     *
+     * @param {Object} defs Definitions object from the server.
+     * @returns {Object} Fast-lookup set of protected word strings.
+     */
+    function buildProtectedWords(defs) {
+        var d = defs || {};
+        var protectedWords = Object.create(null);
+        var sets = [
+            buildWordSet(MAXIMA_OPERATOR_KEYWORDS),
+            buildWordSet(d.functionNames || d.functions || []),
+            buildWordSet(d.constants || []),
+            buildWordSet(d.greek || []),
+            buildWordSet(d.reservedWords || []),
+            getUnitSet(d),
+            buildWordSet(d.percentConstants || [])
+        ];
+        var si;
+        var keys;
+        var ki;
+
+        for (si = 0; si < sets.length; si++) {
+            keys = Object.keys(sets[si]);
+            for (ki = 0; ki < keys.length; ki++) {
+                protectedWords[keys[ki]] = true;
+            }
+        }
+        return protectedWords;
     }
 
     /**
@@ -241,6 +294,10 @@ define([], function() {
     /**
      * Expand multi-character identifiers into individual variables if required.
      *
+     * Identifiers that appear in the protected-words set (function names,
+     * constants, Greek letters, units, Maxima operator keywords such as
+     * "or", "and", "not", …) are always kept intact.
+     *
      * @param {Array}  tokens  Token array from tokenizeForImplicitMultiplication.
      * @param {Object} options Conversion options.
      * @returns {Array} Expanded token array.
@@ -249,32 +306,13 @@ define([], function() {
         var opts = options || {};
         var defs = opts.defs || {};
         var mode = normaliseImplicitMode(opts.variableMode || 'stack');
-        var splitIdentifiers =
-            (mode === 'explicit_single' || mode === 'space_single');
-        var protectedWords = Object.create(null);
+        var splitIdentifiers = mode === 'explicit_single' || mode === 'space_single';
+        var protectedWords = buildProtectedWords(defs);
         var out = [];
         var i;
         var tok;
         var value;
         var parts;
-        var sets = [
-            buildWordSet(defs.functionNames || defs.functions || []),
-            buildWordSet(defs.constants || []),
-            buildWordSet(defs.greek || []),
-            buildWordSet(defs.reservedWords || []),
-            getUnitSet(defs),
-            buildWordSet(defs.percentConstants || [])
-        ];
-        var si;
-        var keys;
-        var ki;
-
-        for (si = 0; si < sets.length; si++) {
-            keys = Object.keys(sets[si]);
-            for (ki = 0; ki < keys.length; ki++) {
-                protectedWords[keys[ki]] = true;
-            }
-        }
 
         for (i = 0; i < tokens.length; i++) {
             tok = tokens[i];
@@ -301,10 +339,7 @@ define([], function() {
 
             parts = value.split('');
             parts.forEach(function(part) {
-                out.push({
-                    type: 'ident',
-                    value: part
-                });
+                out.push({type: 'ident', value: part});
             });
         }
 
@@ -320,6 +355,46 @@ define([], function() {
      * @param {Object} options Conversion options.
      * @returns {boolean} True if a multiplication sign should be inserted.
      */
+    /**
+     * Return true if the token pair (prev, curr) blocks implicit multiplication.
+     *
+     * @param {Object} prev Previous token.
+     * @param {Object} curr Current token.
+     * @returns {boolean} True when multiplication is blocked.
+     */
+    function blocksImplicitMultiplication(prev, curr) {
+        if (!prev || !curr) {
+            return true;
+        }
+        if (prev.type === 'other' || curr.type === 'other') {
+            return true;
+        }
+        if (prev.type === 'comma' || curr.type === 'comma') {
+            return true;
+        }
+        return prev.type === 'open' || curr.type === 'close';
+    }
+
+    /**
+     * Determine the multiplication rule for a close→X transition.
+     *
+     * @param {Object} curr Current token.
+     * @returns {boolean} True if multiplication is needed.
+     */
+    function closeTokenNeedsMultiply(curr) {
+        return curr.type === 'ident'
+            || curr.type === 'number'
+            || curr.type === 'open';
+    }
+
+    /**
+     * Decide whether implicit multiplication is needed between two tokens.
+     *
+     * @param {Object} prev    Previous token.
+     * @param {Object} curr    Current token.
+     * @param {Object} options Conversion options (defs, variableMode).
+     * @returns {boolean} True when a multiplication sign should be inserted.
+     */
     function needsImplicitMultiplication(prev, curr, options) {
         var opts = options || {};
         var defs = opts.defs || {};
@@ -328,16 +403,7 @@ define([], function() {
         );
         var unitSet = getUnitSet(defs);
 
-        if (!prev || !curr) {
-            return false;
-        }
-        if (prev.type === 'other' || curr.type === 'other') {
-            return false;
-        }
-        if (prev.type === 'comma' || curr.type === 'comma') {
-            return false;
-        }
-        if (prev.type === 'open' || curr.type === 'close') {
+        if (blocksImplicitMultiplication(prev, curr)) {
             return false;
         }
 
@@ -353,11 +419,8 @@ define([], function() {
         if (prev.type === 'ident' && curr.type === 'open') {
             return !functionNames[prev.value];
         }
-        if (prev.type === 'close'
-                && (curr.type === 'ident'
-                    || curr.type === 'number'
-                    || curr.type === 'open')) {
-            return true;
+        if (prev.type === 'close') {
+            return closeTokenNeedsMultiply(curr);
         }
 
         return false;
@@ -365,6 +428,10 @@ define([], function() {
 
     /**
      * Insert implicit multiplication signs between tokens where required.
+     *
+     * At keyword operator boundaries (or, and, not, …) a plain space is
+     * always used regardless of the configured separator, so that keywords
+     * are never glued to adjacent tokens with a "*" sign.
      *
      * @param {string} s       Preprocessed string.
      * @param {Object} options Conversion options.
@@ -374,25 +441,141 @@ define([], function() {
         var opts = options || {};
         var mode = normaliseImplicitMode(opts.variableMode || 'stack');
         var separator = getImplicitSeparator(mode);
-        var tokens = tokenizeForImplicitMultiplication(s);
+        var tokens;
+        var operatorKeywords;
         var out = '';
         var i;
+        var prevIsKeyword;
+        var currIsKeyword;
 
         if (mode === 'stack') {
             return s;
         }
 
+        operatorKeywords = buildWordSet(MAXIMA_OPERATOR_KEYWORDS);
+        tokens = tokenizeForImplicitMultiplication(s);
         tokens = expandIdentifiers(tokens, opts);
 
         for (i = 0; i < tokens.length; i++) {
-            if (i > 0
-                    && needsImplicitMultiplication(tokens[i - 1], tokens[i], opts)) {
-                out += separator;
+            if (i > 0) {
+                prevIsKeyword = tokens[i - 1].type === 'ident'
+                    && operatorKeywords[tokens[i - 1].value];
+                currIsKeyword = tokens[i].type === 'ident'
+                    && operatorKeywords[tokens[i].value];
+
+                if (prevIsKeyword || currIsKeyword) {
+                    // Always use a plain space around keyword operators.
+                    out += ' ';
+                } else if (needsImplicitMultiplication(
+                        tokens[i - 1], tokens[i], opts)) {
+                    out += separator;
+                }
             }
             out += tokens[i].value;
         }
 
         return out;
+    }
+
+
+    /**
+     * Split a string by a delimiter that is only recognised at top level.
+     *
+     * @param {string} s Input.
+     * @param {string} delimiter Delimiter.
+     * @returns {Array} Parts.
+     */
+    function splitTopLevel(s, delimiter) {
+        var parts = [];
+        var depthParen = 0;
+        var depthBrace = 0;
+        var start = 0;
+        var i;
+
+        for (i = 0; i < s.length; i++) {
+            if (s.charAt(i) === '(') {
+                depthParen++;
+                continue;
+            }
+            if (s.charAt(i) === ')' && depthParen > 0) {
+                depthParen--;
+                continue;
+            }
+            if (s.charAt(i) === '{') {
+                depthBrace++;
+                continue;
+            }
+            if (s.charAt(i) === '}' && depthBrace > 0) {
+                depthBrace--;
+                continue;
+            }
+            if (depthParen !== 0 || depthBrace !== 0) {
+                continue;
+            }
+            if (s.substring(i, i + delimiter.length) !== delimiter) {
+                continue;
+            }
+
+            parts.push(s.substring(start, i));
+            start = i + delimiter.length;
+            i = start - 1;
+        }
+
+        parts.push(s.substring(start));
+        return parts;
+    }
+
+    /**
+     * Strip one layer of outer braces around a row.
+     *
+     * @param {string} s Input.
+     * @returns {string} Row without outer braces.
+     */
+    function stripOuterBraces(s) {
+        var trimmed = s.trim();
+
+        if (trimmed.charAt(0) === '{' && trimmed.charAt(trimmed.length - 1) === '}') {
+            return trimmed.substring(1, trimmed.length - 1).trim();
+        }
+
+        return trimmed;
+    }
+
+    /**
+     * Convert a LaTeX cases environment to and-connected relation rows.
+     *
+     * @param {string} s Input.
+     * @returns {string} Converted string.
+     */
+    function convertCasesToAndRelations(s) {
+        return s.replace(
+            /(?:\\\[\s*)?\\begin\{cases\}([\s\S]*?)\\end\{cases\}(?:\s*\\\])?/g,
+            function(match, body) {
+                var rows = splitTopLevel(body, '\\\\');
+                var parts = [];
+                var i;
+                var row;
+
+                for (i = 0; i < rows.length; i++) {
+                    row = stripOuterBraces(rows[i]);
+                    if (!row) {
+                        continue;
+                    }
+                    row = row.replace(/\s*&\s*/g, '');
+                    row = row.replace(/\s+/g, ' ').trim();
+                    if (!row) {
+                        continue;
+                    }
+                    parts.push('(' + row + ')');
+                }
+
+                if (parts.length < 2) {
+                    return match;
+                }
+
+                return parts.join(' and ');
+            }
+        );
     }
 
     /**
@@ -402,6 +585,10 @@ define([], function() {
      * All ± are replaced synchronously: variant 1 uses +, variant 2 uses −.
      * All ∓ flip in the opposite direction (variant 1 uses −, variant 2 uses +).
      * This is non-recursive: no combinatorial explosion for multiple markers.
+     *
+     * In the positive variant (v1), any unary "+" that appears directly after
+     * "=", "(" or at the string start is stripped, because STACK / Maxima
+     * treats "+2" differently from "2" in those positions.
      *
      * @param {string} s Maxima string possibly containing ± or ∓.
      * @returns {string} Expanded string or unmodified input.
@@ -413,6 +600,12 @@ define([], function() {
         }
         var v1 = s.replace(/\u00b1/g, '+').replace(/\u2213/g, '-');
         var v2 = s.replace(/\u00b1/g, '-').replace(/\u2213/g, '+');
+
+        // Strip unary '+' from positive variant: a '+' that appears
+        // directly after '=', '(' or at the very start of the string is
+        // unary, not a binary infix — STACK does not need it.
+        v1 = v1.replace(/(^|[=(])\+/g, '$1');
+
         return v1 + ' or ' + v2;
     }
 
@@ -435,6 +628,7 @@ define([], function() {
         var maxIter = 20;
 
         s = s.replace(/\s+/g, ' ').trim();
+        s = convertCasesToAndRelations(s);
         s = s.replace(/\\left/g, '');
         s = s.replace(/\\right/g, '');
 
@@ -458,6 +652,10 @@ define([], function() {
                 '($1)/($2)'
             );
         }
+
+        // Mixed-fraction guard: N(p)/(q) → (N+p/q).
+        // Prevents N*(p/q) implicit multiplication; supports multi-digit integers.
+        s = s.replace(/(\d+)\((\d+)\)\/\((\d+)\)/g, '($1+$2/$3)');
 
         s = s.replace(
             /\\sqrt\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
@@ -489,7 +687,8 @@ define([], function() {
         s = s.replace(/\\ln(?![a-zA-Z])/g, 'log');
         s = s.replace(/\\log(?![a-zA-Z])/g, 'log');
         s = s.replace(/\\exp(?![a-zA-Z])/g, 'exp');
-        s = s.replace(/\\pi(?![a-zA-Z])/g, '%pi');
+        // Pi notation is configurable: plain "pi" (default) or Maxima "%pi".
+        s = s.replace(/\\pi(?![a-zA-Z])/g, defs.usePercentPi ? '%pi' : 'pi');
         s = s.replace(/\\infty/g, 'inf');
         s = s.replace(/\\e(?![a-zA-Z])/g, '%e');
         s = s.replace(/\\cdot/g, '*');
@@ -539,6 +738,7 @@ define([], function() {
             );
         });
 
+        // Set-theory: LaTeX → Maxima keywords (notin before in to avoid partial match).
         s = s.replace(/\\notin(?![a-zA-Z])/g, ' notin ');
         s = s.replace(/\\in(?![a-zA-Z])/g, ' in ');
         s = s.replace(/\\cup(?![a-zA-Z])/g, ' union ');
@@ -546,6 +746,8 @@ define([], function() {
         s = s.replace(/\\setminus(?![a-zA-Z])/g, ' setdiff ');
         s = s.replace(/\\subset(?![a-zA-Z])/g, ' subset ');
         s = s.replace(/\\supset(?![a-zA-Z])/g, ' superset ');
+
+        // Logic: LaTeX → Maxima keywords (nexists before exists to avoid partial match).
         s = s.replace(/\\nexists/g, ' nexists ');
         s = s.replace(/\\not\\exists/g, ' nexists ');
         s = s.replace(/\\forall(?![a-zA-Z])/g, ' forall ');

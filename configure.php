@@ -100,7 +100,7 @@ if (!$quizmode) {
 $context = \context_module::instance($cmid);
 require_login($course, false, $cm);
 
-// mod_adaptivequiz does not define a :manage capability; :viewreport is
+// Mod_adaptivequiz does not define a :manage capability; :viewreport is
 // granted to editingteacher and manager and is the closest equivalent.
 $capname = $isadaptivequiz ? 'mod/adaptivequiz:viewreport' : 'mod/quiz:manage';
 require_capability($capname, $context);

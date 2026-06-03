@@ -131,8 +131,12 @@ define([], function() {
             Typeset: function(element, callback) {
                 typesetElement(element).then(function() {
                     if (typeof callback === 'function') {
+                        // eslint-disable-next-line promise/no-callback-in-promise
                         callback();
                     }
+                    return null;
+                }).catch(function() {
+                    return null;
                 });
             },
 

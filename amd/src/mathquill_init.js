@@ -32,10 +32,18 @@ define([
     'use strict';
 
     /**
-     * Write a developer-level debug message to the browser console.
+     * Set the data-sme-init attribute on document.body for Behat diagnostics.
      *
-     * Only active when Moodle developer debug mode is enabled
-     * (M.cfg.developerdebug is truthy). Silent on production sites.
+     * @param {string} state Current initialisation state.
+     */
+    function setState(state) {
+        if (document.body) {
+            document.body.setAttribute('data-sme-init', state);
+        }
+    }
+
+    /**
+     * Log a debug message to the browser console when developer debug is active.
      *
      * @param {string} msg Message to log.
      */
@@ -208,7 +216,9 @@ define([
         var instanceVarMode =
             params.variableMode || 'single';
 
+        setState('boot');
         if (!window.MathQuill) {
+            setState('no-mathquill');
             dbg('ERROR: window.MathQuill is undefined.');
             return;
         }
@@ -292,6 +302,7 @@ define([
          * @param {Object} params From PHP js_call_amd.
          */
         init: function(params) {
+            setState('init-called');
             dbg('init() called.');
 
             var mqJsUrl = params.mathquillJsUrl;
@@ -326,8 +337,10 @@ define([
             loadCss(mqCssUrl);
 
             loadScript(mqJsUrl).then(function() {
+                setState('mathquill-loaded');
                 dbg('MathQuill loaded successfully.');
                 boot(params, defs, localeComma);
+                return null;
             }).fail(function(err) {
                 dbg('Failed to load MathQuill: '
                     + (err && err.message

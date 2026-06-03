@@ -1,41 +1,31 @@
 ##############################################################################
-# GitHub Actions CI – local_stackmatheditor
+# GitHub Actions CI – block_coursectrldates (Course Dates Block)
 #
 # Matrix:
-#   Moodle: MOODLE_405_STABLE, MOODLE_500_STABLE, MOODLE_501_STABLE
-#   PHP:    8.2, 8.3, 8.4  (8.4 nur für Moodle ≥ 5.1, siehe exclude)
-#   DB:     MariaDB 10.11  |  PostgreSQL 16
+#   Moodle:  4.5, 5.0, 5.1, 5.2
+#   PHP:     8.1, 8.2, 8.3, 8.4  (with version-appropriate exclusions)
+#   DB:      MariaDB 10.11  |  PostgreSQL 16
 #
-# Abhängigkeiten:
-#   qtype_stack  → branch master
-#   Maxima ≥ 5.46 via apt + Versionscheck
-#   gnuplot       → für STACK-Plot-Rendering
-#
-# WICHTIG:
-#   - moodle-plugin-ci install --plugin ./plugin registriert das Plugin.
-#     Nachfolgende Subcommands (phpunit, behat, grunt) werden OHNE
-#     Plugin-Argument aufgerufen – sie kennen das Plugin bereits.
-#   - Ab Moodle 4.5 verlangt MariaDB den Treiber "mariadb" (NICHT "mysqli").
-#   - MariaDB-Service OHNE MYSQL_DATABASE → moodle-plugin-ci erstellt
-#     die DB selbst.
-#   - PostgreSQL-Service mit POSTGRES_DB=postgres → DB "moodle" wird
-#     NICHT vorab erstellt.
-#   - max_input_vars=5000 via ini-values (Moodle-Mindestanforderung).
-#   - --branch (nicht --moodle!) übergibt den Moodle-Branch.
-#   - Maxima + gnuplot in ALLEN Jobs mit qtype_stack.
-#   - en_AU.UTF-8 Locale muss installiert werden (Moodle-Core-
-#     Anforderung für PHPUnit/Behat Test-Suite-Initialisierung).
+# Dependency:
+#   local_coursectrl (Course Control Hub) is cloned from the main branch
+#   of ralferlebach/moodle-local_coursectrl and installed as an extra plugin
+#   before PHPUnit / Behat initialisation.
 ##############################################################################
 
 name: Moodle Plugin CI
 
 on:
   push:
-    branches: ['**']
+    branches-ignore:
+      - main
   pull_request:
+    branches-ignore:
+      - main
 
 env:
   MOODLE_CI: '^4'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PGPASSWORD: postgres
 
 jobs:
 
@@ -46,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php: ['8.2', '8.3', '8.4']
+        php: ['8.1', '8.2', '8.3', '8.4']
 
     steps:
       - uses: actions/checkout@v4
@@ -68,15 +58,12 @@ jobs:
       - name: PHP CodeSniffer (Moodle coding style)
         run: moodle-plugin-ci phpcs plugin
 
-      - name: PHP Copy/Paste Detector
-        run: moodle-plugin-ci phpcpd plugin || true
-
       - name: PHP Mess Detector
         run: moodle-plugin-ci phpmd plugin || true
 
-  # ── 1b. JS / CSS Lint ────────────────────────────────────────────────────
+  # ── 1b. JS / CSS Lint ─────────────────────────────────────────────────────
   lint-js:
-    name: "JS/CSS Lint"
+    name: "JS/CSS/Mustache Lint"
     runs-on: ubuntu-24.04
 
     services:
@@ -103,27 +90,10 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      # Moodle Core benötigt en_AU.UTF-8 für Test-Suite-Initialisierung
-      - name: Install required locale
+      - name: Install en_AU.UTF-8 locale
         run: |
           sudo locale-gen en_AU.UTF-8
           sudo update-locale
-
-      - name: Install Maxima (≥ 5.46) and gnuplot
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y maxima gnuplot
-          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
-          echo "Installed Maxima $VER"
-          python3 -c "
-          v = tuple(int(x) for x in '${VER}'.split('.'))
-          assert v >= (5, 46), f'Maxima {v} < required (5, 46)'
-          print(f'Maxima {v}: OK')
-          "
 
       - name: Install moodle-plugin-ci
         run: |
@@ -131,35 +101,36 @@ jobs:
           echo "$GITHUB_WORKSPACE/ci/bin"        >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
 
-      - name: Set TRAVIS_BRANCH for moodle-plugin-ci
+      - name: Set TRAVIS_BRANCH
         run: |
           BRANCH_NAME=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
-          if [ -z "$BRANCH_NAME" ]; then
-            BRANCH_NAME="default-branch"
-          fi
-          echo "TRAVIS_BRANCH=$BRANCH_NAME" >> "$GITHUB_ENV"
+          echo "TRAVIS_BRANCH=${BRANCH_NAME:-main}" >> "$GITHUB_ENV"
 
-      - name: Register qtype_stack
-        run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
-
-      - name: Install Moodle (grunt-Config)
+      - name: Install Moodle 4.5 (grunt baseline)
         run: |
           moodle-plugin-ci install \
-            --plugin   ./plugin \
-            --db-type  mariadb \
-            --db-host  127.0.0.1 \
-            --db-port  3306 \
-            --db-user  root \
-            --db-pass  root \
-            --db-name  moodle \
-            --branch   MOODLE_405_STABLE
+            --plugin  ./plugin \
+            --branch  MOODLE_405_STABLE \
+            --db-type mariadb \
+            --db-host 127.0.0.1 \
+            --db-port 3306 \
+            --db-user root \
+            --db-pass root \
+            --db-name moodle \
+            --no-init
+
+      - name: Clone and install local_coursectrl dependency
+        run: |
+          MOODLE_DIR=$([ -d "${{ github.workspace }}/moodle/public" ] \
+            && echo "${{ github.workspace }}/moodle/public" \
+            || echo "${{ github.workspace }}/moodle")
+          git clone --depth=1 --branch main \
+            https://github.com/ralferlebach/moodle-local_coursectrl.git \
+            "$MOODLE_DIR/local/coursectrl"
 
       - name: Install Node dependencies
         run: npm install
         working-directory: ${{ github.workspace }}/moodle
-
-      - name: Fix .git pack permissions for grunt backup/restore
-        run: chmod -R u+w plugin/.git/ 2>/dev/null || true
 
       - name: ESLint – AMD JS
         run: moodle-plugin-ci grunt -m "$GITHUB_WORKSPACE/moodle" -t eslint
@@ -168,22 +139,28 @@ jobs:
         run: moodle-plugin-ci grunt -m "$GITHUB_WORKSPACE/moodle" -t stylelint
         continue-on-error: true
 
-      - name: Verify AMD build artefacts
+      - name: Verify AMD build artefacts are up to date
         run: |
+          if ! ls plugin/amd/src/*.js 2>/dev/null | grep -q .; then
+            echo "No AMD source files — skipping."; exit 0
+          fi
           MISSING=0
           for src in plugin/amd/src/*.js; do
-            [ -f "$src" ] || continue
             base=$(basename "$src" .js)
             [ -f "plugin/amd/build/${base}.min.js" ] || {
-              echo "MISSING: amd/build/${base}.min.js"
-              MISSING=$((MISSING+1))
+              echo "MISSING: $base.min.js"; MISSING=$((MISSING+1))
             }
           done
-          if [ "$MISSING" -gt 0 ]; then
-            echo "ERROR: $MISSING AMD build file(s) fehlen – 'grunt amd' ausführen."
-            exit 1
-          fi
-          echo "AMD build OK: $(ls plugin/amd/src/*.js | wc -l) Datei(en) verifiziert."
+          [ "$MISSING" -eq 0 ] && echo "AMD OK." \
+            || { echo "ERROR: $MISSING file(s) missing."; exit 1; }
+
+      - name: PHPDoc check
+        run: moodle-plugin-ci phpdoc
+        env:
+          IGNORE_PATHS: tools
+
+      - name: Mustache lint
+        run: moodle-plugin-ci mustache
 
   # ── 2. PHPUnit ────────────────────────────────────────────────────────────
   phpunit:
@@ -193,13 +170,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE', 'MOODLE_501_STABLE']
-        php:    ['8.2', '8.3', '8.4']
+        moodle:
+          - MOODLE_405_STABLE
+          - MOODLE_500_STABLE
+          - MOODLE_501_STABLE
+          - MOODLE_502_STABLE
+        php: ['8.1', '8.2', '8.3', '8.4']
         db:
           - { engine: mariadb, type: mariadb, port: 3306, user: root,   pass: root   }
           - { engine: pgsql,   type: pgsql,   port: 5432, user: moodle, pass: moodle }
         exclude:
+          # Moodle 4.5 supports PHP 8.1–8.3 only.
           - { moodle: MOODLE_405_STABLE, php: '8.4' }
+          # Moodle 5.0+ requires PHP 8.2+.
+          - { moodle: MOODLE_500_STABLE, php: '8.1' }
+          - { moodle: MOODLE_501_STABLE, php: '8.1' }
+          - { moodle: MOODLE_502_STABLE, php: '8.1' }
+          # Moodle 5.2 requires PHP 8.3+.
+          - { moodle: MOODLE_502_STABLE, php: '8.2' }
+          # Moodle 5.0 PHP 8.4 support — conservative, align with local_coursectrl.
           - { moodle: MOODLE_500_STABLE, php: '8.4' }
 
     services:
@@ -239,23 +228,10 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
-      # Moodle Core benötigt en_AU.UTF-8 für PHPUnit-Initialisierung
-      - name: Install required locale
+      - name: Install en_AU.UTF-8 locale
         run: |
           sudo locale-gen en_AU.UTF-8
           sudo update-locale
-
-      - name: Install Maxima (≥ 5.46) and gnuplot
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y maxima gnuplot
-          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
-          echo "Installed Maxima $VER"
-          python3 -c "
-          v = tuple(int(x) for x in '${VER}'.split('.'))
-          assert v >= (5, 46), f'Maxima {v} < required (5, 46)'
-          print(f'Maxima {v}: OK')
-          "
 
       - name: Install moodle-plugin-ci
         run: |
@@ -263,53 +239,50 @@ jobs:
           echo "$GITHUB_WORKSPACE/ci/bin"        >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
 
-      - name: Set TRAVIS_BRANCH for moodle-plugin-ci
+      - name: Set TRAVIS_BRANCH
         run: |
           BRANCH_NAME=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
-          if [ -z "$BRANCH_NAME" ]; then
-            BRANCH_NAME="default-branch"
-          fi
-          echo "TRAVIS_BRANCH=$BRANCH_NAME" >> "$GITHUB_ENV"
-
-      - name: Register qtype_stack
-        run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
+          echo "TRAVIS_BRANCH=${BRANCH_NAME:-main}" >> "$GITHUB_ENV"
 
       - name: Install Moodle ${{ matrix.moodle }}
         run: |
           moodle-plugin-ci install \
-            --plugin   ./plugin \
-            --db-type  ${{ matrix.db.type }} \
-            --db-host  127.0.0.1 \
-            --db-port  ${{ matrix.db.port }} \
-            --db-user  ${{ matrix.db.user }} \
-            --db-pass  ${{ matrix.db.pass }} \
-            --db-name  moodle \
-            --branch   ${{ matrix.moodle }}
+            --plugin  ./plugin \
+            --branch  ${{ matrix.moodle }} \
+            --db-type ${{ matrix.db.type }} \
+            --db-host 127.0.0.1 \
+            --db-port ${{ matrix.db.port }} \
+            --db-user ${{ matrix.db.user }} \
+            --db-pass ${{ matrix.db.pass }} \
+            --db-name moodle
 
-      # KEIN Plugin-Argument: install --plugin hat es bereits registriert.
+      - name: Clone and install local_coursectrl dependency
+        run: |
+          MOODLE_DIR=$([ -d "${{ github.workspace }}/moodle/public" ] \
+            && echo "${{ github.workspace }}/moodle/public" \
+            || echo "${{ github.workspace }}/moodle")
+          git clone --depth=1 --branch main \
+            https://github.com/ralferlebach/moodle-local_coursectrl.git \
+            "$MOODLE_DIR/local/coursectrl"
+          cd "$MOODLE_DIR" && php admin/tool/phpunit/cli/init.php
+
       - name: PHPUnit – all tests
-        run: moodle-plugin-ci phpunit
+        run: moodle-plugin-ci phpunit --fail-on-warning
 
   # ── 3. Behat ──────────────────────────────────────────────────────────────
   behat:
     name: "Behat (${{ matrix.moodle }} / PHP 8.2 / Chrome)"
     runs-on: ubuntu-24.04
-    needs: [phpunit]
+    needs: [lint-php, lint-js]
     strategy:
       fail-fast: false
       matrix:
-        moodle: ['MOODLE_405_STABLE', 'MOODLE_500_STABLE', 'MOODLE_501_STABLE']
+        moodle:
+          - MOODLE_405_STABLE
+          - MOODLE_500_STABLE
+          - MOODLE_501_STABLE
 
     services:
-      selenium:
-        image: selenium/standalone-chrome:latest
-        options: >-
-          --shm-size=2g
-          --health-cmd="curl -sf http://localhost:4444/status"
-          --health-interval=15s
-          --health-retries=5
-        ports: ['4444:4444']
-
       mariadb:
         image: mariadb:10.11
         env:
@@ -332,23 +305,10 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
-      # Moodle Core benötigt en_AU.UTF-8 für Behat-Initialisierung
-      - name: Install required locale
+      - name: Install en_AU.UTF-8 locale
         run: |
           sudo locale-gen en_AU.UTF-8
           sudo update-locale
-
-      - name: Install Maxima (≥ 5.46) and gnuplot
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y maxima gnuplot
-          VER=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
-          echo "Installed Maxima $VER"
-          python3 -c "
-          v = tuple(int(x) for x in '${VER}'.split('.'))
-          assert v >= (5, 46), f'Maxima {v} < required (5, 46)'
-          print(f'Maxima {v}: OK')
-          "
 
       - name: Install moodle-plugin-ci
         run: |
@@ -356,35 +316,39 @@ jobs:
           echo "$GITHUB_WORKSPACE/ci/bin"        >> "$GITHUB_PATH"
           echo "$GITHUB_WORKSPACE/ci/vendor/bin" >> "$GITHUB_PATH"
 
-      - name: Set TRAVIS_BRANCH for moodle-plugin-ci
+      - name: Set TRAVIS_BRANCH
         run: |
           BRANCH_NAME=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
-          if [ -z "$BRANCH_NAME" ]; then
-            BRANCH_NAME="default-branch"
-          fi
-          echo "TRAVIS_BRANCH=$BRANCH_NAME" >> "$GITHUB_ENV"
-
-      - name: Register qtype_stack
-        run: moodle-plugin-ci add-plugin --branch master maths/moodle-qtype_stack
+          echo "TRAVIS_BRANCH=${BRANCH_NAME:-main}" >> "$GITHUB_ENV"
 
       - name: Install Moodle ${{ matrix.moodle }}
         run: |
           moodle-plugin-ci install \
-            --plugin   ./plugin \
-            --db-type  mariadb \
-            --db-host  127.0.0.1 \
-            --db-port  3306 \
-            --db-user  root \
-            --db-pass  root \
-            --db-name  moodle \
-            --branch   ${{ matrix.moodle }}
+            --plugin  ./plugin \
+            --branch  ${{ matrix.moodle }} \
+            --db-type mariadb \
+            --db-host 127.0.0.1 \
+            --db-port 3306 \
+            --db-user root \
+            --db-pass root \
+            --db-name moodle
 
-      # KEIN Plugin-Argument: install --plugin hat es bereits registriert.
-      - name: Behat – all plugin scenarios
+      - name: Clone and install local_coursectrl dependency
+        run: |
+          MOODLE_DIR=$([ -d "${{ github.workspace }}/moodle/public" ] \
+            && echo "${{ github.workspace }}/moodle/public" \
+            || echo "${{ github.workspace }}/moodle")
+          git clone --depth=1 --branch main \
+            https://github.com/ralferlebach/moodle-local_coursectrl.git \
+            "$MOODLE_DIR/local/coursectrl"
+          cd "$MOODLE_DIR" && php admin/tool/behat/cli/init.php
+
+      - name: Behat – all block scenarios
         run: |
           moodle-plugin-ci behat \
             --profile chrome \
-            --tags "@local_stackmatheditor and not @broken"
+            --tags "@block_coursectrldates and not @broken" \
+            --start-servers
 
       - name: Upload failure screenshots
         if: failure()

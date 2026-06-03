@@ -64,6 +64,15 @@ if ($hassiteconfig) {
         ]
     ));
 
+
+    // Use percent-pi notation (%pi) instead of plain pi.
+    $settings->add(new admin_setting_configcheckbox(
+        'local_stackmatheditor/usepercentpi',
+        get_string('setting_usepercentpi', 'local_stackmatheditor'),
+        get_string('setting_usepercentpi_desc', 'local_stackmatheditor'),
+        0
+    ));
+
     // Default element groups multiselect.
     $grouplabels = \local_stackmatheditor\definitions::get_group_labels_with_examples();
     $groups      = \local_stackmatheditor\definitions::get_element_groups();
