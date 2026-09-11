@@ -1,4 +1,3 @@
-<?php
 // This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -15,20 +14,19 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * Plugin version metadata for local_stackmatheditor.
+ * Jest configuration for the local_stackmatheditor AMD unit tests.
  *
- * @package    local_stackmatheditor
+ * The tests live in their own directory with their own package.json on purpose: a package.json
+ * in the plugin root would make moodle-plugin-ci run an extra `npm install` inside the plugin
+ * during every install step.
+ *
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
-$plugin->version      = 2026091000;
-$plugin->requires     = 2024100700;
-$plugin->component    = 'local_stackmatheditor';
-$plugin->maturity     = MATURITY_STABLE;
-$plugin->release      = '1.2';
-$plugin->dependencies = [
-    'qtype_stack' => 2024010400,
-];
+module.exports = {
+    rootDir: __dirname,
+    testEnvironment: 'node',
+    testMatch: ['<rootDir>/**/*.test.js'],
+    testPathIgnorePatterns: ['/node_modules/'],
+};

@@ -1,0 +1,151 @@
+##############################################################################
+# Load test (JMeter) - local_stackmatheditor - twin of load-k6.yml
+#
+# Modes:
+#   selfcontained (default): build a fresh Moodle + STACK + plugin site here,
+#                            serve it and run the plan against it.
+#   external:                point at a Moodle you already run (base_url).
+#
+# JMeter exits 0 even when every assertion failed. The result file is
+# therefore evaluated separately (tests/load/check_jtl.py); only that step
+# decides whether the run is green.
+#
+# Triggers: manual (the button needs this file on the DEFAULT branch), plus
+# push to non-main branches when the load harness or this workflow changes.
+##############################################################################
+
+name: Load test (JMeter)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'selfcontained (build + serve here) or external (your own site)'
+        type: choice
+        options: [selfcontained, external]
+        default: selfcontained
+        required: true
+      base_url:
+        description: '[external mode] Base URL of your Moodle (no trailing slash)'
+        required: false
+      threads:
+        description: Concurrent threads
+        default: '5'
+        required: false
+      rampup:
+        description: Ramp-up seconds
+        default: '5'
+        required: false
+      loops:
+        description: Iterations per thread
+        default: '10'
+        required: false
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - 'tests/load/**'
+      - '.github/build-test-site.sh'
+      - '.github/serve-test-site.sh'
+      - '.github/workflows/load-jmeter.yml'
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  JMETER_VERSION: '5.6.3'
+
+jobs:
+  jmeter:
+    name: "JMeter smoke / ${{ inputs.mode || 'selfcontained' }}"
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: moodle
+          POSTGRES_PASSWORD: moodle
+          POSTGRES_DB: moodle
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready" --health-interval=10s
+          --health-timeout=5s --health-retries=5
+    env:
+      # Inputs are empty on push; every value therefore carries its own default.
+      MODE: ${{ inputs.mode || 'selfcontained' }}
+      THREADS: ${{ inputs.threads || '5' }}
+      RAMPUP: ${{ inputs.rampup || '5' }}
+      LOOPS: ${{ inputs.loops || '10' }}
+      EXTERNAL_BASE_URL: ${{ inputs.base_url }}
+      MOODLE_BRANCH: MOODLE_405_STABLE
+      MOODLE_WWWROOT: http://127.0.0.1:8000
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v6
+        with:
+          path: plugin
+      - name: Set up PHP
+        if: ${{ env.MODE == 'selfcontained' }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pgsql, gd, intl, zip, soap, mbstring, curl, xml, exif
+          ini-values: max_input_vars=5000
+      - name: Install Maxima and gnuplot (STACK CAS)
+        if: ${{ env.MODE == 'selfcontained' }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq maxima gnuplot-nox
+      - name: Build and install the test site (Moodle + STACK + plugin)
+        if: ${{ env.MODE == 'selfcontained' }}
+        run: bash plugin/.github/build-test-site.sh
+      - name: Set up JMeter
+        run: |
+          # Supply-chain hardening: verify the download against Apache's published SHA-512.
+          base="https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz"
+          curl -fsSL "$base" -o jmeter.tgz
+          curl -fsSL "${base}.sha512" -o jmeter.tgz.sha512
+          # The .sha512 file already carries a filename; take the hash field only.
+          echo "$(awk '{print $1}' jmeter.tgz.sha512)  jmeter.tgz" | sha512sum -c -
+          tar xzf jmeter.tgz
+      - name: Run the JMeter smoke plan
+        run: |
+          if [ "$MODE" = "external" ]; then
+            if [ -z "$EXTERNAL_BASE_URL" ]; then
+              echo "external mode needs base_url."
+              exit 1
+            fi
+            base="$EXTERNAL_BASE_URL"
+          else
+            # The web server is started inside THIS step (see serve-test-site.sh).
+            . plugin/.github/serve-test-site.sh
+            base="$MOODLE_WWWROOT"
+          fi
+          echo "Target: $base, threads: $THREADS, ramp-up: ${RAMPUP}s, loops: $LOOPS"
+          "apache-jmeter-${JMETER_VERSION}/bin/jmeter" -n \
+            -t plugin/tests/load/stackmatheditor-smoke.jmx \
+            -Jbase_url="$base" \
+            -Jthreads="$THREADS" \
+            -Jrampup="$RAMPUP" \
+            -Jloops="$LOOPS" \
+            -l results.jtl \
+            -j jmeter.log \
+            -e -o jmeter-report
+      - name: Evaluate the results (JMeter itself always exits 0)
+        run: python3 plugin/tests/load/check_jtl.py results.jtl
+      - name: Show Moodle server log on failure
+        if: ${{ failure() && env.MODE == 'selfcontained' }}
+        run: tail -100 /tmp/moodle-server.log || true
+      - name: Upload results and HTML dashboard
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: jmeter-results
+          path: |
+            results.jtl
+            jmeter.log
+            jmeter-report
+          retention-days: 7
+          if-no-files-found: ignore

@@ -15,20 +15,28 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * Plugin version metadata for local_stackmatheditor.
+ * CLI preflight and seed for the local_stackmatheditor Playwright tests.
+ *
+ * Verifies that the plugin and its hard dependency qtype_stack are installed, then prints the
+ * base URL as a shell "export" line, so the CI runner and `make playwright` can source it.
+ * Fails early with a clear message instead of letting the browser run into a half-built site.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
+define('CLI_SCRIPT', true);
 
-$plugin->version      = 2026091000;
-$plugin->requires     = 2024100700;
-$plugin->component    = 'local_stackmatheditor';
-$plugin->maturity     = MATURITY_STABLE;
-$plugin->release      = '1.2';
-$plugin->dependencies = [
-    'qtype_stack' => 2024010400,
-];
+require(__DIR__ . '/../../../../config.php');
+
+$pluginmanager = core_plugin_manager::instance();
+foreach (['local_stackmatheditor', 'qtype_stack'] as $component) {
+    $info = $pluginmanager->get_plugin_info($component);
+    if ($info === null || empty($info->versiondb)) {
+        fwrite(STDERR, "{$component} is not installed on this site - run the Moodle upgrade first.\n");
+        exit(1);
+    }
+}
+
+echo "export SME_BASE_URL='" . $CFG->wwwroot . "'\n";

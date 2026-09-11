@@ -1,0 +1,14 @@
+# moodle-plugin-ci configuration for local_stackmatheditor.
+#
+# moodle-plugin-ci does NOT read phpcs.xml; paths are excluded here (plus thirdpartylibs.xml,
+# which already covers thirdparty/). Only generated, locally installed artefacts of the test
+# harnesses are excluded - the harness sources themselves (seed.php, specs, plans) are checked.
+filter:
+  notPaths:
+    - node_modules
+    - tests/jest/node_modules
+    - tests/playwright/node_modules
+    - tests/playwright/playwright-report
+    - tests/playwright/test-results
+    - tests/load/apache-jmeter-5.6.3
+    - tests/load/jmeter-report

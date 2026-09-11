@@ -1,0 +1,426 @@
+##############################################################################
+# Moodle Plugin CI - main (release) pipeline - local_stackmatheditor
+#
+# Runs ONLY on push / PR to main and provides the "CI complete" status check
+# for branch protection. Full SEQUENTIAL pipeline per matrix cell across the
+# supported Moodle 4.5 / 5.0 / 5.1 / 5.2 x PHP x DB matrix, plus the release
+# gates: release artefact, coverage floor, Jest, stale files and an
+# aggregating release gate. The fast parallel pipeline lives in
+# moodle-plugin-ci-dev.yml.
+#
+# STACK notes: see the header of moodle-plugin-ci-dev.yml and
+# docs/ENTWICKLUNGSUMGEBUNG.md, section 11.
+##############################################################################
+
+name: Moodle Plugin CI Main
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ci-main-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    # Explicit bash enables -o pipefail, so `cmd | tee log` keeps the exit code of cmd.
+    shell: bash
+
+env:
+  # qtype_stack and every plugin it declares as a dependency (STACK >= 4.13 added the two
+  # dfexplicitvaildate behaviours and qbank_importasversion). Pin a branch to a tag or commit
+  # when a STACK release breaks the pipeline.
+  STACK_BRANCH: master
+  ADAPTIVEMULTIPART_BRANCH: master
+  DFEXPLICITVAILDATE_BRANCH: master
+  DFCBMEXPLICITVAILDATE_BRANCH: master
+  IMPORTASVERSION_BRANCH: main
+
+jobs:
+  test:
+    name: "CI / ${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.database }}"
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: 'postgres'
+          POSTGRES_HOST_AUTH_METHOD: 'trust'
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MYSQL_USER: 'root'
+          MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 3
+    strategy:
+      fail-fast: false
+      matrix:
+        # grunt only where amd/build is produced (MOODLE_405_STABLE, see `make amd`): grunt
+        # fails on a stale build, and another Moodle branch may minify differently.
+        include:
+          - { moodle: MOODLE_405_STABLE, php: '8.2', database: pgsql, grunt: true }
+          - { moodle: MOODLE_405_STABLE, php: '8.3', database: mariadb, grunt: true }
+          - { moodle: MOODLE_500_STABLE, php: '8.2', database: mariadb, grunt: false }
+          - { moodle: MOODLE_500_STABLE, php: '8.3', database: pgsql, grunt: false }
+          - { moodle: MOODLE_501_STABLE, php: '8.3', database: pgsql, grunt: false }
+          - { moodle: MOODLE_501_STABLE, php: '8.4', database: mariadb, grunt: false }
+          - { moodle: MOODLE_502_STABLE, php: '8.3', database: mariadb, grunt: false }
+          - { moodle: MOODLE_502_STABLE, php: '8.4', database: pgsql, grunt: false }
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v6
+        with:
+          path: plugin
+      - name: Prepare log directory
+        run: mkdir -p ci-logs
+      - name: Setup PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          ini-values: max_input_vars=5000
+          coverage: none
+      - name: Cache Composer downloads
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ github.sha }}
+          restore-keys: composer-${{ runner.os }}-
+      - name: Install Maxima and gnuplot (STACK CAS)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq maxima gnuplot-nox
+          ver=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
+          echo "Installed Maxima $ver"
+          dpkg --compare-versions "$ver" ge 5.46 || { echo "Maxima $ver < 5.46 - STACK will reject it."; exit 1; }
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo "$(cd ci/bin; pwd)" >> "$GITHUB_PATH"
+          echo "$(cd ci/vendor/bin; pwd)" >> "$GITHUB_PATH"
+          sudo locale-gen en_AU.UTF-8
+          echo "NVM_DIR=$HOME/.nvm" >> "$GITHUB_ENV"
+      - name: Install Moodle, STACK and plugin
+        run: |
+          moodle-plugin-ci add-plugin --branch "$STACK_BRANCH" maths/moodle-qtype_stack
+          moodle-plugin-ci add-plugin --branch "$ADAPTIVEMULTIPART_BRANCH" maths/moodle-qbehaviour_adaptivemultipart
+          moodle-plugin-ci add-plugin --branch "$DFEXPLICITVAILDATE_BRANCH" maths/moodle-qbehaviour_dfexplicitvaildate
+          moodle-plugin-ci add-plugin --branch "$DFCBMEXPLICITVAILDATE_BRANCH" maths/moodle-qbehaviour_dfcbmexplicitvaildate
+          moodle-plugin-ci add-plugin --branch "$IMPORTASVERSION_BRANCH" maths/moodle-qbank_importasversion
+          moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
+        env:
+          DB: ${{ matrix.database }}
+          MOODLE_BRANCH: ${{ matrix.moodle }}
+      # After install: NO <plugin> argument (default from ci/.env = installed copy in the tree).
+      - name: PHP Lint
+        if: ${{ always() }}
+        run: moodle-plugin-ci phplint 2>&1 | tee ci-logs/phplint.log
+      - name: PHP Copy/Paste Detector
+        continue-on-error: true
+        if: ${{ always() }}
+        run: moodle-plugin-ci phpcpd 2>&1 | tee ci-logs/phpcpd.log
+      - name: PHP Mess Detector
+        continue-on-error: true
+        if: ${{ always() }}
+        run: moodle-plugin-ci phpmd 2>&1 | tee ci-logs/phpmd.log
+      - name: Moodle Code Checker
+        if: ${{ always() }}
+        run: moodle-plugin-ci codechecker --max-warnings 0 --exclude=PSR1.Classes.ClassDeclaration,moodle.Commenting.TodoComment 2>&1 | tee ci-logs/codechecker.log
+      - name: Moodle PHPDoc Checker
+        if: ${{ always() }}
+        run: moodle-plugin-ci phpdoc --max-warnings 0 2>&1 | tee ci-logs/phpdoc.log
+      - name: Validating
+        if: ${{ always() }}
+        run: moodle-plugin-ci validate 2>&1 | tee ci-logs/validate.log
+      - name: Check upgrade savepoints
+        if: ${{ always() }}
+        run: moodle-plugin-ci savepoints 2>&1 | tee ci-logs/savepoints.log
+      - name: Mustache Lint
+        if: ${{ always() }}
+        run: moodle-plugin-ci mustache 2>&1 | tee ci-logs/mustache.log
+      - name: Grunt (ESLint, AMD build freshness, stylelint, gherkinlint)
+        if: ${{ always() && matrix.grunt }}
+        run: moodle-plugin-ci grunt --max-lint-warnings 0 2>&1 | tee ci-logs/grunt.log
+      - name: PHPUnit tests
+        if: ${{ always() }}
+        run: moodle-plugin-ci phpunit --fail-on-warning --testdox 2>&1 | tee ci-logs/phpunit.log
+      - name: Initialise STACK CAS for the Behat site
+        id: stackinit
+        if: ${{ always() }}
+        working-directory: moodle
+        run: php "$GITHUB_WORKSPACE/plugin/.github/stack-behat-init.php" 2>&1 | tee ../ci-logs/stack-behat-init.log
+      - name: Behat - STACK CAS preflight (@stack_init)
+        id: behat-preflight
+        if: ${{ always() && steps.stackinit.outcome == 'success' }}
+        run: |
+          moodle-plugin-ci behat --profile chrome --auto-rerun 0 \
+            --tags "@stack_init&&~@broken&&~@wip" --dump 2>&1 | tee ci-logs/behat-stack-init.log
+      - name: Behat - all plugin scenarios
+        id: behat
+        if: ${{ always() && steps.behat-preflight.outcome == 'success' }}
+        run: |
+          moodle-plugin-ci behat --profile chrome --auto-rerun 0 \
+            --tags "@local_stackmatheditor&&~@broken&&~@wip&&~@stack_init" --dump 2>&1 | tee ci-logs/behat.log
+      - name: Collect error summary
+        if: ${{ always() }}
+        run: |
+          for dir in behat_dump behat_faildump; do
+            if [ -d "$GITHUB_WORKSPACE/moodledata/$dir" ]; then
+              mkdir -p "ci-logs/$dir"
+              cp -a "$GITHUB_WORKSPACE/moodledata/$dir/." "ci-logs/$dir/"
+            fi
+          done
+          {
+            echo "job: ${{ github.job }} (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.database }})"
+            echo "status: ${{ job.status }}"
+            echo "ref:    ${{ github.ref }}"
+            echo ""
+            ls -1 ci-logs
+          } > ci-logs/summary.txt
+          cat ci-logs/summary.txt
+      - name: Upload error summary (ZIP)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: error-summary-main-${{ matrix.moodle }}-${{ matrix.php }}-${{ matrix.database }}
+          path: ci-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
+  jest:
+    name: "Jest (AMD conversion logic)"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tests/jest/package-lock.json
+      - name: Install Jest
+        working-directory: tests/jest
+        run: npm ci --no-audit --no-fund
+      - name: Jest tests
+        working-directory: tests/jest
+        run: npm test
+
+  release-artefact:
+    name: Release artefact contents
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v6
+
+      - name: Build the release archive exactly as it will be distributed
+        run: |
+          # git archive is what honours .gitattributes export-ignore. Building the artefact here
+          # means the gate tests the file set that is actually shipped, not the working tree.
+          git archive --format=tar --prefix=stackmatheditor/ HEAD > /tmp/release.tar
+          tar -tf /tmp/release.tar > /tmp/release.list
+          echo "Artefact contains $(wc -l < /tmp/release.list) entries."
+
+      - name: No developer tooling, CI plumbing or test harnesses may ship
+        run: |
+          rc=0
+          while read -r forbidden; do
+            if grep -qE "^stackmatheditor/${forbidden}" /tmp/release.list; then
+              echo "FORBIDDEN in release artefact: $forbidden"
+              grep -E "^stackmatheditor/${forbidden}" /tmp/release.list | head -5
+              rc=1
+            fi
+          done <<'PATTERNS'
+          tools/
+          docs/
+          \.github/
+          \.idea/
+          tests/load/
+          tests/playwright/
+          tests/jest/
+          \.gitattributes
+          \.gitignore
+          \.moodle-plugin-ci\.yml
+          makefile
+          phpcs\.xml
+          PATTERNS
+          if [[ $rc -ne 0 ]]; then
+            echo "The release artefact must not contain developer tooling."
+            exit 1
+          fi
+          echo "Artefact is clean."
+
+      - name: The artefact must still contain what Moodle runs
+        run: |
+          for required in \
+            stackmatheditor/version.php \
+            stackmatheditor/lang/en/local_stackmatheditor.php \
+            stackmatheditor/db/install.xml \
+            stackmatheditor/amd/build/ \
+            stackmatheditor/thirdparty/mathquill/mathquill.js \
+            stackmatheditor/thirdpartylibs.xml; do
+            if ! grep -q "^${required}" /tmp/release.list; then
+              echo "MISSING in release artefact: $required"
+              exit 1
+            fi
+          done
+          echo "Required contents present."
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: 'postgres'
+          POSTGRES_HOST_AUTH_METHOD: 'trust'
+        ports:
+          - 5432:5432
+        options: --health-cmd=pg_isready --health-interval=10s --health-timeout=5s --health-retries=3
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v6
+        with:
+          path: plugin
+      - name: Set up PHP with a coverage driver
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          # pcov is enough for line coverage and far faster than xdebug.
+          coverage: pcov
+          ini-values: max_input_vars=5000
+      - name: Install Maxima and gnuplot (STACK CAS)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq maxima gnuplot-nox
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo "$(cd ci/bin; pwd)" >> "$GITHUB_PATH"
+          echo "$(cd ci/vendor/bin; pwd)" >> "$GITHUB_PATH"
+          sudo locale-gen en_AU.UTF-8
+          echo "NVM_DIR=$HOME/.nvm" >> "$GITHUB_ENV"
+      - name: Install Moodle, STACK and plugin
+        run: |
+          moodle-plugin-ci add-plugin --branch "$STACK_BRANCH" maths/moodle-qtype_stack
+          moodle-plugin-ci add-plugin --branch "$ADAPTIVEMULTIPART_BRANCH" maths/moodle-qbehaviour_adaptivemultipart
+          moodle-plugin-ci add-plugin --branch "$DFEXPLICITVAILDATE_BRANCH" maths/moodle-qbehaviour_dfexplicitvaildate
+          moodle-plugin-ci add-plugin --branch "$DFCBMEXPLICITVAILDATE_BRANCH" maths/moodle-qbehaviour_dfcbmexplicitvaildate
+          moodle-plugin-ci add-plugin --branch "$IMPORTASVERSION_BRANCH" maths/moodle-qbank_importasversion
+          moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
+        env:
+          DB: pgsql
+          MOODLE_BRANCH: MOODLE_405_STABLE
+      - name: Run PHPUnit with coverage
+        run: |
+          # Clover XML instead of --coverage-text: the text report covers the whole Moodle tree,
+          # which says nothing about this plugin. Clover gives per-file counters, so the gate can
+          # measure exactly this plugin. The report is written to $PWD/coverage.xml.
+          moodle-plugin-ci phpunit --coverage-clover --coverage-pcov
+      - name: Enforce the coverage floor for this plugin
+        run: php plugin/tools/coverage_gate.php coverage.xml "$COVERAGE_FLOOR"
+        env:
+          # Ratchet: measured 42.41 % (545/1285) on 2026-09-10 (Moodle 4.5, PHP 8.3, pcov).
+          # Raise it whenever new tests lift the figure; never lower it silently.
+          COVERAGE_FLOOR: '40'
+      - name: Upload the Clover report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-clover
+          path: coverage.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
+  maturity-gate:
+    name: Release gate
+    needs: [test, jest, release-artefact, coverage]
+    runs-on: ubuntu-24.04
+    # Without always() this job is skipped whenever one of its dependencies fails - and a skipped
+    # job is not re-executed by "re-run failed jobs", so it stays skipped for good and keeps
+    # ci-complete red even after every real failure has been fixed.
+    if: always()
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v6
+      - name: Every release gate must be green
+        run: |
+          rc=0
+          for entry in \
+            "test=${{ needs.test.result }}" \
+            "jest=${{ needs.jest.result }}" \
+            "release-artefact=${{ needs.release-artefact.result }}" \
+            "coverage=${{ needs.coverage.result }}"; do
+            echo "  ${entry%%=*}: ${entry#*=}"
+            if [[ "${entry#*=}" != "success" ]]; then
+              rc=1
+            fi
+          done
+          if [[ $rc -ne 0 ]]; then
+            echo "At least one release gate is not green (see list above)."
+            exit 1
+          fi
+          maturity=$(grep -oE 'MATURITY_[A-Z]+' version.php | head -1)
+          release=$(grep -oE "\\\$plugin->release[[:space:]]*=[[:space:]]*'[^']+'" version.php | grep -oE "'[^']+'")
+          echo "Declared maturity: ${maturity:-unknown}, release ${release:-unknown}"
+          echo "All release gates are green."
+
+  stale-files:
+    name: Stale files
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v6
+      - name: Files removed in earlier releases must not still be present
+        run: |
+          list=db/removed_files.txt
+          if [[ ! -f "$list" ]]; then
+            echo "No list of removed files - nothing to check."
+            exit 0
+          fi
+          rc=0
+          while IFS= read -r path; do
+            [[ -z "$path" || "$path" == \#* ]] && continue
+            if [[ -e "$path" ]]; then
+              echo "Stale file still present: $path"
+              rc=1
+            fi
+          done < "$list"
+          if [[ $rc -ne 0 ]]; then
+            echo "These files were removed in earlier releases and must be deleted (git rm)."
+            exit 1
+          fi
+          echo "No stale files found."
+
+  ci-complete:
+    name: CI complete
+    needs: [maturity-gate, stale-files]
+    runs-on: ubuntu-24.04
+    if: always()
+    steps:
+      - name: All gates must have succeeded
+        run: |
+          # Only the two aggregating jobs are evaluated here; the matrix, Jest, artefact and
+          # coverage results are judged once, inside maturity-gate.
+          rc=0
+          for entry in \
+            "maturity-gate=${{ needs.maturity-gate.result }}" \
+            "stale-files=${{ needs.stale-files.result }}"; do
+            echo "  ${entry%%=*}: ${entry#*=}"
+            if [[ "${entry#*=}" != "success" ]]; then
+              rc=1
+            fi
+          done
+          if [[ $rc -ne 0 ]]; then
+            echo "At least one gate is not green (see list above)."
+            exit 1
+          fi
+          echo "All CI gates passed."

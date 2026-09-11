@@ -53,7 +53,7 @@ temp/
 
 # Dependencies
 /vendor/
-/node_modules/
+node_modules/
 
 # Frontend build artifacts
 /dist/
@@ -66,3 +66,19 @@ temp/
 *.gz
 *.tgz
 *.7z
+
+# Test harness artefacts (the harnesses themselves are versioned)
+tests/playwright/playwright-report/
+tests/playwright/test-results/
+tests/playwright/blob-report/
+tests/load/apache-jmeter-*/
+tests/load/jmeter-report/
+tests/load/*.jtl
+tests/load/k6-summary.json
+tests/load/.load-env
+coverage.xml
+
+# moodle-plugin-ci working directories (when run from the plugin checkout)
+/ci/
+/moodle/
+/moodledata/

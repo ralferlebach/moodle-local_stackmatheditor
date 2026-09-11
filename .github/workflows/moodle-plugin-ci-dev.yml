@@ -1,0 +1,508 @@
+##############################################################################
+# Moodle Plugin CI - development (accelerated) pipeline - local_stackmatheditor
+#
+# Runs on push / PR to every branch EXCEPT main (development, feature branches).
+# Parallel jobs:
+#   lint-php      phplint (gates phpunit and behat)
+#   codeanalysis  phpmd / phpcpd (advisory, never blocking)
+#   quality       codechecker / phpdoc / savepoints / validate / mustache /
+#                 grunt - all inside a Moodle tree (several sniffs stay silent
+#                 on a standalone directory)
+#   jest          conversion logic of the AMD modules (tex2max / max2tex)
+#   phpunit       reduced matrix Moodle 4.5 / 5.0 / 5.2
+#   behat         Moodle 4.5 with a working STACK CAS (Maxima)
+#   stale-files   db/removed_files.txt must not be present any more
+#   ci-complete   single status check for branch protection
+#
+# The full sequential matrix runs on main via moodle-plugin-ci-main.yml.
+#
+# STACK notes (hard-won, see docs/ENTWICKLUNGSUMGEBUNG.md, section 11):
+# - qtype_stack is a hard dependency. Its install.php calls Maxima while the
+#   PHPUnit/Behat test sites are initialised, so Maxima must be installed
+#   BEFORE `moodle-plugin-ci install`.
+# - ubuntu-22.04 only ships Maxima 5.45.1 which STACK rejects; every job that
+#   initialises a test site therefore runs on ubuntu-24.04 (Maxima >= 5.46).
+# - qbehaviour_adaptivemultipart, qbehaviour_dfexplicitvaildate,
+#   qbehaviour_dfcbmexplicitvaildate and qbank_importasversion are dependencies
+#   of qtype_stack, not of this plugin. A real site installation aborts without
+#   them before this plugin is even reached.
+# - Behat: `.github/stack-behat-init.php` sets platform=linux in the Behat DB,
+#   the @stack_init preflight proves the CAS works, and every CAS-dependent
+#   scenario resets the platform through an explicit Gherkin step.
+##############################################################################
+
+name: Moodle Plugin CI Dev
+
+on:
+  push:
+    branches-ignore:
+      - main
+    tags:
+      - '[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+'
+  pull_request:
+    branches-ignore:
+      - main
+
+concurrency:
+  group: ci-dev-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    # Explicit bash enables -o pipefail, so `cmd | tee log` keeps the exit code of cmd.
+    shell: bash
+
+env:
+  # qtype_stack and every plugin it declares as a dependency (STACK >= 4.13 added the two
+  # dfexplicitvaildate behaviours and qbank_importasversion). Pin a branch to a tag or commit
+  # when a STACK release breaks the pipeline.
+  STACK_BRANCH: master
+  ADAPTIVEMULTIPART_BRANCH: master
+  DFEXPLICITVAILDATE_BRANCH: master
+  DFCBMEXPLICITVAILDATE_BRANCH: master
+  IMPORTASVERSION_BRANCH: main
+
+jobs:
+
+  lint-php:
+    name: "PHP lint (phplint)"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: plugin
+      - name: Prepare log directory
+        run: mkdir -p ci-logs
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          ini-values: max_input_vars=5000
+          coverage: none
+      - name: Cache Composer downloads
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ github.sha }}
+          restore-keys: composer-${{ runner.os }}-
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo "$(cd ci/bin; pwd)" >> "$GITHUB_PATH"
+          echo "$(cd ci/vendor/bin; pwd)" >> "$GITHUB_PATH"
+      # No install in this job, so the <plugin> argument is mandatory.
+      - name: PHP Lint
+        run: moodle-plugin-ci phplint plugin 2>&1 | tee ci-logs/phplint.log
+      - name: Collect error summary
+        if: ${{ always() }}
+        run: |
+          { echo "job: lint-php"; echo "status: ${{ job.status }}"; echo "ref: ${{ github.ref }}"; echo ""; ls -1 ci-logs; } > ci-logs/summary.txt
+          cat ci-logs/summary.txt
+      - name: Upload error summary (ZIP)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: error-summary-dev-lint-php
+          path: ci-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
+  codeanalysis:
+    name: "Code analysis (phpmd + phpcpd, advisory)"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: plugin
+      - name: Prepare log directory
+        run: mkdir -p ci-logs
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          ini-values: max_input_vars=5000
+          coverage: none
+      - name: Cache Composer downloads
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ github.sha }}
+          restore-keys: composer-${{ runner.os }}-
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo "$(cd ci/bin; pwd)" >> "$GITHUB_PATH"
+          echo "$(cd ci/vendor/bin; pwd)" >> "$GITHUB_PATH"
+      - name: PHP Mess Detector
+        continue-on-error: true
+        if: ${{ always() }}
+        run: moodle-plugin-ci phpmd plugin 2>&1 | tee ci-logs/phpmd.log
+      - name: PHP Copy/Paste Detector
+        continue-on-error: true
+        if: ${{ always() }}
+        run: moodle-plugin-ci phpcpd plugin 2>&1 | tee ci-logs/phpcpd.log
+      - name: Collect error summary
+        if: ${{ always() }}
+        run: |
+          { echo "job: codeanalysis"; echo "status: ${{ job.status }}"; echo "ref: ${{ github.ref }}"; echo ""; ls -1 ci-logs; } > ci-logs/summary.txt
+          cat ci-logs/summary.txt
+      - name: Upload error summary (ZIP)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: error-summary-dev-codeanalysis
+          path: ci-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
+  quality:
+    name: "Quality (codechecker / phpdoc / savepoints / validate / mustache / grunt)"
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: 'postgres'
+          POSTGRES_HOST_AUTH_METHOD: 'trust'
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: plugin
+      - name: Prepare log directory
+        run: mkdir -p ci-logs
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          ini-values: max_input_vars=5000
+          coverage: none
+      - name: Cache Composer downloads
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ github.sha }}
+          restore-keys: composer-${{ runner.os }}-
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo "$(cd ci/bin; pwd)" >> "$GITHUB_PATH"
+          echo "$(cd ci/vendor/bin; pwd)" >> "$GITHUB_PATH"
+          sudo locale-gen en_AU.UTF-8
+          echo "NVM_DIR=$HOME/.nvm" >> "$GITHUB_ENV"
+      # --no-init: no PHPUnit/Behat site is initialised, so STACK never calls Maxima here.
+      # MOODLE_405_STABLE is the branch the committed amd/build is produced with (make amd);
+      # grunt fails on a stale build, and a different Moodle branch may minify differently.
+      - name: Install Moodle, STACK and plugin (no test init)
+        run: |
+          moodle-plugin-ci add-plugin --branch "$STACK_BRANCH" maths/moodle-qtype_stack
+          moodle-plugin-ci add-plugin --branch "$ADAPTIVEMULTIPART_BRANCH" maths/moodle-qbehaviour_adaptivemultipart
+          moodle-plugin-ci add-plugin --branch "$DFEXPLICITVAILDATE_BRANCH" maths/moodle-qbehaviour_dfexplicitvaildate
+          moodle-plugin-ci add-plugin --branch "$DFCBMEXPLICITVAILDATE_BRANCH" maths/moodle-qbehaviour_dfcbmexplicitvaildate
+          moodle-plugin-ci add-plugin --branch "$IMPORTASVERSION_BRANCH" maths/moodle-qbank_importasversion
+          moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1 --no-init
+        env:
+          DB: pgsql
+          MOODLE_BRANCH: MOODLE_405_STABLE
+      # After install: NO <plugin> argument. The default comes from ci/.env and points to the
+      # installed copy inside the Moodle tree - which is what makes the tree-only sniffs fire.
+      - name: Moodle Code Checker
+        if: ${{ always() }}
+        run: moodle-plugin-ci codechecker --max-warnings 0 --exclude=PSR1.Classes.ClassDeclaration,moodle.Commenting.TodoComment 2>&1 | tee ci-logs/codechecker.log
+      - name: Moodle PHPDoc Checker
+        if: ${{ always() }}
+        run: moodle-plugin-ci phpdoc --max-warnings 0 2>&1 | tee ci-logs/phpdoc.log
+      - name: Check upgrade savepoints
+        if: ${{ always() }}
+        run: moodle-plugin-ci savepoints 2>&1 | tee ci-logs/savepoints.log
+      - name: Validating
+        if: ${{ always() }}
+        run: moodle-plugin-ci validate 2>&1 | tee ci-logs/validate.log
+      - name: Mustache Lint
+        if: ${{ always() }}
+        run: moodle-plugin-ci mustache 2>&1 | tee ci-logs/mustache.log
+      - name: Grunt (ESLint, AMD build freshness, stylelint, gherkinlint)
+        if: ${{ always() }}
+        run: moodle-plugin-ci grunt --max-lint-warnings 0 2>&1 | tee ci-logs/grunt.log
+      - name: Collect error summary
+        if: ${{ always() }}
+        run: |
+          { echo "job: quality"; echo "status: ${{ job.status }}"; echo "ref: ${{ github.ref }}"; echo ""; ls -1 ci-logs; } > ci-logs/summary.txt
+          cat ci-logs/summary.txt
+      - name: Upload error summary (ZIP)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: error-summary-dev-quality
+          path: ci-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
+  jest:
+    name: "Jest (AMD conversion logic)"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Prepare log directory
+        run: mkdir -p ci-logs
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tests/jest/package-lock.json
+      - name: Install Jest
+        working-directory: tests/jest
+        run: npm ci --no-audit --no-fund
+      - name: Jest tests
+        working-directory: tests/jest
+        run: npm test 2>&1 | tee ../../ci-logs/jest.log
+      - name: Upload error summary (ZIP)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: error-summary-dev-jest
+          path: ci-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
+  phpunit:
+    name: "PHPUnit / ${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.database }}"
+    runs-on: ubuntu-24.04
+    needs: [lint-php]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: 'postgres'
+          POSTGRES_HOST_AUTH_METHOD: 'trust'
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MYSQL_USER: 'root'
+          MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 3
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { moodle: MOODLE_405_STABLE, php: '8.2', database: pgsql }
+          - { moodle: MOODLE_500_STABLE, php: '8.3', database: mariadb }
+          - { moodle: MOODLE_502_STABLE, php: '8.3', database: pgsql }
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: plugin
+      - name: Prepare log directory
+        run: mkdir -p ci-logs
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          ini-values: max_input_vars=5000
+          coverage: none
+      - name: Cache Composer downloads
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ github.sha }}
+          restore-keys: composer-${{ runner.os }}-
+      - name: Install Maxima and gnuplot (STACK CAS)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq maxima gnuplot-nox
+          ver=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
+          echo "Installed Maxima $ver"
+          dpkg --compare-versions "$ver" ge 5.46 || { echo "Maxima $ver < 5.46 - STACK will reject it."; exit 1; }
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo "$(cd ci/bin; pwd)" >> "$GITHUB_PATH"
+          echo "$(cd ci/vendor/bin; pwd)" >> "$GITHUB_PATH"
+          sudo locale-gen en_AU.UTF-8
+          echo "NVM_DIR=$HOME/.nvm" >> "$GITHUB_ENV"
+      - name: Install Moodle, STACK and plugin
+        run: |
+          moodle-plugin-ci add-plugin --branch "$STACK_BRANCH" maths/moodle-qtype_stack
+          moodle-plugin-ci add-plugin --branch "$ADAPTIVEMULTIPART_BRANCH" maths/moodle-qbehaviour_adaptivemultipart
+          moodle-plugin-ci add-plugin --branch "$DFEXPLICITVAILDATE_BRANCH" maths/moodle-qbehaviour_dfexplicitvaildate
+          moodle-plugin-ci add-plugin --branch "$DFCBMEXPLICITVAILDATE_BRANCH" maths/moodle-qbehaviour_dfcbmexplicitvaildate
+          moodle-plugin-ci add-plugin --branch "$IMPORTASVERSION_BRANCH" maths/moodle-qbank_importasversion
+          moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
+        env:
+          DB: ${{ matrix.database }}
+          MOODLE_BRANCH: ${{ matrix.moodle }}
+      - name: PHPUnit tests
+        if: ${{ always() }}
+        run: moodle-plugin-ci phpunit --fail-on-warning --testdox 2>&1 | tee ci-logs/phpunit.log
+      - name: Collect error summary
+        if: ${{ always() }}
+        run: |
+          { echo "job: phpunit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.database }})"; echo "status: ${{ job.status }}"; echo "ref: ${{ github.ref }}"; echo ""; ls -1 ci-logs; } > ci-logs/summary.txt
+          cat ci-logs/summary.txt
+      - name: Upload error summary (ZIP)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: error-summary-dev-phpunit-${{ matrix.moodle }}-${{ matrix.php }}-${{ matrix.database }}
+          path: ci-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
+  behat:
+    name: "Behat / MOODLE_405_STABLE / PHP 8.2 / Chrome"
+    runs-on: ubuntu-24.04
+    needs: [lint-php]
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MYSQL_USER: 'root'
+          MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 3
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: plugin
+      - name: Prepare log directory
+        run: mkdir -p ci-logs
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          ini-values: max_input_vars=5000
+          coverage: none
+      - name: Cache Composer downloads
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ github.sha }}
+          restore-keys: composer-${{ runner.os }}-
+      - name: Install Maxima and gnuplot (STACK CAS)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq maxima gnuplot-nox
+          ver=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
+          echo "Installed Maxima $ver"
+          dpkg --compare-versions "$ver" ge 5.46 || { echo "Maxima $ver < 5.46 - STACK will reject it."; exit 1; }
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo "$(cd ci/bin; pwd)" >> "$GITHUB_PATH"
+          echo "$(cd ci/vendor/bin; pwd)" >> "$GITHUB_PATH"
+          sudo locale-gen en_AU.UTF-8
+          echo "NVM_DIR=$HOME/.nvm" >> "$GITHUB_ENV"
+      - name: Install Moodle, STACK and plugin
+        run: |
+          moodle-plugin-ci add-plugin --branch "$STACK_BRANCH" maths/moodle-qtype_stack
+          moodle-plugin-ci add-plugin --branch "$ADAPTIVEMULTIPART_BRANCH" maths/moodle-qbehaviour_adaptivemultipart
+          moodle-plugin-ci add-plugin --branch "$DFEXPLICITVAILDATE_BRANCH" maths/moodle-qbehaviour_dfexplicitvaildate
+          moodle-plugin-ci add-plugin --branch "$DFCBMEXPLICITVAILDATE_BRANCH" maths/moodle-qbehaviour_dfcbmexplicitvaildate
+          moodle-plugin-ci add-plugin --branch "$IMPORTASVERSION_BRANCH" maths/moodle-qbank_importasversion
+          moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
+        env:
+          DB: mariadb
+          MOODLE_BRANCH: MOODLE_405_STABLE
+      # Works in the Behat DB context (BEHAT_UTIL): platform=linux, castimeout=300, genuine
+      # CAS connect. Exits 1 when the CAS is broken, so Behat never runs against it.
+      - name: Initialise STACK CAS for the Behat site
+        working-directory: moodle
+        run: php "$GITHUB_WORKSPACE/plugin/.github/stack-behat-init.php" 2>&1 | tee ../ci-logs/stack-behat-init.log
+      # Servers (Selenium + PHP) are started by moodle-plugin-ci itself: install writes
+      # MOODLE_START_BEHAT_SERVERS=YES into ci/.env. --auto-rerun 0 keeps failures deterministic.
+      - name: Behat - STACK CAS preflight (@stack_init)
+        id: behat-preflight
+        run: |
+          moodle-plugin-ci behat --profile chrome --auto-rerun 0 \
+            --tags "@stack_init&&~@broken&&~@wip" --dump 2>&1 | tee ci-logs/behat-stack-init.log
+      - name: Behat - all plugin scenarios
+        id: behat
+        run: |
+          moodle-plugin-ci behat --profile chrome --auto-rerun 0 \
+            --tags "@local_stackmatheditor&&~@broken&&~@wip&&~@stack_init" --dump 2>&1 | tee ci-logs/behat.log
+      - name: Show relevant Behat failures
+        if: ${{ failure() }}
+        run: |
+          grep -h -n -E 'Scenario:|Exception|Error|Failed|Coding error|stack_cas_connection|Fatal error|not found|does not equal' \
+            ci-logs/behat-stack-init.log ci-logs/behat.log 2>/dev/null | head -200 || true
+      - name: Collect error summary and Behat dumps
+        if: ${{ always() }}
+        run: |
+          for dir in behat_dump behat_faildump; do
+            if [ -d "$GITHUB_WORKSPACE/moodledata/$dir" ]; then
+              mkdir -p "ci-logs/$dir"
+              cp -a "$GITHUB_WORKSPACE/moodledata/$dir/." "ci-logs/$dir/"
+            fi
+          done
+          { echo "job: behat"; echo "status: ${{ job.status }}"; echo "ref: ${{ github.ref }}"; echo ""; ls -1 ci-logs; } > ci-logs/summary.txt
+          cat ci-logs/summary.txt
+      - name: Upload error summary (ZIP)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: error-summary-dev-behat
+          path: ci-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
+  stale-files:
+    name: Stale files
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v6
+      - name: Files removed in earlier releases must not still be present
+        run: |
+          # Unpacking a patch ZIP adds and overwrites files but never deletes any, so a file
+          # removed upstream survives in an installed copy or in a repository updated that way.
+          # It then still autoloads, duplicates a class, or reads columns that no longer exist.
+          list=db/removed_files.txt
+          if [[ ! -f "$list" ]]; then
+            echo "No list of removed files - nothing to check."
+            exit 0
+          fi
+          rc=0
+          while IFS= read -r path; do
+            [[ -z "$path" || "$path" == \#* ]] && continue
+            if [[ -e "$path" ]]; then
+              echo "Stale file still present: $path"
+              rc=1
+            fi
+          done < "$list"
+          if [[ $rc -ne 0 ]]; then
+            echo "These files were removed in earlier releases and must be deleted (git rm)."
+            exit 1
+          fi
+          echo "No stale files found."
+
+  ci-complete:
+    name: CI complete
+    needs: [lint-php, codeanalysis, quality, jest, phpunit, behat, stale-files]
+    runs-on: ubuntu-24.04
+    if: always()
+    steps:
+      - name: All dev jobs must have succeeded
+        run: |
+          rc=0
+          for entry in \
+            "lint-php=${{ needs.lint-php.result }}" \
+            "codeanalysis=${{ needs.codeanalysis.result }}" \
+            "quality=${{ needs.quality.result }}" \
+            "jest=${{ needs.jest.result }}" \
+            "phpunit=${{ needs.phpunit.result }}" \
+            "behat=${{ needs.behat.result }}" \
+            "stale-files=${{ needs.stale-files.result }}"; do
+            echo "  ${entry%%=*}: ${entry#*=}"
+            if [[ "${entry#*=}" != "success" ]]; then
+              rc=1
+            fi
+          done
+          if [[ $rc -ne 0 ]]; then
+            echo "At least one dev job failed or was cancelled (see list above)."
+            exit 1
+          fi
+          echo "All dev CI jobs passed."

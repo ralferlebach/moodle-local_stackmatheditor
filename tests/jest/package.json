@@ -1,0 +1,13 @@
+{
+  "name": "local_stackmatheditor-jest",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Jest unit tests for the AMD conversion modules of local_stackmatheditor.",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "test": "jest"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}

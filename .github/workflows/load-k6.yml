@@ -1,0 +1,126 @@
+##############################################################################
+# Load test (k6) - local_stackmatheditor - twin of load-jmeter.yml
+#
+# Modes:
+#   selfcontained (default): build a fresh Moodle + STACK + plugin site here,
+#                            serve it and run the plan against it.
+#   external:                point at a Moodle you already run (base_url).
+#
+# Triggers: manual (the button needs this file on the DEFAULT branch), plus
+# push to non-main branches when the load harness or this workflow changes -
+# so the first push of this file runs it once. Push runs use the defaults.
+##############################################################################
+
+name: Load test (k6)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'selfcontained (build + serve here) or external (your own site)'
+        type: choice
+        options: [selfcontained, external]
+        default: selfcontained
+        required: true
+      base_url:
+        description: '[external mode] Base URL of your Moodle (no trailing slash)'
+        required: false
+      vus:
+        description: Concurrent virtual users
+        default: '5'
+        required: false
+      duration:
+        description: Duration in seconds
+        default: '15'
+        required: false
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - 'tests/load/**'
+      - '.github/build-test-site.sh'
+      - '.github/serve-test-site.sh'
+      - '.github/workflows/load-k6.yml'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  k6:
+    name: "k6 smoke / ${{ inputs.mode || 'selfcontained' }}"
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: moodle
+          POSTGRES_PASSWORD: moodle
+          POSTGRES_DB: moodle
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready" --health-interval=10s
+          --health-timeout=5s --health-retries=5
+    env:
+      # Inputs are empty on push; every value therefore carries its own default.
+      MODE: ${{ inputs.mode || 'selfcontained' }}
+      VUS: ${{ inputs.vus || '5' }}
+      DURATION: ${{ inputs.duration || '15' }}
+      EXTERNAL_BASE_URL: ${{ inputs.base_url }}
+      MOODLE_BRANCH: MOODLE_405_STABLE
+      MOODLE_WWWROOT: http://127.0.0.1:8000
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v6
+        with:
+          path: plugin
+      - name: Set up PHP
+        if: ${{ env.MODE == 'selfcontained' }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pgsql, gd, intl, zip, soap, mbstring, curl, xml, exif
+          ini-values: max_input_vars=5000
+      - name: Install Maxima and gnuplot (STACK CAS)
+        if: ${{ env.MODE == 'selfcontained' }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq maxima gnuplot-nox
+      - name: Build and install the test site (Moodle + STACK + plugin)
+        if: ${{ env.MODE == 'selfcontained' }}
+        run: bash plugin/.github/build-test-site.sh
+      - name: Set up k6
+        uses: grafana/setup-k6-action@v1
+      - name: Run the k6 smoke plan
+        run: |
+          if [ "$MODE" = "external" ]; then
+            if [ -z "$EXTERNAL_BASE_URL" ]; then
+              echo "external mode needs base_url."
+              exit 1
+            fi
+            base="$EXTERNAL_BASE_URL"
+          else
+            # The web server is started inside THIS step (see serve-test-site.sh).
+            . plugin/.github/serve-test-site.sh
+            base="$MOODLE_WWWROOT"
+          fi
+          echo "Target: $base, VUs: $VUS, duration: ${DURATION}s"
+          # A failed check or threshold makes k6 exit non-zero (99), which fails this step.
+          k6 run \
+            -e BASE_URL="$base" \
+            -e VUS="$VUS" \
+            -e DURATION="${DURATION}s" \
+            --summary-export=k6-summary.json \
+            plugin/tests/load/stackmatheditor-smoke.js
+      - name: Show Moodle server log on failure
+        if: ${{ failure() && env.MODE == 'selfcontained' }}
+        run: tail -100 /tmp/moodle-server.log || true
+      - name: Upload results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: k6-summary
+          path: k6-summary.json
+          retention-days: 7
+          if-no-files-found: ignore
