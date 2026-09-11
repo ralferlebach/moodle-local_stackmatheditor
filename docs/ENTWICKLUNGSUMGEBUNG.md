@@ -359,6 +359,7 @@ Before finishing:
 | Behat-Schritt findet deutschen Text nicht | Feature-Dateien müssen englische UI-Strings verwenden |
 | JMeter-Job grün, obwohl alles 404 war | JMeter endet immer mit 0 — nur `check_jtl.py` entscheidet |
 | Stale-files-Job rot | Datei aus `db/removed_files.txt` liegt noch im Repo — `git rm` |
+| Testseite: STACK-Fragen zeigen „unexpected internal error … marked as broken during editing or import", kein Editor | Beim Import validiert STACK jede Frage mit dem CAS; auf einer frisch installierten Seite ist `maximacommand` leer. `seed.php` richtet den CAS jetzt vor dem Import ein und bricht ab, falls eine Frage als defekt markiert wird |
 | Playwright/Last-Workflow: „Environment variable SME_… is not set" | Variablen aus `seed.php` erreichen `$GITHUB_ENV` nur, wenn der `sed`-Filter Ziffern im Namen zulässt (`[A-Z_][A-Z0-9_]*`) |
 
 ---

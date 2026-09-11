@@ -710,3 +710,25 @@ Delivered as `sme_v1.2.0_19.zip` (2026091118).
 - README: MDL Shield badge now links to the public plugin page
   `https://mdlshield.com/plugins/local_stackmatheditor` (image URL unchanged; the badge
   currently shows grade "A").
+
+Delivered as `sme_v1.2.0_20.zip` (2026091119).
+
+## 27. Iteration 22 (2026-09-11) — 2026091120: broken STACK questions on the CI test site
+
+Playwright run `93772663516` (with the environment fix): smoke 3/3 and the configuration-page
+a11y test green; settings "admin on/off", performance and attempt a11y red - no editor appeared
+at all. The screenshot shows every STACK question with "This question generated an unexpected
+internal error … The question has been marked as broken during editing or import."
+
+Root cause: STACK validates each imported question with the CAS and sets `isbroken` when it
+fails. A freshly installed site (build-test-site.sh) has `qtype_stack | maximacommand` unset, so
+the CAS was unreachable during the seed import. Locally the site had been configured with
+`setup-stack-cas.php` before seeding - which is why it passed here.
+
+Fix in `seed.php`: configure the CAS (platform linux, maxima, maximalocal) and require a genuine
+connection before importing; after each import fail with a clear message if STACK marked the
+question broken.
+
+Verified on a freshly built site exactly like CI (`build-test-site.sh`, `maximacommand` unset):
+0 of 12 STACK questions broken; Playwright with the GitHub-style environment: smoke 3/3,
+settings 6/6 (2.6 min), performance 1/1, a11y 2/2.
