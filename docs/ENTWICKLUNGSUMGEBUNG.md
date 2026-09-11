@@ -270,7 +270,7 @@ GitHub-Lauf der neuen Suiten nachgeschärft.
 | k6 Attempt: Versuchsseite (10 STACK-Fragen) | lokal p95 0,9–1,4 s, max 2,1 s | p95 < 3 s, max < 8 s (vorläufig) |
 | k6 Attempt: `get_config` | lokal p95 0,2 s, max 0,7 s | p95 < 0,8 s, max < 3 s (vorläufig) |
 | JMeter Smoke: Login-Seite / AMD-Modul | max 95 ms / 6 ms | 3000 ms (kalter erster Aufruf bis ~2 s) / 500 ms |
-| JMeter Attempt: Seite / `get_config` / Start | lokal max 4,1 s (Start) | 8000 / 3000 / 10000 ms (vorläufig) |
+| JMeter Attempt: Seite / `get_config` / Start | lokal Start 0,5–2,6 s (CAS-Cache vorgewärmt) | 8000 / 3000 / 20000 ms (vorläufig) |
 
 ### Artefakte
 
@@ -360,6 +360,7 @@ Before finishing:
 | JMeter-Job grün, obwohl alles 404 war | JMeter endet immer mit 0 — nur `check_jtl.py` entscheidet |
 | Stale-files-Job rot | Datei aus `db/removed_files.txt` liegt noch im Repo — `git rm` |
 | Testseite: STACK-Fragen zeigen „unexpected internal error … marked as broken during editing or import", kein Editor | Beim Import validiert STACK jede Frage mit dem CAS; auf einer frisch installierten Seite ist `maximacommand` leer. `seed.php` richtet den CAS jetzt vor dem Import ein und bricht ab, falls eine Frage als defekt markiert wird |
+| Last-Test: „POST start attempt" scheitert oder dauert > 100 s | Kalter CAS: alle simulierten Studierenden starten gleichzeitig, jeder Start instanziiert zehn STACK-Fragen mit frischem Maxima. `seed.php` wärmt den CAS-Ergebnis-Cache vorher an (lokal gemessen: kalt ~108 s je Start, vorgewärmt 0,5–2,6 s) |
 | Playwright/Last-Workflow: „Environment variable SME_… is not set" | Variablen aus `seed.php` erreichen `$GITHUB_ENV` nur, wenn der `sed`-Filter Ziffern im Namen zulässt (`[A-Z_][A-Z0-9_]*`) |
 
 ---

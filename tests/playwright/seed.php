@@ -183,6 +183,33 @@ $loadcm = local_stackmatheditor_seed_quiz(
     array_merge(array_fill(0, 8, 'stack_algebraic.xml'), array_fill(0, 2, 'stack_textarea.xml'))
 );
 
+// Warm STACK's CAS result cache: instantiate every question once now. Otherwise the first
+// attempts of all simulated students start at the same moment, each instantiating ten STACK
+// questions with a fresh Maxima process, and the herd runs into the CAS timeout on a small CI
+// runner - the load test would then measure the cold CAS, not the page and the plugin.
+$started = microtime(true);
+$questionids = $DB->get_fieldset_sql(
+    "SELECT qv.questionid
+       FROM {quiz_slots} qs
+       JOIN {quiz} q ON q.id = qs.quizid
+       JOIN {question_references} qr ON qr.itemid = qs.id
+            AND qr.component = 'mod_quiz' AND qr.questionarea = 'slot'
+       JOIN {question_versions} qv ON qv.questionbankentryid = qr.questionbankentryid
+      WHERE q.course = :courseid",
+    ['courseid' => $course->id]
+);
+$quba = question_engine::make_questions_usage_by_activity('local_stackmatheditor', $context);
+$quba->set_preferred_behaviour('adaptive');
+foreach (array_unique($questionids) as $questionid) {
+    $quba->add_question(question_bank::load_question($questionid));
+}
+$quba->start_all_questions();
+fwrite(STDERR, sprintf(
+    "STACK CAS cache warmed for %d questions in %.1f s.\n",
+    count(array_unique($questionids)),
+    microtime(true) - $started
+));
+
 // Question bank entry ids of the settings quiz, in slot order (question-level configuration).
 $qbeids = $DB->get_fieldset_sql(
     "SELECT qr.questionbankentryid

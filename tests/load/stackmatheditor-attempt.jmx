@@ -8,7 +8,8 @@
 
   Properties: base_url, load_cmid, user_pass (required); threads (10), rampup (10), duration (60 s).
   Maximum response times (Duration Assertions, provisional until the first GitHub run): attempt
-  page 8000 ms, get_config 3000 ms, starting the attempt 10000 ms.
+  page 8000 ms, get_config 3000 ms, starting the attempt 20000 ms (once per student; STACK
+  instantiates ten questions - with the CAS cache warmed by seed.php 0.5-2.6 s locally).
   JMeter exits 0 even when assertions fail - evaluate results.jtl with check_jtl.py.
 
   @copyright 2026 Ralf Erlebach
@@ -26,7 +27,7 @@
     </TestPlan>
     <hashTree>
       <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Students" enabled="true">
-        <stringProp name="ThreadGroup.on_sample_error">startnextloop</stringProp>
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
         <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" enabled="true">
           <boolProp name="LoopController.continue_forever">false</boolProp><intProp name="LoopController.loops">-1</intProp>
         </elementProp>
@@ -43,6 +44,10 @@
         <hashTree/>
         <OnceOnlyController guiclass="OnceOnlyControllerGui" testclass="OnceOnlyController" testname="Log in and start the attempt" enabled="true"/>
         <hashTree>
+        <ResultAction guiclass="ResultActionGui" testclass="ResultAction" testname="Without a session and an attempt the thread has nothing to measure: stop it" enabled="true">
+          <intProp name="OnError.action">1</intProp>
+        </ResultAction>
+        <hashTree/>
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET login page" enabled="true">
           <stringProp name="HTTPSampler.domain"></stringProp>
           <stringProp name="HTTPSampler.path">${base_url}/login/index.php</stringProp>
@@ -96,8 +101,8 @@
             <stringProp name="Assertion.test_field">Assertion.url</stringProp><boolProp name="Assertion.assume_success">false</boolProp>
             <intProp name="Assertion.test_type">16</intProp>
           </ResponseAssertion><hashTree/>
-          <DurationAssertion guiclass="DurationAssertionGui" testclass="DurationAssertion" testname="At most 10000 ms" enabled="true">
-            <stringProp name="DurationAssertion.duration">10000</stringProp>
+          <DurationAssertion guiclass="DurationAssertionGui" testclass="DurationAssertion" testname="At most 20000 ms" enabled="true">
+            <stringProp name="DurationAssertion.duration">20000</stringProp>
           </DurationAssertion>
           <hashTree/></hashTree>
         </hashTree>

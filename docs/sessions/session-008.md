@@ -732,3 +732,28 @@ question broken.
 Verified on a freshly built site exactly like CI (`build-test-site.sh`, `maximacommand` unset):
 0 of 12 STACK questions broken; Playwright with the GitHub-style environment: smoke 3/3,
 settings 6/6 (2.6 min), performance 1/1, a11y 2/2.
+
+Delivered as `sme_v1.2.0_21.zip` (2026091120).
+
+## 28. Iteration 23 (2026-09-11) — 2026091121: cold CAS herd in the attempt load test
+
+JMeter run `93835264702`: smoke 100/100; attempt plan: `POST start attempt` 0/10, then 71 failed
+logins. The failed logins are a follow-up: with `on_sample_error=startnextloop` each thread
+re-ran its once-only login while already logged in.
+
+Reproduced on a site built exactly like CI (fresh, CAS cache empty, 8 PHP workers, 10 threads,
+ramp-up 5 s): every `POST startattempt.php` took ~108 s - ten students start at once, each start
+instantiates ten STACK questions with a fresh Maxima process. After warming the CAS result cache
+once, the same run starts the attempts in 0.5-2.6 s and is green (197 attempt pages, 191
+get_config calls, 0 errors).
+
+Fix:
+- `seed.php` instantiates every seeded STACK question once (question usage, not saved) and so
+  fills STACK's CAS result cache before any test (12 questions in ~10 s locally).
+- JMeter attempt plan: errors in the loop no longer restart the thread; a failed login or attempt
+  start stops that thread (Result Status Action Handler) instead of producing follow-up errors.
+- Start-attempt limit 20 s (once per student).
+
+Note for real courses (not a plugin issue): the first attempts of a STACK quiz started by many
+students at the same moment pay the cold-CAS cost; STACK's optimised Maxima image and the CAS
+cache reduce it.
