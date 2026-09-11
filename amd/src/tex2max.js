@@ -946,6 +946,16 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Drop every "+" that stands in unary position.
+     *
+     * @param {string} s One alternative of a ± / ∓ expansion.
+     * @returns {string} Alternative without unary plus signs.
+     */
+    function stripUnaryPlus(s) {
+        return s.replace(/(^|[=<>#(,[])\s*\+/g, '$1');
+    }
+
+    /**
      * Expand plus-minus (±) and minus-plus (∓) into two coupled alternatives
      * joined by STACK's non-simplifying "nounor" (#30).
      *
@@ -955,8 +965,9 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
      * subtree it belongs to - and every bracket around it - stays unchanged.
      *
      * A "+" that ends up in unary position (start, after a relation, "(", ","
-     * or "[") is dropped from variant A; it carries no meaning and must never
-     * read like "+x = ...". A binary "+" is never touched.
+     * or "[") is dropped from both alternatives - for ± that is the first, for
+     * ∓ the second one (#49); it carries no meaning and must never read like
+     * "+x = ...". A binary "+" is never touched.
      *
      * Both alternatives are wrapped in brackets so that "nounor" never binds
      * into a relation: (x=2) nounor (x=-2).
@@ -975,7 +986,9 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         v1 = s.replace(/\u00b1/g, '+').replace(/\u2213/g, '-');
         v2 = s.replace(/\u00b1/g, '-').replace(/\u2213/g, '+');
 
-        v1 = v1.replace(/(^|[=<>#(,[])\s*\+/g, '$1');
+        // Symmetric (#49): the positive alternative is v1 for ± but v2 for ∓.
+        v1 = stripUnaryPlus(v1);
+        v2 = stripUnaryPlus(v2);
 
         return '(' + v1.trim() + ') ' + OperatorMap.SOLUTION_JOIN + ' (' + v2.trim() + ')';
     }

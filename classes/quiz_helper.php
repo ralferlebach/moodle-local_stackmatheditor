@@ -384,16 +384,19 @@ class quiz_helper {
     }
 
     /**
-     * Return the URL to redirect to after saving configuration.
+     * Return the page a configuration link should lead back to: the current page.
      *
-     * Falls back to the quiz view page if $PAGE->url is not set.
+     * The complete URL including all query parameters is kept, so the Back button returns to
+     * exactly the calling page (view, edit, review, ...). Without a page URL the module's view
+     * page is used (#47).
      *
-     * @param int $cmid Course module ID.
+     * @param int    $cmid    Course module ID.
+     * @param string $modname Module name ('quiz' or 'adaptivequiz').
      * @return string Absolute URL string.
      */
-    public static function get_return_url(int $cmid): string {
+    public static function get_return_url(int $cmid, string $modname = 'quiz'): string {
         global $PAGE;
-        $fallback = (new \moodle_url('/mod/quiz/view.php', ['id' => $cmid]))->out(false);
+        $fallback = self::get_fallback_return_url($cmid, $modname);
         // Accessing $PAGE->url before set_url() triggers debugging() in Moodle 4.x.
         // The has_set_url() check prevents that in both production and test context.
         if (!$PAGE->has_set_url()) {
@@ -405,6 +408,46 @@ class quiz_helper {
         } catch (\Throwable $e) {
             return $fallback;
         }
+    }
+
+    /**
+     * Safe default return target when the calling page is unknown (direct call).
+     *
+     * @param int    $cmid    Course module ID.
+     * @param string $modname Module name ('quiz' or 'adaptivequiz').
+     * @return string Absolute URL string of the module's view page.
+     */
+    public static function get_fallback_return_url(int $cmid, string $modname = 'quiz'): string {
+        $path = $modname === 'adaptivequiz' ? '/mod/adaptivequiz/view.php' : '/mod/quiz/view.php';
+        return (new \moodle_url($path, ['id' => $cmid]))->out(false);
+    }
+
+    /**
+     * Validate a requested return URL; fall back to the module's view page.
+     *
+     * Only URLs on this site are accepted: root-relative paths ("/mod/quiz/edit.php?cmid=5")
+     * or absolute URLs below $CFG->wwwroot. External targets ("https://example.org/"),
+     * protocol-relative ones ("//example.org/"), script URLs and paths relative to the current
+     * directory are rejected, so the Back button can never become an open redirect (#47).
+     *
+     * @param string $raw     Requested URL (e.g. the returnurl parameter).
+     * @param int    $cmid    Course module ID.
+     * @param string $modname Module name ('quiz' or 'adaptivequiz').
+     * @return string Absolute local URL string.
+     */
+    public static function resolve_return_url(string $raw, int $cmid, string $modname = 'quiz'): string {
+        global $CFG;
+        $fallback = self::get_fallback_return_url($cmid, $modname);
+        $clean = clean_param(trim($raw), PARAM_LOCALURL);
+        if ($clean === '') {
+            return $fallback;
+        }
+        $rootrelative = strpos($clean, '/') === 0 && strpos($clean, '//') !== 0;
+        $absolute = stripos($clean, $CFG->wwwroot . '/') === 0;
+        if (!$rootrelative && !$absolute) {
+            return $fallback;
+        }
+        return (new \moodle_url($clean))->out(false);
     }
 
     /**

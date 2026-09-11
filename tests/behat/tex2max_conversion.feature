@@ -97,6 +97,12 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
     Then the underlying STACK input for "ans1" should be "(x=a+b-c) nounor (x=a-b+c)"
 
   @javascript
+  Scenario: Minus-plus is the mirror image of plus-minus, without a unary plus (#49)
+    When I enter latex "x=\mp 2" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "(x=-2) nounor (x=2)"
+    And the underlying STACK input for "ans1" should not contain "+"
+
+  @javascript
   Scenario: A unary pm inside parentheses keeps the parentheses
     When I enter latex "x=a\left(\pm b+c\right)" into the MathQuill field for "ans1"
     Then the underlying STACK input for "ans1" should contain "(b+c)"

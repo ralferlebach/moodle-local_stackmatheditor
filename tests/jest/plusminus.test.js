@@ -119,3 +119,39 @@ describe('max2tex renders pi exactly once (found while testing #30)', () => {
         expect(tex).not.toContain('\\\\');
     });
 });
+
+describe('#49: ∓ is the mirror image of ±', () => {
+    test.each([
+        ['x=\\pm 2\\sqrt{\\pi}', '(x=2*sqrt(pi)) nounor (x=-2*sqrt(pi))'],
+        ['x=\\mp 2\\sqrt{\\pi}', '(x=-2*sqrt(pi)) nounor (x=2*sqrt(pi))'],
+        ['\\pm a', '(a) nounor (-a)'],
+        ['\\mp a', '(-a) nounor (a)'],
+        ['x=\\mp a', '(x=-a) nounor (x=a)'],
+        ['x=\\left(\\mp a\\right)', '(x=(-a)) nounor (x=(a))'],
+        ['x=a\\mp b\\pm c', '(x=a-b+c) nounor (x=a+b-c)'],
+    ])('%s -> %s', (latex, expected) => {
+        expect(toMaxima(latex)).toBe(expected);
+    });
+
+    test.each(VARIABLE_MODES)('no unary plus survives in any alternative (mode %s)', (mode) => {
+        ['x=\\mp 2\\sqrt{\\pi}', '\\mp a', 'f\\left(\\mp a\\right)', 'x=\\left(\\mp a\\right)'].forEach((latex) => {
+            const out = toMaxima(latex, mode);
+            expect(out).not.toMatch(/(^|[=(,[]|\(\s*)\+/);
+            expect(out).not.toMatch(/\+\s*x\s*=/);
+        });
+    });
+
+    test.each(VARIABLE_MODES)('\\mp keeps its orientation over a roundtrip (mode %s)', (mode) => {
+        ['x=\\mp a', 'x=\\mp 2\\sqrt{\\pi}', '\\mp a', 'x=a\\mp b\\pm c'].forEach((latex) => {
+            const first = toMaxima(latex, mode);
+            const tex = toTex(first, mode);
+            expect(tex.indexOf('\\mp')).toBeGreaterThan(-1);
+            expect(toMaxima(tex, mode)).toBe(first);
+        });
+    });
+
+    test('max2tex reads both orientations', () => {
+        expect(toTex('(x=a) nounor (x=-a)')).toBe('x=\\pm a');
+        expect(toTex('(x=-a) nounor (x=a)')).toBe('x=\\mp a');
+    });
+});

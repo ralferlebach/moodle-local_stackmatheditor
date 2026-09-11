@@ -423,3 +423,56 @@ Check the reloaded textarea is `x=1\nx=2`.
 
 All four scenarios replayed with Playwright against Moodle 4.5 + STACK 4.13.1 using the same
 selectors and key sequences: green. The Behat run itself happens in CI.
+
+Delivered as `sme_v1.2.0_08.zip` (2026091107). Decision on empty lines after STACK processing
+(drop criterion / keep in plugin / ask STACK) still open with Ralf.
+
+## 15. Iteration 10 (2026-09-11) — 2026091108: #47
+
+### Root cause
+
+`lib.php` built the settings-menu link without `returnurl` (comment: "breadcrumb handles it"), and
+`configure.php` then assumed `/mod/quiz/edit.php` for every call without `returnurl`.
+
+### Fix
+
+- `quiz_helper::get_return_url($cmid, $modname)`: current page with all query parameters;
+  fallback now the module's **view** page (quiz or adaptivequiz), never the edit page.
+- New `quiz_helper::get_fallback_return_url()` and `resolve_return_url()`: accepts only
+  root-relative paths or absolute URLs below `$CFG->wwwroot` (after `PARAM_LOCALURL`); external,
+  protocol-relative (`//host`), backslash tricks, `javascript:` and directory-relative paths fall
+  back to the view page - no open redirect.
+- `lib.php`: the settings-menu link carries `returnurl`; on the configuration page itself the
+  page's own return target is passed on, so the parameter never nests.
+- `configure.php`: uses `resolve_return_url()`; Back (form cancel) and the fallback share one
+  path; Save behaviour unchanged (stays on the page with the success message).
+- `configure_injector.php`: passes the module name to `get_return_url()`.
+
+### Tests
+
+- PHPUnit (`quiz_helper_test`): current page kept incl. query; fallback view page for quiz and
+  adaptivequiz; four local URLs kept exactly; six unsafe targets rejected for both module types.
+- Behat (`configure_toolbar.feature`): Back from view, Back from edit, direct call with external
+  `returnurl`; steps `I am on the STACK MathQuill quiz configuration page for :quizname with return
+  URL :returnurl` and `I should be on the quiz :pagetype page of :quizname`.
+- Real browser (Playwright, Moodle 4.5): view → configure → Back → `view.php?id=…`;
+  edit → configure → Back → `edit.php?cmid=…`; `returnurl=https://example.org/` → view page;
+  the settings link on the configuration page itself keeps the original return target.
+
+Delivered as `sme_v1.2.0_09.zip` (2026091108).
+
+Ralf's decisions: #41 criterion "empty lines survive saving" dropped (STACK strips them, the
+roundtrip simply strips them too); quantifier buttons stay commented out (mostly needed for
+proofs). Next: #49, then the feature issues #22, #46, #44 before the merge to main.
+
+## 16. Iteration 11 (2026-09-11) — 2026091109: #49
+
+`expandPlusMinus()` dropped the unary "+" only from the first alternative - correct for ±, but for
+∓ the positive alternative is the second one: `x=\mp 2\sqrt{\pi}` gave `x=+2*sqrt(pi)`, which
+STACK displays as "+x = ...". Now `stripUnaryPlus()` runs on both alternatives. max2tex already
+merged a sign missing in either alternative (∓ when the second one lacks it), so `\mp` keeps its
+orientation over the roundtrip. Reading stays `nounor`-only (a logical `or` is never a ± pair -
+Ralf's decision from iteration 5; the issue text predates it).
+
+Tests: 18 new Jest cases (all unary cases of the issue, coupled signs in both orders, every
+mode, orientation roundtrip), Behat scenario `x=\mp 2 → (x=-2) nounor (x=2)`.

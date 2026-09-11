@@ -129,6 +129,54 @@ class behat_local_stackmatheditor extends behat_base {
     }
 
     /**
+     * Open the quiz-level configuration page directly with an explicit return URL.
+     *
+     * @Given I am on the STACK MathQuill quiz configuration page for :quizname with return URL :returnurl
+     * @param string $quizname  Quiz name.
+     * @param string $returnurl Value passed as returnurl parameter (may be unsafe on purpose).
+     */
+    public function i_am_on_quiz_config_page_with_return_url(string $quizname, string $returnurl): void {
+        global $DB;
+        $quiz = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
+        $cm = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
+        $url = new \moodle_url(
+            '/local/stackmatheditor/configure.php',
+            ['cmid' => $cm->id, 'returnurl' => $returnurl]
+        );
+        $this->getSession()->visit($url->out(false));
+        $this->getSession()->wait(2000, "document.readyState === 'complete'");
+    }
+
+    /**
+     * Assert that the browser shows the view or edit page of a quiz (#47).
+     *
+     * @Then I should be on the quiz :pagetype page of :quizname
+     * @param string $pagetype "view" or "edit".
+     * @param string $quizname Quiz name.
+     */
+    public function i_should_be_on_the_quiz_page(string $pagetype, string $quizname): void {
+        global $DB;
+        $quiz = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
+        $cm = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
+        $expectedpath = $pagetype === 'edit' ? '/mod/quiz/edit.php' : '/mod/quiz/view.php';
+        $expectedparam = $pagetype === 'edit' ? 'cmid' : 'id';
+
+        $this->getSession()->wait(3000, "document.readyState === 'complete'");
+        $current = $this->getSession()->getCurrentUrl();
+        $path = (string) parse_url($current, PHP_URL_PATH);
+        parse_str((string) parse_url($current, PHP_URL_QUERY), $query);
+
+        $onpath = substr($path, -strlen($expectedpath)) === $expectedpath;
+        if (!$onpath || (int) ($query[$expectedparam] ?? 0) !== (int) $cm->id) {
+            throw new ExpectationException(
+                "Expected the quiz {$pagetype} page of '{$quizname}' "
+                    . "({$expectedpath}?{$expectedparam}={$cm->id}), but the browser is on {$current}.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
      * Assert that an element with the given CSS class exists on the page.
      *
      * @Then I should see the class :cssclass

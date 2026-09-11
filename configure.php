@@ -105,14 +105,9 @@ require_login($course, false, $cm);
 $capname = $isadaptivequiz ? 'mod/adaptivequiz:viewreport' : 'mod/quiz:manage';
 require_capability($capname, $context);
 
-// Return URL: default to the activity's primary management page.
-if (empty($returnurl)) {
-    if ($isadaptivequiz) {
-        $returnurl = (new \moodle_url('/mod/adaptivequiz/view.php', ['id' => $cmid]))->out(false);
-    } else {
-        $returnurl = (new \moodle_url('/mod/quiz/edit.php', ['cmid' => $cmid]))->out(false);
-    }
-}
+// Return URL: the calling page passed by every configuration link; only a direct call without
+// (or with an unusable) returnurl falls back to the activity's view page (#47).
+$returnurl = \local_stackmatheditor\quiz_helper::resolve_return_url($returnurl, $cmid, $modname);
 
 // Page setup.
 $pageparams = ['cmid' => $cmid];
