@@ -438,7 +438,7 @@ class quiz_helper {
     public static function resolve_return_url(string $raw, int $cmid, string $modname = 'quiz'): string {
         global $CFG;
         $fallback = self::get_fallback_return_url($cmid, $modname);
-        $clean = clean_param(trim($raw), PARAM_LOCALURL);
+        $clean = clean_param(trim($raw, " \n\r\t\v\x00"), PARAM_LOCALURL);
         if ($clean === '') {
             return $fallback;
         }

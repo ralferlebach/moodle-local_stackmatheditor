@@ -107,8 +107,10 @@ class definitions {
                 'label'           => get_string('group_basic_operators', $p),
                 'default_enabled' => true,
                 'elements'        => [
-                    ['display' => '+', 'write' => '+'],
-                    ['display' => '−', 'write' => '-'],
+                    ['display' => '+', 'write' => '+',
+                        'tooltip' => get_string('btn_plus', $p)],
+                    ['display' => '−', 'write' => '-',
+                        'tooltip' => get_string('btn_minus', $p)],
                     ['display' => '·', 'cmd'   => '\\cdot',
                         'tooltip' => get_string('btn_cdot', $p)],
                     ['display' => '÷', 'cmd'   => '\\div',
@@ -140,9 +142,12 @@ class definitions {
                 'label'           => get_string('group_exponential_log', $p),
                 'default_enabled' => true,
                 'elements'        => [
-                    ['display' => 'exp', 'write' => '\\exp\\left(\\right)'],
-                    ['display' => 'log', 'write' => '\\log\\left(\\right)'],
-                    ['display' => 'ln', 'write' => '\\ln\\left(\\right)'],
+                    ['display' => 'exp', 'write' => '\\exp\\left(\\right)',
+                        'tooltip' => get_string('btn_exp', $p)],
+                    ['display' => 'log', 'write' => '\\log\\left(\\right)',
+                        'tooltip' => get_string('btn_log', $p)],
+                    ['display' => 'ln', 'write' => '\\ln\\left(\\right)',
+                        'tooltip' => get_string('btn_ln', $p)],
                 ],
             ],
 
@@ -151,13 +156,16 @@ class definitions {
                 'label'           => get_string('group_comparators', $p),
                 'default_enabled' => true,
                 'elements'        => [
-                    ['display' => '=', 'write' => '='],
+                    ['display' => '=', 'write' => '=',
+                        'tooltip' => get_string('btn_equal', $p)],
                     ['display' => '≠', 'cmd'   => '\\neq',
                         'tooltip' => get_string('btn_neq', $p)],
                     ['display' => '≈', 'cmd'   => '\\approx',
                         'tooltip' => get_string('btn_approx', $p)],
-                    ['display' => '<', 'write' => '<'],
-                    ['display' => '>', 'write' => '>'],
+                    ['display' => '<', 'write' => '<',
+                        'tooltip' => get_string('btn_less', $p)],
+                    ['display' => '>', 'write' => '>',
+                        'tooltip' => get_string('btn_greater', $p)],
                     ['display' => '≤', 'cmd'   => '\\leq',
                         'tooltip' => get_string('btn_leq', $p)],
                     ['display' => '≥', 'cmd'   => '\\geq',
@@ -360,9 +368,12 @@ class definitions {
                 'label'           => get_string('group_trigonometry', $p),
                 'default_enabled' => true,
                 'elements'        => [
-                    ['display' => 'sin', 'write' => '\\sin\\left(\\right)'],
-                    ['display' => 'cos', 'write' => '\\cos\\left(\\right)'],
-                    ['display' => 'tan', 'write' => '\\tan\\left(\\right)'],
+                    ['display' => 'sin', 'write' => '\\sin\\left(\\right)',
+                        'tooltip' => get_string('btn_sin', $p)],
+                    ['display' => 'cos', 'write' => '\\cos\\left(\\right)',
+                        'tooltip' => get_string('btn_cos', $p)],
+                    ['display' => 'tan', 'write' => '\\tan\\left(\\right)',
+                        'tooltip' => get_string('btn_tan', $p)],
                     ['display' => 'asin', 'write' => '\\arcsin\\left(\\right)',
                         'tooltip' => get_string('btn_arcsin', $p)],
                     ['display' => 'acos', 'write' => '\\arccos\\left(\\right)',
@@ -718,6 +729,20 @@ class definitions {
     }
 
     /**
+     * Language strings the editor needs synchronously (accessible names of its controls).
+     *
+     * @return array Map string key => text in the current language.
+     */
+    public static function get_js_strings(): array {
+        $keys = ['aria_add_line', 'aria_add_row', 'aria_formula_input', 'aria_remove_row', 'aria_remove_step'];
+        $strings = [];
+        foreach ($keys as $key) {
+            $strings[$key] = get_string($key, 'local_stackmatheditor');
+        }
+        return $strings;
+    }
+
+    /**
      * Export all definitions as a data structure for JSON encoding.
      *
      * Called by mathjax_injector to pass definitions to JavaScript modules.
@@ -738,6 +763,8 @@ class definitions {
             'reservedWords'    => self::get_reserved_words(),
             'percentConstants' => self::get_percent_constants(),
             'usePercentPi'     => (bool)(int)get_config('local_stackmatheditor', 'usepercentpi'),
+            // Accessible names of the editor's own controls, needed synchronously on page load.
+            'strings'          => self::get_js_strings(),
         ];
     }
 

@@ -221,6 +221,11 @@ define(['jquery'], function($) {
             .attr('title',
                 el.tooltip || el.display
                 || el.label || command);
+        // The visible content is a symbol ("√"); screen readers need the word from the
+        // language pack instead.
+        if (el.tooltip) {
+            $btn.attr('aria-label', el.tooltip);
+        }
 
         // Apply label.
         if (labelInfo && labelInfo.html) {

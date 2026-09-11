@@ -30,8 +30,9 @@ define([
     'local_stackmatheditor/toolbar',
     'local_stackmatheditor/operator_map',
     'local_stackmatheditor/stack_bridge',
-    'local_stackmatheditor/local_validation'
-], function($, tex2max, max2tex, toolbar, OperatorMap, Bridge, LocalValidation) {
+    'local_stackmatheditor/local_validation',
+    'local_stackmatheditor/a11y'
+], function($, tex2max, max2tex, toolbar, OperatorMap, Bridge, LocalValidation, A11y) {
     'use strict';
 
     var TYPES = ['equiv', 'textarea'];
@@ -535,7 +536,6 @@ define([
             .attr('type', 'button')
             .addClass('btn btn-sm btn-outline-secondary mt-1')
             .html('<i class="fa fa-plus" aria-hidden="true"></i>')
-            .attr('title', 'Add line')
             .on('click', function(e) {
                 var template;
                 e.preventDefault();
@@ -549,6 +549,7 @@ define([
                 // The "+" (Add line) button adds a line like Enter does, and says so (#43).
                 Bridge.signalEnter(self.$ta[0], {trigger: 'button', inputType: self.inputType, slot: self.slot});
             });
+        A11y.label(this.$addBtn[0], 'aria_add_line', true);
         this.$wrap.append(this.$addBtn);
 
         startValue = (this.$ta[0].defaultValue || this.$ta.val() || '').trim();
@@ -687,9 +688,8 @@ define([
         var $subdel = $('<button>')
             .attr('type', 'button')
             .addClass('btn btn-link sme-equiv-subdel')
-            .attr('aria-label', 'Remove equation row')
-            .attr('title', 'Remove equation row')
             .text('×');
+        A11y.label($subdel[0], 'aria_remove_row', true);
         var mq;
         var fieldData;
 
@@ -727,6 +727,7 @@ define([
                 }
             }
         });
+        A11y.labelEditor(mq);
 
         fieldData = {
             $line: $line,
@@ -870,14 +871,13 @@ define([
         var $subadd = $('<button>')
             .attr('type', 'button')
             .addClass('btn btn-link sme-equiv-subadd')
-            .attr('aria-label', 'Add equation row')
-            .attr('title', 'Add equation row')
             .text('+');
+        A11y.label($subadd[0], 'aria_add_row', true);
         var $del = $('<button>')
             .attr('type', 'button')
             .addClass('sme-equiv-del')
-            .html('<i class="fa fa-times text-danger" aria-hidden="true"></i>')
-            .attr('title', 'Remove transformation step');
+            .html('<i class="fa fa-times text-danger" aria-hidden="true"></i>');
+        A11y.label($del[0], 'aria_remove_step', true);
         var stepData = {
             $row: $row,
             $num: $num,
@@ -1022,6 +1022,7 @@ define([
 
     return {
         init: function(ctx) {
+            A11y.useStrings(ctx.defs && ctx.defs.strings);
             ensureStyles();
             var $areas = $(selector());
             if (!$areas.length) {

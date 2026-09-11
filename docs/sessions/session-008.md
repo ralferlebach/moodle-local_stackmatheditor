@@ -648,3 +648,20 @@ Delivered as `sme_v1.2.0_15.zip` (2026091114). CI green, merge to `main` done (R
 - Playwright: `settings.spec.js` (6 tests, full matrix via the real UI, screenshots) and
   `performance.spec.js` (ten editors, exactly once, re-initialisation).
 - Local results: see `docs/REVIEW-2026-09-11.md`, section 4.
+
+Delivered as `sme_v1.2.0_16.zip` (2026091115).
+
+## 23. Iteration 18 (2026-09-11) — 2026091116: accessibility, plugin-directory check
+
+Ralf: #40 not yet; #34 as a supplementary issue comment (download
+`comment-issue-34-toolbar-catalogue.md`); accessibility now.
+
+- New `amd/src/a11y.js`: accessible names from the language pack, preloaded with the page
+  (`definitions::get_js_strings()` → `definitions.strings`), fallback `core/str`.
+- MathQuill's hidden textarea, the add/remove row/line/step buttons and every toolbar button
+  (`aria-label` = tooltip) are named; eleven buttons got their missing tooltips; PHPUnit test:
+  every offered button has a tooltip.
+- `tests/playwright/a11y.spec.js` (axe-core, WCAG 2.0/2.1 A/AA): 2/2 green locally.
+- Plugins directory "phplint FAIL – Log file not found": see `docs/REVIEW-2026-09-11.md`,
+  section 6; `PHP Lint` next to `Validating` in the dev quality job; new main job that checks the
+  exact release ZIP with PHP 8.1 and publishes it as artifact.
