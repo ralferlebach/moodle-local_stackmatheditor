@@ -2,10 +2,9 @@
 
 **Branch:** `develop`
 **Date:** 2026-06-03
-**Plugin version:** 2026060303
-**Status:** Infrastructure complete — preflight 1/1, main suite expected 25/25
-green after patch-4. 4 scenarios tagged `@wip` (2 AMD features, 2 pre-fill
-persistence) for focused follow-up tasks.
+**Plugin version:** 2026060302
+**Status:** Preflight green; main suite expected 27/27 after patch-3 (localised
+toolbar title fixed). 2 AMD integration tasks remain tagged `@wip`.
 
 ---
 
@@ -240,51 +239,15 @@ test was the defect (fixed in patch 2026060301), not the plugin. If tidier CSS
 is wanted later, the Moodle-idiomatic option is the `accesshide` helper class —
 not `display:none`.
 
-## 12. Run 3 result (patch 2026060302) and the patch-4 change
+## 11. Next: the two `@wip` AMD tasks (JS work package)
 
-Toolbar-title fix worked. Preflight green. Main suite: **27 scenarios, 26
-passed, 1 failed.** The single failure was the pre-fill scenario:
+Both fixes live in `amd/src/*.js`; the build (`amd/build/*.min.js`) will be
+regenerated locally via `grunt`.
 
-```
-Pre-fill restores previous answer on page reload (editor_rendering.feature:40)
-  Then the MathQuill field for "ans1" should not be empty
-    MathQuill field for input 'ans1' is empty or not found.
-  URL at failure: mod/quiz/view.php?id=...   (NOT attempt.php)
-```
-
-Root cause (test harness, not the plugin): the pre-fill scenarios navigate with
-`getSession()->back()` (`i_return_to_the_quiz_attempt_page`,
-`i_navigate_to_next_question_and_back`). A single-question STACK quiz has no
-"Next" button, so those helpers only call `back()`, which from `attempt.php`
-lands on `view.php`; a second `back()` goes further still. The browser
-back/forward cache makes this non-deterministic — the sibling scenario
-"…after navigating away and back" passed this run only because bfcache happened
-to restore the populated attempt page. Additionally, the answer is never
-persisted server-side (the value is set via JS with no real form submit), so
-even a correct re-open would render an empty field.
-
-Decision: both pre-fill scenarios are tagged `@wip` (patch 2026060303) so the
-infrastructure suite is **deterministically** green (preflight 1/1 + main
-25/25). This is a test-determinism issue, not a plugin defect — the faildump
-never reached a correctly re-opened attempt, so it says nothing about whether
-pre-fill works.
-
-### Deterministic pre-fill test rework (separate task)
-
-A robust pre-fill test must:
-1. Persist the answer with a **real** save — submit the attempt response form to
-   `processattempt.php` (or drive Moodle's autosave), not a JS value assignment.
-2. Re-open the **same** attempt by URL (`attempt.php?attempt=<id>&cmid=<id>`)
-   instead of `back()`; resolve the attempt id from the DB for the user+quiz.
-3. Then assert MathQuill is pre-filled and the hidden input contains the value.
-
-## 13. Status of `@wip` scenarios (4 total)
-
-- `tex2max_conversion.feature`: "%pi when usePercentPi enabled" (#31 plumbing),
-  "Logic \\land → and" (MathQuill `\\wedge` normalisation).
-- `editor_rendering.feature`: "Pre-fill … on page reload",
-  "Pre-fill … after navigating away and back" (deterministic-persistence rework).
-
-Infrastructure is complete once this run is green. Remaining work is feature/
-test-harness, tracked above, to be done as focused tasks with `grunt`-built
-AMD where needed.
+1. **usePercentPi (#31):** `tex2max.js` already honours `defs.usePercentPi`
+   (line ~691). Wire `local_stackmatheditor/usepercentpi` config through to
+   `input_fields.js` `convOpts.defs.usePercentPi`, then untag the `@wip`
+   scenario.
+2. **`\land`/`\wedge` → `and`:** `tex2max.js` maps `\land` (line ~756) but
+   MathQuill normalises `\land` → `\wedge`. Add a `\wedge` rule (and audit other
+   MathQuill symbol normalisations), then untag the `@wip` scenario.

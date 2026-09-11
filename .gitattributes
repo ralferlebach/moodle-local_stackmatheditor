@@ -1,9 +1,10 @@
-# Normalise line endings on all text files.
-* text=auto
+# Normalise line endings on all text files. Not cosmetic: CRLF shifts the boilerplate lines that
+# PHPCS counts and turns every file red (see docs/ENTWICKLUNGSUMGEBUNG.md, section 11).
+* text=auto eol=lf
 
 # Keep generated and source artefacts byte-stable across Linux/macOS/Windows.
-# Moodle/Grunt/Rollup writes LF line endings in CI; pinning these files avoids
-# false stale-build failures caused by CRLF checkouts or editor rewrites.
+# Grunt/Rollup writes LF line endings in CI; pinning these files avoids false stale-build
+# failures caused by CRLF checkouts or editor rewrites.
 *.php      text eol=lf
 *.js       text eol=lf
 *.json     text eol=lf
@@ -12,46 +13,65 @@
 *.scss     text eol=lf
 *.mustache text eol=lf
 *.xml      text eol=lf
+*.jmx      text eol=lf
 *.yml      text eol=lf
 *.yaml     text eol=lf
 *.md       text eol=lf
 *.feature  text eol=lf
 *.txt      text eol=lf
 *.sh       text eol=lf
+*.py       text eol=lf
 *.svg      text eol=lf
+makefile   text eol=lf
 
 # Binary artefacts must never be line-ending normalised.
-*.png  binary
-*.jpg  binary
-*.jpeg binary
-*.gif  binary
-*.webp binary
-*.ico  binary
-*.zip  binary
-*.gz   binary
-*.tgz  binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.zip   binary
+*.gz    binary
+*.tgz   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.eot   binary
 
-# ── Development documentation (not deployed to production) ────────────────────
-# Session logs, coding-standards prompts, and specification documents are
-# development artefacts only. They are excluded from `git archive` exports
-# (e.g. Moodle update packages) and from automated deployment pipelines that
-# use `git archive` or `export-ignore` flags.
-/docs/prompt-templates                 export-ignore
-/docs/prompt-templates/**              export-ignore
-/docs/sessions                         export-ignore
-/docs/sessions/**                      export-ignore
-/docs/materials                        export-ignore
-/docs/materials/**                     export-ignore
-/tools                                 export-ignore
-/tools/**                              export-ignore
+# ── Distribution rules for `git archive` (the release ZIP) ───────────────────
+# The released package contains everything Moodle runs, but none of the development, CI or
+# test-harness machinery. The release-artefact job in moodle-plugin-ci-main.yml enforces this.
 
-# ── User documentation (deployed) ────────────────────────────────────────────
-# docs/user-guide.md is intentionally NOT listed here — it is included in
-# exports so that administrators and teachers can read it offline.
+# Repository, IDE and CI plumbing.
+/.github                export-ignore
+/.idea                  export-ignore
+/.gitattributes         export-ignore
+/.gitignore             export-ignore
+/.moodle-plugin-ci.yml  export-ignore
+/.eslintrc              export-ignore
+/.eslintignore          export-ignore
+/.stylelintrc           export-ignore
+/makefile               export-ignore
+/phpcs.xml              export-ignore
+/vendor                 export-ignore
+/node_modules           export-ignore
 
-# ── Tooling and CI (not deployed) ────────────────────────────────────────────
-/.github                               export-ignore
-/.github/**                            export-ignore
-/vendor                                export-ignore
-/vendor/**                             export-ignore
-/makefile                              export-ignore
+# Internal documentation: session logs, prompts, specifications, environment setup.
+/docs                   export-ignore
+
+# Developer tooling.
+/tools                  export-ignore
+
+# Browser, load and JS unit-test harnesses. They seed sites, start servers and pull npm
+# packages: fine as developer/CI tools, out of place on a production Moodle server.
+/tests/load             export-ignore
+/tests/playwright       export-ignore
+/tests/jest             export-ignore
+
+# Only relevant when a repository is updated in place.
+/db/removed_files.txt   export-ignore
+
+# The Moodle-native tests (tests/unit, tests/behat, tests/coverage.php) DO ship: they are useful
+# to maintainers, plugin review and distribution QA.

@@ -28,8 +28,11 @@ define([
     'jquery',
     'local_stackmatheditor/tex2max',
     'local_stackmatheditor/max2tex',
-    'local_stackmatheditor/toolbar'
-], function($, tex2max, max2tex, toolbar) {
+    'local_stackmatheditor/toolbar',
+    'local_stackmatheditor/operator_map',
+    'local_stackmatheditor/stack_bridge',
+    'local_stackmatheditor/local_validation'
+], function($, tex2max, max2tex, toolbar, OperatorMap, Bridge, LocalValidation) {
     'use strict';
 
     var TYPES = ['algebraic', 'units'];
@@ -57,26 +60,8 @@ define([
      * @param {jQuery} $input Hidden input.
      */
     function triggerStackValidation($input) {
-        // Standard events.
-        $input.trigger('change');
-        $input.trigger('input');
-
-        // STACK uses blur to trigger validation.
-        $input.trigger('blur');
-
-        // Native event for frameworks that don't
-        // listen to jQuery events.
-        var nativeInput = new Event('input', {
-            bubbles: true,
-            cancelable: true
-        });
-        $input[0].dispatchEvent(nativeInput);
-
-        var nativeChange = new Event('change', {
-            bubbles: true,
-            cancelable: true
-        });
-        $input[0].dispatchEvent(nativeChange);
+        // One native input + change event; they reach jQuery handlers too (#48).
+        Bridge.triggerValidation($input[0]);
     }
 
     /**
@@ -86,22 +71,29 @@ define([
      * @param {jQuery} $input Hidden input.
      * @param {Object} convOpts Conversion options.
      * @param {Function} dbg Debug logger.
+     * @param {boolean} [silent] Write without raising events (right before a submit).
      */
-    function syncToInput(mqField, $input, convOpts, dbg) {
+    function syncToInput(mqField, $input, convOpts, dbg, silent) {
         var latex = mqField.latex();
         var maxima = '';
+        var result;
         if (latex && latex.trim()) {
             try {
-                maxima = tex2max.convert(latex, convOpts);
+                // An incomplete structure (#44) yields no CAS text and a local message.
+                result = tex2max.analyse(latex, convOpts);
+                maxima = result.maxima;
+                LocalValidation.show(mqField.el(), result.problems);
             } catch (e) {
                 maxima = latex;
             }
+        } else {
+            LocalValidation.show(mqField.el(), []);
         }
         var oldVal = $input.val();
         $input.val(maxima);
 
         // Only trigger validation if value changed.
-        if (maxima !== oldVal) {
+        if (maxima !== oldVal && !silent) {
             triggerStackValidation($input);
             dbg('Sync: LaTeX="' + latex
                 + '" Maxima="' + maxima + '"');
@@ -145,7 +137,7 @@ define([
     }
 
     /**
-     * Split a top-level Maxima and-chain.
+     * Split a Maxima expression at the top-level system join (nounand).
      *
      * @param {string} expr Maxima expression.
      * @returns {string[]} Parts or the original expression.
@@ -158,6 +150,7 @@ define([
         var prev;
         var next;
         var part;
+        var kw = OperatorMap.SYSTEM_JOIN;
 
         for (i = 0; i < expr.length; i++) {
             if (expr.charAt(i) === '(') {
@@ -168,11 +161,11 @@ define([
                 depth = Math.max(0, depth - 1);
                 continue;
             }
-            if (depth !== 0 || expr.slice(i, i + 3) !== 'and') {
+            if (depth !== 0 || expr.slice(i, i + kw.length) !== kw) {
                 continue;
             }
             prev = i > 0 ? expr.charAt(i - 1) : '';
-            next = i + 3 < expr.length ? expr.charAt(i + 3) : '';
+            next = i + kw.length < expr.length ? expr.charAt(i + kw.length) : '';
             if ((prev && /[A-Za-z0-9_]/.test(prev)) ||
                     (next && /[A-Za-z0-9_]/.test(next))) {
                 continue;
@@ -181,8 +174,8 @@ define([
             if (part) {
                 parts.push(part);
             }
-            start = i + 3;
-            i += 2;
+            start = i + kw.length;
+            i += kw.length - 1;
         }
 
         part = expr.slice(start).trim();
@@ -224,7 +217,8 @@ define([
     }
 
     /**
-     * Detect a relation system represented by top-level and-connections.
+     * Detect a relation system: relations joined by the structural nounand.
+     * A logical "and" (∧ button) is a statement, not a system.
      *
      * @param {string} maxima Maxima input.
      * @returns {?Array} Relation parts or null.
@@ -258,11 +252,15 @@ define([
      */
     function latexFieldToMaxima(mqField, convOpts) {
         var latex = mqField.latex();
+        var result;
         if (!latex || !latex.trim()) {
+            LocalValidation.show(mqField.el(), []);
             return '';
         }
         try {
-            return tex2max.convert(latex, convOpts);
+            result = tex2max.analyse(latex, convOpts);
+            LocalValidation.show(mqField.el(), result.problems);
+            return result.maxima;
         } catch (e) {
             return latex;
         }
@@ -275,20 +273,21 @@ define([
      * @param {jQuery} $input Hidden input.
      * @param {Object} convOpts Conversion options.
      * @param {Function} dbg Debug logger.
+     * @param {boolean} [silent] Write without raising events (right before a submit).
      */
-    function syncSystemToInput(rows, $input, convOpts, dbg) {
+    function syncSystemToInput(rows, $input, convOpts, dbg, silent) {
         var maxima = rows.map(function(row) {
             return latexFieldToMaxima(row.mqField, convOpts).trim();
         }).filter(function(value) {
             return !!value;
         }).map(function(value) {
             return '(' + value + ')';
-        }).join(' and ');
+        }).join(' ' + OperatorMap.SYSTEM_JOIN + ' ');
         var oldVal = $input.val();
 
         $input.val(maxima);
 
-        if (maxima !== oldVal) {
+        if (maxima !== oldVal && !silent) {
             triggerStackValidation($input);
             dbg('System sync: Maxima="' + maxima + '"');
         }
@@ -342,6 +341,9 @@ define([
                         return;
                     }
                     syncSystemToInput(rows, $input, convOpts, ctx.dbg);
+                },
+                enter: function() {
+                    Bridge.signalEnter($input[0], {trigger: 'key', inputType: 'system'});
                 }
             }
         });
@@ -617,6 +619,8 @@ define([
                 row.prefilling = false;
                 row.mqField.focus();
                 syncSystemToInput(rows, $input, convOpts, ctx.dbg);
+                // The "+" button adds a row like Enter does, and says so (#43).
+                Bridge.signalEnter($input[0], {trigger: 'button', inputType: 'system'});
             });
 
             toolbar.typeset($tb);
@@ -626,6 +630,12 @@ define([
                     syncSystemToInput(rows, $input, convOpts, ctx.dbg);
                 }, 0);
             }, 0);
+
+            // Check / Submit always send the visible system (#48).
+            Bridge.register(function() {
+                syncSystemToInput(rows, $input, convOpts, ctx.dbg, true);
+            });
+            Bridge.guardStaleValidation($input[0]);
             return;
         }
 
@@ -640,9 +650,21 @@ define([
                     syncToInput(
                         mqField, $input,
                         convOpts, ctx.dbg);
+                },
+                enter: function() {
+                    // No editor action on Enter; the signal stays observable (#43).
+                    Bridge.signalEnter($input[0], {trigger: 'key', inputType: 'algebraic'});
                 }
             }
         });
+
+        // Check / Submit always send the visible state (#48).
+        Bridge.register(function() {
+            if (!prefilling) {
+                syncToInput(mqField, $input, convOpts, ctx.dbg, true);
+            }
+        });
+        Bridge.guardStaleValidation($input[0]);
 
         // Typeset toolbar (delayed for MathJax).
         toolbar.typeset($tb);

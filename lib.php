@@ -115,12 +115,21 @@ function local_stackmatheditor_extend_settings_navigation(
 
     $cmid = (int) $cm->id;
 
-    // No returnurl is passed when opened from the settings navigation.
-    // Breadcrumb handles back-navigation in that case.
-    // Configure.php renders the "Back" button only when returnurl is present.
+    // The link carries the page it is opened from, so "Back" on the configuration page returns
+    // to exactly that page (#47). On the configuration page itself its own return target is
+    // passed on instead, so the parameter never nests.
+    $returnurl = \local_stackmatheditor\quiz_helper::get_return_url($cmid, $cm->modname);
+    if ($PAGE->has_set_url() && $PAGE->url->compare(new moodle_url('/local/stackmatheditor/configure.php'), URL_MATCH_BASE)) {
+        $returnurl = \local_stackmatheditor\quiz_helper::resolve_return_url(
+            (string) $PAGE->url->get_param('returnurl'),
+            $cmid,
+            $cm->modname
+        );
+    }
 
     $url = new moodle_url('/local/stackmatheditor/configure.php', [
-        'cmid' => $cmid,
+        'cmid'      => $cmid,
+        'returnurl' => $returnurl,
     ]);
 
     // Build the navigation node (not yet attached to the tree).

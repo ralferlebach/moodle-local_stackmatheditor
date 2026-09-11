@@ -1,97 +1,50 @@
 # Tests – local_stackmatheditor
 
-## Overview
+Six tools, each covering what the others cannot. The split is deliberate; see
+`docs/ENTWICKLUNGSUMGEBUNG.md`, section 6, for the reasoning.
 
-| Suite | Tool | What it covers |
-|---|---|---|
-| `unit/` | PHPUnit | Pure logic: definitions, config_manager priority chain, enabled modes |
-| `behat/` | Behat + Selenium | Browser: toolbar rendering, pre-fill, configure page, nav selector |
+| Tool | Location | Covers | Deliberately does not cover |
+|---|---|---|---|
+| PHPUnit | `unit/` | definitions, config_manager priority chain, quiz/page helpers | anything that needs a browser |
+| Behat | `behat/` | editor rendering in a quiz attempt, tex2max via the real STACK CAS, toolbar configuration, pre-fill | load, asset delivery details |
+| Jest | `jest/` | conversion logic of `amd/src/tex2max.js` / `max2tex.js` without Moodle | DOM, MathQuill, STACK |
+| Playwright | `playwright/` | live site: settings page, shipped AMD build served by `requirejs.php` (videos + traces) | CAS grading |
+| k6 / JMeter | `load/` | latency and error rate of the read paths under parallel requests | functional correctness |
 
----
+`coverage.php` limits PHPUnit coverage to `classes/`; the CI gate (`tools/coverage_gate.php`)
+enforces the floor configured in `.github/workflows/moodle-plugin-ci-main.yml`.
 
-## Running PHPUnit tests
-
-Run from the **Moodle root** (not from within the plugin):
+## Quick start (from the plugin root, inside a Moodle tree)
 
 ```bash
-# All plugin tests (no DB needed for unit/ suite):
-vendor/bin/phpunit --testsuite local_stackmatheditor
+make jest                                  # no Moodle needed
+make phpunit                               # needs phpunit_prefix / phpunit_dataroot
+make behat-stack && make behat             # needs behat_* config, Selenium, Maxima
+make playwright SME_ADMIN_PASS='...'       # running dev site
+make k6            # BASE_URL defaults to $CFG->wwwroot
+make jmeter
+```
 
-# DB-dependent integration tests only:
-vendor/bin/phpunit --testsuite local_stackmatheditor \
-    --group local_stackmatheditor_db
+Direct PHPUnit call from the Moodle root:
 
-# Single test class:
+```bash
+vendor/bin/phpunit --testsuite local_stackmatheditor_testsuite
 vendor/bin/phpunit local/stackmatheditor/tests/unit/definitions_test.php
 ```
 
-The `--group local_stackmatheditor_db` tests require:
+## STACK / Maxima
 
-```bash
-# Initialise the Moodle test DB first (once per environment):
-php admin/tool/phpunit/cli/init.php
-```
+qtype_stack is a hard dependency, and Behat scenarios that submit answers need a working CAS.
+A STACK test that "passes" without Maxima has usually skipped itself. In CI, and locally via
+`make behat-stack`, `.github/stack-behat-init.php` sets `platform=linux` in the Behat database
+and verifies a genuine CAS connection; the `@stack_init` preflight feature must pass before the
+remaining scenarios run.
 
-### Test groups
+## CI
 
-| Group | Requires DB | Notes |
+| Workflow | Trigger | Runs |
 |---|---|---|
-| *(default / no group)* | No | Pure logic, fast, no fixtures |
-| `local_stackmatheditor_db` | Yes | DB read/write via Moodle's test fixtures |
-
----
-
-## Running Behat tests
-
-```bash
-# Initialise Behat (once per environment):
-php admin/tool/behat/cli/init.php
-
-# Run all plugin scenarios:
-vendor/bin/behat --config behat/behat.yml \
-    --tags @local_stackmatheditor
-
-# Run only rendering scenarios:
-vendor/bin/behat --config behat/behat.yml \
-    --tags "@local_stackmatheditor and @javascript" \
-    local/stackmatheditor/tests/behat/editor_rendering.feature
-
-# Run toolbar configuration scenarios:
-vendor/bin/behat --config behat/behat.yml \
-    --tags "@local_stackmatheditor" \
-    local/stackmatheditor/tests/behat/configure_toolbar.feature
-```
-
-Behat requires:
-- A running Selenium/WebDriver instance (Chrome recommended).
-- `qtype_stack` installed and at least one STACK question in the test DB.
-- `$CFG->behat_prefix` configured in `config.php`.
-
----
-
-## CI / GitHub Actions
-
-A suggested workflow (`.github/workflows/ci.yml` in the Moodle root or as a
-standalone `moodle-plugin-ci` run):
-
-```yaml
-- name: Run PHPUnit unit tests (no DB)
-  run: vendor/bin/phpunit --testsuite local_stackmatheditor
-
-- name: Run PHPUnit DB tests
-  run: vendor/bin/phpunit --testsuite local_stackmatheditor \
-       --group local_stackmatheditor_db
-
-- name: Run Behat tests
-  run: vendor/bin/behat --tags @local_stackmatheditor \
-       --config behat/behat.yml
-```
-
-For `moodle-plugin-ci`, add to `.moodle-plugin-ci.yml`:
-
-```yaml
-phpunit:
-  extra: "--testsuite local_stackmatheditor"
-behat:
-  extra: "--tags @local_stackmatheditor"
-```
+| `moodle-plugin-ci-dev.yml` | push/PR, every branch except `main` | static gates, JS/CSS department (ESLint + AMD build, stylelint, Jest) gating Behat (4.5), PHPUnit (reduced matrix) |
+| `moodle-plugin-ci-main.yml` | push/PR to `main` | full matrix incl. Behat + release gates |
+| `playwright.yml` | manual only | Playwright smoke with videos |
+| `load-k6.yml`, `load-jmeter.yml` | manual only | load smoke |

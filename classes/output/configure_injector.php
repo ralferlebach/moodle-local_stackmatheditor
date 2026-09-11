@@ -49,7 +49,8 @@ class configure_injector {
         $configureurl = (new \moodle_url('/local/stackmatheditor/configure.php'))->out(false);
         $linktext = get_string('configure_editor', 'local_stackmatheditor');
         $quizlinktextraw = get_string('configure_quiz_nav', 'local_stackmatheditor');
-        $returnurl = quiz_helper::get_return_url($cmid);
+        $modname = ($PAGE->cm && !empty($PAGE->cm->modname)) ? $PAGE->cm->modname : 'quiz';
+        $returnurl = quiz_helper::get_return_url($cmid, $modname);
 
         $linkdata = self::build_link_data(
             $cmid,

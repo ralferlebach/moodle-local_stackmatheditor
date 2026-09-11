@@ -80,3 +80,27 @@ Feature: MathQuill toolbar configuration
     And a STACK question exists in quiz "Test Quiz"
     When I am on the STACK MathQuill quiz configuration page for "Test Quiz"
     Then the checkbox "id_sme_enabled" should be checked
+
+  # ── Back button returns to the calling page (#47) ─────────────────────────────
+
+  @javascript
+  Scenario: Back returns to the quiz view page the configuration was opened from
+    Given a STACK question exists in quiz "Test Quiz"
+    And I am on the "Test Quiz" "mod_quiz > View" page
+    When I navigate to the STACK MathQuill quiz configuration
+    And I press "Back"
+    Then I should be on the quiz view page of "Test Quiz"
+
+  @javascript
+  Scenario: Back returns to the quiz edit page the configuration was opened from
+    Given a STACK question exists in quiz "Test Quiz"
+    And I am on the "Test Quiz" "mod_quiz > Edit" page
+    When I navigate to the STACK MathQuill quiz configuration
+    And I press "Back"
+    Then I should be on the quiz edit page of "Test Quiz"
+
+  Scenario: A direct call ignores an external return URL and falls back to the view page
+    Given a STACK question exists in quiz "Test Quiz"
+    And I am on the STACK MathQuill quiz configuration page for "Test Quiz" with return URL "https://example.org/"
+    When I press "Back"
+    Then I should be on the quiz view page of "Test Quiz"

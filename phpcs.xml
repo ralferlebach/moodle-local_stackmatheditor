@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!--
+  PHPCS configuration for local_stackmatheditor, used by IDEs and a bare `phpcs` call.
+  `make lint-php` and moodle-plugin-ci pass their own options; moodle-plugin-ci reads its
+  exclusions from .moodle-plugin-ci.yml instead of this file.
+-->
+<ruleset name="local_stackmatheditor">
+    <description>PHPCS configuration for local_stackmatheditor.</description>
+    <rule ref="moodle"/>
+    <exclude-pattern>*/node_modules/*</exclude-pattern>
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/thirdparty/*</exclude-pattern>
+    <exclude-pattern>*/tests/playwright/playwright-report/*</exclude-pattern>
+    <exclude-pattern>*/tests/playwright/test-results/*</exclude-pattern>
+</ruleset>

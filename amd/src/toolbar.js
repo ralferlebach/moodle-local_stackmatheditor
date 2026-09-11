@@ -249,6 +249,11 @@ define(['jquery'], function($) {
             try {
                 if (action === 'write') {
                     f.write(command);
+                    // Templates (#44/#46): MathQuill leaves the cursor after the written LaTeX;
+                    // 'left' moves it back into the template's first field (e.g. the integrand).
+                    for (var steps = parseInt(el.left, 10) || 0; steps > 0; steps--) {
+                        f.keystroke('Left');
+                    }
                 } else if (action === 'keystroke') {
                     f.keystroke(command);
                 } else {

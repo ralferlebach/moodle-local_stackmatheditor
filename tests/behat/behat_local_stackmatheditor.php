@@ -27,6 +27,26 @@ use Behat\Behat\Hook\Scope\BeforeScenarioScope;
  */
 class behat_local_stackmatheditor extends behat_base {
     /**
+     * URL of the quiz view page most recently visited by the attempt-start helper.
+     *
+     * Used by pre-fill steps to navigate back to a known page without relying
+     * on browser history (getSession()->back() is non-deterministic with bfcache).
+     *
+     * @var string|null
+     */
+    private $lastquizviewurl = null;
+
+    /**
+     * URL of the attempt page opened most recently by the attempt-start helper.
+     *
+     * Stored after assert_stack_input_present() confirms the attempt is live.
+     * Used by i_return_to_the_quiz_attempt_page and i_navigate_to_next_question_and_back
+     * to re-open the same attempt deterministically.
+     *
+     * @var string|null
+     */
+    private $lastquizattempturl = null;
+    /**
      * Set the plugin enabled mode in Moodle config.
      *
      * @Given the plugin enabled mode is set to :mode
@@ -105,7 +125,62 @@ class behat_local_stackmatheditor extends behat_base {
             ['cmid' => $cm->id]
         );
         $this->getSession()->visit($url->out(false));
-        $this->getSession()->wait(2000, "document.readyState === 'complete'");
+        if ($this->running_javascript()) {
+            $this->getSession()->wait(2000, "document.readyState === 'complete'");
+        }
+    }
+
+    /**
+     * Open the quiz-level configuration page directly with an explicit return URL.
+     *
+     * @Given I am on the STACK MathQuill quiz configuration page for :quizname with return URL :returnurl
+     * @param string $quizname  Quiz name.
+     * @param string $returnurl Value passed as returnurl parameter (may be unsafe on purpose).
+     */
+    public function i_am_on_quiz_config_page_with_return_url(string $quizname, string $returnurl): void {
+        global $DB;
+        $quiz = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
+        $cm = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
+        $url = new \moodle_url(
+            '/local/stackmatheditor/configure.php',
+            ['cmid' => $cm->id, 'returnurl' => $returnurl]
+        );
+        $this->getSession()->visit($url->out(false));
+        if ($this->running_javascript()) {
+            $this->getSession()->wait(2000, "document.readyState === 'complete'");
+        }
+    }
+
+    /**
+     * Assert that the browser shows the view or edit page of a quiz (#47).
+     *
+     * @Then I should be on the quiz :pagetype page of :quizname
+     * @param string $pagetype "view" or "edit".
+     * @param string $quizname Quiz name.
+     */
+    public function i_should_be_on_the_quiz_page(string $pagetype, string $quizname): void {
+        global $DB;
+        $quiz = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
+        $cm = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
+        $expectedpath = $pagetype === 'edit' ? '/mod/quiz/edit.php' : '/mod/quiz/view.php';
+        $expectedparam = $pagetype === 'edit' ? 'cmid' : 'id';
+
+        // Waiting needs JavaScript; without it (BrowserKit) the page is complete already.
+        if ($this->running_javascript()) {
+            $this->getSession()->wait(3000, "document.readyState === 'complete'");
+        }
+        $current = $this->getSession()->getCurrentUrl();
+        $path = (string) parse_url($current, PHP_URL_PATH);
+        parse_str((string) parse_url($current, PHP_URL_QUERY), $query);
+
+        $onpath = substr($path, -strlen($expectedpath)) === $expectedpath;
+        if (!$onpath || (int) ($query[$expectedparam] ?? 0) !== (int) $cm->id) {
+            throw new ExpectationException(
+                "Expected the quiz {$pagetype} page of '{$quizname}' "
+                    . "({$expectedpath}?{$expectedparam}={$cm->id}), but the browser is on {$current}.",
+                $this->getSession()
+            );
+        }
     }
 
     /**
@@ -430,6 +505,141 @@ JS;
     }
 
     /**
+     * Create a quiz with one STACK question whose input is a multi-line textarea.
+     *
+     * Uses qtype_stack's 'textarea_input' generator template, which the plugin renders with the
+     * multiline MathQuill editor.
+     *
+     * @Given a STACK quiz :quizname with textarea input exists in :shortname
+     * @param string $quizname  Quiz name.
+     * @param string $shortname Course shortname.
+     */
+    public function a_stack_quiz_with_textarea_input_exists_in(
+        string $quizname,
+        string $shortname
+    ): void {
+        global $DB;
+
+        $course = $DB->get_record('course', ['shortname' => $shortname], '*', MUST_EXIST);
+        if (!$DB->record_exists('quiz', ['name' => $quizname, 'course' => $course->id])) {
+            $quizdata = testing_util::get_data_generator()->create_module('quiz', [
+                'course'             => $course->id,
+                'name'               => $quizname,
+                'grade'              => 10,
+                'sumgrades'          => 1,
+                'preferredbehaviour' => 'adaptive',
+            ]);
+            $this->assert_quiz_behaviour_is_available(
+                $DB->get_record('quiz', ['id' => $quizdata->id], '*', MUST_EXIST)
+            );
+        }
+        $this->ensure_stack_question_in_quiz($quizname, 'Test STACK textarea Q', 'textarea_input');
+    }
+
+    // Multiline (textarea / equiv) editor.
+
+    /**
+     * JavaScript expression that finds the rows of the multiline editor for a STACK input.
+     *
+     * @param string $inputname STACK input name (e.g. "ans1").
+     * @return string JavaScript expression evaluating to an array of row elements, or null.
+     */
+    protected function multiline_rows_js(string $inputname): string {
+        $jsinput = json_encode($inputname);
+        return <<<JS
+(function() {
+    var n = {$jsinput};
+    var input = document.querySelector('[name$="_' + n + '"]') || document.querySelector('[name="' + n + '"]');
+    if (!input) { return null; }
+    var que = input.closest('.que') || document;
+    return Array.prototype.slice.call(que.querySelectorAll('.sme-equiv-row'));
+})()
+JS;
+    }
+
+    /**
+     * Put the keyboard focus at the end of one row of the multiline editor.
+     *
+     * Following key steps ("I type", "I press the backspace key") then go to that row.
+     *
+     * @When I focus row :row of the multiline MathQuill editor for :inputname
+     * @param int    $row       1-based row number.
+     * @param string $inputname STACK input name.
+     */
+    public function i_focus_multiline_row(int $row, string $inputname): void {
+        $rows = $this->multiline_rows_js($inputname);
+        $index = $row - 1;
+        $result = $this->getSession()->evaluateScript(<<<JS
+(function() {
+    var rows = {$rows};
+    if (!rows) { return 'no-stack-input'; }
+    if (!rows[{$index}]) { return 'no row {$row} of ' + rows.length; }
+    var editable = rows[{$index}].querySelector('.mq-editable-field');
+    if (!editable || !window.MathQuill) { return 'no-mathquill'; }
+    var field = window.MathQuill.getInterface(2)(editable);
+    field.focus();
+    field.moveToRightEnd();
+    return 'ok';
+})()
+JS);
+        if ($result !== 'ok') {
+            throw new ExpectationException(
+                "Could not focus row {$row} of the multiline editor for '{$inputname}' ({$result}).",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Assert the number of rows of the multiline editor (waits up to 3 s).
+     *
+     * @Then the multiline MathQuill editor for :inputname should have :count rows
+     * @param string $inputname STACK input name.
+     * @param int    $count     Expected number of rows.
+     */
+    public function the_multiline_editor_should_have_rows(string $inputname, int $count): void {
+        $rows = $this->multiline_rows_js($inputname);
+        $this->getSession()->wait(3000, "(function() { var r = {$rows}; return !!r && r.length === {$count}; })()");
+        $actual = $this->getSession()->evaluateScript("(function() { var r = {$rows}; return r ? r.length : -1; })()");
+        if ((int)$actual !== $count) {
+            throw new ExpectationException(
+                "The multiline editor for '{$inputname}' has {$actual} rows, expected {$count}.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Assert the lines of the underlying STACK textarea, "|"-separated (waits up to 3 s).
+     *
+     * "x=1||x=2" means three lines with an empty second line. The wait covers the editor's
+     * debounced sync.
+     *
+     * @Then the lines of the underlying STACK input for :inputname should be :lines
+     * @param string $inputname STACK input name.
+     * @param string $lines     Expected lines separated by "|".
+     */
+    public function the_lines_of_the_underlying_input_should_be(string $inputname, string $lines): void {
+        $jsinput = json_encode($inputname);
+        $jslines = json_encode($lines);
+        $read = <<<JS
+(function() {
+    var n = {$jsinput};
+    var input = document.querySelector('[name$="_' + n + '"]') || document.querySelector('[name="' + n + '"]');
+    return input ? input.value.split(/\\r?\\n/).join('|') : '__missing_input__';
+})()
+JS;
+        $this->getSession()->wait(3000, "{$read} === {$jslines}");
+        $actual = $this->getSession()->evaluateScript($read);
+        if ($actual !== $lines) {
+            throw new ExpectationException(
+                "The lines of STACK input '{$inputname}' are '{$actual}', expected '{$lines}'.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
      * Create a STACK question (any name) and add it to the named quiz.
      *
      * @Given a STACK question exists in quiz :quizname
@@ -570,15 +780,17 @@ JS;
     /**
      * Internal helper: find-or-create a STACK question in a quiz.
      *
-     * Uses qtype_stack's 'algebraic' generator template.
+     * Uses a qtype_stack generator template ('algebraic_input' by default).
      *
      * @param string $quizname     Quiz name.
      * @param string $questionname Question name.
+     * @param string $template     qtype_stack generator template.
      * @return stdClass The question record.
      */
     protected function ensure_stack_question_in_quiz(
         string $quizname,
-        string $questionname
+        string $questionname,
+        string $template = 'algebraic_input'
     ): stdClass {
         global $DB, $CFG;
         require_once($CFG->dirroot . '/mod/quiz/locallib.php');
@@ -628,7 +840,7 @@ JS;
         // Create STACK question via the plugin generator.
         $gen      = testing_util::get_data_generator();
         $qgen     = $gen->get_plugin_generator('core_question');
-        $question = $qgen->create_question('stack', 'algebraic_input', [
+        $question = $qgen->create_question('stack', $template, [
             'name'     => $questionname,
             'category' => $cat->id,
         ]);
@@ -719,6 +931,9 @@ JS;
         $this->getSession()->visit($url->out(false));
         $this->getSession()->wait(2000, "document.readyState === 'complete'");
 
+        // Store the quiz view URL so navigation helpers can return to it without back().
+        $this->lastquizviewurl = $url->out(false);
+
         // Click "Attempt quiz now" button (text varies by Moodle version / language).
         $page   = $this->getSession()->getPage();
         $button = $page->find(
@@ -734,6 +949,9 @@ JS;
         }
         // Verify the STACK question rendered ans1 (CAS must be working).
         $this->assert_stack_input_present('ans1');
+
+        // Store the attempt URL for deterministic re-open by pre-fill helpers.
+        $this->lastquizattempturl = $this->getSession()->getCurrentUrl();
     }
 
     /**
@@ -813,17 +1031,30 @@ JS);
     }
 
     /**
-     * Return to the quiz attempt page (re-open the current attempt).
+     * Return to the quiz attempt page by re-visiting the stored attempt URL.
+     *
+     * Uses the URL stored by i_start_the_stack_mathquill_quiz_attempt rather than
+     * getSession()->back() which is non-deterministic due to browser bfcache and
+     * does not work reliably for single-question quizzes (no "Next" button present).
      *
      * @When I return to the quiz attempt page
      */
     public function i_return_to_the_quiz_attempt_page(): void {
-        $this->getSession()->back();
-        $this->getSession()->wait(2000, "document.readyState === 'complete'");
+        if ($this->lastquizattempturl) {
+            $this->getSession()->visit($this->lastquizattempturl);
+        }
+        $this->assert_stack_input_present('ans1');
     }
 
     /**
-     * Navigate to next quiz page and back to simulate saving progress.
+     * Navigate to next quiz page (if present) and back, to simulate quiz navigation.
+     *
+     * In a single-question quiz there is no "Next" button, so this simply re-visits
+     * the stored attempt URL, which re-renders the page with any server-saved answer.
+     * In a multi-page quiz it clicks "Next", then re-opens the first page.
+     *
+     * Uses the URL stored by i_start_the_stack_mathquill_quiz_attempt to avoid the
+     * non-deterministic getSession()->back() behaviour (bfcache).
      *
      * @When I navigate to the next question and back
      */
@@ -837,17 +1068,27 @@ JS);
         );
         if ($next) {
             $next->click();
-            $this->getSession()->wait(2000, "document.readyState === 'complete'");
+            $this->getSession()->wait(3000, "document.readyState === 'complete'");
         }
-        $this->getSession()->back();
-        $this->getSession()->wait(2000, "document.readyState === 'complete'");
+        // Re-open the stored attempt URL (first page) rather than calling back().
+        if ($this->lastquizattempturl) {
+            $this->getSession()->visit($this->lastquizattempturl);
+        }
+        $this->assert_stack_input_present('ans1');
     }
 
     /**
-     * Enter an answer in a quiz, then navigate away and back to simulate persistence.
+     * Enter an answer in a quiz and persist it server-side via a real form submit.
+     *
+     * Submits the Moodle quiz responseform without a named button so that
+     * processattempt.php performs a "save" action and redirects back to the same
+     * attempt page.  The step then navigates to the quiz view page so that
+     * subsequent "return to attempt" or "navigate and back" steps can visit
+     * the stored attempt URL and verify that the server-rendered answer value
+     * pre-populates the MathQuill field on reload.
      *
      * @When I have previously answered :answer in the quiz :quizname
-     * @param string $answer   Maxima expression to set as the input value.
+     * @param string $answer   Maxima expression to save as the input value.
      * @param string $quizname Quiz name.
      */
     public function i_have_previously_answered(
@@ -856,22 +1097,36 @@ JS);
     ): void {
         $this->i_start_the_stack_mathquill_quiz_attempt($quizname);
 
-        // Set the first visible STACK algebraic input value via JS.
-        $safeanswer = addslashes($answer);
-        $js = <<<JS
-            (function() {
-                var input = document.querySelector('input[name*="ans"]');
-                if (!input) { return false; }
-                input.value = '{$safeanswer}';
-                input.dispatchEvent(new Event('change', {bubbles: true}));
-                return true;
-            })()
-JS;
-        $this->getSession()->evaluateScript($js);
-        $this->getSession()->wait(1000, 'true');
+        // Set the STACK algebraic input directly on the hidden form field.
+        // Using json_encode avoids any special-character quoting issues.
+        $jsinput  = json_encode($answer);
+        $setvalue = "(function() {"
+            . "var i = document.querySelector('[name\$=\"_ans1\"]')"
+            . " || document.querySelector('[name*=\"ans1\"]');"
+            . "if (!i) { return false; }"
+            . "i.value = {$jsinput};"
+            . "return true;"
+            . "})()";
+        $this->getSession()->evaluateScript($setvalue);
 
-        // Submit via the "Next" or save-without-submitting button.
-        $this->i_navigate_to_next_question_and_back();
+        // Submit the responseform without a named button.  processattempt.php
+        // interprets this as a "save" action: it saves the answers and redirects
+        // back to the attempt page.  The redirect destination is irrelevant —
+        // we navigate explicitly to the quiz view page afterwards.
+        $this->getSession()->evaluateScript(
+            "(function() { var f=document.getElementById('responseform');"
+            . " if (f) { f.submit(); } })()"
+        );
+
+        // Wait for processattempt redirect to complete.
+        $this->getSession()->wait(15000, "document.readyState === 'complete'");
+
+        // Navigate to the quiz view page so that subsequent steps can visit
+        // the stored attempt URL and observe the pre-filled MathQuill field.
+        if ($this->lastquizviewurl) {
+            $this->getSession()->visit($this->lastquizviewurl);
+            $this->getSession()->wait(5000, "document.readyState === 'complete'");
+        }
     }
 
     // Configure form assertions.
@@ -1217,13 +1472,26 @@ JS;
     }
 
     /**
-     * Set the plugin usepercentpi config option directly in the database.
+     * Set the plugin usepercentpi config option and reload the attempt page.
+     *
+     * The sme-definitions JSON element (which carries usePercentPi to the AMD
+     * runtime) is rendered at page-load time.  Simply calling set_config() after
+     * the attempt page has already loaded has no effect on the running JS.
+     * This step purges the MUC cache so the web server re-reads the updated value
+     * on the next request, then reloads the current page so the AMD module picks
+     * up the new usePercentPi setting.
      *
      * @Given the plugin usepercentpi setting is :value
      * @param string $value Config value: "0" to disable, "1" to enable.
      */
     public function the_plugin_usepercentpi_setting_is(string $value): void {
         set_config('usepercentpi', (int) $value, 'local_stackmatheditor');
+        // Force the web-server process to re-read the config from the DB.
+        purge_all_caches();
+        // Reload the current page so the AMD module receives the updated value
+        // in the freshly-rendered sme-definitions JSON element.
+        $this->getSession()->reload();
+        $this->assert_stack_input_present('ans1');
     }
 
     // Tex2max JavaScript evaluation.
@@ -1313,7 +1581,10 @@ JS;
                 );
             })();
 JS;
-        $this->getSession()->evaluateScript($js);
+        // Execute, not evaluate: evaluateScript() prefixes the script with "return ", and a
+        // "return" followed by the leading comment line returned undefined before any statement
+        // ran - the result stayed empty. executeScript() runs the script exactly as written.
+        $this->getSession()->executeScript($js);
         // Wait up to 3 s for the AMD callback to fire.
         $this->getSession()->wait(3000, "window.__sme_t2m_result !== '__waiting__'");
     }
@@ -1393,9 +1664,39 @@ JS;
      * @When I navigate to the STACK healthcheck page
      */
     public function i_navigate_to_stack_healthcheck_page(): void {
+        // The healthcheck runs a dozen CAS calls; with platform=linux (Maxima without a frozen
+        // image) the response can take longer than php-webdriver's 30 s HTTP timeout, and a
+        // regular visit() then fails with "WebDriverCurlException ... Operation timed out"
+        // although STACK is fine. The page is therefore fetched from within the current page:
+        // fetch() is no navigation, so every WebDriver command below returns at once, and the
+        // step waits up to 280 s (castimeout is 300 s) for the result. The fetched HTML is shown
+        // in the current page, where the assertion steps read it.
         $url = new moodle_url('/question/type/stack/adminui/healthcheck.php');
-        $this->getSession()->visit($this->locate_path($url->out(false)));
-        $this->wait_for_pending_js();
+        $jsurl = json_encode($this->locate_path($url->out(false)));
+        $this->getSession()->executeScript(<<<JS
+window.__smeHealthcheck = null;
+fetch({$jsurl}, {credentials: 'same-origin'})
+    .then(function(response) {
+        return response.text().then(function(text) {
+            var box = document.getElementById('sme-healthcheck') || document.createElement('div');
+            box.id = 'sme-healthcheck';
+            box.innerHTML = text;
+            document.body.appendChild(box);
+            window.__smeHealthcheck = 'HTTP ' + response.status;
+        });
+    })
+    .catch(function(e) {
+        window.__smeHealthcheck = 'error: ' + e;
+    });
+JS);
+        $this->getSession()->wait(280000, 'window.__smeHealthcheck !== null');
+        $status = $this->getSession()->evaluateScript('return window.__smeHealthcheck;');
+        if ($status !== 'HTTP 200') {
+            throw new ExpectationException(
+                'The STACK healthcheck page could not be loaded within 280 s (' . var_export($status, true) . ').',
+                $this->getSession()
+            );
+        }
     }
 
     /**

@@ -46,6 +46,7 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
   Scenario: "not" is not split into n*o*t in explicit_single mode
     When I enter latex "\neg (x=0)" into the MathQuill field for "ans1"
     Then the underlying STACK input for "ans1" should not contain "n*o*t"
+    And the underlying STACK input for "ans1" should not contain "#g"
 
   # ── Mixed-fraction fix (#29) ──────────────────────────────────────────────────
 
@@ -71,7 +72,7 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
     When I enter latex "\pi" into the MathQuill field for "ans1"
     Then the underlying STACK input for "ans1" should be "pi"
 
-  @javascript @wip
+  @javascript
   Scenario: Pi is rendered as "%pi" when usePercentPi is enabled
     Given the plugin usePercentPi setting is "1"
     When I enter latex "\pi" into the MathQuill field for "ans1"
@@ -80,38 +81,78 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
   # ── pm / ± expansion (#30) ────────────────────────────────────────────────────
 
   @javascript
-  Scenario: Prefix pm produces two variants with unary plus stripped
+  Scenario: Prefix pm produces two nounor alternatives with unary plus stripped
     When I enter latex "x=\pm 2" into the MathQuill field for "ans1"
-    Then the underlying STACK input for "ans1" should contain "or"
-    And the underlying STACK input for "ans1" should contain "x=2"
-    And the underlying STACK input for "ans1" should contain "x=-2"
+    Then the underlying STACK input for "ans1" should be "(x=2) nounor (x=-2)"
     And the underlying STACK input for "ans1" should not contain "x=+2"
 
   @javascript
   Scenario: Infix pm retains both plus and minus signs
     When I enter latex "a\pm b" into the MathQuill field for "ans1"
-    Then the underlying STACK input for "ans1" should contain "a+b or a-b"
-
-  # ── Set-theory (#28) ─────────────────────────────────────────────────────────
+    Then the underlying STACK input for "ans1" should be "(a+b) nounor (a-b)"
 
   @javascript
-  Scenario: Set-theory notin converts to Maxima keyword
+  Scenario: Coupled pm and mp give exactly two alternatives
+    When I enter latex "x=a\pm b\mp c" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "(x=a+b-c) nounor (x=a-b+c)"
+
+  @javascript
+  Scenario: Minus-plus is the mirror image of plus-minus, without a unary plus (#49)
+    When I enter latex "x=\mp 2" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "(x=-2) nounor (x=2)"
+    And the underlying STACK input for "ans1" should not contain "+"
+
+  @javascript
+  Scenario: A unary pm inside parentheses keeps the parentheses
+    When I enter latex "x=a\left(\pm b+c\right)" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should contain "(b+c)"
+    And the underlying STACK input for "ans1" should contain "(-b+c)"
+    And the underlying STACK input for "ans1" should contain "nounor"
+
+  # ── Square root (#39) ────────────────────────────────────────────────────────
+
+  @javascript
+  Scenario: A square root next to plus/minus stays an atomic sqrt call
+    When I enter latex "x=-\frac{p}{2}\pm\sqrt{\frac{p^2}{4-q}}" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should contain "sqrt((p^2)/(4-q))"
+    And the underlying STACK input for "ans1" should not contain "s*q*r*t"
+    And the underlying STACK input for "ans1" should not contain "\pm"
+
+  @javascript
+  Scenario Outline: The shipped tex2max never splits sqrt, whatever the variable mode
+    When the tex2max output for latex "a\sqrt{b}" in variableMode "<mode>" is evaluated
+    Then the tex2max result should contain "sqrt(b)"
+    And the tex2max result should not contain "asqrt"
+
+    Examples:
+      | mode            |
+      | explicit_single |
+      | space_single    |
+      | stack           |
+
+  # ── Set theory and logic: STACK-valid forms (#35) ────────────────────────────
+
+  @javascript
+  Scenario: Set membership becomes the STACK predicate elementp
     When I enter latex "x\notin A" into the MathQuill field for "ans1"
-    Then the underlying STACK input for "ans1" should contain "notin"
+    Then the underlying STACK input for "ans1" should be "not elementp(x,A)"
 
   @javascript
-  Scenario: Set-theory union converts to Maxima keyword
-    When I enter latex "A\cup B" into the MathQuill field for "ans1"
-    Then the underlying STACK input for "ans1" should contain "union"
-
-  # ── Logic operators ───────────────────────────────────────────────────────────
-
-  @javascript @wip
-  Scenario: Logic "and" from \land converts correctly
-    When I enter latex "p\land q" into the MathQuill field for "ans1"
-    Then the underlying STACK input for "ans1" should contain "and"
+  Scenario: Set union becomes the STACK function union
+    When I enter latex "x\in A\cup B" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "elementp(x,union(A,B))"
 
   @javascript
-  Scenario: Logic "implies" from \Rightarrow converts correctly
-    When I enter latex "p\Rightarrow q" into the MathQuill field for "ans1"
-    Then the underlying STACK input for "ans1" should contain "implies"
+  Scenario: A proper subset keeps its strictness
+    When I enter latex "A\subset B" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "(subsetp(A,B) and A#B)"
+
+  @javascript
+  Scenario: Logic buttons write and/or, not the structural noun operators
+    When I enter latex "p\land q\lor r" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "p and q or r"
+
+  @javascript
+  Scenario: Implied-by is rewritten as a swapped implication
+    When I enter latex "p\Leftarrow q" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "q implies p"

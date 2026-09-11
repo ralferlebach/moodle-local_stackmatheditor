@@ -27,8 +27,11 @@ define([
     'jquery',
     'local_stackmatheditor/tex2max',
     'local_stackmatheditor/max2tex',
-    'local_stackmatheditor/toolbar'
-], function($, tex2max, max2tex, toolbar) {
+    'local_stackmatheditor/toolbar',
+    'local_stackmatheditor/operator_map',
+    'local_stackmatheditor/stack_bridge',
+    'local_stackmatheditor/local_validation'
+], function($, tex2max, max2tex, toolbar, OperatorMap, Bridge, LocalValidation) {
     'use strict';
 
     var TYPES = ['equiv', 'textarea'];
@@ -230,29 +233,6 @@ define([
     }
 
     /**
-     * Trigger native and jQuery validation events for a textarea.
-     *
-     * @param {jQuery} $ta Textarea element.
-     */
-    function triggerStackValidation($ta) {
-        $ta.trigger('change');
-        $ta.trigger('input');
-        $ta.trigger('blur');
-
-        var nativeInput = new Event('input', {
-            bubbles: true,
-            cancelable: true
-        });
-        $ta[0].dispatchEvent(nativeInput);
-
-        var nativeChange = new Event('change', {
-            bubbles: true,
-            cancelable: true
-        });
-        $ta[0].dispatchEvent(nativeChange);
-    }
-
-    /**
      * Check whether a character is a valid boundary for the keyword and.
      *
      * @param {string} ch Character to inspect.
@@ -263,7 +243,7 @@ define([
     }
 
     /**
-     * Split a Maxima expression by top-level and connectors.
+     * Split a Maxima expression at the top-level system join (nounand).
      *
      * @param {string} expr Source expression.
      * @returns {string[]} Split top-level parts.
@@ -275,6 +255,7 @@ define([
         var i;
         var prev;
         var next;
+        var kw = OperatorMap.SYSTEM_JOIN;
 
         for (i = 0; i < expr.length; i++) {
             if (expr.charAt(i) === '(') {
@@ -283,13 +264,13 @@ define([
                 depth = Math.max(0, depth - 1);
             }
 
-            if (depth === 0 && expr.substr(i, 3) === 'and') {
+            if (depth === 0 && expr.substr(i, kw.length) === kw) {
                 prev = i > 0 ? expr.charAt(i - 1) : '';
-                next = i + 3 < expr.length ? expr.charAt(i + 3) : '';
+                next = i + kw.length < expr.length ? expr.charAt(i + kw.length) : '';
                 if (isAndBoundaryChar(prev) && isAndBoundaryChar(next)) {
                     parts.push(expr.substring(start, i).trim());
-                    start = i + 3;
-                    i += 2;
+                    start = i + kw.length;
+                    i += kw.length - 1;
                 }
             }
         }
@@ -400,12 +381,14 @@ define([
      * @returns {string[][]} Parsed editor steps.
      */
     function parseInitialSteps(value, inputType) {
+        // Leading/trailing blank lines are dropped (STACK trims the value as well); inner empty
+        // lines are real lines of the answer and are kept (#41).
         var raw = (value || '').trim();
         var lines;
         if (!raw) {
             return [['']];
         }
-        lines = raw.split('\n').map(function(line) {
+        lines = raw.split(/\r?\n/).map(function(line) {
             return line.trim();
         });
         if (inputType === 'equiv') {
@@ -429,18 +412,34 @@ define([
     }
 
     /**
+     * True when a MathQuill field holds no content.
+     *
+     * @param {string} latex Field LaTeX.
+     * @returns {boolean} Whether the field is empty.
+     */
+    function isEmptyLatex(latex) {
+        return !latex || !latex.trim();
+    }
+
+    /**
      * Convert a MathQuill LaTeX string to Maxima.
      *
      * @param {string} latex LaTeX input.
      * @param {Object} convOpts Converter options.
-     * @returns {string} Converted Maxima expression.
+     * @param {string[]} [problems] Collects codes of incomplete structures (#44).
+     * @returns {string} Converted Maxima expression (empty for an incomplete structure).
      */
-    function maximaFromLatex(latex, convOpts) {
+    function maximaFromLatex(latex, convOpts, problems) {
+        var result;
         if (!latex || !latex.trim()) {
             return '';
         }
         try {
-            return tex2max.convert(latex, convOpts);
+            result = tex2max.analyse(latex, convOpts);
+            if (problems) {
+                Array.prototype.push.apply(problems, result.problems);
+            }
+            return result.maxima;
         } catch (e) {
             return latex;
         }
@@ -504,6 +503,14 @@ define([
             + ', varMode=' + this.varMode + ')');
 
         this.build();
+
+        // Check / Submit always send the visible state, even while a debounced sync is still
+        // pending (#48); a stale "invalid" result from STACK is re-checked once.
+        var self = this;
+        Bridge.register(function() {
+            self.syncNow({silent: true});
+        });
+        Bridge.guardStaleValidation($ta[0]);
     }
 
     /**
@@ -539,6 +546,8 @@ define([
                 }
                 self.addStep(template);
                 self.focusStep(self.rows.length - 1, 0);
+                // The "+" (Add line) button adds a line like Enter does, and says so (#43).
+                Bridge.signalEnter(self.$ta[0], {trigger: 'button', inputType: self.inputType, slot: self.slot});
             });
         this.$wrap.append(this.$addBtn);
 
@@ -713,6 +722,8 @@ define([
                     }
                     self.addStep(template, pos.stepIdx + 1);
                     self.focusStep(pos.stepIdx + 1, pos.fieldIdx < template.length ? pos.fieldIdx : 0);
+                    // Enter stays observable for external scripts (#43).
+                    Bridge.signalEnter(self.$ta[0], {trigger: 'key', inputType: self.inputType, slot: self.slot});
                 }
             }
         });
@@ -734,26 +745,50 @@ define([
         $mqWrap.on('click', function() {
             mq.focus();
         });
+        // MathQuill does not raise "edit" for every structural change. A key release, paste or
+        // cut always schedules a sync, so no intermediate state can outlive the final one (#48).
+        $mqWrap.on('keyup paste cut', function() {
+            self.debouncedSync();
+        });
         $mqWrap.on('focusin', function() {
             var pos = self.indexOfField(mq);
             if (pos) {
                 self.setActive(pos.stepIdx, pos.fieldIdx);
             }
         });
-        $mqWrap.on('keydown', function(e) {
-            var pos = self.indexOfField(mq);
-            if (!pos) {
+        // Normal lines (#41): two-stage deletion. MathQuill deletes the content down to an
+        // empty line, which then stays as a real empty line; only Backspace or Delete in a line
+        // that was ALREADY empty removes it. The capture phase runs before MathQuill's own key
+        // handler, so it sees the line as it was before this key. At least one line remains.
+        $mqWrap[0].addEventListener('keydown', function(e) {
+            var pos;
+            if (e.key !== 'Backspace' && e.key !== 'Delete') {
                 return;
             }
-            if (e.key === 'Backspace' && (!mq.latex() || mq.latex().trim() === '')) {
-                if (self.rows[pos.stepIdx].fields.length > 1) {
-                    e.preventDefault();
-                    self.removeField(pos.stepIdx, pos.fieldIdx);
-                } else if (self.rows.length > 1) {
-                    e.preventDefault();
-                    self.removeStep(pos.stepIdx);
-                    self.focusStep(Math.max(0, pos.stepIdx - 1), 0);
-                }
+            pos = self.indexOfField(mq);
+            if (!pos || self.rows[pos.stepIdx].fields.length > 1) {
+                return;
+            }
+            if (!isEmptyLatex(mq.latex()) || self.rows.length <= 1) {
+                return;
+            }
+            // Only here a structure is removed, and only here the key is claimed.
+            e.preventDefault();
+            self.removeStep(pos.stepIdx);
+            self.focusStep(e.key === 'Backspace'
+                ? Math.max(0, pos.stepIdx - 1)
+                : Math.min(pos.stepIdx, self.rows.length - 1), 0);
+        }, true);
+        // Equation-system sub-rows keep their behaviour: a Backspace that leaves a sub-row
+        // empty removes that sub-row.
+        $mqWrap.on('keydown', function(e) {
+            var pos = self.indexOfField(mq);
+            if (!pos || e.key !== 'Backspace' || !isEmptyLatex(mq.latex())) {
+                return;
+            }
+            if (self.rows[pos.stepIdx].fields.length > 1) {
+                e.preventDefault();
+                self.removeField(pos.stepIdx, pos.fieldIdx);
             }
         });
 
@@ -880,6 +915,8 @@ define([
             }
             self.addField(self.rows.indexOf(stepData), templateValue, focusField + 1);
             self.focusStep(self.rows.indexOf(stepData), focusField + 1);
+            // The "+" button adds a row like Enter does, and says so (#43).
+            Bridge.signalEnter(self.$ta[0], {trigger: 'button', inputType: self.inputType, slot: self.slot});
         });
 
         $del.on('click', function(e) {
@@ -943,26 +980,42 @@ define([
 
     /**
      * Sync all visible editor rows back into the hidden textarea.
+     *
+     * Every row is converted afresh from its MathQuill field, so a conversion
+     * that failed for a transient state never blocks the next sync, and no row
+     * keeps an outdated value.
+     *
+     * @param {Object} [options] Options.
+     * @param {boolean} [options.silent] Write without raising events (used right
+     *     before a submit, where STACK validates the posted value anyway).
      */
-    EquivEditor.prototype.syncNow = function() {
+    EquivEditor.prototype.syncNow = function(options) {
         var self = this;
+        var silent = !!(options && options.silent);
+
+        if (this.syncTimer) {
+            clearTimeout(this.syncTimer);
+            this.syncTimer = null;
+        }
+        var problems = [];
         var lines = this.rows.map(function(step) {
             var parts = step.fields.map(function(fieldData) {
-                fieldData.maxima = maximaFromLatex(fieldData.mq.latex(), self.convOpts);
+                fieldData.maxima = maximaFromLatex(fieldData.mq.latex(), self.convOpts, problems);
                 return fieldData.maxima;
             });
             if (parts.length > 1) {
                 return parts.map(function(part) {
                     return '(' + part + ')';
-                }).join(' and ');
+                }).join(' ' + OperatorMap.SYSTEM_JOIN + ' ');
             }
             return parts[0] || '';
         });
         var value = lines.join('\n');
         var oldVal = this.$ta.val();
+        LocalValidation.show(this.$rows[0], problems);
         this.$ta.val(value);
-        if (value !== oldVal) {
-            triggerStackValidation(this.$ta);
+        if (value !== oldVal && !silent) {
+            Bridge.triggerValidation(this.$ta[0]);
             dbg('sync: ' + lines.length + ' steps');
         }
     };

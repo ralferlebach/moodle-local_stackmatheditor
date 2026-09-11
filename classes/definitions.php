@@ -194,6 +194,10 @@ class definitions {
                         'tooltip' => get_string('btn_cap', $p)],
                     ['display' => '∖', 'cmd'   => '\\setminus',
                         'tooltip' => get_string('btn_setminus', $p)],
+                    ['display' => '⊆', 'cmd'   => '\\subseteq',
+                        'tooltip' => get_string('btn_subseteq', $p)],
+                    ['display' => '⊇', 'cmd'   => '\\supseteq',
+                        'tooltip' => get_string('btn_supseteq', $p)],
                     ['display' => '⊂', 'cmd'   => '\\subset',
                         'tooltip' => get_string('btn_subset', $p)],
                     ['display' => '⊃', 'cmd'   => '\\supset',
@@ -221,12 +225,18 @@ class definitions {
                 'label'           => get_string('group_logic', $p),
                 'default_enabled' => false,
                 'elements'        => [
+                    // @codingStandardsIgnoreStart
+                    /*
+                    // Quantifiers: deferred - STACK 4.13 knows neither forall, exists nor
+                    // nexists, so every answer written with these buttons would be invalid.
                     ['display' => '∀', 'cmd' => '\\forall',
                         'tooltip' => get_string('btn_forall', $p)],
                     ['display' => '∃', 'cmd' => '\\exists',
                         'tooltip' => get_string('btn_exists', $p)],
                     ['display' => '∄', 'cmd' => '\\nexists',
                         'tooltip' => get_string('btn_nexists', $p)],
+                    */
+                    // @codingStandardsIgnoreEnd
                     ['display' => '¬', 'cmd' => '\\neg',
                         'tooltip' => get_string('btn_neg', $p)],
                     ['display' => '∧', 'cmd' => '\\land',
@@ -239,6 +249,36 @@ class definitions {
                         'tooltip' => get_string('btn_impliedby', $p)],
                     ['display' => '⇔', 'cmd' => '\\Leftrightarrow',
                         'tooltip' => get_string('btn_iff', $p)],
+                ],
+            ],
+
+            // Differential calculus (#46): three structured templates, canonical ∂ (diff(...) does
+            // not record d vs. ∂). The operand bracket is part of the template; the cursor
+            // starts inside it. The total order is checked against the denominator orders.
+            'differential_operators' => [
+                'label'           => get_string('group_differential_operators', $p),
+                'default_enabled' => false,
+                'elements'        => [
+                    ['display' => '∂/∂x', 'write' => '\\frac{\\partial}{\\partial x}\\left(\\right)', 'left' => 1,
+                        'tooltip' => get_string('btn_partial', $p)],
+                    ['display' => '∂ⁿ/∂xⁿ', 'write' => '\\frac{\\partial^{2}}{\\partial x^{2}}\\left(\\right)', 'left' => 1,
+                        'tooltip' => get_string('btn_partial_n', $p)],
+                    ['display' => '∂²/∂x∂y',
+                        'write' => '\\frac{\\partial^{2}}{\\partial x\\partial y}\\left(\\right)', 'left' => 1,
+                        'tooltip' => get_string('btn_partial_mixed', $p)],
+                ],
+            ],
+
+            // Integral calculus (#44): one structured template - limits (leave empty for an
+            // indefinite integral), integrand in brackets, atomic variable after d. The cursor
+            // starts in the integrand. The contour integral has no STACK semantics and is not
+            // offered.
+            'integral_operators' => [
+                'label'           => get_string('group_integral_operators', $p),
+                'default_enabled' => false,
+                'elements'        => [
+                    ['display' => '∫', 'write' => '\\int_{}^{}\\left(\\right)\\mathrm{d}x', 'left' => 5,
+                        'tooltip' => get_string('btn_integral', $p)],
                 ],
             ],
 
@@ -377,19 +417,6 @@ class definitions {
             ],
 
             // 16. Differential calculus.
-            'differential_operators' => [
-                'label'           => get_string('group_differential_operators', $p),
-                'default_enabled' => false,
-                'elements'        => [
-                    ['display' => 'd/dx', 'write' => '\\frac{d}{dx}',
-                        'tooltip' => get_string('btn_deriv', $p)],
-                    ['display' => '∂/∂x', 'write' => '\\frac{\\partial}{\\partial x}',
-                        'tooltip' => get_string('btn_partial', $p)],
-                    ['display' => '∇', 'cmd'   => '\\nabla',
-                        'tooltip' => get_string('btn_nabla', $p)],
-                    ['display' => 'Δ', 'cmd'   => '\\Delta',
-                        'tooltip' => get_string('btn_laplacian', $p)],
-                ],
             ],
 
             // 17. Vector differential.
@@ -423,15 +450,6 @@ class definitions {
             ],
 
             // 19. Integral calculus.
-            'integral_operators' => [
-                'label'           => get_string('group_integral_operators', $p),
-                'default_enabled' => false,
-                'elements'        => [
-                    ['display' => '∫', 'write' => '\\int_{}^{}',
-                        'tooltip' => get_string('btn_integral', $p)],
-                    ['display' => '∮', 'write' => '\\oint_{}^{}',
-                        'tooltip' => get_string('btn_contour_integral', $p)],
-                ],
             ],
 
             // 20. Statistics.

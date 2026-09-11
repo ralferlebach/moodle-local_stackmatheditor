@@ -8,7 +8,7 @@ Halte dich an exakt diese Struktur:
 
 ---
 
-# CCH Kontext-Dokument
+# STACK MathQuill Editor – Kontext-Dokument
 Erstellt: [Datum + Uhrzeit]
 Sitzung Nr.: [fortlaufend]
 

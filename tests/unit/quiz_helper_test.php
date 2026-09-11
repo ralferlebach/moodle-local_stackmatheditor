@@ -81,6 +81,103 @@ final class quiz_helper_test extends advanced_testcase {
     }
 
     /**
+     * get_return_url() keeps the complete calling page, including all query parameters (#47).
+     */
+    public function test_get_return_url_keeps_the_calling_page(): void {
+        global $PAGE;
+        $this->resetAfterTest();
+        $PAGE->set_url(new \moodle_url('/mod/quiz/view.php', ['id' => 42, 'extra' => 'x']));
+
+        $this->assertSame(
+            (new \moodle_url('/mod/quiz/view.php', ['id' => 42, 'extra' => 'x']))->out(false),
+            quiz_helper::get_return_url(42)
+        );
+    }
+
+    /**
+     * Without a page URL the fallback is the module's view page, never the quiz edit page (#47).
+     */
+    public function test_get_return_url_without_page_url_uses_the_view_page(): void {
+        global $PAGE;
+        $this->resetAfterTest();
+        $PAGE = new \moodle_page();
+
+        $this->assertSame(
+            (new \moodle_url('/mod/quiz/view.php', ['id' => 42]))->out(false),
+            quiz_helper::get_return_url(42)
+        );
+        $this->assertSame(
+            (new \moodle_url('/mod/adaptivequiz/view.php', ['id' => 42]))->out(false),
+            quiz_helper::get_return_url(42, 'adaptivequiz')
+        );
+    }
+
+    /**
+     * Local return URLs are kept exactly, with all query parameters (#47).
+     *
+     * @dataProvider local_return_url_provider
+     * @param string $raw Requested return URL.
+     * @param string $expectedpath Expected path and query below wwwroot.
+     */
+    public function test_resolve_return_url_keeps_local_urls(string $raw, string $expectedpath): void {
+        global $CFG;
+        if (strpos($raw, 'WWWROOT') === 0) {
+            $raw = $CFG->wwwroot . substr($raw, strlen('WWWROOT'));
+        }
+        $this->assertSame($CFG->wwwroot . $expectedpath, quiz_helper::resolve_return_url($raw, 42));
+    }
+
+    /**
+     * Local return URLs.
+     *
+     * @return array
+     */
+    public static function local_return_url_provider(): array {
+        return [
+            'quiz view' => ['/mod/quiz/view.php?id=123', '/mod/quiz/view.php?id=123'],
+            'quiz edit' => ['/mod/quiz/edit.php?cmid=123', '/mod/quiz/edit.php?cmid=123'],
+            'review with extra parameters' => [
+                '/mod/quiz/review.php?attempt=456&page=2',
+                '/mod/quiz/review.php?attempt=456&page=2',
+            ],
+            'absolute below wwwroot' => ['WWWROOT/mod/quiz/view.php?id=7', '/mod/quiz/view.php?id=7'],
+        ];
+    }
+
+    /**
+     * External, protocol-relative, script and directory-relative targets fall back (#47).
+     *
+     * @dataProvider unsafe_return_url_provider
+     * @param string $raw Requested return URL.
+     */
+    public function test_resolve_return_url_rejects_unsafe_targets(string $raw): void {
+        $this->assertSame(
+            quiz_helper::get_fallback_return_url(42),
+            quiz_helper::resolve_return_url($raw, 42)
+        );
+        $this->assertSame(
+            quiz_helper::get_fallback_return_url(42, 'adaptivequiz'),
+            quiz_helper::resolve_return_url($raw, 42, 'adaptivequiz')
+        );
+    }
+
+    /**
+     * Unsafe return URLs.
+     *
+     * @return array
+     */
+    public static function unsafe_return_url_provider(): array {
+        return [
+            'external' => ['https://example.org/'],
+            'protocol-relative' => ['//example.org/'],
+            'backslash trick' => ['/\\example.org'],
+            'javascript' => ['javascript:alert(1)'],
+            'relative to the current directory' => ['mod/quiz/view.php?id=3'],
+            'empty' => [''],
+        ];
+    }
+
+    /**
      * quiz_has_stack_questions() returns false for a nonexistent cmid.
      */
     public function test_quiz_has_stack_questions_invalid(): void {

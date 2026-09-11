@@ -1,0 +1,123 @@
+##############################################################################
+# Playwright browser tests - local_stackmatheditor
+#
+# Needs a live, fully installed Moodle site (not a moodle-plugin-ci test site),
+# so it runs separately from the static pipelines.
+#
+# Trigger: manual only (workflow_dispatch) - never on push, PR or merge.
+# NOTE: the "Run workflow" button only appears in the Actions UI once this
+# file exists on the repository's DEFAULT branch (main). The branch to test is
+# then chosen in the dialog ("Use workflow from"), e.g. development.
+#
+# Artefacts: videos, traces and screenshots are recorded for EVERY test and
+# uploaded in both outcomes - green documents the journey, red can be
+# diagnosed without reproducing it locally.
+##############################################################################
+
+name: Playwright
+
+on:
+  workflow_dispatch:
+    inputs:
+      moodle_branch:
+        description: 'Moodle branch of the test site'
+        default: 'MOODLE_405_STABLE'
+        required: false
+
+concurrency:
+  group: playwright-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  playwright:
+    name: "Playwright smoke / ${{ inputs.moodle_branch || 'MOODLE_405_STABLE' }}"
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: moodle
+          POSTGRES_PASSWORD: moodle
+          POSTGRES_DB: moodle
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready" --health-interval=10s
+          --health-timeout=5s --health-retries=5
+    env:
+      MOODLE_BRANCH: ${{ inputs.moodle_branch || 'MOODLE_405_STABLE' }}
+      MOODLE_WWWROOT: http://127.0.0.1:8000
+      MOODLE_ADMIN_PASS: 'Admin!23'
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v6
+        with:
+          path: plugin
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pgsql, gd, intl, zip, soap, mbstring, curl, xml, exif
+          ini-values: max_input_vars=5000
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      # STACK's install.php talks to Maxima while the site is installed.
+      - name: Install Maxima and gnuplot (STACK CAS)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq maxima gnuplot-nox
+      - name: Build and install the test site (Moodle + STACK + plugin)
+        run: bash plugin/.github/build-test-site.sh
+      - name: Preflight - plugin and STACK installed
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          php "$web/local/stackmatheditor/tests/playwright/seed.php" > /tmp/sme-seed.env
+          sed -n "s/^export \([A-Z_][A-Z_]*\)='\(.*\)'$/\1=\2/p" /tmp/sme-seed.env >> "$GITHUB_ENV"
+          cat /tmp/sme-seed.env
+      - name: Install Playwright and Chromium
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          cd "$web/local/stackmatheditor/tests/playwright"
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Run Playwright tests
+        env:
+          SME_ADMIN_USER: admin
+          SME_ADMIN_PASS: ${{ env.MOODLE_ADMIN_PASS }}
+        run: |
+          # The web server is started inside THIS step (see serve-test-site.sh).
+          . plugin/.github/serve-test-site.sh
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          cd "$web/local/stackmatheditor/tests/playwright"
+          npm test
+      - name: Collect report, videos and server log
+        if: ${{ always() }}
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          src="$web/local/stackmatheditor/tests/playwright"
+          dest="$RUNNER_TEMP/playwright-artefacts"
+          mkdir -p "$dest"
+          [ -d "$src/playwright-report" ] && cp -a "$src/playwright-report" "$dest/"
+          [ -d "$src/test-results" ] && cp -a "$src/test-results" "$dest/"
+          if [ -s /tmp/moodle-server.log ]; then
+            gzip -c /tmp/moodle-server.log > "$dest/moodle-server.log.gz"
+          fi
+          echo "Videos:"
+          find "$dest" -name '*.webm' | sed 's#^#  #' || true
+      - name: Show the tail of the server log on failure
+        if: ${{ failure() }}
+        run: tail -100 /tmp/moodle-server.log || true
+      - name: Upload report with videos
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-${{ job.status }}-report-with-videos
+          path: ${{ runner.temp }}/playwright-artefacts
+          retention-days: 14
+          if-no-files-found: warn

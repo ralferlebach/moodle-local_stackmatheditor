@@ -22,7 +22,7 @@
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-define([], function() {
+define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     'use strict';
 
     /**
@@ -141,6 +141,8 @@ define([], function() {
         s = s.replace(/\bforall\b/g, '\\forall ');
         s = s.replace(/\bexists\b/g, '\\exists ');
         s = s.replace(/\bnot\b/g, '\\neg ');
+        s = s.replace(/\bnounand\b/g, '\\land ');
+        s = s.replace(/\bnounor\b/g, '\\lor ');
         s = s.replace(/\band\b/g, '\\land ');
         s = s.replace(/\bor\b/g, '\\lor ');
         s = s.replace(/\bimpliedby\b/g, '\\Leftarrow ');
@@ -203,7 +205,10 @@ define([], function() {
                 result += s.substring(i);
                 break;
             }
-            if (idx > 0 && /[a-zA-Z0-9_]/.test(s[idx - 1])) {
+            // Part of a longer identifier (asqrt(, x_1sqrt() - not this function.
+            // A preceding pure number is a coefficient: 2sqrt(x) is 2*sqrt(x) (#39).
+            if (idx > 0 && /[a-zA-Z0-9_]/.test(s[idx - 1])
+                    && !/(^|[^a-zA-Z0-9_])[0-9]+$/.test(s.substring(0, idx))) {
                 result += s.substring(i, idx + 1);
                 i = idx + 1;
                 continue;
@@ -281,87 +286,446 @@ define([], function() {
     }
 
     /**
-     * Attempt to collapse a Maxima " or " expression back into a
-     * single LaTeX expression using \pm and \mp.
+     * Marker character of a table operator.
      *
-     * Handles two cases:
-     * 1. Symmetric: v1 and v2 have equal length and differ only in +/-.
-     * 2. Asymmetric: v1 is shorter by exactly one character because
-     *    tex2max stripped a leading unary '+' from the positive variant.
-     *    In this case a synthetic '+' is re-inserted at the divergence
-     *    point before doing the character-by-character comparison.
-     *
-     * Works on the final LaTeX output of convert(). Both sides of
-     * " or " must be equal length (after normalisation) and differ
-     * only in "+" vs "-" positions.  Where variant 1 has "+" and
-     * variant 2 has "-", the result gets \pm; where variant 1 has
-     * "-" and variant 2 has "+", the result gets \mp.
-     *
-     * @param {string} s Converted string that may contain " or ".
-     * @returns {string} Collapsed string or unmodified input.
+     * @param {string} name Operator name.
+     * @returns {string} Marker.
      */
-    function collapsePlusMinus(s) {
-        var orIdx = s.indexOf(' or ');
-        if (orIdx === -1) {
-            return s;
-        }
+    function opMarker(name) {
+        return OperatorMap.byName(name).marker;
+    }
 
-        var v1 = s.substring(0, orIdx);
-        var v2 = s.substring(orIdx + 4);
+    /**
+     * Split a function argument list at top-level commas.
+     *
+     * @param {string} s Argument list without the enclosing parentheses.
+     * @returns {string[]} Arguments.
+     */
+    function splitArguments(s) {
+        var parts = [];
+        var depth = 0;
+        var start = 0;
+        var i;
+        var ch;
 
-        // Only handle exactly two variants.
-        if (v2.indexOf(' or ') !== -1) {
-            return s;
-        }
-
-        // Handle asymmetric case: v1 is shorter by 1 because a leading
-        // unary '+' was stripped by tex2max's expandPlusMinus fix.
-        if (v1.length + 1 === v2.length) {
-            // Find the first position where v1 and v2 diverge.
-            var di = 0;
-            while (di < v1.length && v1[di] === v2[di]) {
-                di++;
+        for (i = 0; i < s.length; i++) {
+            ch = s.charAt(i);
+            if ('([{\uE020'.indexOf(ch) !== -1) {
+                depth++;
+            } else if (')]}\uE021'.indexOf(ch) !== -1) {
+                depth--;
+            } else if (ch === ',' && depth === 0) {
+                parts.push(s.substring(start, i).trim());
+                start = i + 1;
             }
-            // If v2[di] is '-' and the preceding character is a valid
-            // unary-prefix boundary (=, (, start of string), restore '+'.
-            if (di < v2.length && v2[di] === '-') {
-                var before = di > 0 ? v2[di - 1] : '';
-                if (!before || /[=(]/.test(before)) {
-                    v1 = v1.substring(0, di) + '+' + v1.substring(di);
+        }
+        parts.push(s.substring(start).trim());
+        return parts;
+    }
+
+    /**
+     * Precedence of a rendered set node: relations 0, ∖ 1, ∪ 2, ∩ 3, operand 10.
+     *
+     * @param {string} name Function name.
+     * @returns {number} Precedence.
+     */
+    function setPrecedence(name) {
+        return {setdifference: 1, union: 2, intersection: 3}[name] || 0;
+    }
+
+    /**
+     * Render one argument of a set function, returning text and precedence.
+     *
+     * @param {string} arg Maxima argument.
+     * @returns {Object} {text, prec}.
+     */
+    function renderSetOperand(arg) {
+        var m = arg.match(/^(union|intersection|setdifference)\(/);
+        var text = renderSetFunctions(arg);
+
+        if (m && findCloseParen(arg, m[1].length) === arg.length - 1) {
+            return {text: text, prec: setPrecedence(m[1])};
+        }
+        if (/^[A-Za-z0-9_%.]+$/.test(arg) || /^[({[\uE020]/.test(arg) && findMatching(arg, 0) === arg.length - 1
+                || /^[A-Za-z_][A-Za-z0-9_]*\(/.test(arg) && findCloseParen(arg, arg.indexOf('(')) === arg.length - 1) {
+            return {text: text, prec: 10};
+        }
+        return {text: '(' + text + ')', prec: 10};
+    }
+
+    /**
+     * Find the matching bracket of any type.
+     *
+     * @param {string} s Input.
+     * @param {number} pos Index of the opening bracket.
+     * @returns {number} Index of the closing bracket or -1.
+     */
+    function findMatching(s, pos) {
+        var depth = 0;
+        var i;
+
+        for (i = pos; i < s.length; i++) {
+            if ('([{\uE020'.indexOf(s.charAt(i)) !== -1) {
+                depth++;
+            } else if (')]}\uE021'.indexOf(s.charAt(i)) !== -1) {
+                depth--;
+                if (depth === 0) {
+                    return i;
                 }
             }
         }
-
-        // Both sides must have equal length for character comparison.
-        if (v1.length !== v2.length) {
-            return s;
-        }
-
-        var result = '';
-        var hasPm = false;
-        var i;
-
-        for (i = 0; i < v1.length; i++) {
-            if (v1[i] === v2[i]) {
-                result += v1[i];
-            } else if (v1[i] === '+' && v2[i] === '-') {
-                result += '\\pm ';
-                hasPm = true;
-            } else if (v1[i] === '-' && v2[i] === '+') {
-                result += '\\mp ';
-                hasPm = true;
-            } else {
-                // Non +/- difference — cannot collapse.
-                return s;
-            }
-        }
-
-        if (!hasPm) {
-            return s;
-        }
-        return result.replace(/\s+/g, ' ').trim();
+        return -1;
     }
 
+    /**
+     * Operand texts, bracketed where their precedence is below minPrec.
+     *
+     * @param {Object[]} nodes Rendered operands {text, prec}.
+     * @param {number} minPrec Precedence of the enclosing operator.
+     * @returns {string[]} Operand texts.
+     */
+    function bracketBelow(nodes, minPrec) {
+        return nodes.map(function(node) {
+            return node.prec < minPrec ? '(' + node.text + ')' : node.text;
+        });
+    }
+
+    /**
+     * Render STACK's set functions as infix operator markers (#35).
+     *
+     * union(A,B) → A ∪ B, intersection → ∩, setdifference → ∖, elementp → ∈,
+     * not elementp → ∉, subsetp → ⊆, and the proper-subset form
+     * "subsetp(A,B) and A#B" written by tex2max → ⊂. Brackets are added
+     * where the precedence ∩ > ∪ requires them, and always around a set
+     * operation next to ∖.
+     *
+     * @param {string} s Maxima expression.
+     * @returns {string} Expression with operator markers.
+     */
+    function renderSetFunctions(s) {
+        var re = /(^|[^A-Za-z0-9_%])((?:not|nounnot)\s+)?(elementp|subsetp|union|intersection|setdifference)\(/;
+        var out = '';
+        var rest = s;
+        var m;
+        var start;
+        var open;
+        var close;
+        var args;
+        var nodes;
+        var prec;
+        var text;
+        var after;
+        var proper;
+
+        while ((m = rest.match(re)) !== null) {
+            start = m.index + m[1].length;
+            open = start + (m[2] || '').length + m[3].length;
+            close = findCloseParen(rest, open);
+            if (close === -1) {
+                break;
+            }
+            out += rest.substring(0, start);
+            args = splitArguments(rest.substring(open + 1, close));
+            after = rest.substring(close + 1);
+            nodes = args.map(renderSetOperand);
+            prec = setPrecedence(m[3]);
+
+            if (m[3] === 'elementp' && args.length === 2) {
+                text = nodes[0].text + ' ' + opMarker(m[2] ? 'notin' : 'in') + ' ' + nodes[1].text;
+            } else if (m[3] === 'subsetp' && args.length === 2) {
+                proper = after.match(/^\s*(?:and|nounand)\s*/);
+                if (proper && after.substring(proper[0].length).indexOf(args[0] + '#' + args[1]) === 0) {
+                    after = after.substring(proper[0].length + (args[0] + '#' + args[1]).length);
+                    text = nodes[0].text + ' ' + opMarker('subset') + ' ' + nodes[1].text;
+                    // Drop the brackets tex2max put around the proper-subset form.
+                    if (/\($/.test(out) && /^\)/.test(after)) {
+                        out = out.substring(0, out.length - 1);
+                        after = after.substring(1);
+                    }
+                } else {
+                    text = nodes[0].text + ' ' + opMarker('subseteq') + ' ' + nodes[1].text;
+                }
+            } else if (m[3] === 'setdifference' && args.length === 2) {
+                // Always bracket a set operation next to ∖: A ∖ B ∪ C is read
+                // differently by different people, (A ∖ B) ∪ C by nobody.
+                text = (nodes[0].prec < 10 ? '(' + nodes[0].text + ')' : nodes[0].text)
+                    + ' ' + opMarker('setminus') + ' '
+                    + (nodes[1].prec < 10 ? '(' + nodes[1].text + ')' : nodes[1].text);
+            } else if (m[3] === 'union' || m[3] === 'intersection') {
+                text = bracketBelow(nodes, prec).join(' ' + opMarker(m[3] === 'union' ? 'cup' : 'cap') + ' ');
+            } else {
+                text = rest.substring(start, close + 1);
+            }
+            out += text;
+            rest = after;
+        }
+        return out + rest;
+    }
+
+    /**
+     * Replace integral calls by placeholders holding their LaTeX (#44).
+     *
+     * Reads the evaluated form integrate(…) / int(…) and the noun forms 'int(…), 'integrate(…)
+     * and nounint(…) - with 2 arguments (indefinite) or 4 (definite). Other arities are left
+     * alone. Written back as \int_{a}^{b} expr\,\mathrm{d}x, the form tex2max reads.
+     *
+     * @param {string} s Maxima expression.
+     * @param {Object} options Conversion options.
+     * @param {string[]} store Collected LaTeX snippets.
+     * @returns {string} Expression with placeholders.
+     */
+    function extractIntegralCalls(s, options, store) {
+        var re = /(^|[^A-Za-z0-9_%])('?)(integrate|int|nounint)\(/;
+        var out = '';
+        var rest = s;
+        var m;
+        var start;
+        var open;
+        var close;
+        var args;
+        var body;
+        var tex;
+
+        while ((m = rest.match(re)) !== null) {
+            start = m.index + m[1].length;
+            open = start + m[2].length + m[3].length;
+            close = findCloseParen(rest, open);
+            if (close === -1) {
+                break;
+            }
+            args = splitArguments(rest.substring(open + 1, close));
+            if (args.length !== 2 && args.length !== 4) {
+                out += rest.substring(0, close + 1);
+                rest = rest.substring(close + 1);
+                continue;
+            }
+            body = convert(args[0], options);
+            // Brackets only where the integrand is a sum; the differential ends it anyway.
+            if (/[+-]/.test(stripEnclosingParens(args[0]).replace(/^[-+]/, '').replace(/\([^()]*\)/g, ''))) {
+                body = '\\left(' + body + '\\right)';
+            }
+            tex = '\\int';
+            if (args.length === 4) {
+                tex += '_{' + convert(args[2], options) + '}^{' + convert(args[3], options) + '}';
+            }
+            // No "\\," before the differential: MathQuill cannot parse it and would drop the
+            // whole pre-filled answer.
+            tex += ' ' + body + '\\mathrm{d}' + convert(args[1], options);
+            out += rest.substring(0, start) + '\uE060' + store.length + '\uE061';
+            store.push(tex);
+            rest = rest.substring(close + 1);
+        }
+        return out + rest;
+    }
+
+    /**
+     * LaTeX of a derivative diff(expr, x[, n][, y, m …]) with the canonical ∂ (#46).
+     *
+     * diff(…) does not record whether d or ∂ was written, so ∂ is used throughout (Ralf's
+     * decision); the order of the variable/order pairs is kept as written.
+     *
+     * @param {string[]} args Arguments of diff (already split).
+     * @param {Object} options Conversion options.
+     * @returns {?string} LaTeX, or null for forms that are not handled (e.g. diff(expr)).
+     */
+    function derivativeLatex(args, options) {
+        var pairs = [];
+        var total = 0;
+        var i;
+        var order;
+
+        if (args.length === 2) {
+            pairs.push({variable: args[1], order: 1});
+        } else if (args.length === 3 && /^\d+$/.test(args[2])) {
+            pairs.push({variable: args[1], order: Number(args[2])});
+        } else if (args.length >= 5 && args.length % 2 === 1) {
+            for (i = 1; i < args.length; i += 2) {
+                if (!/^\d+$/.test(args[i + 1])) {
+                    return null;
+                }
+                pairs.push({variable: args[i], order: Number(args[i + 1])});
+            }
+        } else {
+            return null;
+        }
+        if (pairs.some(function(pair) {
+            return pair.order < 1 || !/^[A-Za-z%][A-Za-z0-9_]*$/.test(pair.variable);
+        })) {
+            return null;
+        }
+        total = pairs.reduce(function(sum, pair) {
+            return sum + pair.order;
+        }, 0);
+        order = function(n) {
+            return n > 1 ? '^{' + n + '}' : '';
+        };
+        return '\\frac{\\partial' + order(total) + '}{'
+            + pairs.map(function(pair) {
+                return '\\partial ' + convert(pair.variable, options) + order(pair.order);
+            }).join('') + '}\\left(' + convert(args[0], options) + '\\right)';
+    }
+
+    /**
+     * Replace derivative calls diff / 'diff / noundiff by placeholders holding their LaTeX (#46).
+     *
+     * @param {string} s Maxima expression.
+     * @param {Object} options Conversion options.
+     * @param {string[]} store Collected LaTeX snippets.
+     * @returns {string} Expression with placeholders.
+     */
+    function extractDerivativeCalls(s, options, store) {
+        var re = /(^|[^A-Za-z0-9_%])('?)(diff|noundiff)\(/;
+        var out = '';
+        var rest = s;
+        var m;
+        var start;
+        var open;
+        var close;
+        var tex;
+
+        while ((m = rest.match(re)) !== null) {
+            start = m.index + m[1].length;
+            open = start + m[2].length + m[3].length;
+            close = findCloseParen(rest, open);
+            if (close === -1) {
+                break;
+            }
+            tex = derivativeLatex(splitArguments(rest.substring(open + 1, close)), options);
+            if (tex === null) {
+                out += rest.substring(0, close + 1);
+            } else {
+                out += rest.substring(0, start) + '\uE060' + store.length + '\uE061';
+                store.push(tex);
+            }
+            rest = rest.substring(close + 1);
+        }
+        return out + rest;
+    }
+
+    /**
+     * Collapse "(A implies B) and (B implies A)" back into A ⇔ B (#35).
+     *
+     * @param {string} s Maxima expression.
+     * @returns {string} Expression with the ⇔ marker, or unchanged.
+     */
+    function collapseIff(s) {
+        var parts = splitTopLevelKeyword(s, 'and');
+        var first;
+        var second;
+
+        if (parts.length !== 2) {
+            return s;
+        }
+        first = splitTopLevelKeyword(stripEnclosingParens(parts[0]), 'implies');
+        second = splitTopLevelKeyword(stripEnclosingParens(parts[1]), 'implies');
+        if (first.length === 2 && second.length === 2
+                && first[0] === second[1] && first[1] === second[0]) {
+            return first[0] + ' ' + opMarker('iff') + ' ' + first[1];
+        }
+        return s;
+    }
+
+    /**
+     * Characters after which a sign is unary (mirrors tex2max's expansion).
+     *
+     * @type {RegExp}
+     */
+    var UNARY_BOUNDARY = /[=<>#(,[]/;
+
+    /**
+     * Merge two alternatives that differ only in coupled signs into one
+     * expression carrying ± (\u00b1) and ∓ (\u2213) (#30).
+     *
+     * Walks both strings in parallel. Equal characters are copied; "+" against
+     * "-" becomes ±, "-" against "+" becomes ∓. A sign present in only one
+     * variant is accepted in unary position (start, after a relation, "(",
+     * "," or "["), because tex2max drops the unary "+" of the positive
+     * alternative: "x=2" against "x=-2" becomes "x=±2". Any other difference
+     * means the alternatives are not a ± pair, and null is returned.
+     *
+     * @param {string} v1 First alternative (Maxima).
+     * @param {string} v2 Second alternative (Maxima).
+     * @returns {?string} Merged expression, or null when not collapsible.
+     */
+    function mergeSignAlternatives(v1, v2) {
+        var out = '';
+        var i = 0;
+        var j = 0;
+        var hasSign = false;
+        var atBoundary;
+        var a;
+        var b;
+
+        while (i < v1.length || j < v2.length) {
+            a = v1.charAt(i);
+            b = v2.charAt(j);
+            atBoundary = out === '' || UNARY_BOUNDARY.test(out.charAt(out.length - 1));
+            if (a === b && a !== '') {
+                out += a;
+                i++;
+                j++;
+            } else if (a === '+' && b === '-') {
+                out += '\u00b1';
+                hasSign = true;
+                i++;
+                j++;
+            } else if (a === '-' && b === '+') {
+                out += '\u2213';
+                hasSign = true;
+                i++;
+                j++;
+            } else if (atBoundary && b === '-' && a !== '+' && a !== '-') {
+                // Unary "+" omitted in the first alternative.
+                out += '\u00b1';
+                hasSign = true;
+                j++;
+            } else if (atBoundary && a === '-' && b !== '+' && b !== '-') {
+                // Unary "+" omitted in the second alternative.
+                out += '\u2213';
+                hasSign = true;
+                i++;
+            } else {
+                return null;
+            }
+        }
+        return hasSign ? out : null;
+    }
+
+    /**
+     * Collapse exactly two sign alternatives back into one ± expression (#30).
+     *
+     * Reads "(A) nounor (B)" only. A logical "or" is never collapsed: it is a
+     * statement a student made with the ∨ button, and turning it into ± would
+     * change its meaning on the next save. Anything else - more than two
+     * alternatives, or alternatives that differ in more than coupled signs -
+     * is returned unchanged and later rendered as a disjunction.
+     *
+     * @param {string} s Maxima expression.
+     * @returns {string} Expression with ± / ∓, or the unmodified input.
+     */
+    function collapsePlusMinus(s) {
+        // Only the structural nounor: a logical "or" typed with the ∨ button must
+        // stay a logical statement and is never reinterpreted as a solution set.
+        var keywords = [OperatorMap.SOLUTION_JOIN];
+        var k;
+        var parts;
+        var merged;
+
+        for (k = 0; k < keywords.length; k++) {
+            parts = splitTopLevelKeyword(s, keywords[k]);
+            if (parts.length !== 2) {
+                continue;
+            }
+            merged = mergeSignAlternatives(
+                stripEnclosingParens(parts[0]),
+                stripEnclosingParens(parts[1])
+            );
+            if (merged !== null) {
+                return merged;
+            }
+        }
+        return s;
+    }
 
     /**
      * Strip one level of enclosing parentheses if they wrap the whole string.
@@ -483,7 +847,8 @@ define([], function() {
      */
     function convertRelationSystemToCases(s) {
         var normalized = stripEnclosingParens(s);
-        var parts = splitTopLevelKeyword(normalized, 'and');
+        // Only the structural nounand: a logical "and" is not an equation system.
+        var parts = splitTopLevelKeyword(normalized, OperatorMap.SYSTEM_JOIN);
         var rows = [];
         var i;
         var relation;
@@ -541,7 +906,7 @@ define([], function() {
 
             if (conMaxima === '%pi' || conMaxima === 'pi') {
                 s = s.replace(/%pi/g, '\\pi ');
-                s = s.replace(/\bpi\b/g, '\\pi ');
+                s = s.replace(/(?<!\\)\bpi\b/g, '\\pi ');
             } else if (conMaxima === 'inf') {
                 s = s.replace(/\binf\b/g, '\\infty ');
             } else if (conMaxima === 'minf') {
@@ -728,8 +1093,19 @@ define([], function() {
         var opts = options || {};
         var commaDecimal = opts.commaDecimal || false;
         var defs = opts.defs || {};
-        var s = convertRelationSystemToCases(maxima.trim());
+        var s = collapsePlusMinus(maxima.trim());
         var prev;
+        var integrals = [];
+
+        s = extractIntegralCalls(s, opts, integrals);
+        s = extractDerivativeCalls(s, opts, integrals);
+
+        // Maxima braces are set literals; LaTeX braces are grouping. Protect the
+        // literals now and write them as \\left\\{ ... \\right\\} at the end.
+        s = s.replace(/\{/g, '\uE020').replace(/\}/g, '\uE021');
+
+        // Set functions and ⇔ become operator markers before any keyword pass (#35).
+        s = convertRelationSystemToCases(renderSetFunctions(collapseIff(s)));
 
         if (!s) {
             return s;
@@ -753,7 +1129,9 @@ define([], function() {
             s = s.replace(/%pi/g, '\\pi ');
         }
         // Bare "pi" → \pi (after logic keyword processing, "pi" no longer matches "implies" etc.).
-        s = s.replace(/\bpi\b/g, '\\pi ');
+        // Not after a backslash: the constants pass may already have produced "\pi", and a second
+        // replacement turned it into "\\pi", a LaTeX line break followed by the letters pi.
+        s = s.replace(/(?<!\\)\bpi\b/g, '\\pi ');
         if (s.indexOf('inf') >= 0) {
             s = s.replace(/\bminf\b/g, '-\\infty ');
             s = s.replace(/\binf\b/g, '\\infty ');
@@ -828,8 +1206,23 @@ define([], function() {
             s = s.replace(/(\d)\.(\d)/g, '$1,$2');
         }
 
+        s = s.replace(/\uE060(\d+)\uE061/g, function(match, index) {
+            return integrals[Number(index)];
+        });
+
+        // Coupled signs restored by collapsePlusMinus().
+        s = s.replace(/\u00b1/g, '\\pm ').replace(/\u2213/g, '\\mp ');
+
+        s = s.replace(/\uE020/g, '\\left\\{').replace(/\uE021/g, '\\right\\}');
+
+        // Set/logic operator markers from the central table.
+        OperatorMap.SET_OPERATORS.concat(OperatorMap.LOGIC_OPERATORS).forEach(function(op) {
+            if (op.marker) {
+                s = s.split(op.marker).join(op.tex + ' ');
+            }
+        });
+
         s = s.replace(/\s+/g, ' ').trim();
-        s = collapsePlusMinus(s);
         return s;
     }
 

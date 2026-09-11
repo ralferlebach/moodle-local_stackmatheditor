@@ -29,7 +29,7 @@
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-define([], function() {
+define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     'use strict';
 
     /**
@@ -72,12 +72,42 @@ define([], function() {
      * @type {string[]}
      */
     var MAXIMA_OPERATOR_KEYWORDS = [
+        'nounor', 'nounand',
         'or', 'and', 'not', 'mod', 'div', 'iff',
         'implies', 'impliedby', 'notin', 'in',
         'union', 'intersect', 'setdiff',
         'subset', 'superset',
         'forall', 'exists', 'nexists'
     ];
+
+    /**
+     * Maxima function names that are always recognised, independent of the
+     * server-side definitions. Merged with defs.functionNames so that a
+     * missing or partial definitions payload can never turn a function call
+     * such as sqrt(x) into an implicit product (s*q*r*t*(x), see #39).
+     *
+     * @type {string[]}
+     */
+    var BUILTIN_FUNCTION_NAMES = [
+        'sqrt', 'abs', 'sgn', 'exp', 'log', 'ln',
+        'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
+        'arcsin', 'arccos', 'arctan', 'asin', 'acos', 'atan',
+        'sinh', 'cosh', 'tanh', 'binomial', 'integrate', 'diff'
+    ];
+
+    /**
+     * Zero-width token boundary placed in front of every LaTeX control word.
+     *
+     * Converting a control word yields a bare Maxima word (\sqrt{x} becomes
+     * sqrt(x), \pi becomes pi). Without a boundary that word fuses with
+     * whatever precedes it: a\sqrt{b} became the identifier "asqrt", and
+     * \pm\sqrt{...} became "\pmsqrt", which the \pm rule no longer
+     * matched and single-variable mode split into p*m*s*q*r*t (#39).
+     * The marker is skipped by the tokenizer and resolved at the very end.
+     *
+     * @type {string}
+     */
+    var BOUNDARY = '\uE000';
 
     /**
      * Build a fast-lookup set from an array of strings.
@@ -114,6 +144,19 @@ define([], function() {
     }
 
     /**
+     * Return a word-set of function names: built-in list plus defs.
+     *
+     * @param {Object} defs Definitions object from the server.
+     * @returns {Object} Word set of function names.
+     */
+    function getFunctionNameSet(defs) {
+        var d = defs || {};
+        return buildWordSet(
+            BUILTIN_FUNCTION_NAMES.concat(d.functionNames || d.functions || [])
+        );
+    }
+
+    /**
      * Build the combined protected-words set for identifier splitting.
      *
      * Merges MAXIMA_OPERATOR_KEYWORDS with all runtime definition sets
@@ -129,7 +172,7 @@ define([], function() {
         var protectedWords = Object.create(null);
         var sets = [
             buildWordSet(MAXIMA_OPERATOR_KEYWORDS),
-            buildWordSet(d.functionNames || d.functions || []),
+            getFunctionNameSet(d),
             buildWordSet(d.constants || []),
             buildWordSet(d.greek || []),
             buildWordSet(d.reservedWords || []),
@@ -240,12 +283,20 @@ define([], function() {
         while (i < s.length) {
             ch = s.charAt(i);
 
-            if (/\s/.test(ch)) {
+            if (/\s/.test(ch) || ch === BOUNDARY) {
                 i++;
                 continue;
             }
 
             rest = s.substring(i);
+
+            // Placeholder of an already converted structure (integral): one atomic operand.
+            m = rest.match(/^\uE050\d+\uE051/);
+            if (m) {
+                tokens.push({type: 'ident', value: m[0]});
+                i += m[0].length;
+                continue;
+            }
 
             m = rest.match(/^\d+(?:[.,]\d+)?/);
             if (m) {
@@ -398,9 +449,7 @@ define([], function() {
     function needsImplicitMultiplication(prev, curr, options) {
         var opts = options || {};
         var defs = opts.defs || {};
-        var functionNames = buildWordSet(
-            defs.functionNames || defs.functions || []
-        );
+        var functionNames = getFunctionNameSet(defs);
         var unitSet = getUnitSet(defs);
 
         if (blocksImplicitMultiplication(prev, curr)) {
@@ -542,7 +591,8 @@ define([], function() {
     }
 
     /**
-     * Convert a LaTeX cases environment to and-connected relation rows.
+     * Convert a LaTeX cases environment to an equation system: the rows are
+     * joined by STACK's nounand, so that every row is assessed on its own.
      *
      * @param {string} s Input.
      * @returns {string} Converted string.
@@ -573,40 +623,449 @@ define([], function() {
                     return match;
                 }
 
-                return parts.join(' and ');
+                return parts.join(' ' + OperatorMap.SYSTEM_JOIN + ' ');
             }
         );
     }
 
     /**
-     * Expand plus-minus (±) and minus-plus (∓) markers into two Maxima
-     * expressions joined by " or ".
+     * Escape a string for use inside a regular expression.
      *
-     * All ± are replaced synchronously: variant 1 uses +, variant 2 uses −.
-     * All ∓ flip in the opposite direction (variant 1 uses −, variant 2 uses +).
-     * This is non-recursive: no combinatorial explosion for multiple markers.
+     * @param {string} str Literal text.
+     * @returns {string} Escaped text.
+     */
+    function escapeRegExp(str) {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    /**
+     * Replace the LaTeX commands of the central operator table (#35).
      *
-     * In the positive variant (v1), any unary "+" that appears directly after
-     * "=", "(" or at the string start is stripped, because STACK / Maxima
-     * treats "+2" differently from "2" in those positions.
+     * @param {string} s LaTeX string.
+     * @returns {string} String with markers or Maxima operators.
+     */
+    function replaceTableOperators(s) {
+        var ops = OperatorMap.SET_OPERATORS.concat(OperatorMap.LOGIC_OPERATORS);
+
+        ops.forEach(function(op) {
+            op.latex.forEach(function(cmd) {
+                s = s.replace(
+                    new RegExp(escapeRegExp(cmd) + '(?![a-zA-Z])', 'g'),
+                    ' ' + (op.marker || op.maxima) + ' '
+                );
+            });
+        });
+        return s;
+    }
+
+    /**
+     * Find the matching closing bracket for the opening bracket at pos.
+     *
+     * @param {string} s Input.
+     * @param {number} pos Index of "(", "[" or "{".
+     * @returns {number} Index of the matching bracket or -1.
+     */
+    function matchingBracket(s, pos) {
+        var depth = 0;
+        var i;
+        var ch;
+
+        for (i = pos; i < s.length; i++) {
+            ch = s.charAt(i);
+            if ('([{'.indexOf(ch) !== -1) {
+                depth++;
+            } else if (')]}'.indexOf(ch) !== -1) {
+                depth--;
+                if (depth === 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Return the top-level indices at which one of the given markers occurs.
+     *
+     * @param {string} s Input.
+     * @param {string[]} markers Marker characters.
+     * @returns {number[]} Indices.
+     */
+    function topLevelIndices(s, markers) {
+        var out = [];
+        var depth = 0;
+        var i;
+        var ch;
+
+        for (i = 0; i < s.length; i++) {
+            ch = s.charAt(i);
+            if ('([{'.indexOf(ch) !== -1) {
+                depth++;
+            } else if (')]}'.indexOf(ch) !== -1) {
+                depth--;
+            } else if (depth === 0 && markers.indexOf(ch) !== -1) {
+                out.push(i);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * True when x is a single operand: identifier, number, bracket group or function call.
+     *
+     * @param {string} x Expression.
+     * @returns {boolean} Whether no brackets are needed around it.
+     */
+    function isAtomic(x) {
+        var open;
+
+        x = x.trim();
+        if (/^[A-Za-z0-9_%.]+$/.test(x)) {
+            return true;
+        }
+        if ('([{'.indexOf(x.charAt(0)) !== -1 && matchingBracket(x, 0) === x.length - 1) {
+            return true;
+        }
+        open = x.indexOf('(');
+        return /^[A-Za-z_][A-Za-z0-9_]*\(/.test(x) && matchingBracket(x, open) === x.length - 1;
+    }
+
+    /**
+     * Put brackets around a compound operand.
+     *
+     * @param {string} x Expression.
+     * @returns {string} Operand safe to combine with an operator.
+     */
+    function wrap(x) {
+        x = x.trim();
+        return isAtomic(x) ? x : '(' + x + ')';
+    }
+
+    /**
+     * Remove brackets enclosing a whole function argument.
+     *
+     * Arguments are delimited by commas, so brackets around one are never
+     * needed: union((a*b),c) is union(a*b,c). Dropping them keeps the output
+     * identical after a roundtrip through max2tex.
+     *
+     * @param {string} x Expression.
+     * @returns {string} Argument without enclosing brackets.
+     */
+    function unwrap(x) {
+        x = x.trim();
+        while (x.charAt(0) === '(' && matchingBracket(x, 0) === x.length - 1) {
+            x = x.substring(1, x.length - 1).trim();
+        }
+        return x;
+    }
+
+    /**
+     * Marker of a set operator by name.
+     *
+     * @param {string} name Operator name from the table.
+     * @returns {string} Marker character.
+     */
+    function marker(name) {
+        return OperatorMap.byName(name).marker;
+    }
+
+    /**
+     * Maxima form of one set relation (#35). Proper subsets are a logical
+     * statement and therefore use "and", not the structural nounand.
+     *
+     * @param {string} name Relation name from the operator table.
+     * @param {string} left Left operand (Maxima).
+     * @param {string} right Right operand (Maxima).
+     * @returns {string} Maxima predicate.
+     */
+    function setRelation(name, left, right) {
+        switch (name) {
+            case 'in':
+                return 'elementp(' + left + ',' + right + ')';
+            case 'notin':
+                return 'not elementp(' + left + ',' + right + ')';
+            case 'subseteq':
+                return 'subsetp(' + left + ',' + right + ')';
+            case 'supseteq':
+                return 'subsetp(' + right + ',' + left + ')';
+            case 'subset':
+                return '(subsetp(' + left + ',' + right + ') and ' + left + '#' + right + ')';
+            default:
+                return '(subsetp(' + right + ',' + left + ') and ' + right + '#' + left + ')';
+        }
+    }
+
+    /**
+     * Turn one set-level segment (no logic operator, relation or comma at top
+     * level) into Maxima function calls.
+     *
+     * Relations bind loosest (a chain becomes a conjunction), then ∖, ∪, ∩
+     * (tightest). ∖ is left-associative, ∪ and ∩ are n-ary.
+     *
+     * @param {string} seg Segment.
+     * @returns {string} Converted segment.
+     */
+    function convertSetSegment(seg) {
+        var t = seg.trim();
+        var relations = ['notin', 'in', 'subseteq', 'supseteq', 'subset', 'supset'];
+        var relMarkers = relations.map(marker);
+        var idx;
+        var left;
+        var right;
+        var parts;
+        var operands;
+        var start;
+
+        idx = topLevelIndices(t, relMarkers);
+        if (idx.length) {
+            // A chain "A ⊃ B ⊂ C" means "A ⊃ B and B ⊂ C" (like a<b<c): each
+            // relation gets its two neighbouring operands.
+            operands = [];
+            start = 0;
+            idx.forEach(function(pos) {
+                operands.push(unwrap(convertSetSegment(t.substring(start, pos))));
+                start = pos + 1;
+            });
+            operands.push(unwrap(convertSetSegment(t.substring(start))));
+            return idx.map(function(pos, k) {
+                return setRelation(relations[relMarkers.indexOf(t.charAt(pos))], operands[k], operands[k + 1]);
+            }).join(' and ');
+        }
+
+        idx = topLevelIndices(t, [marker('setminus')]);
+        if (idx.length) {
+            left = unwrap(convertSetSegment(t.substring(0, idx[idx.length - 1])));
+            right = unwrap(convertSetSegment(t.substring(idx[idx.length - 1] + 1)));
+            return 'setdifference(' + left + ',' + right + ')';
+        }
+
+        [['cup', 'union'], ['cap', 'intersection']].some(function(pair) {
+            var positions = topLevelIndices(t, [marker(pair[0])]);
+            var start = 0;
+
+            if (!positions.length) {
+                return false;
+            }
+            parts = [];
+            positions.forEach(function(pos) {
+                parts.push(unwrap(convertSetSegment(t.substring(start, pos))));
+                start = pos + 1;
+            });
+            parts.push(unwrap(convertSetSegment(t.substring(start))));
+            t = pair[1] + '(' + parts.join(',') + ')';
+            return true;
+        });
+        return t;
+    }
+
+    /**
+     * Split a level at top-level logic operators, relations and commas and
+     * convert each set-level segment.
+     *
+     * @param {string} s Expression (bracket groups already converted).
+     * @returns {string} Converted expression.
+     */
+    function convertSegments(s) {
+        var boundary = /^(\s+(?:nounand|nounor|implies|and|or|xor)\s+|(?:^|\s)(?:not|nounnot)\s+|<=|>=|=|<|>|#|,)/;
+        var out = '';
+        var seg = '';
+        var depth = 0;
+        var i = 0;
+        var ch;
+        var m;
+
+        while (i < s.length) {
+            ch = s.charAt(i);
+            if ('([{'.indexOf(ch) !== -1) {
+                depth++;
+            } else if (')]}'.indexOf(ch) !== -1) {
+                depth--;
+            }
+            m = depth === 0 ? s.substring(i).match(boundary) : null;
+            if (m && m[0] && (m[0].trim() !== 'not' || seg.trim() === '')) {
+                out += convertSetSegment(seg) + m[0];
+                seg = '';
+                i += m[0].length;
+                continue;
+            }
+            seg += ch;
+            i++;
+        }
+        return out + convertSetSegment(seg);
+    }
+
+    /**
+     * Convert the operator markers of one bracket level, innermost first (#35).
+     *
+     * ⇔ becomes the logical conjunction of both implications and ⇐ a swapped
+     * implication, because STACK knows neither "iff" nor "impliedby".
+     *
+     * @param {string} s Expression.
+     * @returns {string} Expression with Maxima function calls.
+     */
+    function convertLevel(s) {
+        var out = '';
+        var i = 0;
+        var close;
+        var idx;
+        var a;
+        var b;
+
+        while (i < s.length) {
+            if ('([{'.indexOf(s.charAt(i)) !== -1) {
+                close = matchingBracket(s, i);
+                if (close !== -1) {
+                    out += s.charAt(i) + convertLevel(s.substring(i + 1, close)) + s.charAt(close);
+                    i = close + 1;
+                    continue;
+                }
+            }
+            out += s.charAt(i);
+            i++;
+        }
+        s = out;
+
+        idx = topLevelIndices(s, [marker('iff')]);
+        if (idx.length) {
+            a = wrap(convertLevel(s.substring(0, idx[0])));
+            b = wrap(convertLevel(s.substring(idx[0] + 1)));
+            return '(' + a + ' implies ' + b + ') and (' + b + ' implies ' + a + ')';
+        }
+        idx = topLevelIndices(s, [marker('impliedby')]);
+        if (idx.length) {
+            a = wrap(convertLevel(s.substring(0, idx[0])));
+            b = wrap(convertLevel(s.substring(idx[0] + 1)));
+            return b + ' implies ' + a;
+        }
+        return convertSegments(s);
+    }
+
+    /**
+     * Turn set/logic operator markers into STACK-valid Maxima (#35).
+     *
+     * @param {string} s Maxima string that may contain operator markers.
+     * @returns {string} Converted string.
+     */
+    function convertStructuredOperators(s) {
+        if (!/[\uE010-\uE01A]/.test(s)) {
+            return s;
+        }
+        return convertLevel(s).replace(/\s+/g, ' ').trim();
+    }
+
+    /**
+     * Drop every "+" that stands in unary position.
+     *
+     * @param {string} s One alternative of a ± / ∓ expansion.
+     * @returns {string} Alternative without unary plus signs.
+     */
+    function stripUnaryPlus(s) {
+        return s.replace(/(^|[=<>#(,[])\s*\+/g, '$1');
+    }
+
+    /**
+     * Expand plus-minus (±) and minus-plus (∓) into two coupled alternatives
+     * joined by STACK's non-simplifying "nounor" (#30).
+     *
+     * The signs are coupled, not combined: variant A reads ± as + and ∓ as -,
+     * variant B reads ± as - and ∓ as +. "x=a±b∓c" therefore yields exactly
+     * two alternatives, never four. Each sign is replaced in place, so the
+     * subtree it belongs to - and every bracket around it - stays unchanged.
+     *
+     * A "+" that ends up in unary position (start, after a relation, "(", ","
+     * or "[") is dropped from both alternatives - for ± that is the first, for
+     * ∓ the second one (#49); it carries no meaning and must never read like
+     * "+x = ...". A binary "+" is never touched.
+     *
+     * Both alternatives are wrapped in brackets so that "nounor" never binds
+     * into a relation: (x=2) nounor (x=-2).
      *
      * @param {string} s Maxima string possibly containing ± or ∓.
      * @returns {string} Expanded string or unmodified input.
      */
     function expandPlusMinus(s) {
+        var v1;
+        var v2;
+
         if (s.indexOf('\u00b1') === -1
                 && s.indexOf('\u2213') === -1) {
             return s;
         }
-        var v1 = s.replace(/\u00b1/g, '+').replace(/\u2213/g, '-');
-        var v2 = s.replace(/\u00b1/g, '-').replace(/\u2213/g, '+');
+        v1 = s.replace(/\u00b1/g, '+').replace(/\u2213/g, '-');
+        v2 = s.replace(/\u00b1/g, '-').replace(/\u2213/g, '+');
 
-        // Strip unary '+' from positive variant: a '+' that appears
-        // directly after '=', '(' or at the very start of the string is
-        // unary, not a binary infix — STACK does not need it.
-        v1 = v1.replace(/(^|[=(])\+/g, '$1');
+        // Symmetric (#49): the positive alternative is v1 for ± but v2 for ∓.
+        v1 = stripUnaryPlus(v1);
+        v2 = stripUnaryPlus(v2);
 
-        return v1 + ' or ' + v2;
+        return '(' + v1.trim() + ') ' + OperatorMap.SOLUTION_JOIN + ' (' + v2.trim() + ')';
+    }
+
+    /**
+     * Put a token boundary in front of every LaTeX control word.
+     *
+     * Only control words (backslash + letters) are marked; the LaTeX row break
+     * "\\" and control symbols such as "\{" or "\," are left alone.
+     *
+     * @param {string} s LaTeX input.
+     * @returns {string} Input with BOUNDARY before each control word.
+     */
+    function markControlWords(s) {
+        var out = '';
+        var i;
+        var ch;
+
+        for (i = 0; i < s.length; i++) {
+            ch = s.charAt(i);
+            if (ch === '\\' && s.charAt(i + 1) === '\\') {
+                out += '\\\\';
+                i++;
+                continue;
+            }
+            if (ch === '\\' && /[a-zA-Z]/.test(s.charAt(i + 1)) && i > 0) {
+                out += BOUNDARY;
+            }
+            out += ch;
+        }
+        return out;
+    }
+
+    /**
+     * Resolve the remaining token boundaries.
+     *
+     * A boundary that separates an identifier from a following word becomes a
+     * space (so "a sqrt(b)" never fuses into "asqrt(b)"); every other boundary
+     * disappears without trace, which keeps e.g. "2sqrt(x)" and "(a)sqrt(b)"
+     * exactly as they were.
+     *
+     * @param {string} s Converted string.
+     * @returns {string} String without boundary markers.
+     */
+    function resolveBoundaries(s) {
+        var out = '';
+        var i;
+        var j;
+        var next;
+        var inIdentifier;
+
+        for (i = 0; i < s.length; i++) {
+            if (s.charAt(i) !== BOUNDARY) {
+                out += s.charAt(i);
+                continue;
+            }
+            next = s.charAt(i + 1);
+            // Walk back over the preceding alphanumeric run; it is an
+            // identifier (not a number) when it starts with a letter.
+            j = out.length - 1;
+            while (j >= 0 && /[a-zA-Z0-9_]/.test(out.charAt(j))) {
+                j--;
+            }
+            inIdentifier = j < out.length - 1 && /[a-zA-Z_]/.test(out.charAt(j + 1));
+            if (inIdentifier && /[a-zA-Z%]/.test(next)) {
+                out += ' ';
+            }
+        }
+        return out;
     }
 
     /**
@@ -620,15 +1079,417 @@ define([], function() {
      * @returns {string} Maxima expression string.
      */
     function convert(latex, options) {
-        var opts = options || {};
+        return analyse(latex, options).maxima;
+    }
+
+    /**
+     * Convert and report structures that cannot be serialised yet (#44).
+     *
+     * An integral without a (simple) integration variable is a visible but incomplete editor
+     * state, not a CAS expression: no "integrate(expr)" is ever invented. In that case maxima is
+     * the empty string and problems names what is missing, so the editor can say so.
+     *
+     * @param {string} latex   LaTeX string from MathQuill.
+     * @param {Object} options Conversion options (see convert()).
+     * @returns {Object} {maxima: string, problems: string[]}.
+     */
+    function analyse(latex, options) {
+        var ctx = {problems: []};
+        var maxima = convertInner(latex || '', options || {}, ctx, false);
+        return {maxima: ctx.problems.length ? '' : maxima, problems: ctx.problems};
+    }
+
+    /**
+     * Read one LaTeX argument starting at pos: {…} group, control word, or single character.
+     *
+     * @param {string} s LaTeX.
+     * @param {number} pos Start index.
+     * @returns {?Object} {text, end} or null.
+     */
+    function readLatexArgument(s, pos) {
+        var depth = 0;
+        var i;
+        var m;
+
+        if (s.charAt(pos) === '{') {
+            for (i = pos; i < s.length; i++) {
+                if (s.charAt(i) === '\\') {
+                    i++;
+                    continue;
+                }
+                if (s.charAt(i) === '{') {
+                    depth++;
+                } else if (s.charAt(i) === '}') {
+                    depth--;
+                    if (depth === 0) {
+                        return {text: s.substring(pos + 1, i), end: i + 1};
+                    }
+                }
+            }
+            return null;
+        }
+        m = s.substring(pos).match(/^\\[a-zA-Z]+|^[^\s{}]/);
+        return m ? {text: m[0], end: pos + m[0].length} : null;
+    }
+
+    /**
+     * Match the differential "\mathrm{d}x" / "dx" at pos.
+     *
+     * @param {string} s LaTeX.
+     * @param {number} pos Index.
+     * @param {boolean} allowBare Also accept a bare "d".
+     * @returns {?Object} {variable, atomic, end} or null.
+     */
+    function matchDifferential(s, pos, allowBare) {
+        var rest = s.substring(pos);
+        var m = rest.match(/^(?:\\[,;:!]|\s)*(\\mathrm\{d\}|\\text\{d\}|d)\s*/);
+        var after;
+        var v;
+
+        if (!m || (m[1] === 'd' && !allowBare)) {
+            return null;
+        }
+        after = rest.substring(m[0].length);
+        v = after.match(/^(?:[A-Za-z]|\\[a-zA-Z]+)(?:_\{[^{}]*\}|_[A-Za-z0-9])?/);
+        if (!v) {
+            return m[1] === 'd' ? null : {variable: '', atomic: false, end: pos + m[0].length};
+        }
+        // A bracket right after the variable means d(f(x)) / d f(x): a composite quantity.
+        return {
+            variable: v[0],
+            atomic: !/^\s*(?:\(|\\left)/.test(after.substring(v[0].length)),
+            end: pos + m[0].length + v[0].length
+        };
+    }
+
+    /**
+     * Read the optional limits "_{a}^{b}" (either order) after \\int.
+     *
+     * @param {string} s LaTeX.
+     * @param {number} pos Index right after "\\int".
+     * @returns {Object} {lower, upper, end}; a missing limit is null.
+     */
+    function readIntegralLimits(s, pos) {
+        var result = {lower: null, upper: null, end: pos};
+        var arg;
+
+        while (s.charAt(result.end) === '_' || s.charAt(result.end) === '^') {
+            arg = readLatexArgument(s, result.end + 1);
+            if (!arg) {
+                break;
+            }
+            result[s.charAt(result.end) === '_' ? 'lower' : 'upper'] = arg.text.trim();
+            result.end = arg.end;
+        }
+        return result;
+    }
+
+    /**
+     * True when a bare differential "dx" starts at i (not the "d" inside a longer word).
+     *
+     * @param {string} s LaTeX.
+     * @param {number} i Index.
+     * @param {number} bodyStart Start of the integrand.
+     * @returns {boolean} Whether a bare differential starts here.
+     */
+    function isBareDifferentialAt(s, i, bodyStart) {
+        return s.charAt(i) === 'd' && i > bodyStart && !/[A-Za-z]/.test(s.charAt(i - 1))
+            && !!matchDifferential(s, i, true);
+    }
+
+    /**
+     * Find the differential that closes the integral whose integrand starts at bodyStart.
+     *
+     * Inner integrals consume their own differential. "\\mathrm{d}x" wins; otherwise the last
+     * bare "dx" on the same level is taken.
+     *
+     * @param {string} s LaTeX.
+     * @param {number} bodyStart Start of the integrand.
+     * @returns {?Object} {differential, bodyEnd} or null.
+     */
+    function findIntegralEnd(s, bodyStart) {
+        var depth = 0;
+        var nested = 0;
+        var lastBare = null;
+        var found;
+        var ch;
+        var i;
+
+        for (i = bodyStart; i < s.length; i++) {
+            ch = s.charAt(i);
+            if (ch === '\\' && /[{}]/.test(s.charAt(i + 1))) {
+                i++;
+            } else if ('({['.indexOf(ch) !== -1) {
+                depth++;
+            } else if (')}]'.indexOf(ch) !== -1) {
+                depth--;
+                if (depth < 0) {
+                    break;
+                }
+            } else if (depth === 0 && /^\\int(?![a-zA-Z])/.test(s.substring(i))) {
+                nested++;
+            } else if (depth === 0 && /^(?:\\[,;:!]|\s)*\\(?:mathrm|text)\{d\}/.test(s.substring(i))) {
+                found = matchDifferential(s, i, false);
+                if (nested === 0) {
+                    return found ? {differential: found, bodyEnd: i} : null;
+                }
+                // The differential of an inner integral: skip it completely.
+                nested--;
+                i = (found ? found.end : i + 1) - 1;
+            } else if (depth === 0 && nested === 0 && isBareDifferentialAt(s, i, bodyStart)) {
+                lastBare = i;
+            }
+        }
+        return lastBare === null ? null : {differential: matchDifferential(s, lastBare, true), bodyEnd: lastBare};
+    }
+
+    /**
+     * Classify an integral that cannot be serialised yet.
+     *
+     * @param {?Object} end Result of findIntegralEnd().
+     * @param {Object} limits Result of readIntegralLimits().
+     * @returns {?string} Problem code or null.
+     */
+    function integralProblem(end, limits) {
+        if (!end || !end.differential.variable) {
+            return 'integral_variable_missing';
+        }
+        if (!end.differential.atomic) {
+            return 'integral_variable_composite';
+        }
+        if (!limits.lower !== !limits.upper) {
+            return 'integral_limit_missing';
+        }
+        return null;
+    }
+
+    /**
+     * Replace every \\int … d<var> by a placeholder for integrate(…) (#44).
+     *
+     * @param {string} s LaTeX.
+     * @param {Object} opts Conversion options.
+     * @param {Object} ctx Context {problems, placeholders}.
+     * @returns {string} LaTeX with placeholders.
+     */
+    function extractIntegrals(s, opts, ctx) {
+        var start = s.search(/\\int(?![a-zA-Z])/);
+        var limits;
+        var end;
+        var problem;
+        var body;
+        var parts;
+        var index;
+
+        if (start === -1) {
+            return s;
+        }
+        limits = readIntegralLimits(s, start + 4);
+        end = findIntegralEnd(s, limits.end);
+        problem = integralProblem(end, limits);
+        body = end ? s.substring(limits.end, end.bodyEnd).trim() : '';
+        if (!problem && !body) {
+            problem = 'integral_integrand_missing';
+        }
+        if (problem) {
+            ctx.problems.push(problem);
+            return s.substring(0, start) + ' ' + s.substring(start + 4);
+        }
+
+        parts = [
+            unwrapArgument(convertInner(body, opts, ctx, true)),
+            convertInner(end.differential.variable, opts, ctx, true)
+        ];
+        if (limits.lower) {
+            parts.push(unwrapArgument(convertInner(limits.lower, opts, ctx, true)));
+            parts.push(unwrapArgument(convertInner(limits.upper, opts, ctx, true)));
+        }
+        index = ctx.placeholders.length;
+        ctx.placeholders.push('integrate(' + parts.join(',') + ')');
+        return extractIntegrals(
+            s.substring(0, start) + '\uE050' + index + '\uE051' + s.substring(end.differential.end),
+            opts,
+            ctx
+        );
+    }
+
+    /**
+     * Parse the numerator of a Leibniz derivative operator: \partial, d or \mathrm{d}, with an
+     * optional total order (\partial^{3}).
+     *
+     * @param {string} tex Numerator LaTeX.
+     * @returns {?Object} {order: ?number} or null when this is no derivative operator.
+     */
+    function parseDerivativeNumerator(tex) {
+        var m = tex.trim().match(/^(?:\\partial|\\mathrm\{d\}|d)\s*(?:\^\s*(?:\{\s*(\d+)\s*\}|(\d)))?$/);
+        if (!m) {
+            return null;
+        }
+        return {order: m[1] || m[2] ? Number(m[1] || m[2]) : null};
+    }
+
+    /**
+     * Parse the denominator: one or more "\partial x^{n}" (or "dx^{n}") factors.
+     *
+     * @param {string} tex Denominator LaTeX.
+     * @returns {?Object} {pairs: [{variable, order}], atomic: boolean} or null.
+     */
+    function parseDerivativeDenominator(tex) {
+        var re = new RegExp(
+            '(?:\\\\partial|\\\\mathrm\\{d\\}|d)\\s*'
+            + '((?:[A-Za-z]|\\\\[a-zA-Z]+)(?:_\\{[^{}]*\\}|_[A-Za-z0-9])?)'
+            + '\\s*(?:\\^\\s*(?:\\{\\s*(\\d+)\\s*\\}|(\\d)))?\\s*',
+            'g'
+        );
+        var rest = tex.trim();
+        var pairs = [];
+        var consumed = 0;
+        var m;
+
+        while ((m = re.exec(rest)) !== null && m.index === consumed) {
+            pairs.push({variable: m[1], order: m[2] || m[3] ? Number(m[2] || m[3]) : 1});
+            consumed = re.lastIndex;
+        }
+        if (!pairs.length) {
+            return null;
+        }
+        return {pairs: pairs, atomic: consumed === rest.length};
+    }
+
+    /**
+     * Read the obligatory bracketed operand "\left( … \right)" or "( … )" at pos.
+     *
+     * @param {string} s LaTeX.
+     * @param {number} pos Index after the operator.
+     * @returns {?Object} {text, end} or null when no bracket follows.
+     */
+    function readDerivativeOperand(s, pos) {
+        var m = s.substring(pos).match(/^\s*(\\left\s*)?\(/);
+        var open;
+        var close;
+
+        if (!m) {
+            return null;
+        }
+        open = pos + m[0].length - 1;
+        close = matchingBracket(s, open);
+        if (close === -1) {
+            return null;
+        }
+        return {
+            text: s.substring(open + 1, close).replace(/\\right\s*$/, '').trim(),
+            end: close + 1
+        };
+    }
+
+    /**
+     * Replace every Leibniz derivative operator with operand by a placeholder for diff(…) (#46).
+     *
+     * ∂/∂x (E) → diff(E,x); ∂ⁿ/∂xⁿ (E) → diff(E,x,n); ∂ᴺ/(∂xⁿ ∂yᵐ) (E) → diff(E,x,n,y,m).
+     * The operand must be bracketed (no implicit scope rule); a numerator order must equal the
+     * sum of the denominator orders.
+     *
+     * @param {string} s LaTeX.
+     * @param {Object} opts Conversion options.
+     * @param {Object} ctx Context {problems, placeholders}.
+     * @param {number} [from] Index to continue searching from.
+     * @returns {string} LaTeX with placeholders.
+     */
+    function extractDerivatives(s, opts, ctx, from) {
+        var start = s.indexOf('\\frac', from || 0);
+        var num;
+        var den;
+        var numerator;
+        var denominator;
+        var operand;
+        var total;
+        var args;
+        var index;
+
+        if (start === -1) {
+            return s;
+        }
+        num = readLatexArgument(s, start + 5);
+        den = num ? readLatexArgument(s, num.end) : null;
+        numerator = num ? parseDerivativeNumerator(num.text) : null;
+        denominator = numerator && den ? parseDerivativeDenominator(den.text) : null;
+        if (!denominator) {
+            return extractDerivatives(s, opts, ctx, start + 5);
+        }
+        operand = readDerivativeOperand(s, den.end);
+        total = denominator.pairs.reduce(function(sum, pair) {
+            return sum + pair.order;
+        }, 0);
+        if (!denominator.atomic) {
+            ctx.problems.push('derivative_variable_composite');
+        } else if (!operand || !operand.text) {
+            ctx.problems.push('derivative_operand_missing');
+        } else if (numerator.order !== null && numerator.order !== total) {
+            ctx.problems.push('derivative_order_mismatch');
+        } else {
+            args = [unwrapArgument(convertInner(operand.text, opts, ctx, true))];
+            denominator.pairs.forEach(function(pair) {
+                args.push(convertInner(pair.variable, opts, ctx, true));
+                if (denominator.pairs.length > 1 || pair.order > 1) {
+                    args.push(String(pair.order));
+                }
+            });
+            index = ctx.placeholders.length;
+            ctx.placeholders.push('diff(' + args.join(',') + ')');
+            return extractDerivatives(
+                s.substring(0, start) + '\uE050' + index + '\uE051' + s.substring(operand.end),
+                opts,
+                ctx,
+                start
+            );
+        }
+        return extractDerivatives(s, opts, ctx, den.end);
+    }
+
+    /**
+     * Remove brackets that enclose a whole function argument.
+     *
+     * @param {string} x Maxima expression.
+     * @returns {string} Argument.
+     */
+    function unwrapArgument(x) {
+        x = x.trim();
+        while (x.charAt(0) === '(' && matchingBracket(x, 0) === x.length - 1) {
+            x = x.substring(1, x.length - 1).trim();
+        }
+        return x;
+    }
+
+    /**
+     * The conversion pipeline.
+     *
+     * @param {string} latex LaTeX input.
+     * @param {Object} opts Conversion options.
+     * @param {Object} ctx Context {problems, placeholders}.
+     * @param {boolean} fragment True for a part of a structure (no ± expansion).
+     * @returns {string} Maxima.
+     */
+    function convertInner(latex, opts, ctx, fragment) {
         var commaDecimal = opts.commaDecimal || false;
         var defs = opts.defs || {};
         var variableMode = opts.variableMode || 'stack';
         var s = latex;
         var maxIter = 20;
+        var placeholders = [];
+        var local = {problems: ctx.problems, placeholders: placeholders};
 
         s = s.replace(/\s+/g, ' ').trim();
+        s = extractIntegrals(s, opts, local);
+        s = extractDerivatives(s, opts, local);
+        // A space after a control word only ends the command's name (LaTeX ignores it). In front
+        // of anything but a letter or digit it carries nothing and would otherwise survive in
+        // stack mode ("gamma (x)", "epsilon _0").
+        s = s.replace(/(\\[a-zA-Z]+)\s+(?=[^A-Za-z0-9\s])/g, '$1');
         s = convertCasesToAndRelations(s);
+        s = markControlWords(s);
+        // Set braces survive the generic brace removal below (#39: no
+        // backslash may reach the CAS string).
+        s = s.replace(/\\left\s*\\\{/g, '\uE001').replace(/\\right\s*\\\}/g, '\uE002');
+        s = s.replace(/\\\{/g, '\uE001').replace(/\\\}/g, '\uE002');
         s = s.replace(/\\left/g, '');
         s = s.replace(/\\right/g, '');
 
@@ -655,7 +1516,7 @@ define([], function() {
 
         // Mixed-fraction guard: N(p)/(q) → (N+p/q).
         // Prevents N*(p/q) implicit multiplication; supports multi-digit integers.
-        s = s.replace(/(\d+)\((\d+)\)\/\((\d+)\)/g, '($1+$2/$3)');
+        s = s.replace(new RegExp('(\\d+)' + BOUNDARY + '?\\((\\d+)\\)\\/\\((\\d+)\\)', 'g'), '($1+$2/$3)');
 
         s = s.replace(
             /\\sqrt\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
@@ -668,6 +1529,7 @@ define([], function() {
         s = s.replace(/\\mathrm\{e\}/g, '%e');
         s = s.replace(/\\mathrm\{i\}/g, '%i');
         s = s.replace(/\\mathrm\{([^{}]*)\}/g, '$1');
+        s = s.replace(/\\text\{([^{}]*)\}/g, '$1');
         s = s.replace(/\\operatorname\{([^{}]*)\}/g, '$1');
         s = s.replace(/\^\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g, '^($1)');
         s = s.replace(/_\{([^{}]*)\}/g, '_$1');
@@ -696,9 +1558,10 @@ define([], function() {
         s = s.replace(/\\div/g, '/');
         s = s.replace(/\\%/g, '%');
         s = s.replace(/\\&/g, '&');
-        s = s.replace(/\\leq?/g, '<=');
-        s = s.replace(/\\geq?/g, '>=');
-        s = s.replace(/\\neq?/g, '#');
+        s = s.replace(/\\leq?(?![a-zA-Z])/g, '<=');
+        s = s.replace(/\\geq?(?![a-zA-Z])/g, '>=');
+        // Lookahead: without it \\neg (¬) became "#g".
+        s = s.replace(/\\neq?(?![a-zA-Z])/g, '#');
         s = s.replace(/\\ne(?![a-zA-Z])/g, '#');
         s = s.replace(/\\approx(?![a-zA-Z])/g, '~=');
         s = s.replace(/\\pm(?![a-zA-Z])\s?/g, '\u00b1');
@@ -710,8 +1573,12 @@ define([], function() {
         s = s.replace(/\\\|/g, '|');
         s = s.replace(/\|([^|]+)\|/g, 'abs($1)');
 
+        // Greek letters (#22) use STACK's own convention: the letter's name. STACK accepts every
+        // name as a student variable and typesets it as the Greek glyph. The variant glyphs have
+        // no STACK identity of their own and map to their letter (\varphi -> phi), so they never
+        // reach STACK as an unknown word that single-letter mode would split into v*a*r*p*h*i.
+        s = s.replace(/\\var(epsilon|theta|phi)(?![a-zA-Z])/g, '$1');
         var greek = [
-            'varepsilon', 'vartheta', 'varphi',
             'alpha', 'beta', 'gamma', 'delta',
             'epsilon', 'zeta', 'eta', 'theta',
             'iota', 'kappa', 'lambda', 'mu',
@@ -738,26 +1605,16 @@ define([], function() {
             );
         });
 
-        // Set-theory: LaTeX → Maxima keywords (notin before in to avoid partial match).
-        s = s.replace(/\\notin(?![a-zA-Z])/g, ' notin ');
-        s = s.replace(/\\in(?![a-zA-Z])/g, ' in ');
-        s = s.replace(/\\cup(?![a-zA-Z])/g, ' union ');
-        s = s.replace(/\\cap(?![a-zA-Z])/g, ' intersect ');
-        s = s.replace(/\\setminus(?![a-zA-Z])/g, ' setdiff ');
-        s = s.replace(/\\subset(?![a-zA-Z])/g, ' subset ');
-        s = s.replace(/\\supset(?![a-zA-Z])/g, ' superset ');
+        // Set-theory and logic operators from the central table (#35). Operators
+        // that need their operands become marker characters here and function
+        // calls in convertStructuredOperators(); the others are emitted directly.
+        s = replaceTableOperators(s);
 
-        // Logic: LaTeX → Maxima keywords (nexists before exists to avoid partial match).
+        // Quantifiers (nexists before exists to avoid partial match).
         s = s.replace(/\\nexists/g, ' nexists ');
-        s = s.replace(/\\not\\exists/g, ' nexists ');
+        s = s.replace(new RegExp('\\\\not' + BOUNDARY + '?\\\\exists', 'g'), ' nexists ');
         s = s.replace(/\\forall(?![a-zA-Z])/g, ' forall ');
         s = s.replace(/\\exists(?![a-zA-Z])/g, ' exists ');
-        s = s.replace(/\\neg(?![a-zA-Z])/g, ' not ');
-        s = s.replace(/\\land(?![a-zA-Z])/g, ' and ');
-        s = s.replace(/\\lor(?![a-zA-Z])/g, ' or ');
-        s = s.replace(/\\Rightarrow(?![a-zA-Z])/g, ' implies ');
-        s = s.replace(/\\Leftarrow(?![a-zA-Z])/g, ' impliedby ');
-        s = s.replace(/\\Leftrightarrow(?![a-zA-Z])/g, ' iff ');
         s = s.replace(/\\angle(?![a-zA-Z])/g, 'angle');
         s = s.replace(/\\perp(?![a-zA-Z])/g, 'perp');
         s = s.replace(/\\circ(?![a-zA-Z])/g, 'circ');
@@ -767,7 +1624,14 @@ define([], function() {
         s = s.replace(/\\dagger(?![a-zA-Z])/g, 'dagger');
         s = s.replace(/\\intercal(?![a-zA-Z])/g, 'T');
         s = s.replace(/\\ /g, '');
+        // Spacing commands carry no mathematical meaning.
+        s = s.replace(/\\[,;:!]/g, '');
+        // Any control word still left is unknown to this converter. Keep its
+        // name as a plain word so STACK reports an unknown identifier instead
+        // of rejecting the backslash (#39).
+        s = s.replace(/\\([a-zA-Z]+)/g, '$1');
         s = s.replace(/[{}]/g, '');
+        s = s.replace(/\uE001/g, '{').replace(/\uE002/g, '}');
 
         if (commaDecimal) {
             s = replaceDecimalCommas(s);
@@ -778,12 +1642,28 @@ define([], function() {
             variableMode: variableMode
         });
 
+        s = resolveBoundaries(s);
+        // "lambda(" is Maxima's anonymous-function constructor. A Greek lambda written in front of
+        // a bracket is always a product (#22); in stack mode, where no implicit multiplication is
+        // inserted, make that explicit.
+        s = s.replace(/(^|[^A-Za-z0-9_%])lambda\s*(?=\()/g, '$1lambda*');
         s = s.replace(/\s+/g, ' ').trim();
-        s = expandPlusMinus(s);
+        // A space next to a bracket or comma never separates two factors
+        // ("sqrt(pi )" from "\sqrt{\pi }"); drop it so the output is stable.
+        s = s.replace(/\s+([)\],}])/g, '$1').replace(/([([{,])\s+/g, '$1');
+        s = convertStructuredOperators(s);
+        s = s.replace(/(^|[\s\S])\uE050(\d+)\uE051/g, function(match, before, index) {
+            // Never fuse with a preceding identifier ("xintegrate(...)" in stack mode).
+            return before + (/[A-Za-z_]/.test(before) ? ' ' : '') + placeholders[Number(index)];
+        });
+        if (!fragment) {
+            s = expandPlusMinus(s);
+        }
         return s;
     }
 
     return /** @alias module:local_stackmatheditor/tex2max */ {
-        convert: convert
+        convert: convert,
+        analyse: analyse
     };
 });
