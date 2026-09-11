@@ -87,6 +87,23 @@ Depending on the calling context, the plugin resolves the question bank entry au
 
 The configuration form also shows the quiz name, question name including version, and a collapsible question preview.
 
+## Greek letters ##
+
+The editor uses STACK's own convention for Greek letters: the **letter's name**. `\alpha` becomes
+`alpha`, `\Lambda` becomes `Lambda`, and back again. STACK accepts every Greek name as a student
+variable and typesets it as the Greek glyph, so teacher answers written as `alpha` match.
+
+- Variant glyphs have no identity of their own in STACK and map to their letter: `\varepsilon` →
+  `epsilon`, `\vartheta` → `theta`, `\varphi` → `phi` (they come back as the standard glyph).
+- `\pi` becomes `pi` (or `%pi`, depending on the global setting).
+- Uppercase letters that look like Latin letters (Alpha, Beta, Epsilon, …) are not Greek in STACK
+  and are not offered; the eleven distinct ones (Γ Δ Θ Λ Ξ Π Σ Υ Φ Ψ Ω) are.
+- `lambda` in front of a bracket is always written as a product (`lambda*(x)`), because
+  `lambda(...)` is Maxima's anonymous-function constructor.
+- Latin letters typed as a Greek name (a-l-p-h-a) form that name, which STACK – like the editor on
+  the way back – shows as α. STACK itself does not distinguish the two, so neither does the editor.
+  In single-letter modes Greek names are protected from being split into letters.
+
 ## Integration events (for external scripts) ##
 
 The editor is an input surface, not an event gateway: it never cancels, replaces or isolates

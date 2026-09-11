@@ -1079,6 +1079,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         var maxIter = 20;
 
         s = s.replace(/\s+/g, ' ').trim();
+        // A space after a control word only ends the command's name (LaTeX ignores it). In front
+        // of anything but a letter or digit it carries nothing and would otherwise survive in
+        // stack mode ("gamma (x)", "epsilon _0").
+        s = s.replace(/(\\[a-zA-Z]+)\s+(?=[^A-Za-z0-9\s])/g, '$1');
         s = convertCasesToAndRelations(s);
         s = markControlWords(s);
         // Set braces survive the generic brace removal below (#39: no
@@ -1168,8 +1172,12 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = s.replace(/\\\|/g, '|');
         s = s.replace(/\|([^|]+)\|/g, 'abs($1)');
 
+        // Greek letters (#22) use STACK's own convention: the letter's name. STACK accepts every
+        // name as a student variable and typesets it as the Greek glyph. The variant glyphs have
+        // no STACK identity of their own and map to their letter (\varphi -> phi), so they never
+        // reach STACK as an unknown word that single-letter mode would split into v*a*r*p*h*i.
+        s = s.replace(/\\var(epsilon|theta|phi)(?![a-zA-Z])/g, '$1');
         var greek = [
-            'varepsilon', 'vartheta', 'varphi',
             'alpha', 'beta', 'gamma', 'delta',
             'epsilon', 'zeta', 'eta', 'theta',
             'iota', 'kappa', 'lambda', 'mu',
@@ -1234,6 +1242,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         });
 
         s = resolveBoundaries(s);
+        // "lambda(" is Maxima's anonymous-function constructor. A Greek lambda written in front of
+        // a bracket is always a product (#22); in stack mode, where no implicit multiplication is
+        // inserted, make that explicit.
+        s = s.replace(/(^|[^A-Za-z0-9_%])lambda\s*(?=\()/g, '$1lambda*');
         s = s.replace(/\s+/g, ' ').trim();
         // A space next to a bracket or comma never separates two factors
         // ("sqrt(pi )" from "\sqrt{\pi }"); drop it so the output is stable.

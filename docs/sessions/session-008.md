@@ -476,3 +476,30 @@ Ralf's decision from iteration 5; the issue text predates it).
 
 Tests: 18 new Jest cases (all unary cases of the issue, coupled signs in both orders, every
 mode, orientation roundtrip), Behat scenario `x=\mp 2 → (x=-2) nounor (x=2)`.
+
+Delivered as `sme_v1.2.0_10.zip` (2026091109).
+
+## 17. Iteration 12 (2026-09-11) — 2026091110: #22
+
+### Verification (STACK 4.13.1 security map)
+
+Every Greek name (alpha … omega, Gamma … Omega) is allowed as a student variable
+(`"variable": "s"`), `lambda` included; `pi` is the constant alias of `%pi`. `varepsilon`,
+`vartheta`, `varphi` are unknown to STACK. Answer to Ralf's question in the issue ("how has this
+been handled so far? alpha_var?"): the editor already used the plain names, which is exactly
+STACK's convention - a private form like `alpha_var` would no longer match teacher answers.
+
+### Fixes
+
+- Variant glyphs were split into letters in single-letter modes (`\varphi` → `v*a*r*p*h*i`) and
+  never came back: they now map to their letter.
+- `lambda(` (Maxima's anonymous function) can no longer arise: `\lambda\left(x\right)` →
+  `lambda*(x)` also in stack mode.
+- Spaces after a control word in front of anything but a letter/digit are dropped (LaTeX ignores
+  them): stack mode no longer produced `gamma (x)` or `epsilon _0`.
+
+### Tests
+
+`tests/jest/greek.test.js`: 181 cases (all 33 letters of the definitions × 5 modes as
+TeX → Maxima → TeX → Maxima without splitting; variants; lambda/pi/gamma collisions; Latin policy).
+README section "Greek letters" documents the policy.
