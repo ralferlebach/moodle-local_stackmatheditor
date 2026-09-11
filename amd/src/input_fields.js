@@ -31,8 +31,9 @@ define([
     'local_stackmatheditor/toolbar',
     'local_stackmatheditor/operator_map',
     'local_stackmatheditor/stack_bridge',
-    'local_stackmatheditor/local_validation'
-], function($, tex2max, max2tex, toolbar, OperatorMap, Bridge, LocalValidation) {
+    'local_stackmatheditor/local_validation',
+    'local_stackmatheditor/a11y'
+], function($, tex2max, max2tex, toolbar, OperatorMap, Bridge, LocalValidation, A11y) {
     'use strict';
 
     var TYPES = ['algebraic', 'units'];
@@ -323,8 +324,8 @@ define([
         var $remove = $('<button>')
             .attr('type', 'button')
             .addClass('btn btn-link sme-system-del')
-            .attr('aria-label', 'Remove equation row')
             .text('×');
+        A11y.label($remove[0], 'aria_remove_row', true);
 
         $mqWrap.append($mqSpan);
         $row.append($mqWrap).append($remove);
@@ -347,6 +348,7 @@ define([
                 }
             }
         });
+        A11y.labelEditor(row.mqField);
 
         /**
          * Mark the current system row as active.
@@ -657,6 +659,7 @@ define([
                 }
             }
         });
+        A11y.labelEditor(mqField);
 
         // Check / Submit always send the visible state (#48).
         Bridge.register(function() {
@@ -724,6 +727,7 @@ define([
          * @param {Object} ctx Shared context.
          */
         init: function(ctx) {
+            A11y.useStrings(ctx.defs && ctx.defs.strings);
             var $inputs = $(selector());
             if (!$inputs.length) {
                 ctx.dbg(

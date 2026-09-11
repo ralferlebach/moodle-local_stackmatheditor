@@ -38,8 +38,16 @@ on:
         default: '5'
         required: false
       loops:
-        description: Iterations per thread
+        description: Smoke iterations per thread
         default: '10'
+        required: false
+      load_threads:
+        description: Concurrent students on the attempt page (at most 20 seeded)
+        default: '10'
+        required: false
+      load_duration:
+        description: Attempt load duration in seconds
+        default: '60'
         required: false
 
 defaults:
@@ -53,6 +61,7 @@ jobs:
   jmeter:
     name: "JMeter smoke / ${{ inputs.mode || 'selfcontained' }}"
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -71,6 +80,8 @@ jobs:
       THREADS: ${{ inputs.threads || '5' }}
       RAMPUP: ${{ inputs.rampup || '5' }}
       LOOPS: ${{ inputs.loops || '10' }}
+      LOAD_THREADS: ${{ inputs.load_threads || '10' }}
+      LOAD_DURATION: ${{ inputs.load_duration || '60' }}
       EXTERNAL_BASE_URL: ${{ inputs.base_url }}
       MOODLE_BRANCH: MOODLE_405_STABLE
       MOODLE_WWWROOT: http://127.0.0.1:8000
@@ -86,6 +97,8 @@ jobs:
           php-version: '8.3'
           extensions: pgsql, gd, intl, zip, soap, mbstring, curl, xml, exif
           ini-values: max_input_vars=5000
+          # No xdebug/pcov: they disable the JIT and distort every timing measured here.
+          coverage: none
       - name: Install Maxima and gnuplot (STACK CAS)
         if: ${{ env.MODE == 'selfcontained' }}
         run: |
@@ -94,6 +107,14 @@ jobs:
       - name: Build and install the test site (Moodle + STACK + plugin)
         if: ${{ env.MODE == 'selfcontained' }}
         run: bash plugin/.github/build-test-site.sh
+      # Course, 20 students and "SME Load Quiz" (ten STACK questions on one page).
+      - name: Seed test data
+        if: ${{ env.MODE == 'selfcontained' }}
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          php "$web/local/stackmatheditor/tests/playwright/seed.php" > /tmp/sme-seed.env
+          sed -n "s/^export \([A-Z_][A-Z_]*\)='\(.*\)'$/\1=\2/p" /tmp/sme-seed.env >> "$GITHUB_ENV"
+          cat /tmp/sme-seed.env
       - name: Set up JMeter
         run: |
           # Supply-chain hardening: verify the download against Apache's published SHA-512.
@@ -126,8 +147,26 @@ jobs:
             -l results.jtl \
             -j jmeter.log \
             -e -o jmeter-report
+          # Load: students on the attempt page with ten STACK questions (needs the seed data).
+          if [ "$MODE" = "selfcontained" ]; then
+            "apache-jmeter-${JMETER_VERSION}/bin/jmeter" -n \
+              -t plugin/tests/load/stackmatheditor-attempt.jmx \
+              -Jbase_url="$base" \
+              -Jload_cmid="$SME_LOAD_CMID" \
+              -Juser_pass="$SME_USER_PASS" \
+              -Jthreads="$LOAD_THREADS" \
+              -Jrampup="$RAMPUP" \
+              -Jduration="$LOAD_DURATION" \
+              -l attempt-results.jtl \
+              -j jmeter-attempt.log \
+              -e -o jmeter-attempt-report
+          fi
       - name: Evaluate the results (JMeter itself always exits 0)
-        run: python3 plugin/tests/load/check_jtl.py results.jtl
+        run: |
+          python3 plugin/tests/load/check_jtl.py results.jtl
+          if [ -f attempt-results.jtl ]; then
+            python3 plugin/tests/load/check_jtl.py attempt-results.jtl
+          fi
       - name: Show Moodle server log on failure
         if: ${{ failure() && env.MODE == 'selfcontained' }}
         run: tail -100 /tmp/moodle-server.log || true
@@ -140,5 +179,8 @@ jobs:
             results.jtl
             jmeter.log
             jmeter-report
+            attempt-results.jtl
+            jmeter-attempt.log
+            jmeter-attempt-report
           retention-days: 7
           if-no-files-found: ignore

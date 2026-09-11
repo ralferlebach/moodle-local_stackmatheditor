@@ -629,3 +629,54 @@ Jest `derivative.test.js` (33 cases); total 711. Real browser with the actual to
 `diff(f,x,1,y,1)`; `∂³/∂x⁴(f)` → empty value + order message; ∫ button + `x^2` →
 `integrate(x^2,x)`; pre-fill from `'diff(f,x,2,y,1)` → MathQuill template, `diff(f,x,2,y,1)`.
 The toolbar shows exactly the four new templates (no ∮).
+
+Delivered as `sme_v1.2.0_15.zip` (2026091114). CI green, merge to `main` done (Ralf).
+
+## 22. Iteration 17 (2026-09-11) — 2026091115: review, load tests, settings matrix
+
+- Review/audit of 11.09.2026: every point listed, verified against the code and recorded in
+  `docs/REVIEW-2026-09-11.md` (new findings: `get_config` without explicit capability, toolbar
+  buttons without `aria-label`, two hard-coded English `aria-label`s, 7 comment blocks in
+  `definitions.php`).
+- Evaluation of the first manual runs on main (Playwright, k6, JMeter smoke): all green; server
+  log shows xdebug disabling the JIT → `coverage: none` in the three manual workflows.
+- Seed: `tests/playwright/seed.php` imports STACK questions from `tests/fixtures/*.xml`
+  (qformat_xml, no PHPUnit generator), creates course, teacher, 20 students, "SME Settings Quiz"
+  (2 questions) and "SME Load Quiz" (8 algebraic + 2 textarea, one page); `--reset` option.
+- Load: k6 `stackmatheditor-attempt.js`, JMeter `stackmatheditor-attempt.jmx` (authenticated
+  students, attempt page + get_config); workflows seed the site and run them after the smoke.
+- Playwright: `settings.spec.js` (6 tests, full matrix via the real UI, screenshots) and
+  `performance.spec.js` (ten editors, exactly once, re-initialisation).
+- Local results: see `docs/REVIEW-2026-09-11.md`, section 4.
+
+Delivered as `sme_v1.2.0_16.zip` (2026091115).
+
+## 23. Iteration 18 (2026-09-11) — 2026091116: accessibility, plugin-directory check
+
+Ralf: #40 not yet; #34 as a supplementary issue comment (download
+`comment-issue-34-toolbar-catalogue.md`); accessibility now.
+
+- New `amd/src/a11y.js`: accessible names from the language pack, preloaded with the page
+  (`definitions::get_js_strings()` → `definitions.strings`), fallback `core/str`.
+- MathQuill's hidden textarea, the add/remove row/line/step buttons and every toolbar button
+  (`aria-label` = tooltip) are named; eleven buttons got their missing tooltips; PHPUnit test:
+  every offered button has a tooltip.
+- `tests/playwright/a11y.spec.js` (axe-core, WCAG 2.0/2.1 A/AA): 2/2 green locally.
+- Plugins directory "phplint FAIL – Log file not found": see `docs/REVIEW-2026-09-11.md`,
+  section 6; `PHP Lint` next to `Validating` in the dev quality job; new main job that checks the
+  exact release ZIP with PHP 8.1 and publishes it as artifact.
+
+Delivered as `sme_v1.2.0_17.zip` (2026091116).
+
+## 24. Iteration 19 (2026-09-11) — 2026091117: runtimes, limits, plugins-directory comparison
+
+- Evaluation of the manual runs (Playwright, k6, JMeter; all green): they ran on `main` at
+  `e55ea52` - smoke suites only; the settings matrix, performance, a11y and attempt load tests of
+  `_16`/`_17` were not yet on that ref (the xdebug JIT warning is still in that server log too).
+- Runtimes from the GitHub API documented in `docs/ENTWICKLUNGSUMGEBUNG.md` ("Laufzeiten und
+  Höchstlaufzeiten"); `timeout-minutes` on every job; k6 thresholds (smoke p95 < 500 ms,
+  max < 3 s; attempt provisional), JMeter Duration Assertions, Playwright timeouts/budgets.
+- Ralf: no extra step. Plugin-directory job and extra dev `PHP Lint` step removed again.
+- Comparison with FlexAccess (see `docs/REVIEW-2026-09-11.md`, section 6): `$plugin->supported`
+  was missing (added `[405, 502]`); privacy metadata referenced a missing string for a dropped
+  column (fixed) - new `language_strings_test`.

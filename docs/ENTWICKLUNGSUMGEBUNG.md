@@ -242,6 +242,36 @@ gepinnt.
 es muss im selben Schritt wie die Tests *gesourct* werden, weil ein Server aus einem früheren
 Schritt nicht zuverlässig weiterlebt.
 
+### Laufzeiten und Höchstlaufzeiten
+
+Gemessen auf GitHub am 11.09.2026 (Commit `e55ea52`, `main`). Die `timeout-minutes` der Jobs und
+die Schwellen der Tests sind daraus mit Puffer abgeleitet; ein Lauf, der sie überschreitet, ist
+rot. Werte mit „(vorläufig)" stammen aus lokalen Referenzläufen und werden nach dem ersten
+GitHub-Lauf der neuen Suiten nachgeschärft.
+
+| Workflow / Job | gemessen | Höchstlaufzeit |
+|---|---|---|
+| Main: `CI / <Moodle> / <PHP> / <DB>` (8 Zellen) | 14,1–20,1 min (davon Behat 9,8–15,3 min) | 35 min |
+| Main: Coverage | 3,4 min | 12 min |
+| Main: Jest / Release-Artefakt / Stale files / Gates | je < 0,5 min | je 5 min |
+| Main gesamt | 20,5 min | – |
+| Dev gesamt | 14,3–17,3 min | Jobs: PHP/Codeanalyse 10, Quality/JS-CSS 15, PHPUnit 20, Behat 30, Rest 5 min |
+| Playwright (nur Smoke) | 2,7–4,5 min | 20 min (inkl. Matrix, Performance, a11y) |
+| k6 (nur Smoke) | 2,8–3,2 min | 15 min (inkl. Attempt-Last) |
+| JMeter (nur Smoke) | 2,8–3,2 min | 15 min (inkl. Attempt-Last) |
+
+| Test | gemessen | Grenze |
+|---|---|---|
+| Playwright Smoke (je Test) | 1,3 s / 4,2 s / 0,02 s | 20 s |
+| Playwright Einstellungsmatrix (je Test) | lokal 9–40 s | 120 s |
+| Playwright Performance: 10 Editoren bereit | lokal 1,2–2,3 s | 6 s (vorläufig) |
+| Playwright a11y | lokal 30 s | 90 s |
+| k6 Smoke `http_req_duration` | p95 57–95 ms, max 150–359 ms | p95 < 500 ms, max < 3 s |
+| k6 Attempt: Versuchsseite (10 STACK-Fragen) | lokal p95 0,9–1,4 s, max 2,1 s | p95 < 3 s, max < 8 s (vorläufig) |
+| k6 Attempt: `get_config` | lokal p95 0,2 s, max 0,7 s | p95 < 0,8 s, max < 3 s (vorläufig) |
+| JMeter Smoke: Login-Seite / AMD-Modul | max 95 ms / 6 ms | 3000 ms (kalter erster Aufruf bis ~2 s) / 500 ms |
+| JMeter Attempt: Seite / `get_config` / Start | lokal max 4,1 s (Start) | 8000 / 3000 / 10000 ms (vorläufig) |
+
 ### Artefakte
 
 Jeder Job lädt ein `error-summary-*`-ZIP mit allen Logs hoch. Behat legt `behat_dump` und

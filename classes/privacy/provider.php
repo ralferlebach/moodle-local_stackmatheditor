@@ -35,9 +35,12 @@ class provider implements metadata_provider {
      */
     public static function get_metadata(collection $collection): collection {
         $collection->add_database_table('local_stackmatheditor', [
-            'questionid'       => 'privacy:metadata:questionid',
-            'allowed_elements' => 'privacy:metadata:allowed_elements',
-            'usermodified'     => 'privacy:metadata:usermodified',
+            'cmid'                => 'privacy:metadata:cmid',
+            'questionbankentryid' => 'privacy:metadata:questionbankentryid',
+            'allowed_elements'    => 'privacy:metadata:allowed_elements',
+            'usermodified'        => 'privacy:metadata:usermodified',
+            'timecreated'         => 'privacy:metadata:timecreated',
+            'timemodified'        => 'privacy:metadata:timemodified',
         ], 'privacy:metadata:local_stackmatheditor');
         return $collection;
     }

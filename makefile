@@ -29,7 +29,9 @@
 #   make behat-stack    — prepare STACK CAS in the Behat site (run once after behat init)
 #   make playwright     — Playwright smoke against the running dev site (SME_ADMIN_PASS=...)
 #   make k6             — k6 smoke load test (BASE_URL defaults to $CFG->wwwroot)
+#   make k6-attempt     — k6 load: students on a quiz page with ten STACK questions (seeds data)
 #   make jmeter         — JMeter smoke load test (downloads JMeter on first run)
+#   make jmeter-attempt — JMeter twin of k6-attempt
 #
 # Setup only:
 #   make jest-setup | playwright-setup | jmeter-setup
@@ -74,6 +76,7 @@ LOOPS          ?= 10
 SME_ADMIN_USER ?= admin
 SME_ADMIN_PASS ?=
 
+.PHONY: k6-attempt jmeter-attempt
 .PHONY: all fix check clear \
         lint-php lint-phpdoc lint-js lint-gherkin lint-mustache lint-cpd lint-md \
         fix-lint-php fix-phpdoc amd \
@@ -311,3 +314,30 @@ jmeter: clear jmeter-setup
 		-l stackmatheditor-smoke.jtl -j jmeter.log -e -o jmeter-report
 	python3 $(LOAD_DIR)/check_jtl.py $(LOAD_DIR)/stackmatheditor-smoke.jtl
 	@echo "HTML dashboard: $(LOAD_DIR)/jmeter-report/index.html"
+
+# ---------------------------------------------------------------------------
+# Attempt load tests - seed.php creates course, 20 students and "SME Load Quiz" (idempotent;
+# for disposable test sites only). LOAD_VUS <= 20.
+# ---------------------------------------------------------------------------
+LOAD_VUS      ?= 10
+LOAD_DURATION ?= 60
+
+k6-attempt: clear
+	@echo ""
+	@echo "=== k6 attempt load against $(BASE_URL) ==="
+	@command -v $(K6) >/dev/null 2>&1 || { echo "k6 is not installed."; exit 1; }
+	eval "$$($(PHP) $(PLAYWRIGHT_DIR)/seed.php)" && \
+		$(K6) run -e BASE_URL="$$SME_BASE_URL" -e LOAD_CMID="$$SME_LOAD_CMID" -e USER_PASS="$$SME_USER_PASS" \
+		-e VUS='$(LOAD_VUS)' -e DURATION='$(LOAD_DURATION)s' \
+		--summary-export=$(LOAD_DIR)/k6-attempt-summary.json \
+		$(LOAD_DIR)/stackmatheditor-attempt.js
+
+jmeter-attempt: clear jmeter-setup
+	@echo ""
+	@echo "=== JMeter attempt load against $(BASE_URL) ==="
+	rm -rf $(LOAD_DIR)/jmeter-attempt-report $(LOAD_DIR)/attempt-results.jtl
+	eval "$$($(PHP) $(PLAYWRIGHT_DIR)/seed.php)" && cd $(LOAD_DIR) && \
+		$(JMETER) -n -t stackmatheditor-attempt.jmx -Jbase_url="$$SME_BASE_URL" -Jload_cmid="$$SME_LOAD_CMID" \
+		-Juser_pass="$$SME_USER_PASS" -Jthreads='$(LOAD_VUS)' -Jduration='$(LOAD_DURATION)' \
+		-l attempt-results.jtl -j jmeter-attempt.log -e -o jmeter-attempt-report
+	python3 $(LOAD_DIR)/check_jtl.py $(LOAD_DIR)/attempt-results.jtl

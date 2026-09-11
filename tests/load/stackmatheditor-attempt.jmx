@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  JMeter load test for local_stackmatheditor - the twin of stackmatheditor-attempt.js (k6).
+
+  Each thread logs in as its own seeded student (sme_student01 …; tests/playwright/seed.php),
+  starts or continues an attempt at "SME Load Quiz" (ten STACK questions on one page) and then
+  repeatedly loads the attempt page and calls local_stackmatheditor_get_config.
+
+  Properties: base_url, load_cmid, user_pass (required); threads (10), rampup (10), duration (60 s).
+  Maximum response times (Duration Assertions, provisional until the first GitHub run): attempt
+  page 8000 ms, get_config 3000 ms, starting the attempt 10000 ms.
+  JMeter exits 0 even when assertions fail - evaluate results.jtl with check_jtl.py.
+
+  @copyright 2026 Ralf Erlebach
+  @license   https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+-->
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="local_stackmatheditor attempt load" enabled="true">
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" enabled="true">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="base_url" elementType="Argument"><stringProp name="Argument.name">base_url</stringProp><stringProp name="Argument.value">${__P(base_url,http://127.0.0.1:8000)}</stringProp></elementProp>
+        </collectionProp>
+      </elementProp>
+    </TestPlan>
+    <hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Students" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">startnextloop</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp><intProp name="LoopController.loops">-1</intProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">${__P(threads,10)}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(rampup,10)}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <stringProp name="ThreadGroup.duration">${__P(duration,60)}</stringProp>
+        <stringProp name="ThreadGroup.delay"></stringProp>
+      </ThreadGroup>
+      <hashTree>
+        <CookieManager guiclass="CookiePanel" testclass="CookieManager" testname="Moodle session per thread" enabled="true">
+          <collectionProp name="CookieManager.cookies"/><boolProp name="CookieManager.clearEachIteration">false</boolProp>
+        </CookieManager>
+        <hashTree/>
+        <OnceOnlyController guiclass="OnceOnlyControllerGui" testclass="OnceOnlyController" testname="Log in and start the attempt" enabled="true"/>
+        <hashTree>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET login page" enabled="true">
+          <stringProp name="HTTPSampler.domain"></stringProp>
+          <stringProp name="HTTPSampler.path">${base_url}/login/index.php</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments"><collectionProp name="Arguments.arguments"></collectionProp></elementProp>
+        </HTTPSamplerProxy>
+        <hashTree><RegexExtractor guiclass="RegexExtractorGui" testclass="RegexExtractor" testname="logintoken" enabled="true">
+            <stringProp name="RegexExtractor.useHeaders">false</stringProp><stringProp name="RegexExtractor.refname">logintoken</stringProp>
+            <stringProp name="RegexExtractor.regex">name="logintoken" value="([^"]+)"</stringProp><stringProp name="RegexExtractor.template">$1$</stringProp>
+            <stringProp name="RegexExtractor.default">NOT_FOUND</stringProp><stringProp name="RegexExtractor.match_number">1</stringProp>
+          </RegexExtractor><hashTree/></hashTree><HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST login" enabled="true">
+          <stringProp name="HTTPSampler.domain"></stringProp>
+          <stringProp name="HTTPSampler.path">${base_url}/login/index.php</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments"><collectionProp name="Arguments.arguments"><elementProp name="username" elementType="HTTPArgument"><boolProp name="HTTPArgument.always_encode">true</boolProp><stringProp name="Argument.name">username</stringProp><stringProp name="Argument.value">sme_student${__groovy(String.format(&apos;%02d&apos;\, (ctx.getThreadNum() % 99) + 1))}</stringProp><boolProp name="HTTPArgument.use_equals">true</boolProp></elementProp><elementProp name="password" elementType="HTTPArgument"><boolProp name="HTTPArgument.always_encode">true</boolProp><stringProp name="Argument.name">password</stringProp><stringProp name="Argument.value">${__P(user_pass)}</stringProp><boolProp name="HTTPArgument.use_equals">true</boolProp></elementProp><elementProp name="logintoken" elementType="HTTPArgument"><boolProp name="HTTPArgument.always_encode">true</boolProp><stringProp name="Argument.name">logintoken</stringProp><stringProp name="Argument.value">${logintoken}</stringProp><boolProp name="HTTPArgument.use_equals">true</boolProp></elementProp></collectionProp></elementProp>
+        </HTTPSamplerProxy>
+        <hashTree><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Logged in (left the login page)" enabled="true">
+            <collectionProp name="Asserion.test_strings"><stringProp name="1">/login/index.php</stringProp></collectionProp>
+            <stringProp name="Assertion.test_field">Assertion.url</stringProp><boolProp name="Assertion.assume_success">false</boolProp>
+            <intProp name="Assertion.test_type">6</intProp>
+          </ResponseAssertion><hashTree/></hashTree><HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET quiz view" enabled="true">
+          <stringProp name="HTTPSampler.domain"></stringProp>
+          <stringProp name="HTTPSampler.path">${base_url}/mod/quiz/view.php?id=${__P(load_cmid)}</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments"><collectionProp name="Arguments.arguments"></collectionProp></elementProp>
+        </HTTPSamplerProxy>
+        <hashTree><RegexExtractor guiclass="RegexExtractorGui" testclass="RegexExtractor" testname="sesskey" enabled="true">
+            <stringProp name="RegexExtractor.useHeaders">false</stringProp><stringProp name="RegexExtractor.refname">sesskey</stringProp>
+            <stringProp name="RegexExtractor.regex">"sesskey":"([^"]+)"</stringProp><stringProp name="RegexExtractor.template">$1$</stringProp>
+            <stringProp name="RegexExtractor.default">NOT_FOUND</stringProp><stringProp name="RegexExtractor.match_number">1</stringProp>
+          </RegexExtractor><hashTree/></hashTree><HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST start attempt" enabled="true">
+          <stringProp name="HTTPSampler.domain"></stringProp>
+          <stringProp name="HTTPSampler.path">${base_url}/mod/quiz/startattempt.php</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments"><collectionProp name="Arguments.arguments"><elementProp name="cmid" elementType="HTTPArgument"><boolProp name="HTTPArgument.always_encode">true</boolProp><stringProp name="Argument.name">cmid</stringProp><stringProp name="Argument.value">${__P(load_cmid)}</stringProp><boolProp name="HTTPArgument.use_equals">true</boolProp></elementProp><elementProp name="sesskey" elementType="HTTPArgument"><boolProp name="HTTPArgument.always_encode">true</boolProp><stringProp name="Argument.name">sesskey</stringProp><stringProp name="Argument.value">${sesskey}</stringProp><boolProp name="HTTPArgument.use_equals">true</boolProp></elementProp></collectionProp></elementProp>
+        </HTTPSamplerProxy>
+        <hashTree><RegexExtractor guiclass="RegexExtractorGui" testclass="RegexExtractor" testname="attempt URL" enabled="true">
+            <stringProp name="RegexExtractor.useHeaders">URL</stringProp><stringProp name="RegexExtractor.refname">attempturl</stringProp>
+            <stringProp name="RegexExtractor.regex">(.*mod/quiz/attempt\.php.*)</stringProp><stringProp name="RegexExtractor.template">$1$</stringProp>
+            <stringProp name="RegexExtractor.default">NOT_FOUND</stringProp><stringProp name="RegexExtractor.match_number">1</stringProp>
+          </RegexExtractor><hashTree/><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="On the attempt page" enabled="true">
+            <collectionProp name="Asserion.test_strings"><stringProp name="1">mod/quiz/attempt.php</stringProp></collectionProp>
+            <stringProp name="Assertion.test_field">Assertion.url</stringProp><boolProp name="Assertion.assume_success">false</boolProp>
+            <intProp name="Assertion.test_type">16</intProp>
+          </ResponseAssertion><hashTree/>
+          <DurationAssertion guiclass="DurationAssertionGui" testclass="DurationAssertion" testname="At most 10000 ms" enabled="true">
+            <stringProp name="DurationAssertion.duration">10000</stringProp>
+          </DurationAssertion>
+          <hashTree/></hashTree>
+        </hashTree>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET attempt page (10 STACK questions)" enabled="true">
+          <stringProp name="HTTPSampler.domain"></stringProp>
+          <stringProp name="HTTPSampler.path">${attempturl}</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments"><collectionProp name="Arguments.arguments"></collectionProp></elementProp>
+        </HTTPSamplerProxy>
+        <hashTree><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="STACK questions rendered" enabled="true">
+            <collectionProp name="Asserion.test_strings"><stringProp name="1">class="que stack</stringProp></collectionProp>
+            <stringProp name="Assertion.test_field">Assertion.response_data</stringProp><boolProp name="Assertion.assume_success">false</boolProp>
+            <intProp name="Assertion.test_type">16</intProp>
+          </ResponseAssertion><hashTree/><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Plugin injected" enabled="true">
+            <collectionProp name="Asserion.test_strings"><stringProp name="1">local_stackmatheditor</stringProp></collectionProp>
+            <stringProp name="Assertion.test_field">Assertion.response_data</stringProp><boolProp name="Assertion.assume_success">false</boolProp>
+            <intProp name="Assertion.test_type">16</intProp>
+          </ResponseAssertion><hashTree/>
+          <DurationAssertion guiclass="DurationAssertionGui" testclass="DurationAssertion" testname="At most 8000 ms" enabled="true">
+            <stringProp name="DurationAssertion.duration">8000</stringProp>
+          </DurationAssertion>
+          <hashTree/></hashTree><HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST get_config web service" enabled="true">
+          <stringProp name="HTTPSampler.domain"></stringProp>
+          <stringProp name="HTTPSampler.path">${base_url}/lib/ajax/service.php?sesskey=${sesskey}&amp;info=local_stackmatheditor_get_config</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments"><collectionProp name="Arguments.arguments">
+            <elementProp name="" elementType="HTTPArgument"><boolProp name="HTTPArgument.always_encode">false</boolProp>
+              <stringProp name="Argument.value">[{&quot;index&quot;:0,&quot;methodname&quot;:&quot;local_stackmatheditor_get_config&quot;,&quot;args&quot;:{&quot;cmid&quot;:${__P(load_cmid)},&quot;questionids&quot;:[]}}]</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          </collectionProp></elementProp>
+        </HTTPSamplerProxy>
+        <hashTree><HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON" enabled="true"><collectionProp name="HeaderManager.headers">
+            <elementProp name="" elementType="Header"><stringProp name="Header.name">Content-Type</stringProp><stringProp name="Header.value">application/json</stringProp></elementProp>
+          </collectionProp></HeaderManager><hashTree/><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="No web-service error" enabled="true">
+            <collectionProp name="Asserion.test_strings"><stringProp name="1">"error":false</stringProp></collectionProp>
+            <stringProp name="Assertion.test_field">Assertion.response_data</stringProp><boolProp name="Assertion.assume_success">false</boolProp>
+            <intProp name="Assertion.test_type">16</intProp>
+          </ResponseAssertion><hashTree/>
+          <DurationAssertion guiclass="DurationAssertionGui" testclass="DurationAssertion" testname="At most 3000 ms" enabled="true">
+            <stringProp name="DurationAssertion.duration">3000</stringProp>
+          </DurationAssertion>
+          <hashTree/></hashTree>
+        <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think time 1 s" enabled="true">
+          <stringProp name="ConstantTimer.delay">1000</stringProp>
+        </ConstantTimer>
+        <hashTree/>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>
