@@ -105,7 +105,7 @@ describe('neighbouring control words no longer fuse (same root cause)', () => {
     test.each([
         ['\\alpha\\beta', 'explicit_single', 'alpha*beta'],
         ['x_1\\sqrt{2}', 'explicit_multi', 'x_1*sqrt(2)'],
-        ['x\\in\\mathbb{R}', 'stack', 'x in R'],
+        ['x\\in\\mathbb{R}', 'stack', 'elementp(x,R)'],
         ['\\binom{n}{k}', 'explicit_single', 'binomial(n,k)'],
         ['\\left\\{1,2\\right\\}', 'stack', '{1,2}'],
         ['2\\frac{1}{2}', 'stack', '(2+1/2)'],

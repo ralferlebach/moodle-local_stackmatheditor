@@ -22,7 +22,7 @@
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-define([], function() {
+define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     'use strict';
 
     /**
@@ -282,6 +282,206 @@ define([], function() {
         s = s.replace(/([a-zA-Z)\]])\s*\*\s*([a-zA-Z\\(])/g, '$1\\cdot $2');
         // Remaining * — use \cdot.
         s = s.replace(/\*/g, '\\cdot ');
+        return s;
+    }
+
+    /**
+     * Marker character of a table operator.
+     *
+     * @param {string} name Operator name.
+     * @returns {string} Marker.
+     */
+    function opMarker(name) {
+        return OperatorMap.byName(name).marker;
+    }
+
+    /**
+     * Split a function argument list at top-level commas.
+     *
+     * @param {string} s Argument list without the enclosing parentheses.
+     * @returns {string[]} Arguments.
+     */
+    function splitArguments(s) {
+        var parts = [];
+        var depth = 0;
+        var start = 0;
+        var i;
+        var ch;
+
+        for (i = 0; i < s.length; i++) {
+            ch = s.charAt(i);
+            if ('([{\uE020'.indexOf(ch) !== -1) {
+                depth++;
+            } else if (')]}\uE021'.indexOf(ch) !== -1) {
+                depth--;
+            } else if (ch === ',' && depth === 0) {
+                parts.push(s.substring(start, i).trim());
+                start = i + 1;
+            }
+        }
+        parts.push(s.substring(start).trim());
+        return parts;
+    }
+
+    /**
+     * Precedence of a rendered set node: relations 0, ∖ 1, ∪ 2, ∩ 3, operand 10.
+     *
+     * @param {string} name Function name.
+     * @returns {number} Precedence.
+     */
+    function setPrecedence(name) {
+        return {setdifference: 1, union: 2, intersection: 3}[name] || 0;
+    }
+
+    /**
+     * Render one argument of a set function, returning text and precedence.
+     *
+     * @param {string} arg Maxima argument.
+     * @returns {Object} {text, prec}.
+     */
+    function renderSetOperand(arg) {
+        var m = arg.match(/^(union|intersection|setdifference)\(/);
+        var text = renderSetFunctions(arg);
+
+        if (m && findCloseParen(arg, m[1].length) === arg.length - 1) {
+            return {text: text, prec: setPrecedence(m[1])};
+        }
+        if (/^[A-Za-z0-9_%.]+$/.test(arg) || /^[({[\uE020]/.test(arg) && findMatching(arg, 0) === arg.length - 1
+                || /^[A-Za-z_][A-Za-z0-9_]*\(/.test(arg) && findCloseParen(arg, arg.indexOf('(')) === arg.length - 1) {
+            return {text: text, prec: 10};
+        }
+        return {text: '(' + text + ')', prec: 10};
+    }
+
+    /**
+     * Find the matching bracket of any type.
+     *
+     * @param {string} s Input.
+     * @param {number} pos Index of the opening bracket.
+     * @returns {number} Index of the closing bracket or -1.
+     */
+    function findMatching(s, pos) {
+        var depth = 0;
+        var i;
+
+        for (i = pos; i < s.length; i++) {
+            if ('([{\uE020'.indexOf(s.charAt(i)) !== -1) {
+                depth++;
+            } else if (')]}\uE021'.indexOf(s.charAt(i)) !== -1) {
+                depth--;
+                if (depth === 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Operand texts, bracketed where their precedence is below minPrec.
+     *
+     * @param {Object[]} nodes Rendered operands {text, prec}.
+     * @param {number} minPrec Precedence of the enclosing operator.
+     * @returns {string[]} Operand texts.
+     */
+    function bracketBelow(nodes, minPrec) {
+        return nodes.map(function(node) {
+            return node.prec < minPrec ? '(' + node.text + ')' : node.text;
+        });
+    }
+
+    /**
+     * Render STACK's set functions as infix operator markers (#35).
+     *
+     * union(A,B) → A ∪ B, intersection → ∩, setdifference → ∖, elementp → ∈,
+     * not elementp → ∉, subsetp → ⊆, and the proper-subset form
+     * "subsetp(A,B) nounand A#B" written by tex2max → ⊂. Brackets are added
+     * where the precedence ∩ > ∪ requires them, and always around a set
+     * operation next to ∖.
+     *
+     * @param {string} s Maxima expression.
+     * @returns {string} Expression with operator markers.
+     */
+    function renderSetFunctions(s) {
+        var re = /(^|[^A-Za-z0-9_%])((?:not|nounnot)\s+)?(elementp|subsetp|union|intersection|setdifference)\(/;
+        var out = '';
+        var rest = s;
+        var m;
+        var start;
+        var open;
+        var close;
+        var args;
+        var nodes;
+        var prec;
+        var text;
+        var after;
+        var proper;
+
+        while ((m = rest.match(re)) !== null) {
+            start = m.index + m[1].length;
+            open = start + (m[2] || '').length + m[3].length;
+            close = findCloseParen(rest, open);
+            if (close === -1) {
+                break;
+            }
+            out += rest.substring(0, start);
+            args = splitArguments(rest.substring(open + 1, close));
+            after = rest.substring(close + 1);
+            nodes = args.map(renderSetOperand);
+            prec = setPrecedence(m[3]);
+
+            if (m[3] === 'elementp' && args.length === 2) {
+                text = nodes[0].text + ' ' + opMarker(m[2] ? 'notin' : 'in') + ' ' + nodes[1].text;
+            } else if (m[3] === 'subsetp' && args.length === 2) {
+                proper = after.match(/^\s*nounand\s*/);
+                if (proper && after.substring(proper[0].length).indexOf(args[0] + '#' + args[1]) === 0) {
+                    after = after.substring(proper[0].length + (args[0] + '#' + args[1]).length);
+                    text = nodes[0].text + ' ' + opMarker('subset') + ' ' + nodes[1].text;
+                    // Drop the brackets tex2max put around the proper-subset form.
+                    if (/\($/.test(out) && /^\)/.test(after)) {
+                        out = out.substring(0, out.length - 1);
+                        after = after.substring(1);
+                    }
+                } else {
+                    text = nodes[0].text + ' ' + opMarker('subseteq') + ' ' + nodes[1].text;
+                }
+            } else if (m[3] === 'setdifference' && args.length === 2) {
+                // Always bracket a set operation next to ∖: A ∖ B ∪ C is read
+                // differently by different people, (A ∖ B) ∪ C by nobody.
+                text = (nodes[0].prec < 10 ? '(' + nodes[0].text + ')' : nodes[0].text)
+                    + ' ' + opMarker('setminus') + ' '
+                    + (nodes[1].prec < 10 ? '(' + nodes[1].text + ')' : nodes[1].text);
+            } else if (m[3] === 'union' || m[3] === 'intersection') {
+                text = bracketBelow(nodes, prec).join(' ' + opMarker(m[3] === 'union' ? 'cup' : 'cap') + ' ');
+            } else {
+                text = rest.substring(start, close + 1);
+            }
+            out += text;
+            rest = after;
+        }
+        return out + rest;
+    }
+
+    /**
+     * Collapse "(A implies B) nounand (B implies A)" back into A ⇔ B (#35).
+     *
+     * @param {string} s Maxima expression.
+     * @returns {string} Expression with the ⇔ marker, or unchanged.
+     */
+    function collapseIff(s) {
+        var parts = splitTopLevelKeyword(s, 'nounand');
+        var first;
+        var second;
+
+        if (parts.length !== 2) {
+            return s;
+        }
+        first = splitTopLevelKeyword(stripEnclosingParens(parts[0]), 'implies');
+        second = splitTopLevelKeyword(stripEnclosingParens(parts[1]), 'implies');
+        if (first.length === 2 && second.length === 2
+                && first[0] === second[1] && first[1] === second[0]) {
+            return first[0] + ' ' + opMarker('iff') + ' ' + first[1];
+        }
         return s;
     }
 
@@ -749,8 +949,15 @@ define([], function() {
         var opts = options || {};
         var commaDecimal = opts.commaDecimal || false;
         var defs = opts.defs || {};
-        var s = convertRelationSystemToCases(collapsePlusMinus(maxima.trim()));
+        var s = collapsePlusMinus(maxima.trim());
         var prev;
+
+        // Maxima braces are set literals; LaTeX braces are grouping. Protect the
+        // literals now and write them as \\left\\{ ... \\right\\} at the end.
+        s = s.replace(/\{/g, '\uE020').replace(/\}/g, '\uE021');
+
+        // Set functions and ⇔ become operator markers before any keyword pass (#35).
+        s = convertRelationSystemToCases(renderSetFunctions(collapseIff(s)));
 
         if (!s) {
             return s;
@@ -853,6 +1060,15 @@ define([], function() {
 
         // Coupled signs restored by collapsePlusMinus().
         s = s.replace(/\u00b1/g, '\\pm ').replace(/\u2213/g, '\\mp ');
+
+        s = s.replace(/\uE020/g, '\\left\\{').replace(/\uE021/g, '\\right\\}');
+
+        // Set/logic operator markers from the central table.
+        OperatorMap.SET_OPERATORS.concat(OperatorMap.LOGIC_OPERATORS).forEach(function(op) {
+            if (op.marker) {
+                s = s.split(op.marker).join(op.tex + ' ');
+            }
+        });
 
         s = s.replace(/\s+/g, ' ').trim();
         return s;

@@ -184,3 +184,47 @@ Delivered as `sme_v1.2.0_01.zip` (2026091100).
 TeX → Maxima → TeX → Maxima, exact expansions, coupled signs, legacy `or`, non-sign differences);
 Behat ± scenarios updated to the exact `nounor` output plus two new ones (coupled signs,
 parentheses). Jest total: 163.
+
+Delivered as `sme_v1.2.0_02.zip` (2026091101).
+
+## 9. Iteration 4 (2026-09-11) — 2026091102: #35
+
+### Verification against STACK 4.13.1 (security-map.json)
+
+| Old output | STACK | Consequence |
+|---|---|---|
+| `x in A` | `in` is the loop keyword | rejected / wrong |
+| `x notin A`, `A setdiff B`, `A superset B`, `p impliedby q`, `p iff q` | unknown | rejected |
+| `A subset B` | `subset(A, pred)` filters by a predicate | wrong meaning |
+| `A union B`, `A intersect B` | functions, not infix | invalid syntax |
+| `p and q`, `p or q` | evaluating operators | allowed, but simplify |
+| — | `nounand` (nary 65), `nounor` (nary 61), `nounnot`, `implies` | supported |
+
+Found on the way: MathQuill writes ∨ as `\vee` (all of `\lor`, `\or`, `\vee` output `\vee `), which
+the old converter did not know at all; and `\neg` became `#g` because the `\ne` rule had no
+lookahead.
+
+### Decisions
+
+- Central table `amd/src/operator_map.js`, used by tex2max, max2tex and the tests.
+- ∈ → `elementp(x,A)`, ∉ → `not elementp(x,A)`, ∪ → `union(…)` (n-ary), ∩ → `intersection(…)`,
+  ∖ → `setdifference(A,B)`; precedence ∩ > ∪ > ∖ (left-associative); max2tex always brackets
+  set operations next to ∖.
+- ⊆ → `subsetp(A,B)`, ⊇ → `subsetp(B,A)`; ⊂ (proper) → `(subsetp(A,B) nounand A#B)`,
+  ⊃ → `(subsetp(B,A) nounand B#A)`. Toolbar: new buttons ⊆/⊇, ⊂/⊃ relabelled "proper".
+- ∧ → `nounand`, ∨ → `nounor`, ¬ → `not` (unchanged), ⇒ → `implies`, ⇐ → swapped `implies`,
+  ⇔ → `(p implies q) nounand (q implies p)`, collapsed back to ⇔ by max2tex.
+- Reading: canonical forms plus legacy `in`, `notin`, `union` … infix and `and`/`or`.
+- Set literals: Maxima `{…}` is rendered as `\left\{…\right\}` (was plain grouping braces).
+
+### Tests
+
+`tests/jest/sets_logic.test.js` (256 cases: 15 mappings × 5 modes × exact/validity/roundtrip,
+precedence, legacy reading, table coverage); Behat set/logic scenarios replaced by exact STACK
+forms; `\neg` scenario guards against `#g`. Jest total 419. Built AMD modules verified in a real
+browser via requirejs (production mode).
+
+### Open
+
+- ∀ / ∃ / ∄ (logic group) produce `forall`/`exists`/`nexists`, which STACK does not know
+  either. Not part of #35; decision needed (hide buttons or map to something STACK accepts).

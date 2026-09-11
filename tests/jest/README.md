@@ -18,6 +18,7 @@ Regenerate it from the Moodle root with
 | `conversion.test.js` | harness smoke (fraction, pi, roundtrip) |
 | `tex2max_sqrt.test.js` | #39: `\sqrt` stays atomic in every mode, no backslash in the CAS string |
 | `plusminus.test.js` | #30: coupled `\pm`/`\mp` expansion with `nounor`, collapse back (incl. legacy `or`), roundtrips in every mode |
+| `sets_logic.test.js` | #35: every set/logic operator of `amd/src/operator_map.js` → STACK-valid Maxima and back, precedence, legacy spellings |
 
 ```bash
 make jest            # from the plugin root; runs npm ci on first use

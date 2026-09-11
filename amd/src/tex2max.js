@@ -29,7 +29,7 @@
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-define([], function() {
+define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     'use strict';
 
     /**
@@ -620,6 +620,309 @@ define([], function() {
     }
 
     /**
+     * Escape a string for use inside a regular expression.
+     *
+     * @param {string} str Literal text.
+     * @returns {string} Escaped text.
+     */
+    function escapeRegExp(str) {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    /**
+     * Replace the LaTeX commands of the central operator table (#35).
+     *
+     * @param {string} s LaTeX string.
+     * @returns {string} String with markers or Maxima operators.
+     */
+    function replaceTableOperators(s) {
+        var ops = OperatorMap.SET_OPERATORS.concat(OperatorMap.LOGIC_OPERATORS);
+
+        ops.forEach(function(op) {
+            op.latex.forEach(function(cmd) {
+                s = s.replace(
+                    new RegExp(escapeRegExp(cmd) + '(?![a-zA-Z])', 'g'),
+                    ' ' + (op.marker || op.maxima) + ' '
+                );
+            });
+        });
+        return s;
+    }
+
+    /**
+     * Find the matching closing bracket for the opening bracket at pos.
+     *
+     * @param {string} s Input.
+     * @param {number} pos Index of "(", "[" or "{".
+     * @returns {number} Index of the matching bracket or -1.
+     */
+    function matchingBracket(s, pos) {
+        var depth = 0;
+        var i;
+        var ch;
+
+        for (i = pos; i < s.length; i++) {
+            ch = s.charAt(i);
+            if ('([{'.indexOf(ch) !== -1) {
+                depth++;
+            } else if (')]}'.indexOf(ch) !== -1) {
+                depth--;
+                if (depth === 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Return the top-level indices at which one of the given markers occurs.
+     *
+     * @param {string} s Input.
+     * @param {string[]} markers Marker characters.
+     * @returns {number[]} Indices.
+     */
+    function topLevelIndices(s, markers) {
+        var out = [];
+        var depth = 0;
+        var i;
+        var ch;
+
+        for (i = 0; i < s.length; i++) {
+            ch = s.charAt(i);
+            if ('([{'.indexOf(ch) !== -1) {
+                depth++;
+            } else if (')]}'.indexOf(ch) !== -1) {
+                depth--;
+            } else if (depth === 0 && markers.indexOf(ch) !== -1) {
+                out.push(i);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * True when x is a single operand: identifier, number, bracket group or function call.
+     *
+     * @param {string} x Expression.
+     * @returns {boolean} Whether no brackets are needed around it.
+     */
+    function isAtomic(x) {
+        var open;
+
+        x = x.trim();
+        if (/^[A-Za-z0-9_%.]+$/.test(x)) {
+            return true;
+        }
+        if ('([{'.indexOf(x.charAt(0)) !== -1 && matchingBracket(x, 0) === x.length - 1) {
+            return true;
+        }
+        open = x.indexOf('(');
+        return /^[A-Za-z_][A-Za-z0-9_]*\(/.test(x) && matchingBracket(x, open) === x.length - 1;
+    }
+
+    /**
+     * Put brackets around a compound operand.
+     *
+     * @param {string} x Expression.
+     * @returns {string} Operand safe to combine with an operator.
+     */
+    function wrap(x) {
+        x = x.trim();
+        return isAtomic(x) ? x : '(' + x + ')';
+    }
+
+    /**
+     * Remove brackets enclosing a whole function argument.
+     *
+     * Arguments are delimited by commas, so brackets around one are never
+     * needed: union((a*b),c) is union(a*b,c). Dropping them keeps the output
+     * identical after a roundtrip through max2tex.
+     *
+     * @param {string} x Expression.
+     * @returns {string} Argument without enclosing brackets.
+     */
+    function unwrap(x) {
+        x = x.trim();
+        while (x.charAt(0) === '(' && matchingBracket(x, 0) === x.length - 1) {
+            x = x.substring(1, x.length - 1).trim();
+        }
+        return x;
+    }
+
+    /**
+     * Marker of a set operator by name.
+     *
+     * @param {string} name Operator name from the table.
+     * @returns {string} Marker character.
+     */
+    function marker(name) {
+        return OperatorMap.byName(name).marker;
+    }
+
+    /**
+     * Turn one set-level segment (no logic operator, relation or comma at top
+     * level) into Maxima function calls.
+     *
+     * Relations bind loosest, then ∖, ∪, ∩ (tightest). ∖ is left-associative,
+     * ∪ and ∩ are n-ary.
+     *
+     * @param {string} seg Segment.
+     * @returns {string} Converted segment.
+     */
+    function convertSetSegment(seg) {
+        var t = seg.trim();
+        var relations = ['notin', 'in', 'subseteq', 'supseteq', 'subset', 'supset'];
+        var relMarkers = relations.map(marker);
+        var idx;
+        var name;
+        var left;
+        var right;
+        var parts;
+
+        idx = topLevelIndices(t, relMarkers);
+        if (idx.length) {
+            name = relations[relMarkers.indexOf(t.charAt(idx[0]))];
+            left = unwrap(convertSetSegment(t.substring(0, idx[0])));
+            right = unwrap(convertSetSegment(t.substring(idx[0] + 1)));
+            switch (name) {
+                case 'in':
+                    return 'elementp(' + left + ',' + right + ')';
+                case 'notin':
+                    return 'not elementp(' + left + ',' + right + ')';
+                case 'subseteq':
+                    return 'subsetp(' + left + ',' + right + ')';
+                case 'supseteq':
+                    return 'subsetp(' + right + ',' + left + ')';
+                case 'subset':
+                    return '(subsetp(' + left + ',' + right + ') nounand ' + left + '#' + right + ')';
+                default:
+                    return '(subsetp(' + right + ',' + left + ') nounand ' + right + '#' + left + ')';
+            }
+        }
+
+        idx = topLevelIndices(t, [marker('setminus')]);
+        if (idx.length) {
+            left = unwrap(convertSetSegment(t.substring(0, idx[idx.length - 1])));
+            right = unwrap(convertSetSegment(t.substring(idx[idx.length - 1] + 1)));
+            return 'setdifference(' + left + ',' + right + ')';
+        }
+
+        [['cup', 'union'], ['cap', 'intersection']].some(function(pair) {
+            var positions = topLevelIndices(t, [marker(pair[0])]);
+            var start = 0;
+
+            if (!positions.length) {
+                return false;
+            }
+            parts = [];
+            positions.forEach(function(pos) {
+                parts.push(unwrap(convertSetSegment(t.substring(start, pos))));
+                start = pos + 1;
+            });
+            parts.push(unwrap(convertSetSegment(t.substring(start))));
+            t = pair[1] + '(' + parts.join(',') + ')';
+            return true;
+        });
+        return t;
+    }
+
+    /**
+     * Split a level at top-level logic operators, relations and commas and
+     * convert each set-level segment.
+     *
+     * @param {string} s Expression (bracket groups already converted).
+     * @returns {string} Converted expression.
+     */
+    function convertSegments(s) {
+        var boundary = /^(\s+(?:nounand|nounor|implies|and|or|xor)\s+|(?:^|\s)(?:not|nounnot)\s+|<=|>=|=|<|>|#|,)/;
+        var out = '';
+        var seg = '';
+        var depth = 0;
+        var i = 0;
+        var ch;
+        var m;
+
+        while (i < s.length) {
+            ch = s.charAt(i);
+            if ('([{'.indexOf(ch) !== -1) {
+                depth++;
+            } else if (')]}'.indexOf(ch) !== -1) {
+                depth--;
+            }
+            m = depth === 0 ? s.substring(i).match(boundary) : null;
+            if (m && m[0] && (m[0].trim() !== 'not' || seg.trim() === '')) {
+                out += convertSetSegment(seg) + m[0];
+                seg = '';
+                i += m[0].length;
+                continue;
+            }
+            seg += ch;
+            i++;
+        }
+        return out + convertSetSegment(seg);
+    }
+
+    /**
+     * Convert the operator markers of one bracket level, innermost first (#35).
+     *
+     * ⇔ becomes a conjunction of both implications and ⇐ a swapped implication,
+     * because STACK knows neither "iff" nor "impliedby".
+     *
+     * @param {string} s Expression.
+     * @returns {string} Expression with Maxima function calls.
+     */
+    function convertLevel(s) {
+        var out = '';
+        var i = 0;
+        var close;
+        var idx;
+        var a;
+        var b;
+
+        while (i < s.length) {
+            if ('([{'.indexOf(s.charAt(i)) !== -1) {
+                close = matchingBracket(s, i);
+                if (close !== -1) {
+                    out += s.charAt(i) + convertLevel(s.substring(i + 1, close)) + s.charAt(close);
+                    i = close + 1;
+                    continue;
+                }
+            }
+            out += s.charAt(i);
+            i++;
+        }
+        s = out;
+
+        idx = topLevelIndices(s, [marker('iff')]);
+        if (idx.length) {
+            a = wrap(convertLevel(s.substring(0, idx[0])));
+            b = wrap(convertLevel(s.substring(idx[0] + 1)));
+            return '(' + a + ' implies ' + b + ') nounand (' + b + ' implies ' + a + ')';
+        }
+        idx = topLevelIndices(s, [marker('impliedby')]);
+        if (idx.length) {
+            a = wrap(convertLevel(s.substring(0, idx[0])));
+            b = wrap(convertLevel(s.substring(idx[0] + 1)));
+            return b + ' implies ' + a;
+        }
+        return convertSegments(s);
+    }
+
+    /**
+     * Turn set/logic operator markers into STACK-valid Maxima (#35).
+     *
+     * @param {string} s Maxima string that may contain operator markers.
+     * @returns {string} Converted string.
+     */
+    function convertStructuredOperators(s) {
+        if (!/[\uE010-\uE01A]/.test(s)) {
+            return s;
+        }
+        return convertLevel(s).replace(/\s+/g, ' ').trim();
+    }
+
+    /**
      * Expand plus-minus (±) and minus-plus (∓) into two coupled alternatives
      * joined by STACK's non-simplifying "nounor" (#30).
      *
@@ -814,9 +1117,10 @@ define([], function() {
         s = s.replace(/\\div/g, '/');
         s = s.replace(/\\%/g, '%');
         s = s.replace(/\\&/g, '&');
-        s = s.replace(/\\leq?/g, '<=');
-        s = s.replace(/\\geq?/g, '>=');
-        s = s.replace(/\\neq?/g, '#');
+        s = s.replace(/\\leq?(?![a-zA-Z])/g, '<=');
+        s = s.replace(/\\geq?(?![a-zA-Z])/g, '>=');
+        // Lookahead: without it \\neg (¬) became "#g".
+        s = s.replace(/\\neq?(?![a-zA-Z])/g, '#');
         s = s.replace(/\\ne(?![a-zA-Z])/g, '#');
         s = s.replace(/\\approx(?![a-zA-Z])/g, '~=');
         s = s.replace(/\\pm(?![a-zA-Z])\s?/g, '\u00b1');
@@ -856,27 +1160,16 @@ define([], function() {
             );
         });
 
-        // Set-theory: LaTeX → Maxima keywords (notin before in to avoid partial match).
-        s = s.replace(/\\notin(?![a-zA-Z])/g, ' notin ');
-        s = s.replace(/\\in(?![a-zA-Z])/g, ' in ');
-        s = s.replace(/\\cup(?![a-zA-Z])/g, ' union ');
-        s = s.replace(/\\cap(?![a-zA-Z])/g, ' intersect ');
-        s = s.replace(/\\setminus(?![a-zA-Z])/g, ' setdiff ');
-        s = s.replace(/\\subset(?![a-zA-Z])/g, ' subset ');
-        s = s.replace(/\\supset(?![a-zA-Z])/g, ' superset ');
+        // Set-theory and logic operators from the central table (#35). Operators
+        // that need their operands become marker characters here and function
+        // calls in convertStructuredOperators(); the others are emitted directly.
+        s = replaceTableOperators(s);
 
-        // Logic: LaTeX → Maxima keywords (nexists before exists to avoid partial match).
+        // Quantifiers (nexists before exists to avoid partial match).
         s = s.replace(/\\nexists/g, ' nexists ');
         s = s.replace(new RegExp('\\\\not' + BOUNDARY + '?\\\\exists', 'g'), ' nexists ');
         s = s.replace(/\\forall(?![a-zA-Z])/g, ' forall ');
         s = s.replace(/\\exists(?![a-zA-Z])/g, ' exists ');
-        s = s.replace(/\\neg(?![a-zA-Z])/g, ' not ');
-        // MathQuill normalises \\land to \\wedge; handle both forms.
-        s = s.replace(/\\(?:land|wedge)(?![a-zA-Z])/g, ' and ');
-        s = s.replace(/\\lor(?![a-zA-Z])/g, ' or ');
-        s = s.replace(/\\Rightarrow(?![a-zA-Z])/g, ' implies ');
-        s = s.replace(/\\Leftarrow(?![a-zA-Z])/g, ' impliedby ');
-        s = s.replace(/\\Leftrightarrow(?![a-zA-Z])/g, ' iff ');
         s = s.replace(/\\angle(?![a-zA-Z])/g, 'angle');
         s = s.replace(/\\perp(?![a-zA-Z])/g, 'perp');
         s = s.replace(/\\circ(?![a-zA-Z])/g, 'circ');
@@ -909,6 +1202,7 @@ define([], function() {
         // A space next to a bracket or comma never separates two factors
         // ("sqrt(pi )" from "\sqrt{\pi }"); drop it so the output is stable.
         s = s.replace(/\s+([)\],}])/g, '$1').replace(/([([{,])\s+/g, '$1');
+        s = convertStructuredOperators(s);
         s = expandPlusMinus(s);
         return s;
     }

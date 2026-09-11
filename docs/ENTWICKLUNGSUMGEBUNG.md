@@ -269,9 +269,11 @@ Before changing code:
    specification; do not work from a summary of them.
 3. Inspect the actual code before using it: definitions, config_manager, the injectors and the
    AMD modules already exist and are more complete than they look.
-4. Conversion rules live in amd/src/tex2max.js and amd/src/max2tex.js only. Every rule change
-   gets Jest cases (tests/jest) and, where MathQuill's own normalisation matters, a Behat
-   scenario.
+4. Conversion rules live in amd/src/tex2max.js and amd/src/max2tex.js only; set-theory and
+   logic operators come from the central table amd/src/operator_map.js, whose Maxima side must
+   be valid in STACK's security map (set operations are functions there: union, intersection,
+   setdifference, elementp, subsetp; logic uses nounand/nounor). Every rule change gets Jest
+   cases (tests/jest) and, where MathQuill's own normalisation matters, a Behat scenario.
 5. Toolbar entries are defined server-side (classes/definitions.php) and exported to JS; the
    client does not invent operators the server does not know.
 6. The original STACK input stays in the DOM, positioned off-screen — never display:none

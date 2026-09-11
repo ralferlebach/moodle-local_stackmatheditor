@@ -18,8 +18,9 @@
  *
  * The modules in amd/src are plain `define([deps], factory)` modules. This loader evaluates the
  * SOURCE file (not the build) with a stub `define`, hands the factory the dependencies passed in
- * and returns what the factory returns. Unknown dependencies fail loudly: a module that silently
- * received `undefined` would test something other than what ships.
+ * and returns what the factory returns. Dependencies on the plugin's own modules
+ * (local_stackmatheditor/...) are loaded the same way; any other unknown dependency fails loudly:
+ * a module that silently received `undefined` would test something other than what ships.
  *
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -48,10 +49,14 @@ function loadAmd(name, deps = {}) {
             ids = [];
         }
         const args = ids.map((id) => {
-            if (!Object.prototype.hasOwnProperty.call(deps, id)) {
-                throw new Error(`AMD module '${name}' needs '${id}' - pass it to loadAmd().`);
+            if (Object.prototype.hasOwnProperty.call(deps, id)) {
+                return deps[id];
             }
-            return deps[id];
+            // The plugin's own modules are loaded from amd/src as well.
+            if (id.indexOf('local_stackmatheditor/') === 0) {
+                return loadAmd(id.substring('local_stackmatheditor/'.length), deps);
+            }
+            throw new Error(`AMD module '${name}' needs '${id}' - pass it to loadAmd().`);
         });
         exported = factory(...args);
         defined = true;

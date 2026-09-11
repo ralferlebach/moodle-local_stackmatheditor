@@ -46,6 +46,7 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
   Scenario: "not" is not split into n*o*t in explicit_single mode
     When I enter latex "\neg (x=0)" into the MathQuill field for "ans1"
     Then the underlying STACK input for "ans1" should not contain "n*o*t"
+    And the underlying STACK input for "ans1" should not contain "#g"
 
   # ── Mixed-fraction fix (#29) ──────────────────────────────────────────────────
 
@@ -123,26 +124,29 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
       | space_single    |
       | stack           |
 
-  # ── Set-theory (#28) ─────────────────────────────────────────────────────────
+  # ── Set theory and logic: STACK-valid forms (#35) ────────────────────────────
 
   @javascript
-  Scenario: Set-theory notin converts to Maxima keyword
+  Scenario: Set membership becomes the STACK predicate elementp
     When I enter latex "x\notin A" into the MathQuill field for "ans1"
-    Then the underlying STACK input for "ans1" should contain "notin"
+    Then the underlying STACK input for "ans1" should be "not elementp(x,A)"
 
   @javascript
-  Scenario: Set-theory union converts to Maxima keyword
-    When I enter latex "A\cup B" into the MathQuill field for "ans1"
-    Then the underlying STACK input for "ans1" should contain "union"
-
-  # ── Logic operators ───────────────────────────────────────────────────────────
+  Scenario: Set union becomes the STACK function union
+    When I enter latex "x\in A\cup B" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "elementp(x,union(A,B))"
 
   @javascript
-  Scenario: Logic "and" from \land converts correctly
-    When I enter latex "p\land q" into the MathQuill field for "ans1"
-    Then the underlying STACK input for "ans1" should contain "and"
+  Scenario: A proper subset keeps its strictness
+    When I enter latex "A\subset B" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "(subsetp(A,B) nounand A#B)"
 
   @javascript
-  Scenario: Logic "implies" from \Rightarrow converts correctly
-    When I enter latex "p\Rightarrow q" into the MathQuill field for "ans1"
-    Then the underlying STACK input for "ans1" should contain "implies"
+  Scenario: Logical and/or become the non-simplifying noun operators
+    When I enter latex "p\land q\lor r" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "p nounand q nounor r"
+
+  @javascript
+  Scenario: Implied-by is rewritten as a swapped implication
+    When I enter latex "p\Leftarrow q" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "q implies p"
