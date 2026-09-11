@@ -1313,6 +1313,139 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Parse the numerator of a Leibniz derivative operator: \partial, d or \mathrm{d}, with an
+     * optional total order (\partial^{3}).
+     *
+     * @param {string} tex Numerator LaTeX.
+     * @returns {?Object} {order: ?number} or null when this is no derivative operator.
+     */
+    function parseDerivativeNumerator(tex) {
+        var m = tex.trim().match(/^(?:\\partial|\\mathrm\{d\}|d)\s*(?:\^\s*(?:\{\s*(\d+)\s*\}|(\d)))?$/);
+        if (!m) {
+            return null;
+        }
+        return {order: m[1] || m[2] ? Number(m[1] || m[2]) : null};
+    }
+
+    /**
+     * Parse the denominator: one or more "\partial x^{n}" (or "dx^{n}") factors.
+     *
+     * @param {string} tex Denominator LaTeX.
+     * @returns {?Object} {pairs: [{variable, order}], atomic: boolean} or null.
+     */
+    function parseDerivativeDenominator(tex) {
+        var re = new RegExp(
+            '(?:\\\\partial|\\\\mathrm\\{d\\}|d)\\s*'
+            + '((?:[A-Za-z]|\\\\[a-zA-Z]+)(?:_\\{[^{}]*\\}|_[A-Za-z0-9])?)'
+            + '\\s*(?:\\^\\s*(?:\\{\\s*(\\d+)\\s*\\}|(\\d)))?\\s*',
+            'g'
+        );
+        var rest = tex.trim();
+        var pairs = [];
+        var consumed = 0;
+        var m;
+
+        while ((m = re.exec(rest)) !== null && m.index === consumed) {
+            pairs.push({variable: m[1], order: m[2] || m[3] ? Number(m[2] || m[3]) : 1});
+            consumed = re.lastIndex;
+        }
+        if (!pairs.length) {
+            return null;
+        }
+        return {pairs: pairs, atomic: consumed === rest.length};
+    }
+
+    /**
+     * Read the obligatory bracketed operand "\left( … \right)" or "( … )" at pos.
+     *
+     * @param {string} s LaTeX.
+     * @param {number} pos Index after the operator.
+     * @returns {?Object} {text, end} or null when no bracket follows.
+     */
+    function readDerivativeOperand(s, pos) {
+        var m = s.substring(pos).match(/^\s*(\\left\s*)?\(/);
+        var open;
+        var close;
+
+        if (!m) {
+            return null;
+        }
+        open = pos + m[0].length - 1;
+        close = matchingBracket(s, open);
+        if (close === -1) {
+            return null;
+        }
+        return {
+            text: s.substring(open + 1, close).replace(/\\right\s*$/, '').trim(),
+            end: close + 1
+        };
+    }
+
+    /**
+     * Replace every Leibniz derivative operator with operand by a placeholder for diff(…) (#46).
+     *
+     * ∂/∂x (E) → diff(E,x); ∂ⁿ/∂xⁿ (E) → diff(E,x,n); ∂ᴺ/(∂xⁿ ∂yᵐ) (E) → diff(E,x,n,y,m).
+     * The operand must be bracketed (no implicit scope rule); a numerator order must equal the
+     * sum of the denominator orders.
+     *
+     * @param {string} s LaTeX.
+     * @param {Object} opts Conversion options.
+     * @param {Object} ctx Context {problems, placeholders}.
+     * @param {number} [from] Index to continue searching from.
+     * @returns {string} LaTeX with placeholders.
+     */
+    function extractDerivatives(s, opts, ctx, from) {
+        var start = s.indexOf('\\frac', from || 0);
+        var num;
+        var den;
+        var numerator;
+        var denominator;
+        var operand;
+        var total;
+        var args;
+        var index;
+
+        if (start === -1) {
+            return s;
+        }
+        num = readLatexArgument(s, start + 5);
+        den = num ? readLatexArgument(s, num.end) : null;
+        numerator = num ? parseDerivativeNumerator(num.text) : null;
+        denominator = numerator && den ? parseDerivativeDenominator(den.text) : null;
+        if (!denominator) {
+            return extractDerivatives(s, opts, ctx, start + 5);
+        }
+        operand = readDerivativeOperand(s, den.end);
+        total = denominator.pairs.reduce(function(sum, pair) {
+            return sum + pair.order;
+        }, 0);
+        if (!denominator.atomic) {
+            ctx.problems.push('derivative_variable_composite');
+        } else if (!operand || !operand.text) {
+            ctx.problems.push('derivative_operand_missing');
+        } else if (numerator.order !== null && numerator.order !== total) {
+            ctx.problems.push('derivative_order_mismatch');
+        } else {
+            args = [unwrapArgument(convertInner(operand.text, opts, ctx, true))];
+            denominator.pairs.forEach(function(pair) {
+                args.push(convertInner(pair.variable, opts, ctx, true));
+                if (denominator.pairs.length > 1 || pair.order > 1) {
+                    args.push(String(pair.order));
+                }
+            });
+            index = ctx.placeholders.length;
+            ctx.placeholders.push('diff(' + args.join(',') + ')');
+            return extractDerivatives(
+                s.substring(0, start) + '\uE050' + index + '\uE051' + s.substring(operand.end),
+                opts,
+                ctx,
+                start
+            );
+        }
+        return extractDerivatives(s, opts, ctx, den.end);
+    }
+
+    /**
      * Remove brackets that enclose a whole function argument.
      *
      * @param {string} x Maxima expression.
@@ -1346,6 +1479,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
 
         s = s.replace(/\s+/g, ' ').trim();
         s = extractIntegrals(s, opts, local);
+        s = extractDerivatives(s, opts, local);
         // A space after a control word only ends the command's name (LaTeX ignores it). In front
         // of anything but a letter or digit it carries nothing and would otherwise survive in
         // stack mode ("gamma (x)", "epsilon _0").

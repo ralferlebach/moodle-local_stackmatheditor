@@ -38,42 +38,29 @@ question which toolbar groups are offered.
 Features
 --------
 
-### Version 1.0
+### Version 1.2
 
-* Visual MathQuill editor for STACK answer inputs in quiz attempts, quiz review and question preview.
-* Automatic LaTeX → Maxima conversion (tex2max) and Maxima → LaTeX for pre-filling saved answers (max2tex).
-* Configurable toolbar groups: basic arithmetic, powers and roots, exponential/logarithm, comparison
-  operators, absolute value, set theory, logic, brackets, mathematical constants, trigonometry,
-  Greek letters (lowercase and uppercase).
-* Five modes for implicit multiplication (see "How this plugin works").
-* Configuration per site, per quiz and per question, including an optional question preview.
-* English and German language packs.
+* Set theory: element, union, intersection, difference, (proper) subset and superset, entered
+  visually and handed to STACK in its own set functions.
+* Integral calculus: definite and indefinite integrals as a structured template (limits,
+  integrand, integration variable).
+* Differential calculus: first, higher and mixed partial derivatives as structured templates.
 
 ### Version 1.1
 
 * Support for small and mobile displays by automatic line breaks of long button rows.
 * Plus/minus and minus/plus buttons.
 
-### Version 1.2
+### Version 1.0
 
-* Multi-line editor for STACK's textarea and equivalence-reasoning inputs, including equation
-  systems within a line; empty lines can be edited as a real line.
-* Mathematically correct conversion of roots, plus/minus, set theory, logic and Greek letters into
-  syntax STACK accepts (see "How this plugin works").
-* Check and Submit always send exactly what the editor shows, even directly after the last key.
-* Documented integration events for external scripts (see "Integration events").
-* Configuration pages return to the page they were opened from.
-* Integral template (group "Integral calculus"): limits, integrand and variable, serialised as
-  `integrate(expr,x)` or `integrate(expr,x,a,b)`; `integrate`, `int` and their noun forms are read
-  back. An incomplete integral is kept in the editor and explained below it, but never sent as a
-  made-up CAS expression. Only simple integration variables (dx, dt, dθ, …).
-
-### Planned
-
-* Structured derivative templates serialising to `diff(expr, x[, n], ...)` (issue #46).
-
-The quantifier buttons (∀, ∃, ∄) are disabled: STACK does not know `forall`, `exists` or `nexists`,
-so every answer written with them would be invalid. They are rarely needed outside of proofs.
+* Visual MathQuill editor for STACK answer inputs in quiz attempts, quiz review and question preview.
+* Automatic LaTeX → Maxima conversion (tex2max) and Maxima → LaTeX for pre-filling saved answers (max2tex).
+* Configurable toolbar groups: basic arithmetic, powers and roots, exponential/logarithm, comparison
+  operators, absolute value, logic, brackets, mathematical constants, trigonometry,
+  Greek letters (lowercase and uppercase).
+* Five modes for implicit multiplication (see "How this plugin works").
+* Configuration per site, per quiz and per question, including an optional question preview.
+* English and German language packs.
 
 
 Installation
@@ -169,6 +156,12 @@ Function names (sqrt, sin, log, …), constants and Greek letter names are never
   `⇐` becomes a swapped implication, `⇔` the conjunction of both implications.
 * **Set theory** uses STACK's functions: `x ∈ A ∪ B` → `elementp(x,union(A,B))`; ⊆ → `subsetp`,
   ⊂/⊃ are proper subsets/supersets; a chain `A ⊃ B ⊂ C` means `A ⊃ B and B ⊂ C`.
+* **Integrals** become `integrate(expr,x)` or `integrate(expr,x,a,b)`; `integrate`, `int` and their
+  noun forms are read back. Only simple integration variables (dx, dt, dθ, …) are supported. An
+  incomplete integral stays in the editor with a hint below it; nothing is sent for it.
+* **Derivatives** become `diff(expr,x)`, `diff(expr,x,n)` or `diff(expr,x,n,y,m,…)`; the
+  expression to differentiate is always written in the template's brackets. `diff` cannot tell
+  whether d or ∂ was meant, so saved derivatives are always shown with ∂.
 * **Greek letters** use STACK's own convention, the letter's name (`\alpha` ↔ `alpha`); variant
   glyphs map to their letter; the uppercase buttons that look like Latin letters write the Latin
   letter (STACK does not distinguish them either).
@@ -244,8 +237,10 @@ It should also work with Boost child themes, including Moodle Core's Classic the
 Plugin repositories
 -------------------
 
-This plugin is not yet published in the Moodle plugins repository; publication is planned with
-version 1.2. The plugin is checked by MDL Shield (see the badge above).
+This plugin is published and regularly updated in the Moodle plugins repository:
+https://marketplace.moodle.com/plugins/3697
+
+It is checked by MDL Shield (see the badge above).
 
 The latest development version can be found on Github:
 https://github.com/ralferlebach/moodle-local_stackmatheditor

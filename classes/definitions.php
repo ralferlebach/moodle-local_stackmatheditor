@@ -252,6 +252,23 @@ class definitions {
                 ],
             ],
 
+            // Differential calculus (#46): three structured templates, canonical ∂ (diff(...) does
+            // not record d vs. ∂). The operand bracket is part of the template; the cursor
+            // starts inside it. The total order is checked against the denominator orders.
+            'differential_operators' => [
+                'label'           => get_string('group_differential_operators', $p),
+                'default_enabled' => false,
+                'elements'        => [
+                    ['display' => '∂/∂x', 'write' => '\\frac{\\partial}{\\partial x}\\left(\\right)', 'left' => 1,
+                        'tooltip' => get_string('btn_partial', $p)],
+                    ['display' => '∂ⁿ/∂xⁿ', 'write' => '\\frac{\\partial^{2}}{\\partial x^{2}}\\left(\\right)', 'left' => 1,
+                        'tooltip' => get_string('btn_partial_n', $p)],
+                    ['display' => '∂²/∂x∂y',
+                        'write' => '\\frac{\\partial^{2}}{\\partial x\\partial y}\\left(\\right)', 'left' => 1,
+                        'tooltip' => get_string('btn_partial_mixed', $p)],
+                ],
+            ],
+
             // Integral calculus (#44): one structured template - limits (leave empty for an
             // indefinite integral), integrand in brackets, atomic variable after d. The cursor
             // starts in the integrand. The contour integral has no STACK semantics and is not
@@ -400,19 +417,6 @@ class definitions {
             ],
 
             // 16. Differential calculus.
-            'differential_operators' => [
-                'label'           => get_string('group_differential_operators', $p),
-                'default_enabled' => false,
-                'elements'        => [
-                    ['display' => 'd/dx', 'write' => '\\frac{d}{dx}',
-                        'tooltip' => get_string('btn_deriv', $p)],
-                    ['display' => '∂/∂x', 'write' => '\\frac{\\partial}{\\partial x}',
-                        'tooltip' => get_string('btn_partial', $p)],
-                    ['display' => '∇', 'cmd'   => '\\nabla',
-                        'tooltip' => get_string('btn_nabla', $p)],
-                    ['display' => 'Δ', 'cmd'   => '\\Delta',
-                        'tooltip' => get_string('btn_laplacian', $p)],
-                ],
             ],
 
             // 17. Vector differential.

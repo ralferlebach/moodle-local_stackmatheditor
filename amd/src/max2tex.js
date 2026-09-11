@@ -519,6 +519,90 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * LaTeX of a derivative diff(expr, x[, n][, y, m …]) with the canonical ∂ (#46).
+     *
+     * diff(…) does not record whether d or ∂ was written, so ∂ is used throughout (Ralf's
+     * decision); the order of the variable/order pairs is kept as written.
+     *
+     * @param {string[]} args Arguments of diff (already split).
+     * @param {Object} options Conversion options.
+     * @returns {?string} LaTeX, or null for forms that are not handled (e.g. diff(expr)).
+     */
+    function derivativeLatex(args, options) {
+        var pairs = [];
+        var total = 0;
+        var i;
+        var order;
+
+        if (args.length === 2) {
+            pairs.push({variable: args[1], order: 1});
+        } else if (args.length === 3 && /^\d+$/.test(args[2])) {
+            pairs.push({variable: args[1], order: Number(args[2])});
+        } else if (args.length >= 5 && args.length % 2 === 1) {
+            for (i = 1; i < args.length; i += 2) {
+                if (!/^\d+$/.test(args[i + 1])) {
+                    return null;
+                }
+                pairs.push({variable: args[i], order: Number(args[i + 1])});
+            }
+        } else {
+            return null;
+        }
+        if (pairs.some(function(pair) {
+            return pair.order < 1 || !/^[A-Za-z%][A-Za-z0-9_]*$/.test(pair.variable);
+        })) {
+            return null;
+        }
+        total = pairs.reduce(function(sum, pair) {
+            return sum + pair.order;
+        }, 0);
+        order = function(n) {
+            return n > 1 ? '^{' + n + '}' : '';
+        };
+        return '\\frac{\\partial' + order(total) + '}{'
+            + pairs.map(function(pair) {
+                return '\\partial ' + convert(pair.variable, options) + order(pair.order);
+            }).join('') + '}\\left(' + convert(args[0], options) + '\\right)';
+    }
+
+    /**
+     * Replace derivative calls diff / 'diff / noundiff by placeholders holding their LaTeX (#46).
+     *
+     * @param {string} s Maxima expression.
+     * @param {Object} options Conversion options.
+     * @param {string[]} store Collected LaTeX snippets.
+     * @returns {string} Expression with placeholders.
+     */
+    function extractDerivativeCalls(s, options, store) {
+        var re = /(^|[^A-Za-z0-9_%])('?)(diff|noundiff)\(/;
+        var out = '';
+        var rest = s;
+        var m;
+        var start;
+        var open;
+        var close;
+        var tex;
+
+        while ((m = rest.match(re)) !== null) {
+            start = m.index + m[1].length;
+            open = start + m[2].length + m[3].length;
+            close = findCloseParen(rest, open);
+            if (close === -1) {
+                break;
+            }
+            tex = derivativeLatex(splitArguments(rest.substring(open + 1, close)), options);
+            if (tex === null) {
+                out += rest.substring(0, close + 1);
+            } else {
+                out += rest.substring(0, start) + '\uE060' + store.length + '\uE061';
+                store.push(tex);
+            }
+            rest = rest.substring(close + 1);
+        }
+        return out + rest;
+    }
+
+    /**
      * Collapse "(A implies B) and (B implies A)" back into A ⇔ B (#35).
      *
      * @param {string} s Maxima expression.
@@ -1014,6 +1098,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         var integrals = [];
 
         s = extractIntegralCalls(s, opts, integrals);
+        s = extractDerivativeCalls(s, opts, integrals);
 
         // Maxima braces are set literals; LaTeX braces are grouping. Protect the
         // literals now and write them as \\left\\{ ... \\right\\} at the end.

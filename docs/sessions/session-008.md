@@ -592,3 +592,40 @@ hidden; pre-fill from `'int(x^2,x,0,1)` renders in MathQuill and yields `integra
 
 Noun vs. verb (`'int` vs. `integrate`) is not visible and is written as `integrate` - an explicit
 option would be needed (Ralf's comment).
+
+Delivered as `sme_v1.2.0_14.zip` (2026091113).
+
+## 21. Iteration 16 (2026-09-11) — 2026091114: #46 + README revision
+
+### #46 decisions (Ralf, issue comment)
+
+Three templates (first, n-th, mixed partial), total order derived/checked, operand bracket
+obligatory (no "following product term" rule), canonical ∂ on the way back (diff does not record
+d vs. ∂), `'diff` read but never written, `diff(expr)` (total differential) out of scope.
+
+### Implementation
+
+- tex2max `extractDerivatives()`: `\frac{∂[^N]}{∂x[^n]∂y[^m]…}` (also d / \mathrm{d}) followed by
+  `\left(…\right)` → `diff(E,x)`, `diff(E,x,n)`, `diff(E,x,n,y,m,…)` (orders written for every
+  pair of a mixed derivative, `,1` dropped only for a single first-order variable). Problems:
+  `derivative_operand_missing`, `derivative_order_mismatch`, `derivative_variable_composite`.
+  Ordinary fractions are untouched.
+- max2tex: `diff|'diff|noundiff` with (expr,x), (expr,x,n) or (expr,x,n,y,m,…) → ∂ template with
+  computed total order; pair order kept; other forms (e.g. `diff(f)`) left as they are.
+- Toolbar "Differential calculus" (not default): ∂/∂x, ∂ⁿ/∂xⁿ, ∂²/∂x∂y templates, cursor in the
+  bracket; d/dx, ∇ and Δ removed (no STACK meaning / Δ is the Greek letter).
+- Strings en/de for the three buttons and three messages.
+
+### README (Ralf's feedback)
+
+Features per version only as features, newest first (1.2: set theory, integral, differential);
+"Planned" and the quantifier note removed; published at
+https://marketplace.moodle.com/plugins/3697; conversion rules for integrals and derivatives added.
+
+### Verification
+
+Jest `derivative.test.js` (33 cases); total 711. Real browser with the actual toolbar buttons
+(Moodle 4.5, site default mode "stack"): ∂/∂x + `x^2`, →, `+1` → `diff(x^2+1,x)`; mixed + `f` →
+`diff(f,x,1,y,1)`; `∂³/∂x⁴(f)` → empty value + order message; ∫ button + `x^2` →
+`integrate(x^2,x)`; pre-fill from `'diff(f,x,2,y,1)` → MathQuill template, `diff(f,x,2,y,1)`.
+The toolbar shows exactly the four new templates (no ∮).

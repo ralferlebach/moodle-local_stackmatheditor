@@ -21,6 +21,8 @@ Regenerate it from the Moodle root with
 | `sets_logic.test.js` | #35: every set/logic operator of `amd/src/operator_map.js` → STACK-valid Maxima and back, precedence, legacy spellings |
 | `stack_bridge.test.js` | #48/#43 (jsdom): one input/change per sync, flush before Check/Submit without extra events, stale-invalid re-validation once per value, integration events (enter, input, beforecheck, beforesubmit) |
 | `greek.test.js` | #22: every Greek letter of the definitions × 5 modes (TeX → Maxima → TeX → Maxima), variants, lambda/pi/function-name collisions, Latin policy |
+| `integral.test.js` | #44: integral template → integrate(...), incomplete states, all read forms, roundtrips |
+| `derivative.test.js` | #46: ∂ templates → diff(...), order check, canonical ∂ on the way back, roundtrips |
 
 ```bash
 make jest            # from the plugin root; runs npm ci on first use
