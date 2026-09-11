@@ -9,6 +9,11 @@
 # file exists on the repository's DEFAULT branch (main). The branch to test is
 # then chosen in the dialog ("Use workflow from"), e.g. development.
 #
+# Suites: smoke.spec.js (site, settings page, AMD build), settings.spec.js (level x setting
+# matrix: admin / quiz / question / inheritance x on-off / toolbar groups / implicit
+# multiplication, verified in the student attempt with screenshots) and performance.spec.js
+# (ten STACK editors on one page, exactly once, also after reloading).
+#
 # Artefacts: videos, traces and screenshots are recorded for EVERY test and
 # uploaded in both outcomes - green documents the journey, red can be
 # diagnosed without reproducing it locally.
@@ -63,6 +68,8 @@ jobs:
           php-version: '8.3'
           extensions: pgsql, gd, intl, zip, soap, mbstring, curl, xml, exif
           ini-values: max_input_vars=5000
+          # No xdebug/pcov: they disable the JIT and distort every timing measured here.
+          coverage: none
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
@@ -74,7 +81,7 @@ jobs:
           sudo apt-get install -y -qq maxima gnuplot-nox
       - name: Build and install the test site (Moodle + STACK + plugin)
         run: bash plugin/.github/build-test-site.sh
-      - name: Preflight - plugin and STACK installed
+      - name: Preflight and seed - plugin installed, course, users, quizzes
         run: |
           web=moodle; [ -d moodle/public ] && web=moodle/public
           php "$web/local/stackmatheditor/tests/playwright/seed.php" > /tmp/sme-seed.env

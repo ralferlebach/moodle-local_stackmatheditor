@@ -3,8 +3,16 @@
 Smoke-level end-to-end tests that run against a **live Moodle site**. They cannot run inside the
 static moodle-plugin-ci pipeline and have their own workflow (`.github/workflows/playwright.yml`).
 
-The smoke suite checks three things: the site answers, an administrator can open the plugin
-settings page, and `requirejs.php` serves the shipped `amd/build` module of `tex2max`.
+| Suite | Checks |
+|---|---|
+| `smoke.spec.js` | the site answers, the settings page opens, `requirejs.php` serves the built `tex2max` |
+| `settings.spec.js` | level (admin, quiz, question, inheritance chain) × setting (on/off, toolbar groups, implicit multiplication), changed through the real UI and verified in a student attempt, with screenshots |
+| `performance.spec.js` | ten STACK editors on one page: ready in time, exactly one editor and toolbar per question, also after reloading |
+
+`seed.php` (idempotent, disposable test sites only) creates course `SMETEST`, a teacher, 20
+students and two quizzes from the Moodle XML fixtures in `tests/fixtures`, and prints the
+`SME_*` variables; `php seed.php --reset` removes the quiz/question configuration of the settings
+quiz (used between the matrix tests).
 
 ## Run locally
 

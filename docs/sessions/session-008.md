@@ -629,3 +629,22 @@ Jest `derivative.test.js` (33 cases); total 711. Real browser with the actual to
 `diff(f,x,1,y,1)`; `∂³/∂x⁴(f)` → empty value + order message; ∫ button + `x^2` →
 `integrate(x^2,x)`; pre-fill from `'diff(f,x,2,y,1)` → MathQuill template, `diff(f,x,2,y,1)`.
 The toolbar shows exactly the four new templates (no ∮).
+
+Delivered as `sme_v1.2.0_15.zip` (2026091114). CI green, merge to `main` done (Ralf).
+
+## 22. Iteration 17 (2026-09-11) — 2026091115: review, load tests, settings matrix
+
+- Review/audit of 11.09.2026: every point listed, verified against the code and recorded in
+  `docs/REVIEW-2026-09-11.md` (new findings: `get_config` without explicit capability, toolbar
+  buttons without `aria-label`, two hard-coded English `aria-label`s, 7 comment blocks in
+  `definitions.php`).
+- Evaluation of the first manual runs on main (Playwright, k6, JMeter smoke): all green; server
+  log shows xdebug disabling the JIT → `coverage: none` in the three manual workflows.
+- Seed: `tests/playwright/seed.php` imports STACK questions from `tests/fixtures/*.xml`
+  (qformat_xml, no PHPUnit generator), creates course, teacher, 20 students, "SME Settings Quiz"
+  (2 questions) and "SME Load Quiz" (8 algebraic + 2 textarea, one page); `--reset` option.
+- Load: k6 `stackmatheditor-attempt.js`, JMeter `stackmatheditor-attempt.jmx` (authenticated
+  students, attempt page + get_config); workflows seed the site and run them after the smoke.
+- Playwright: `settings.spec.js` (6 tests, full matrix via the real UI, screenshots) and
+  `performance.spec.js` (ten editors, exactly once, re-initialisation).
+- Local results: see `docs/REVIEW-2026-09-11.md`, section 4.
