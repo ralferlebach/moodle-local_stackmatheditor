@@ -259,6 +259,8 @@ GitHub-Lauf der neuen Suiten nachgeschärft.
 | Playwright (nur Smoke) | 2,7–4,5 min | 20 min (inkl. Matrix, Performance, a11y) |
 | k6 (nur Smoke) | 2,8–3,2 min | 15 min (inkl. Attempt-Last) |
 | JMeter (nur Smoke) | 2,8–3,2 min | 15 min (inkl. Attempt-Last) |
+| k6 mit Attempt-Last (60 s) | 5,6 min | 15 min |
+| JMeter mit Attempt-Last (60 s) | 5,5 min | 15 min |
 
 | Test | gemessen | Grenze |
 |---|---|---|
@@ -266,11 +268,12 @@ GitHub-Lauf der neuen Suiten nachgeschärft.
 | Playwright Einstellungsmatrix (je Test) | lokal 9–40 s | 120 s |
 | Playwright Performance: 10 Editoren bereit | lokal 1,2–2,3 s | 6 s (vorläufig) |
 | Playwright a11y | lokal 30 s | 90 s |
-| k6 Smoke `http_req_duration` | p95 57–95 ms, max 150–359 ms | p95 < 500 ms, max < 3 s |
-| k6 Attempt: Versuchsseite (10 STACK-Fragen) | lokal p95 0,9–1,4 s, max 2,1 s | p95 < 3 s, max < 8 s (vorläufig) |
-| k6 Attempt: `get_config` | lokal p95 0,2 s, max 0,7 s | p95 < 0,8 s, max < 3 s (vorläufig) |
-| JMeter Smoke: Login-Seite / AMD-Modul | max 95 ms / 6 ms | 3000 ms (kalter erster Aufruf bis ~2 s) / 500 ms |
-| JMeter Attempt: Seite / `get_config` / Start | lokal Start 0,5–2,6 s (CAS-Cache vorgewärmt) | 8000 / 3000 / 20000 ms (vorläufig) |
+| k6 Smoke `http_req_duration` | p95 42–95 ms, max 125–359 ms | p95 < 500 ms, max < 3 s |
+| k6 Attempt: Versuchsseite (10 STACK-Fragen) | p95 221 ms, max 452 ms | p95 < 3 s, max < 8 s |
+| k6 Attempt: `get_config` | p95 52 ms, max 144 ms | p95 < 0,8 s, max < 3 s |
+| k6 Attempt: Anmeldung + Versuchsstart (einmal je VU) | max 43 s beim gleichzeitigen Start der 10 VUs | keine eigene Schwelle (`http_req_duration` bewertet nur die Schleife) |
+| JMeter Smoke: Login-Seite / AMD-Modul | max 83 ms / 5 ms | 3000 ms (kalter erster Aufruf bis ~2 s) / 500 ms |
+| JMeter Attempt: Seite / `get_config` / Start | max 243 ms / 50 ms / 743 ms | 8000 / 3000 / 20000 ms |
 
 ### Artefakte
 

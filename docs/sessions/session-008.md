@@ -757,3 +757,28 @@ Fix:
 Note for real courses (not a plugin issue): the first attempts of a STACK quiz started by many
 students at the same moment pay the cold-CAS cost; STACK's optimised Maxima image and the CAS
 cache reduce it.
+
+Delivered as `sme_v1.2.0_22.zip` (2026091121).
+
+## 29. Iteration 24 (2026-09-11) — load tests green on GitHub
+
+Both manual load workflows green with the warmed CAS cache. Measured on the runner:
+
+| | k6 (10 VUs, 60 s) | JMeter (10 threads, 60 s) |
+|---|---|---|
+| Requests / samples | 365, 0 failed, 755/755 checks | 578, 0 failed |
+| Attempt page (10 STACK questions) | p95 221 ms, max 452 ms | p95 157 ms, max 243 ms |
+| `get_config` | p95 52 ms, max 144 ms | p95 30 ms, max 50 ms |
+| Attempt start (once per student) | — | max 743 ms |
+
+Smoke unchanged: k6 300/300 checks, p95 42 ms; JMeter 100/100, login page max 83 ms.
+
+One observation: k6's `http_req_duration` max is 43 s, while every measured page and service call
+stays well below 0.5 s. The peak is the once-per-VU setup (login + startattempt), which all ten
+VUs run at the same second - the same herd effect the seed warm-up fixed for STACK, here on
+Moodle's login/attempt creation. It is outside the trends the test judges (`sme_*`), so the run is
+green and the numbers for the page and the web service are unaffected. JMeter ramps up over 5 s
+and shows the same step at 743 ms.
+
+Runtimes and limits in `docs/ENTWICKLUNGSUMGEBUNG.md` updated with the GitHub figures; the
+"vorläufig" marks are gone for the attempt load.
