@@ -1657,9 +1657,39 @@ JS;
      * @When I navigate to the STACK healthcheck page
      */
     public function i_navigate_to_stack_healthcheck_page(): void {
+        // The healthcheck runs a dozen CAS calls; with platform=linux (Maxima without a frozen
+        // image) the response can take longer than php-webdriver's 30 s HTTP timeout, and a
+        // regular visit() then fails with "WebDriverCurlException ... Operation timed out"
+        // although STACK is fine. The page is therefore fetched from within the current page:
+        // fetch() is no navigation, so every WebDriver command below returns at once, and the
+        // step waits up to 280 s (castimeout is 300 s) for the result. The fetched HTML is shown
+        // in the current page, where the assertion steps read it.
         $url = new moodle_url('/question/type/stack/adminui/healthcheck.php');
-        $this->getSession()->visit($this->locate_path($url->out(false)));
-        $this->wait_for_pending_js();
+        $jsurl = json_encode($this->locate_path($url->out(false)));
+        $this->getSession()->executeScript(<<<JS
+window.__smeHealthcheck = null;
+fetch({$jsurl}, {credentials: 'same-origin'})
+    .then(function(response) {
+        return response.text().then(function(text) {
+            var box = document.getElementById('sme-healthcheck') || document.createElement('div');
+            box.id = 'sme-healthcheck';
+            box.innerHTML = text;
+            document.body.appendChild(box);
+            window.__smeHealthcheck = 'HTTP ' + response.status;
+        });
+    })
+    .catch(function(e) {
+        window.__smeHealthcheck = 'error: ' + e;
+    });
+JS);
+        $this->getSession()->wait(280000, 'window.__smeHealthcheck !== null');
+        $status = $this->getSession()->evaluateScript('return window.__smeHealthcheck;');
+        if ($status !== 'HTTP 200') {
+            throw new ExpectationException(
+                'The STACK healthcheck page could not be loaded within 280 s (' . var_export($status, true) . ').',
+                $this->getSession()
+            );
+        }
     }
 
     /**

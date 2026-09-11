@@ -503,3 +503,21 @@ STACK's convention - a private form like `alpha_var` would no longer match teach
 `tests/jest/greek.test.js`: 181 cases (all 33 letters of the definitions × 5 modes as
 TeX → Maxima → TeX → Maxima without splitting; variants; lambda/pi/gamma collisions; Latin policy).
 README section "Greek letters" documents the policy.
+
+Delivered as `sme_v1.2.0_11.zip` (2026091110).
+
+## 18. Iteration 13 (2026-09-11) — 2026091111: CI Behat preflight
+
+The `@stack_init` preflight failed in the dev pipeline: `I navigate to the STACK healthcheck
+page` ended with `WebDriverCurlException ... Operation timed out after 30001 milliseconds`.
+The healthcheck runs a dozen CAS calls; with `platform=linux` (no frozen Maxima image) the page
+sometimes needs longer than php-webdriver's 30 s HTTP timeout for a navigation, although STACK
+itself was fine (the CLI baseline connect in `stack-behat-init.php` had just succeeded). Runner
+speed decides - earlier runs passed in 39 s.
+
+Fix: the step no longer navigates. It fetches the healthcheck with `fetch()` from within the
+current page (no navigation, so every WebDriver command returns at once), waits up to 280 s
+(castimeout 300 s) for the response and inserts the HTML into the current page, where the
+unchanged assertion steps read it. A non-200 answer or a network error fails the step with the
+status. Verified in a real browser against Moodle 4.5 + STACK 4.13.1: HTTP 200, "live connection
+to the CAS" and the library version stamp found.
