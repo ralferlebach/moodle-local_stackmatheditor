@@ -1389,7 +1389,10 @@ JS;
                 );
             })();
 JS;
-        $this->getSession()->evaluateScript($js);
+        // Execute, not evaluate: evaluateScript() prefixes the script with "return ", and a
+        // "return" followed by the leading comment line returned undefined before any statement
+        // ran - the result stayed empty. executeScript() runs the script exactly as written.
+        $this->getSession()->executeScript($js);
         // Wait up to 3 s for the AMD callback to fire.
         $this->getSession()->wait(3000, "window.__sme_t2m_result !== '__waiting__'");
     }

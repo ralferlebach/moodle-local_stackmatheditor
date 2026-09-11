@@ -269,3 +269,26 @@ structural operators.
 Jest 425 (new: logic vs. structure, chains, systems; legacy `or` no longer collapses). Changed
 AMD modules (tex2max, max2tex, operator_map, input_fields, textarea_fields) verified in a real
 browser via requirejs.
+
+Delivered as `sme_v1.2.0_04.zip` (2026091103).
+
+## 11. Iteration 6 (2026-09-11) — 2026091104: CI/Behat and local gherkinlint
+
+### Behat (dev pipeline, 35 scenarios, 3 failed)
+
+All three failures were the new Scenario Outline "The shipped tex2max never splits sqrt"
+(`explicit_single`, `space_single`, `stack`), each with `tex2max result '' does not contain 'sqrt(b)'`.
+
+Root cause in the step `the tex2max output for latex … in variableMode … is evaluated` (unused
+until this session): it ran its setup script with `evaluateScript()`, which prefixes the script
+with `return `. The script starts with a comment line, so `return` was followed by a line break,
+automatic semicolon insertion returned `undefined`, and not a single statement ran - the result
+variable was never set. Reproduced in Node (nothing executed, require never called). Fix:
+`executeScript()`, which runs the script as written. Verified by running the exact generated step
+script in a real browser against the built modules: result `a sqrt(b)`.
+
+### Local gherkinlint
+
+`make lint-gherkin` linted every feature of the whole Moodle tree, so `no-dupe-feature-names`
+reported clashes between unrelated plugins (local_catquizlab vs. local_catquiz). The target now
+passes `--files="local/stackmatheditor/tests/behat/*.feature"`.

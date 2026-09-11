@@ -164,10 +164,14 @@ lint-js:
 		--files=$(PLUGIN_REL)/amd/src/ \
 		--show-lint-warnings
 
+# Only this plugin's features: from the Moodle root without --files, gherkinlint checks every
+# feature file of every installed plugin, and no-dupe-feature-names then reports clashes between
+# unrelated plugins (e.g. local_catquizlab vs. local_catquiz).
 lint-gherkin:
 	@echo ""
-	@echo "=== Gherkin lint ==="
-	-cd $(MOODLE_ROOT) && $(NPX) grunt gherkinlint --root=.
+	@echo "=== Gherkin lint (this plugin only) ==="
+	-cd $(MOODLE_ROOT) && $(NPX) grunt gherkinlint --root=. \
+		--files="$(PLUGIN_REL)/tests/behat/*.feature"
 
 # Rollup needs entry points, not a directory (a directory causes E_RESOLVE), hence the list.
 # The committed amd/build must match what this produces: CI rebuilds on MOODLE_405_STABLE and
