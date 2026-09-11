@@ -69,7 +69,7 @@ env:
 jobs:
 
   lint-php:
-    name: "PHP lint (phplint)"
+    name: "PHP"
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -240,7 +240,7 @@ jobs:
           if-no-files-found: ignore
 
   javascript:
-    name: "JavaScript / CSS (ESLint + AMD build, stylelint, Jest)"
+    name: "JS/CSS"
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -539,7 +539,7 @@ jobs:
 
   ci-complete:
     name: CI complete
-    needs: [lint-php, codeanalysis, quality, javascript, phpunit, behat, stale-files]
+    needs: [lint-php, codeanalysis, quality, phpunit, behat, stale-files]
     runs-on: ubuntu-24.04
     if: always()
     steps:
@@ -550,7 +550,6 @@ jobs:
             "lint-php=${{ needs.lint-php.result }}" \
             "codeanalysis=${{ needs.codeanalysis.result }}" \
             "quality=${{ needs.quality.result }}" \
-            "javascript=${{ needs.javascript.result }}" \
             "phpunit=${{ needs.phpunit.result }}" \
             "behat=${{ needs.behat.result }}" \
             "stale-files=${{ needs.stale-files.result }}"; do

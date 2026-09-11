@@ -292,3 +292,51 @@ script in a real browser against the built modules: result `a sqrt(b)`.
 `make lint-gherkin` linted every feature of the whole Moodle tree, so `no-dupe-feature-names`
 reported clashes between unrelated plugins (local_catquizlab vs. local_catquiz). The target now
 passes `--files="local/stackmatheditor/tests/behat/*.feature"`.
+
+Delivered as `sme_v1.2.0_05.zip` (2026091104). Ralf confirmed in the browser console:
+`p\vee q → p or q`, `A\subset B → (subsetp(A,B) and A#B)`.
+
+## 12. Iteration 7 (2026-09-11) — 2026091105: #48
+
+CI: Ralf's `moodle-plugin-ci-dev.yml` adopted as supplied (short job names "PHP", "JS/CSS";
+`javascript` no longer listed in `ci-complete.needs`). One consequential fix: the result loop
+still read `needs.javascript.result`, which is empty when the job is not in `needs` - actionlint
+flags it, and ci-complete would always have failed. The line was removed; a failing JS/CSS job
+still turns ci-complete red through `behat`, which needs it.
+
+### Findings (STACK 4.13.1 `amd/src/input.js`, our editors)
+
+1. Our debounced sync (150 ms) could still be pending when Check was pressed.
+2. MathQuill 0.10.1 raises `edit` only on a root reflow, not for every structural change.
+3. STACK shows an "invalid" AJAX response without checking that it belongs to the current value
+   (valid responses are cached per value, invalid ones are not). A slow CAS answer for the
+   transient "(2)/()" can arrive after the final value was validated and overwrite the display.
+4. `triggerStackValidation()` fired jQuery triggers *and* native events: native events reach
+   jQuery handlers too, so jQuery listeners got input/change twice, plus a synthetic blur.
+
+### Fix
+
+- New `amd/src/stack_bridge.js`:
+  - `triggerValidation()`: exactly one native `input` and one `change`;
+  - `register(flush)` + capture listeners (`pointerdown`/Enter/Space on submit controls,
+    `submit`): every editor writes its visible state silently before the form data is built;
+    no preventDefault, no own submit;
+  - `guardStaleValidation()`: after an "invalid" result that may be stale (≥ STACK's 1 s typing
+    delay after our last change), request validation of the current value once; STACK answers
+    from its cache when that value was already validated; once per value, so no loop.
+- `textarea_fields.js`: sync also on keyup/paste/cut; `syncNow({silent})` cancels a pending
+  debounce and converts every row afresh; bridge registration per editor.
+- `input_fields.js` (single line and system editor): same bridge, silent flush.
+
+### Verification
+
+- Jest (jsdom) `stack_bridge.test.js`: 8 cases; total 433.
+- Real end-to-end run (Playwright against Moodle 4.5 + STACK 4.13.1 + Maxima, textarea question):
+  `2/12` → two Backspace → pause 2.5 s (STACK receives `(2)/()`) → `6`, ↑, Backspace, `1`
+  → Check clicked immediately after the last key (inside the debounce). Posted value
+  `(1)/(6)`; STACK after reload: "interpreted as \frac{1}{6}".
+
+### Open
+
+- No Behat scenario for a textarea/equiv question yet (the Behat context only creates algebraic
+  questions); STACK's generator template `textarea_input` would be the basis.

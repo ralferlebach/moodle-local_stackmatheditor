@@ -28,8 +28,9 @@ define([
     'local_stackmatheditor/tex2max',
     'local_stackmatheditor/max2tex',
     'local_stackmatheditor/toolbar',
-    'local_stackmatheditor/operator_map'
-], function($, tex2max, max2tex, toolbar, OperatorMap) {
+    'local_stackmatheditor/operator_map',
+    'local_stackmatheditor/stack_bridge'
+], function($, tex2max, max2tex, toolbar, OperatorMap, Bridge) {
     'use strict';
 
     var TYPES = ['equiv', 'textarea'];
@@ -228,29 +229,6 @@ define([
         return TYPES.map(function(t) {
             return 'textarea[data-stack-input-type="' + t + '"]';
         }).join(',');
-    }
-
-    /**
-     * Trigger native and jQuery validation events for a textarea.
-     *
-     * @param {jQuery} $ta Textarea element.
-     */
-    function triggerStackValidation($ta) {
-        $ta.trigger('change');
-        $ta.trigger('input');
-        $ta.trigger('blur');
-
-        var nativeInput = new Event('input', {
-            bubbles: true,
-            cancelable: true
-        });
-        $ta[0].dispatchEvent(nativeInput);
-
-        var nativeChange = new Event('change', {
-            bubbles: true,
-            cancelable: true
-        });
-        $ta[0].dispatchEvent(nativeChange);
     }
 
     /**
@@ -506,6 +484,14 @@ define([
             + ', varMode=' + this.varMode + ')');
 
         this.build();
+
+        // Check / Submit always send the visible state, even while a debounced sync is still
+        // pending (#48); a stale "invalid" result from STACK is re-checked once.
+        var self = this;
+        Bridge.register(function() {
+            self.syncNow({silent: true});
+        });
+        Bridge.guardStaleValidation($ta[0]);
     }
 
     /**
@@ -736,6 +722,11 @@ define([
         $mqWrap.on('click', function() {
             mq.focus();
         });
+        // MathQuill does not raise "edit" for every structural change. A key release, paste or
+        // cut always schedules a sync, so no intermediate state can outlive the final one (#48).
+        $mqWrap.on('keyup paste cut', function() {
+            self.debouncedSync();
+        });
         $mqWrap.on('focusin', function() {
             var pos = self.indexOfField(mq);
             if (pos) {
@@ -945,9 +936,23 @@ define([
 
     /**
      * Sync all visible editor rows back into the hidden textarea.
+     *
+     * Every row is converted afresh from its MathQuill field, so a conversion
+     * that failed for a transient state never blocks the next sync, and no row
+     * keeps an outdated value.
+     *
+     * @param {Object} [options] Options.
+     * @param {boolean} [options.silent] Write without raising events (used right
+     *     before a submit, where STACK validates the posted value anyway).
      */
-    EquivEditor.prototype.syncNow = function() {
+    EquivEditor.prototype.syncNow = function(options) {
         var self = this;
+        var silent = !!(options && options.silent);
+
+        if (this.syncTimer) {
+            clearTimeout(this.syncTimer);
+            this.syncTimer = null;
+        }
         var lines = this.rows.map(function(step) {
             var parts = step.fields.map(function(fieldData) {
                 fieldData.maxima = maximaFromLatex(fieldData.mq.latex(), self.convOpts);
@@ -963,8 +968,8 @@ define([
         var value = lines.join('\n');
         var oldVal = this.$ta.val();
         this.$ta.val(value);
-        if (value !== oldVal) {
-            triggerStackValidation(this.$ta);
+        if (value !== oldVal && !silent) {
+            Bridge.triggerValidation(this.$ta[0]);
             dbg('sync: ' + lines.length + ' steps');
         }
     };

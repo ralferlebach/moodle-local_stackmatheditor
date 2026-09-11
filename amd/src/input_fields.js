@@ -29,8 +29,9 @@ define([
     'local_stackmatheditor/tex2max',
     'local_stackmatheditor/max2tex',
     'local_stackmatheditor/toolbar',
-    'local_stackmatheditor/operator_map'
-], function($, tex2max, max2tex, toolbar, OperatorMap) {
+    'local_stackmatheditor/operator_map',
+    'local_stackmatheditor/stack_bridge'
+], function($, tex2max, max2tex, toolbar, OperatorMap, Bridge) {
     'use strict';
 
     var TYPES = ['algebraic', 'units'];
@@ -58,26 +59,8 @@ define([
      * @param {jQuery} $input Hidden input.
      */
     function triggerStackValidation($input) {
-        // Standard events.
-        $input.trigger('change');
-        $input.trigger('input');
-
-        // STACK uses blur to trigger validation.
-        $input.trigger('blur');
-
-        // Native event for frameworks that don't
-        // listen to jQuery events.
-        var nativeInput = new Event('input', {
-            bubbles: true,
-            cancelable: true
-        });
-        $input[0].dispatchEvent(nativeInput);
-
-        var nativeChange = new Event('change', {
-            bubbles: true,
-            cancelable: true
-        });
-        $input[0].dispatchEvent(nativeChange);
+        // One native input + change event; they reach jQuery handlers too (#48).
+        Bridge.triggerValidation($input[0]);
     }
 
     /**
@@ -87,8 +70,9 @@ define([
      * @param {jQuery} $input Hidden input.
      * @param {Object} convOpts Conversion options.
      * @param {Function} dbg Debug logger.
+     * @param {boolean} [silent] Write without raising events (right before a submit).
      */
-    function syncToInput(mqField, $input, convOpts, dbg) {
+    function syncToInput(mqField, $input, convOpts, dbg, silent) {
         var latex = mqField.latex();
         var maxima = '';
         if (latex && latex.trim()) {
@@ -102,7 +86,7 @@ define([
         $input.val(maxima);
 
         // Only trigger validation if value changed.
-        if (maxima !== oldVal) {
+        if (maxima !== oldVal && !silent) {
             triggerStackValidation($input);
             dbg('Sync: LaTeX="' + latex
                 + '" Maxima="' + maxima + '"');
@@ -278,8 +262,9 @@ define([
      * @param {jQuery} $input Hidden input.
      * @param {Object} convOpts Conversion options.
      * @param {Function} dbg Debug logger.
+     * @param {boolean} [silent] Write without raising events (right before a submit).
      */
-    function syncSystemToInput(rows, $input, convOpts, dbg) {
+    function syncSystemToInput(rows, $input, convOpts, dbg, silent) {
         var maxima = rows.map(function(row) {
             return latexFieldToMaxima(row.mqField, convOpts).trim();
         }).filter(function(value) {
@@ -291,7 +276,7 @@ define([
 
         $input.val(maxima);
 
-        if (maxima !== oldVal) {
+        if (maxima !== oldVal && !silent) {
             triggerStackValidation($input);
             dbg('System sync: Maxima="' + maxima + '"');
         }
@@ -629,6 +614,12 @@ define([
                     syncSystemToInput(rows, $input, convOpts, ctx.dbg);
                 }, 0);
             }, 0);
+
+            // Check / Submit always send the visible system (#48).
+            Bridge.register(function() {
+                syncSystemToInput(rows, $input, convOpts, ctx.dbg, true);
+            });
+            Bridge.guardStaleValidation($input[0]);
             return;
         }
 
@@ -646,6 +637,14 @@ define([
                 }
             }
         });
+
+        // Check / Submit always send the visible state (#48).
+        Bridge.register(function() {
+            if (!prefilling) {
+                syncToInput(mqField, $input, convOpts, ctx.dbg, true);
+            }
+        });
+        Bridge.guardStaleValidation($input[0]);
 
         // Typeset toolbar (delayed for MathJax).
         toolbar.typeset($tb);
