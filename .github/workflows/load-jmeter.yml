@@ -113,7 +113,7 @@ jobs:
         run: |
           web=moodle; [ -d moodle/public ] && web=moodle/public
           php "$web/local/stackmatheditor/tests/playwright/seed.php" > /tmp/sme-seed.env
-          sed -n "s/^export \([A-Z_][A-Z_]*\)='\(.*\)'$/\1=\2/p" /tmp/sme-seed.env >> "$GITHUB_ENV"
+          sed -n "s/^export \([A-Z_][A-Z0-9_]*\)='\(.*\)'$/\1=\2/p" /tmp/sme-seed.env >> "$GITHUB_ENV"
           cat /tmp/sme-seed.env
       - name: Set up JMeter
         run: |

@@ -82,8 +82,10 @@ test('attempt page: editors and toolbars are accessible', async({browser}, info)
         .map((b) => b.outerHTML.slice(0, 80)));
     expect(unnamed).toEqual([]);
 
-    // Keyboard only: Tab reaches an editor, typing converts.
+    // Keyboard: the editor's own (named) input takes the keys, and typing converts. The field
+    // is emptied first - a continued attempt may still hold an answer from an earlier run.
     const first = page.locator('.que.stack').first();
+    await first.locator('.mq-editable-field').first().evaluate((el) => window.MathQuill.getInterface(2)(el).latex(''));
     await first.locator('.mq-editable-field textarea').focus();
     await page.keyboard.type('x');
     await expect(first.locator('input[name$="_ans1"]')).toHaveValue('x');

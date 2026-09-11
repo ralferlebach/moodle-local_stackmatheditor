@@ -680,3 +680,22 @@ Delivered as `sme_v1.2.0_17.zip` (2026091116).
 - Comparison with FlexAccess (see `docs/REVIEW-2026-09-11.md`, section 6): `$plugin->supported`
   was missing (added `[405, 502]`); privacy metadata referenced a missing string for a dropped
   column (fixed) - new `language_strings_test`.
+
+Delivered as `sme_v1.2.0_18.zip` (2026091117).
+
+## 25. Iteration 20 (2026-09-11) — 2026091118: Playwright workflow environment
+
+First GitHub run of the new Playwright suites (log `logs_93728539984`): the whole run aborted
+before the first test with `Environment variable SME_SETTINGS_QBE1 is not set`. The seed printed
+the variable, but the workflow copies the `export` lines into `$GITHUB_ENV` with
+`sed "s/^export \([A-Z_][A-Z_]*\)=…"` - no digits allowed, so `SME_SETTINGS_QBE1/2` were
+dropped (locally the file was sourced, which is why it never showed). Fixed in all three
+workflows (`[A-Z_][A-Z0-9_]*`).
+
+Hardening: `settings.spec.js` and `performance.spec.js` read their variables when the suite
+starts, not when the file is loaded - a missing variable now fails only that suite (checked:
+smoke still runs). `a11y.spec.js` empties the field before the keyboard check (a continued
+attempt may hold an earlier answer).
+
+Replayed locally with exactly the GitHub-style environment file (KEY=VALUE, the same sed):
+settings 6/6 (3.4 min, longest test 47 s), smoke 3/3, performance 1/1, a11y 2/2.
