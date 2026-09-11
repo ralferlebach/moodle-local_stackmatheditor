@@ -521,3 +521,22 @@ current page (no navigation, so every WebDriver command returns at once), waits 
 unchanged assertion steps read it. A non-200 answer or a network error fails the step with the
 status. Verified in a real browser against Moodle 4.5 + STACK 4.13.1: HTTP 200, "live connection
 to the CAS" and the library version stamp found.
+
+Delivered as `sme_v1.2.0_12.zip` (2026091111).
+
+## 19. Iteration 14 (2026-09-11) — 2026091112: README from moodle-plugintemplate
+
+`README.md` rewritten on the structure of `ralferlebach/moodle-plugintemplate` and filled for this
+plugin: requirements (incl. STACK 4.13 dependencies and Maxima), motivation, features per version
+(1.0, 1.1, 1.2) plus planned ones (#44, #46) and the disabled quantifiers, settings and
+configuration pages, capabilities (none added; `mod/quiz:manage` / `mod/adaptivequiz:viewreport`),
+how it works (chain, variable modes, conversion rules, pitfalls such as empty lines and legacy
+`and`/`or`), Greek letters, integration events, privacy, third-party library, development pointers.
+
+Badges: Moodle Plugin CI (`moodle-plugin-ci-main.yml` on `main` - shows a status once the new
+workflow runs on main) and MDL Shield via the shields.io endpoint
+`https://mdlshield.com/api/badge/local_stackmatheditor` (currently "not reviewed"), linking to
+`https://mdlshield.com/dashboard/plugins/local_stackmatheditor`.
+
+Correction to iteration 12: the uppercase Greek buttons that look like Latin letters (Α, Β, Ε, …)
+are offered and write the Latin letter; the README now says so.
