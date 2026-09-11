@@ -21,8 +21,18 @@ make jmeter THREADS=10 LOOPS=20
 
 The JMeter HTML dashboard ends up in `tests/load/jmeter-report/index.html`.
 
-## Next steps
+## Attempt load (k6 and JMeter twins)
 
-Once the pipelines are green, the plans grow towards the real read path of the editor: the
-`local_stackmatheditor_get_config` web service (needs a seeded quiz with STACK questions and a
-token) and a quiz attempt page with the editor injected.
+`stackmatheditor-attempt.js` / `stackmatheditor-attempt.jmx`: every virtual user logs in as its
+own seeded student (`sme_student01` …), starts or continues an attempt at "SME Load Quiz" (ten
+STACK questions on one page) and then repeatedly loads the attempt page and calls
+`local_stackmatheditor_get_config`. Data: `tests/playwright/seed.php` (idempotent, disposable test
+sites only).
+
+```bash
+make k6-attempt LOAD_VUS=10 LOAD_DURATION=60
+make jmeter-attempt LOAD_VUS=10 LOAD_DURATION=60
+```
+
+Thresholds (k6): checks > 99 %, failed requests < 1 %, attempt page p95 < 8 s, get_config
+p95 < 1.5 s.

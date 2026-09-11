@@ -207,6 +207,11 @@ jobs:
           MOODLE_BRANCH: MOODLE_405_STABLE
       # After install: NO <plugin> argument. The default comes from ci/.env and points to the
       # installed copy inside the Moodle tree - which is what makes the tree-only sniffs fire.
+      # Also here (not only in the "PHP" job): tools that read one job's log - such as the
+      # Moodle plugins directory checker - then find phplint next to validate.
+      - name: PHP Lint
+        if: ${{ always() }}
+        run: moodle-plugin-ci phplint 2>&1 | tee ci-logs/phplint-tree.log
       - name: Moodle Code Checker
         if: ${{ always() }}
         run: moodle-plugin-ci codechecker --max-warnings 0 --exclude=PSR1.Classes.ClassDeclaration,moodle.Commenting.TodoComment 2>&1 | tee ci-logs/codechecker.log

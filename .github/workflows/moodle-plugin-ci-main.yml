@@ -273,6 +273,77 @@ jobs:
           done
           echo "Required contents present."
 
+  plugin-directory:
+    # The Moodle plugins directory runs moodle-plugin-ci on the uploaded ZIP. This job builds
+    # exactly that ZIP (git archive, one top-level folder "stackmatheditor/") and runs the same
+    # checks on it with the lowest PHP version Moodle 4.5 supports - so a packaging mistake or a
+    # syntax the directory's PHP does not know is caught here, before the upload.
+    name: "Plugin directory checks on the release ZIP (PHP 8.1)"
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: 'postgres'
+          POSTGRES_HOST_AUTH_METHOD: 'trust'
+        ports:
+          - 5432:5432
+        options: --health-cmd=pg_isready --health-interval=10s --health-timeout=5s --health-retries=3
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v6
+        with:
+          path: source
+      - name: Build the release ZIP
+        run: |
+          git -C source archive --format=zip --prefix=stackmatheditor/ HEAD > stackmatheditor.zip
+          mkdir -p package
+          unzip -q stackmatheditor.zip -d package
+          echo "Release ZIP: $(unzip -l stackmatheditor.zip | tail -1)"
+      - name: Setup PHP 8.1
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          ini-values: max_input_vars=5000
+          coverage: none
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo "$(cd ci/bin; pwd)" >> "$GITHUB_PATH"
+          echo "$(cd ci/vendor/bin; pwd)" >> "$GITHUB_PATH"
+          sudo locale-gen en_AU.UTF-8
+          echo "NVM_DIR=$HOME/.nvm" >> "$GITHUB_ENV"
+      - name: Install Moodle and the release package (no test init)
+        run: moodle-plugin-ci install --plugin ./package/stackmatheditor --db-host=127.0.0.1 --no-init
+        env:
+          DB: pgsql
+          MOODLE_BRANCH: MOODLE_405_STABLE
+      - name: PHP Lint
+        if: ${{ always() }}
+        run: moodle-plugin-ci phplint
+      - name: Validating
+        if: ${{ always() }}
+        run: moodle-plugin-ci validate
+      - name: Moodle Code Checker
+        if: ${{ always() }}
+        run: moodle-plugin-ci codechecker --max-warnings 0 --exclude=PSR1.Classes.ClassDeclaration,moodle.Commenting.TodoComment
+      - name: Moodle PHPDoc Checker
+        if: ${{ always() }}
+        run: moodle-plugin-ci phpdoc --max-warnings 0
+      - name: Check upgrade savepoints
+        if: ${{ always() }}
+        run: moodle-plugin-ci savepoints
+      - name: Mustache Lint
+        if: ${{ always() }}
+        run: moodle-plugin-ci mustache
+      - name: Upload the checked release ZIP
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-zip-stackmatheditor
+          path: stackmatheditor.zip
+          retention-days: 30
+
   coverage:
     name: Coverage
     runs-on: ubuntu-24.04
@@ -342,7 +413,7 @@ jobs:
 
   maturity-gate:
     name: Release gate
-    needs: [test, jest, release-artefact, coverage]
+    needs: [test, jest, release-artefact, plugin-directory, coverage]
     runs-on: ubuntu-24.04
     # Without always() this job is skipped whenever one of its dependencies fails - and a skipped
     # job is not re-executed by "re-run failed jobs", so it stays skipped for good and keeps
@@ -358,6 +429,7 @@ jobs:
             "test=${{ needs.test.result }}" \
             "jest=${{ needs.jest.result }}" \
             "release-artefact=${{ needs.release-artefact.result }}" \
+            "plugin-directory=${{ needs.plugin-directory.result }}" \
             "coverage=${{ needs.coverage.result }}"; do
             echo "  ${entry%%=*}: ${entry#*=}"
             if [[ "${entry#*=}" != "success" ]]; then

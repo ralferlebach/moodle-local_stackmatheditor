@@ -30,8 +30,16 @@ on:
         default: '5'
         required: false
       duration:
-        description: Duration in seconds
+        description: Smoke duration in seconds
         default: '15'
+        required: false
+      load_vus:
+        description: Concurrent students on the attempt page (at most 20 seeded)
+        default: '10'
+        required: false
+      load_duration:
+        description: Attempt load duration in seconds
+        default: '60'
         required: false
 
 defaults:
@@ -59,6 +67,8 @@ jobs:
       MODE: ${{ inputs.mode || 'selfcontained' }}
       VUS: ${{ inputs.vus || '5' }}
       DURATION: ${{ inputs.duration || '15' }}
+      LOAD_VUS: ${{ inputs.load_vus || '10' }}
+      LOAD_DURATION: ${{ inputs.load_duration || '60' }}
       EXTERNAL_BASE_URL: ${{ inputs.base_url }}
       MOODLE_BRANCH: MOODLE_405_STABLE
       MOODLE_WWWROOT: http://127.0.0.1:8000
@@ -74,6 +84,8 @@ jobs:
           php-version: '8.3'
           extensions: pgsql, gd, intl, zip, soap, mbstring, curl, xml, exif
           ini-values: max_input_vars=5000
+          # No xdebug/pcov: they disable the JIT and distort every timing measured here.
+          coverage: none
       - name: Install Maxima and gnuplot (STACK CAS)
         if: ${{ env.MODE == 'selfcontained' }}
         run: |
@@ -82,6 +94,14 @@ jobs:
       - name: Build and install the test site (Moodle + STACK + plugin)
         if: ${{ env.MODE == 'selfcontained' }}
         run: bash plugin/.github/build-test-site.sh
+      # Course, 20 students and "SME Load Quiz" (ten STACK questions on one page).
+      - name: Seed test data
+        if: ${{ env.MODE == 'selfcontained' }}
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          php "$web/local/stackmatheditor/tests/playwright/seed.php" > /tmp/sme-seed.env
+          sed -n "s/^export \([A-Z_][A-Z_]*\)='\(.*\)'$/\1=\2/p" /tmp/sme-seed.env >> "$GITHUB_ENV"
+          cat /tmp/sme-seed.env
       - name: Set up k6
         uses: grafana/setup-k6-action@v1
       - name: Run the k6 smoke plan
@@ -105,6 +125,17 @@ jobs:
             -e DURATION="${DURATION}s" \
             --summary-export=k6-summary.json \
             plugin/tests/load/stackmatheditor-smoke.js
+          # Load: students on the attempt page with ten STACK questions (needs the seed data).
+          if [ "$MODE" = "selfcontained" ]; then
+            k6 run \
+              -e BASE_URL="$base" \
+              -e LOAD_CMID="$SME_LOAD_CMID" \
+              -e USER_PASS="$SME_USER_PASS" \
+              -e VUS="$LOAD_VUS" \
+              -e DURATION="${LOAD_DURATION}s" \
+              --summary-export=k6-attempt-summary.json \
+              plugin/tests/load/stackmatheditor-attempt.js
+          fi
       - name: Show Moodle server log on failure
         if: ${{ failure() && env.MODE == 'selfcontained' }}
         run: tail -100 /tmp/moodle-server.log || true
@@ -113,6 +144,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: k6-summary
-          path: k6-summary.json
+          path: |
+            k6-summary.json
+            k6-attempt-summary.json
           retention-days: 7
           if-no-files-found: ignore

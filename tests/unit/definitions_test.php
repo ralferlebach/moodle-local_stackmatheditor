@@ -346,4 +346,21 @@ final class definitions_test extends advanced_testcase {
             'usePercentPi must be a bool'
         );
     }
+
+    /**
+     * Every button of every offered group has an accessible name from the language pack.
+     *
+     * The toolbar uses the tooltip as aria-label; a button without one is announced as its
+     * symbol only ("<"), which says nothing to a screen-reader user.
+     */
+    public function test_every_offered_button_has_a_tooltip(): void {
+        foreach (definitions::get_element_groups() as $groupkey => $group) {
+            foreach ($group['elements'] as $index => $element) {
+                $this->assertNotEmpty(
+                    $element['tooltip'] ?? '',
+                    "Group '{$groupkey}', button {$index} has no tooltip (accessible name)."
+                );
+            }
+        }
+    }
 }
