@@ -64,4 +64,22 @@ function loadAmd(name, deps = {}) {
     return exported;
 }
 
-module.exports = {loadAmd};
+/**
+ * Load the server-side definitions the converters receive in production.
+ *
+ * tests/jest/fixtures/definitions.json is an export of definitions::export_for_js() (the keys the
+ * converters read). tests/unit/jest_fixture_test.php fails as soon as the fixture and the PHP
+ * definitions drift apart, so the Jest tests never run against outdated definitions.
+ *
+ * @param {Object} [overrides] Keys to add or replace, e.g. {usePercentPi: true}.
+ * @returns {Object} Definitions object.
+ */
+function loadDefinitions(overrides = {}) {
+    const file = path.join(__dirname, 'fixtures', 'definitions.json');
+    return Object.assign(JSON.parse(fs.readFileSync(file, 'utf8')), overrides);
+}
+
+/** All implicit-multiplication / variable modes the converters support. */
+const VARIABLE_MODES = ['explicit_single', 'explicit_multi', 'space_single', 'space_multi', 'stack'];
+
+module.exports = {loadAmd, loadDefinitions, VARIABLE_MODES};

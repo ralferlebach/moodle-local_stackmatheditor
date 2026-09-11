@@ -4,12 +4,10 @@
 # Needs a live, fully installed Moodle site (not a moodle-plugin-ci test site),
 # so it runs separately from the static pipelines.
 #
-# Triggers:
-#   - manually (workflow_dispatch). NOTE: the button only appears in the Actions
-#     UI once this file exists on the repository's DEFAULT branch (main).
-#   - push to any branch except main when the browser tests, the frontend or
-#     this workflow change - so the very first push of this file runs it too.
-#   - weekly schedule, to notice upstream breakage (Moodle / STACK master).
+# Trigger: manual only (workflow_dispatch) - never on push, PR or merge.
+# NOTE: the "Run workflow" button only appears in the Actions UI once this
+# file exists on the repository's DEFAULT branch (main). The branch to test is
+# then chosen in the dialog ("Use workflow from"), e.g. development.
 #
 # Artefacts: videos, traces and screenshots are recorded for EVERY test and
 # uploaded in both outcomes - green documents the journey, red can be
@@ -25,22 +23,6 @@ on:
         description: 'Moodle branch of the test site'
         default: 'MOODLE_405_STABLE'
         required: false
-  push:
-    branches-ignore:
-      - main
-    paths:
-      - 'tests/playwright/**'
-      - 'amd/**'
-      - 'classes/**'
-      - 'lib.php'
-      - 'settings.php'
-      - 'styles.css'
-      - 'thirdparty/**'
-      - '.github/build-test-site.sh'
-      - '.github/serve-test-site.sh'
-      - '.github/workflows/playwright.yml'
-  schedule:
-    - cron: '0 3 * * 1'
 
 concurrency:
   group: playwright-${{ github.ref }}

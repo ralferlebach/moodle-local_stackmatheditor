@@ -44,7 +44,7 @@ remaining scenarios run.
 
 | Workflow | Trigger | Runs |
 |---|---|---|
-| `moodle-plugin-ci-dev.yml` | push/PR, every branch except `main` | static gates, Jest, PHPUnit (reduced matrix), Behat (4.5) |
+| `moodle-plugin-ci-dev.yml` | push/PR, every branch except `main` | static gates, JS/CSS department (ESLint + AMD build, stylelint, Jest) gating Behat (4.5), PHPUnit (reduced matrix) |
 | `moodle-plugin-ci-main.yml` | push/PR to `main` | full matrix incl. Behat + release gates |
-| `playwright.yml` | manual, weekly, push touching frontend/tests | Playwright smoke with videos |
-| `load-k6.yml`, `load-jmeter.yml` | manual, push touching `tests/load` | load smoke |
+| `playwright.yml` | manual only | Playwright smoke with videos |
+| `load-k6.yml`, `load-jmeter.yml` | manual only | load smoke |

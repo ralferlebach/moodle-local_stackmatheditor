@@ -98,3 +98,60 @@ PHPUnit on PHP 8.4, and the three new STACK dependencies on Moodle 5.x.
    #35/#34 (set/logic operators), #41, #43, #40/#44/#45/#46 (editor/operators), #23.
 3. Grow the smoke tests: quiz attempt with a STACK question (Playwright), get_config web service
    (k6/JMeter), roundtrip tables (Jest).
+
+---
+
+## 7. Iteration 2 (2026-09-11) — 2026091100, release 1.2.0
+
+First GitHub run of the new pipelines: all green (Ralf).
+
+### Decisions (Ralf)
+
+- From now on only **complete plugin ZIPs** are delivered (start prompt and docs updated).
+- Release name three-part (`1.2.0`); version numbers by date, counted up per iteration.
+- Playwright, k6 and JMeter are **manual-only** workflows (no push / PR / merge triggers).
+- The dev pipeline gets a JavaScript/CSS department (`javascript`: ESLint + AMD build freshness,
+  stylelint, Jest) that Behat depends on.
+
+### Issue order (technical dependencies)
+
+| # | Issue | Why at this position |
+|---|---|---|
+| 1 | #39 `\sqrt` → `sqrt(...)` | Converter correctness at the root of the pipeline; #30 fixtures contain roots |
+| 2 | #30 `±`/`∓` grouping, `nounor`, roundtrip | Needs a correct token stream (#39); introduces `nounor` |
+| 3 | #35 set/logic mapping table, `nounand`/`nounor` both ways | Builds on #30's `nounor`; central mapping table |
+| 4 | #48 transient states must not survive; `syncNow()` before Check | Sync core of `textarea_fields.js`; converter output is then final |
+| 5 | #43 event bridge (Enter, beforecheck/beforesubmit) | Uses `syncNow()` from #48 |
+| 6 | #41 empty lines in the multiline editor | Same keydown/serialisation code; after #48/#43 have settled it |
+| 7 | #47 Back button returns to the calling page | Independent PHP navigation fix |
+
+Note: #30 and #39 expect `nounor` output; the dedicated noun-operator issue (#42) is not on the
+list but is implemented as part of #30.
+
+### #39 — root cause and fix
+
+Converting a LaTeX control word produced a bare word that fused with whatever preceded it:
+`a\sqrt{b}` became the identifier `asqrt`, and in `\pm\sqrt{…}` the `\sqrt` rule ran first, left
+`\pmsqrt`, which the `\pm` rule (with its `(?![a-zA-Z])` guard) no longer matched; single-variable
+mode then split it into `\p*m*s*q*r*t`. Fix in `tex2max.js`:
+
+- a zero-width boundary (`U+E000`) in front of every control word; skipped by the tokenizer,
+  resolved at the end (space only where an identifier meets a word, otherwise nothing, so
+  `2sqrt(x)` in stack mode is unchanged);
+- built-in function names (`sqrt`, trig, `log`, `abs`, `binomial`, …) always protected, even
+  without server definitions;
+- no backslash reaches the CAS string: `\{`/`\}` survive as set braces, spacing commands are
+  dropped, `\text{…}` yields its content, unknown control words keep their name.
+
+`max2tex.js`: a numeric coefficient before a function (`2sqrt(x)`) no longer blocks `\sqrt`.
+
+Regression comparison over 52 expressions × 5 modes against the previous converter: 34
+differences, all of them previously broken outputs (`alphabeta`, `x\inR`, `\1,2\`,
+`b*i*n*o*m*i*a*l`, `%ipi`, …).
+
+Tests: `tests/jest/tex2max_sqrt.test.js` (98 cases incl. all mandatory inputs × 5 modes and
+roundtrips), Jest fixture of the real definitions plus `tests/unit/jest_fixture_test.php`,
+two Behat scenarios in `tex2max_conversion.feature`.
+
+Still open for #30: the `±` alternatives are joined with `or` and rendered back as `\lor`
+(not collapsed to `\pm`).

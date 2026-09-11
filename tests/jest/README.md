@@ -5,7 +5,18 @@ Node without Moodle, which makes them the fastest place for roundtrip test table
 
 `amd_loader.js` evaluates the **source** module with a stub `define()` and hands it the
 dependencies you pass explicitly; an undeclared dependency fails loudly instead of receiving
-`undefined`.
+`undefined`. `loadDefinitions()` returns the definitions the converters get in production
+(`fixtures/definitions.json`, an export of `definitions::export_for_js()`), and `VARIABLE_MODES`
+lists the five variable modes every conversion rule should be tested in.
+
+`tests/unit/jest_fixture_test.php` fails when the fixture no longer matches the PHP definitions.
+Regenerate it from the Moodle root with
+`php local/stackmatheditor/tests/jest/export_definitions.php`.
+
+| Suite | Covers |
+|---|---|
+| `conversion.test.js` | harness smoke (fraction, pi, roundtrip) |
+| `tex2max_sqrt.test.js` | #39: `\sqrt` stays atomic in every mode, no backslash in the CAS string |
 
 ```bash
 make jest            # from the plugin root; runs npm ci on first use

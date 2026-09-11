@@ -10,8 +10,9 @@
 # therefore evaluated separately (tests/load/check_jtl.py); only that step
 # decides whether the run is green.
 #
-# Triggers: manual (the button needs this file on the DEFAULT branch), plus
-# push to non-main branches when the load harness or this workflow changes.
+# Trigger: manual only (workflow_dispatch) - never on push, PR or merge.
+# The "Run workflow" button needs this file on the DEFAULT branch (main); the
+# branch to test is chosen in the dialog ("Use workflow from").
 ##############################################################################
 
 name: Load test (JMeter)
@@ -40,14 +41,6 @@ on:
         description: Iterations per thread
         default: '10'
         required: false
-  push:
-    branches-ignore:
-      - main
-    paths:
-      - 'tests/load/**'
-      - '.github/build-test-site.sh'
-      - '.github/serve-test-site.sh'
-      - '.github/workflows/load-jmeter.yml'
 
 defaults:
   run:
@@ -73,7 +66,7 @@ jobs:
           --health-cmd="pg_isready" --health-interval=10s
           --health-timeout=5s --health-retries=5
     env:
-      # Inputs are empty on push; every value therefore carries its own default.
+      # Every value carries its own default (inputs are empty for API-triggered runs).
       MODE: ${{ inputs.mode || 'selfcontained' }}
       THREADS: ${{ inputs.threads || '5' }}
       RAMPUP: ${{ inputs.rampup || '5' }}

@@ -203,7 +203,10 @@ define([], function() {
                 result += s.substring(i);
                 break;
             }
-            if (idx > 0 && /[a-zA-Z0-9_]/.test(s[idx - 1])) {
+            // Part of a longer identifier (asqrt(, x_1sqrt() - not this function.
+            // A preceding pure number is a coefficient: 2sqrt(x) is 2*sqrt(x) (#39).
+            if (idx > 0 && /[a-zA-Z0-9_]/.test(s[idx - 1])
+                    && !/(^|[^a-zA-Z0-9_])[0-9]+$/.test(s.substring(0, idx))) {
                 result += s.substring(i, idx + 1);
                 i = idx + 1;
                 continue;

@@ -6,9 +6,9 @@
 #                            serve it and run the plan against it.
 #   external:                point at a Moodle you already run (base_url).
 #
-# Triggers: manual (the button needs this file on the DEFAULT branch), plus
-# push to non-main branches when the load harness or this workflow changes -
-# so the first push of this file runs it once. Push runs use the defaults.
+# Trigger: manual only (workflow_dispatch) - never on push, PR or merge.
+# The "Run workflow" button needs this file on the DEFAULT branch (main); the
+# branch to test is chosen in the dialog ("Use workflow from").
 ##############################################################################
 
 name: Load test (k6)
@@ -33,14 +33,6 @@ on:
         description: Duration in seconds
         default: '15'
         required: false
-  push:
-    branches-ignore:
-      - main
-    paths:
-      - 'tests/load/**'
-      - '.github/build-test-site.sh'
-      - '.github/serve-test-site.sh'
-      - '.github/workflows/load-k6.yml'
 
 defaults:
   run:
@@ -63,7 +55,7 @@ jobs:
           --health-cmd="pg_isready" --health-interval=10s
           --health-timeout=5s --health-retries=5
     env:
-      # Inputs are empty on push; every value therefore carries its own default.
+      # Every value carries its own default (inputs are empty for API-triggered runs).
       MODE: ${{ inputs.mode || 'selfcontained' }}
       VUS: ${{ inputs.vus || '5' }}
       DURATION: ${{ inputs.duration || '15' }}

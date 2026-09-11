@@ -80,6 +80,35 @@ define([], function() {
     ];
 
     /**
+     * Maxima function names that are always recognised, independent of the
+     * server-side definitions. Merged with defs.functionNames so that a
+     * missing or partial definitions payload can never turn a function call
+     * such as sqrt(x) into an implicit product (s*q*r*t*(x), see #39).
+     *
+     * @type {string[]}
+     */
+    var BUILTIN_FUNCTION_NAMES = [
+        'sqrt', 'abs', 'sgn', 'exp', 'log', 'ln',
+        'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
+        'arcsin', 'arccos', 'arctan', 'asin', 'acos', 'atan',
+        'sinh', 'cosh', 'tanh', 'binomial'
+    ];
+
+    /**
+     * Zero-width token boundary placed in front of every LaTeX control word.
+     *
+     * Converting a control word yields a bare Maxima word (\sqrt{x} becomes
+     * sqrt(x), \pi becomes pi). Without a boundary that word fuses with
+     * whatever precedes it: a\sqrt{b} became the identifier "asqrt", and
+     * \pm\sqrt{...} became "\pmsqrt", which the \pm rule no longer
+     * matched and single-variable mode split into p*m*s*q*r*t (#39).
+     * The marker is skipped by the tokenizer and resolved at the very end.
+     *
+     * @type {string}
+     */
+    var BOUNDARY = '\uE000';
+
+    /**
      * Build a fast-lookup set from an array of strings.
      *
      * @param {Array} list Array of strings.
@@ -114,6 +143,19 @@ define([], function() {
     }
 
     /**
+     * Return a word-set of function names: built-in list plus defs.
+     *
+     * @param {Object} defs Definitions object from the server.
+     * @returns {Object} Word set of function names.
+     */
+    function getFunctionNameSet(defs) {
+        var d = defs || {};
+        return buildWordSet(
+            BUILTIN_FUNCTION_NAMES.concat(d.functionNames || d.functions || [])
+        );
+    }
+
+    /**
      * Build the combined protected-words set for identifier splitting.
      *
      * Merges MAXIMA_OPERATOR_KEYWORDS with all runtime definition sets
@@ -129,7 +171,7 @@ define([], function() {
         var protectedWords = Object.create(null);
         var sets = [
             buildWordSet(MAXIMA_OPERATOR_KEYWORDS),
-            buildWordSet(d.functionNames || d.functions || []),
+            getFunctionNameSet(d),
             buildWordSet(d.constants || []),
             buildWordSet(d.greek || []),
             buildWordSet(d.reservedWords || []),
@@ -240,7 +282,7 @@ define([], function() {
         while (i < s.length) {
             ch = s.charAt(i);
 
-            if (/\s/.test(ch)) {
+            if (/\s/.test(ch) || ch === BOUNDARY) {
                 i++;
                 continue;
             }
@@ -398,9 +440,7 @@ define([], function() {
     function needsImplicitMultiplication(prev, curr, options) {
         var opts = options || {};
         var defs = opts.defs || {};
-        var functionNames = buildWordSet(
-            defs.functionNames || defs.functions || []
-        );
+        var functionNames = getFunctionNameSet(defs);
         var unitSet = getUnitSet(defs);
 
         if (blocksImplicitMultiplication(prev, curr)) {
@@ -610,6 +650,73 @@ define([], function() {
     }
 
     /**
+     * Put a token boundary in front of every LaTeX control word.
+     *
+     * Only control words (backslash + letters) are marked; the LaTeX row break
+     * "\\" and control symbols such as "\{" or "\," are left alone.
+     *
+     * @param {string} s LaTeX input.
+     * @returns {string} Input with BOUNDARY before each control word.
+     */
+    function markControlWords(s) {
+        var out = '';
+        var i;
+        var ch;
+
+        for (i = 0; i < s.length; i++) {
+            ch = s.charAt(i);
+            if (ch === '\\' && s.charAt(i + 1) === '\\') {
+                out += '\\\\';
+                i++;
+                continue;
+            }
+            if (ch === '\\' && /[a-zA-Z]/.test(s.charAt(i + 1)) && i > 0) {
+                out += BOUNDARY;
+            }
+            out += ch;
+        }
+        return out;
+    }
+
+    /**
+     * Resolve the remaining token boundaries.
+     *
+     * A boundary that separates an identifier from a following word becomes a
+     * space (so "a sqrt(b)" never fuses into "asqrt(b)"); every other boundary
+     * disappears without trace, which keeps e.g. "2sqrt(x)" and "(a)sqrt(b)"
+     * exactly as they were.
+     *
+     * @param {string} s Converted string.
+     * @returns {string} String without boundary markers.
+     */
+    function resolveBoundaries(s) {
+        var out = '';
+        var i;
+        var j;
+        var next;
+        var inIdentifier;
+
+        for (i = 0; i < s.length; i++) {
+            if (s.charAt(i) !== BOUNDARY) {
+                out += s.charAt(i);
+                continue;
+            }
+            next = s.charAt(i + 1);
+            // Walk back over the preceding alphanumeric run; it is an
+            // identifier (not a number) when it starts with a letter.
+            j = out.length - 1;
+            while (j >= 0 && /[a-zA-Z0-9_]/.test(out.charAt(j))) {
+                j--;
+            }
+            inIdentifier = j < out.length - 1 && /[a-zA-Z_]/.test(out.charAt(j + 1));
+            if (inIdentifier && /[a-zA-Z%]/.test(next)) {
+                out += ' ';
+            }
+        }
+        return out;
+    }
+
+    /**
      * Convert a MathQuill LaTeX string to Maxima CAS notation.
      *
      * @param {string} latex   LaTeX string from MathQuill.
@@ -629,6 +736,11 @@ define([], function() {
 
         s = s.replace(/\s+/g, ' ').trim();
         s = convertCasesToAndRelations(s);
+        s = markControlWords(s);
+        // Set braces survive the generic brace removal below (#39: no
+        // backslash may reach the CAS string).
+        s = s.replace(/\\left\s*\\\{/g, '\uE001').replace(/\\right\s*\\\}/g, '\uE002');
+        s = s.replace(/\\\{/g, '\uE001').replace(/\\\}/g, '\uE002');
         s = s.replace(/\\left/g, '');
         s = s.replace(/\\right/g, '');
 
@@ -655,7 +767,7 @@ define([], function() {
 
         // Mixed-fraction guard: N(p)/(q) → (N+p/q).
         // Prevents N*(p/q) implicit multiplication; supports multi-digit integers.
-        s = s.replace(/(\d+)\((\d+)\)\/\((\d+)\)/g, '($1+$2/$3)');
+        s = s.replace(new RegExp('(\\d+)' + BOUNDARY + '?\\((\\d+)\\)\\/\\((\\d+)\\)', 'g'), '($1+$2/$3)');
 
         s = s.replace(
             /\\sqrt\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
@@ -668,6 +780,7 @@ define([], function() {
         s = s.replace(/\\mathrm\{e\}/g, '%e');
         s = s.replace(/\\mathrm\{i\}/g, '%i');
         s = s.replace(/\\mathrm\{([^{}]*)\}/g, '$1');
+        s = s.replace(/\\text\{([^{}]*)\}/g, '$1');
         s = s.replace(/\\operatorname\{([^{}]*)\}/g, '$1');
         s = s.replace(/\^\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g, '^($1)');
         s = s.replace(/_\{([^{}]*)\}/g, '_$1');
@@ -749,7 +862,7 @@ define([], function() {
 
         // Logic: LaTeX → Maxima keywords (nexists before exists to avoid partial match).
         s = s.replace(/\\nexists/g, ' nexists ');
-        s = s.replace(/\\not\\exists/g, ' nexists ');
+        s = s.replace(new RegExp('\\\\not' + BOUNDARY + '?\\\\exists', 'g'), ' nexists ');
         s = s.replace(/\\forall(?![a-zA-Z])/g, ' forall ');
         s = s.replace(/\\exists(?![a-zA-Z])/g, ' exists ');
         s = s.replace(/\\neg(?![a-zA-Z])/g, ' not ');
@@ -768,7 +881,14 @@ define([], function() {
         s = s.replace(/\\dagger(?![a-zA-Z])/g, 'dagger');
         s = s.replace(/\\intercal(?![a-zA-Z])/g, 'T');
         s = s.replace(/\\ /g, '');
+        // Spacing commands carry no mathematical meaning.
+        s = s.replace(/\\[,;:!]/g, '');
+        // Any control word still left is unknown to this converter. Keep its
+        // name as a plain word so STACK reports an unknown identifier instead
+        // of rejecting the backslash (#39).
+        s = s.replace(/\\([a-zA-Z]+)/g, '$1');
         s = s.replace(/[{}]/g, '');
+        s = s.replace(/\uE001/g, '{').replace(/\uE002/g, '}');
 
         if (commaDecimal) {
             s = replaceDecimalCommas(s);
@@ -779,6 +899,7 @@ define([], function() {
             variableMode: variableMode
         });
 
+        s = resolveBoundaries(s);
         s = s.replace(/\s+/g, ' ').trim();
         s = expandPlusMinus(s);
         return s;

@@ -92,6 +92,27 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
     When I enter latex "a\pm b" into the MathQuill field for "ans1"
     Then the underlying STACK input for "ans1" should contain "a+b or a-b"
 
+  # ── Square root (#39) ────────────────────────────────────────────────────────
+
+  @javascript
+  Scenario: A square root next to plus/minus stays an atomic sqrt call
+    When I enter latex "x=-\frac{p}{2}\pm\sqrt{\frac{p^2}{4-q}}" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should contain "sqrt((p^2)/(4-q))"
+    And the underlying STACK input for "ans1" should not contain "s*q*r*t"
+    And the underlying STACK input for "ans1" should not contain "\pm"
+
+  @javascript
+  Scenario Outline: The shipped tex2max never splits sqrt, whatever the variable mode
+    When the tex2max output for latex "a\sqrt{b}" in variableMode "<mode>" is evaluated
+    Then the tex2max result should contain "sqrt(b)"
+    And the tex2max result should not contain "asqrt"
+
+    Examples:
+      | mode            |
+      | explicit_single |
+      | space_single    |
+      | stack           |
+
   # ── Set-theory (#28) ─────────────────────────────────────────────────────────
 
   @javascript

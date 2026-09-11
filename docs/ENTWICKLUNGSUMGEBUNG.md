@@ -156,7 +156,7 @@ Alles aus `local/stackmatheditor/`:
 | `make lint-php` | nur PHPCS, Moodle-Standard |
 | `make lint-js` | ESLint über `amd/src/` |
 | `make amd` | AMD-Build (Ergebnis committen!) |
-| `make jest` | Jest-Tests der Konvertierungsmodule |
+| `make jest` | Jest-Tests der Konvertierungsmodule (mit den echten Server-Definitionen) |
 | `make phpunit` | PHPUnit-Testsuite dieses Plugins |
 | `make behat-stack` / `make behat` | STACK-CAS im Behat-Site vorbereiten / Behat-Szenarien |
 | `make playwright SME_ADMIN_PASS=…` | Browser-Smoke gegen die laufende Instanz |
@@ -176,7 +176,7 @@ anderer Moodle-Zweig kann anders minifizieren; deshalb läuft der Grunt-Gate nur
 |---|---|---|---|
 | PHPUnit | `tests/unit/` | definitions, config_manager, quiz_helper, page_helper | Alles, was einen Browser braucht |
 | Behat | `tests/behat/` | Editor im Quizversuch, tex2max über das echte CAS, Toolbar-Konfiguration, Pre-Fill | Last, Asset-Auslieferung im Detail |
-| Jest | `tests/jest/` | `tex2max.js` / `max2tex.js` ohne Moodle — schnellster Ort für Roundtrip-Tabellen | DOM, MathQuill, STACK |
+| Jest | `tests/jest/` | `tex2max.js` / `max2tex.js` ohne Moodle, mit den echten Definitionen (`fixtures/definitions.json`) — schnellster Ort für Roundtrip-Tabellen | DOM, MathQuill, STACK |
 | Playwright | `tests/playwright/` | Einstellungsseite, ausgeliefertes `amd/build` über `requirejs.php`, Videos + Traces | Fachliche Bewertung durch STACK |
 | k6 / JMeter | `tests/load/` | Latenz und Fehlerrate der Lese-Pfade unter Parallelität | Funktionale Korrektheit |
 
@@ -184,6 +184,17 @@ Die Aufteilung ist keine Geschmacksfrage. Die Konvertierungsregeln (#30, #34, #3
 brauchen dutzende Ein-/Ausgabepaare; in Behat kostet jedes Paar einen Seitenaufbau samt CAS,
 in Jest eine Millisekunde. Umgekehrt beweist Jest nichts darüber, ob MathQuill den Ausdruck
 überhaupt so liefert (`\land` wird intern zu `\wedge`) — das bleibt Behat vorbehalten.
+
+### Jest-Definitionen
+
+Die Jest-Tests laufen mit `tests/jest/fixtures/definitions.json`, einem Export von
+`definitions::export_for_js()` — also mit denselben Funktionsnamen, Einheiten und reservierten
+Wörtern wie im Browser. `tests/unit/jest_fixture_test.php` schlägt fehl, sobald Fixture und
+PHP-Definitionen auseinanderlaufen. Nach einer gewollten Änderung an `classes/definitions.php`:
+
+```bash
+php local/stackmatheditor/tests/jest/export_definitions.php     # aus dem Moodle-Root
+```
 
 ### Coverage
 
@@ -201,16 +212,24 @@ Größte Lücken: `form/configure_form.php`, die drei Injector-Klassen, `externa
 |---|---|---|
 | `moodle-plugin-ci-dev.yml` | Push/PR auf jeden Branch außer `main` (also `development`) | Schnelles paralleles Feedback |
 | `moodle-plugin-ci-main.yml` | Push/PR auf `main` | Volle Matrix 4.5–5.2 × PHP × DB + Release-Gates |
-| `playwright.yml` | manuell, wöchentlich, Push auf Frontend-/Testpfade | Browser-Smoke mit Videos |
-| `load-k6.yml`, `load-jmeter.yml` | manuell, Push auf `tests/load/**` | Last-Smoke |
+| `playwright.yml` | **nur manuell** | Browser-Smoke mit Videos |
+| `load-k6.yml`, `load-jmeter.yml` | **nur manuell** | Last-Smoke |
+
+**Aufbau der Dev-Pipeline.** Parallel starten `lint-php`, `codeanalysis`, `quality`
+(codechecker, phpdoc, savepoints, validate, mustache, gherkinlint), die
+**JavaScript-/CSS-Abteilung** `javascript` (ESLint + AMD-Build-Frische, stylelint, Jest) und
+`stale-files`. `phpunit` wartet auf `lint-php`; `behat` wartet auf `lint-php` **und**
+`javascript` — ein kaputter oder veralteter AMD-Build macht jedes Browser-Szenario wertlos, also
+läuft Behat erst, wenn das Frontend grün ist.
 
 `moodle-plugin-ci-main.yml` ist der maßgebliche Release-Gate: Matrix, Jest, Release-Artefakt
 (`git archive` darf keine Entwicklerwerkzeuge enthalten), Coverage-Untergrenze und veraltete
 Dateien. Der Job `ci-complete` ist der Status-Check für den Branch-Schutz.
 
-**Manuelle Workflows** erscheinen im Actions-UI erst, wenn die Datei auf dem Default-Branch
-(`main`) liegt. Deshalb laufen Playwright, k6 und JMeter zusätzlich bei einem Push mit
-Pfadfilter — der erste Push der Dateien startet sie also bereits.
+**Manuelle Workflows** (Playwright, k6, JMeter) laufen nie bei Push, PR oder Merge. Der Button
+„Run workflow" erscheint im Actions-UI erst, wenn die Datei auf dem Default-Branch (`main`) liegt;
+der zu testende Branch wird dann im Dialog unter „Use workflow from" gewählt (z. B.
+`development`). Alternativ per CLI: `gh workflow run playwright.yml --ref development`.
 
 **STACK-Branches** sind in jedem Workflow als Variablen geführt (`STACK_BRANCH`,
 `ADAPTIVEMULTIPART_BRANCH`, `DFEXPLICITVAILDATE_BRANCH`, `DFCBMEXPLICITVAILDATE_BRANCH`,
@@ -284,8 +303,9 @@ Before finishing:
    STACK test is not a passing STACK test.
 5. Rebuild AMD (make amd) and commit amd/build. A stale build ships old conversion logic while
    amd/src looks perfectly current.
-6. Bump version.php (YYYYMMDDNN, today's date). Add anything deleted to db/removed_files.txt.
-7. Build and inspect the patch ZIP (local/stackmatheditor/, changed files only).
+6. Bump version.php (YYYYMMDDNN, today's date; release as three-part number, e.g. 1.2.0).
+7. Build and inspect the COMPLETE plugin ZIP (local/stackmatheditor/, all files, no
+   node_modules or generated reports). Anything deleted also goes into db/removed_files.txt.
 ```
 
 
@@ -369,3 +389,22 @@ byte-identisch nach dem Neubau.
 der Sniff Kopfzeilen zählt. Ohne die Regel bringt der nächste Windows-Checkout die CRLF zurück,
 und die CI wird rot aus einem Grund, den man im Diff nicht sieht. Die Patch-ZIPs dieses Projekts
 werden deshalb immer mit LF ausgeliefert.
+
+---
+
+## 12. Auslieferung
+
+Jede Iteration wird als **vollständige Plugin-ZIP** ausgeliefert (`local/stackmatheditor/`, alle
+Dateien, ohne `node_modules` und lokal erzeugte Reports). Das Plugin-Verzeichnis wird damit
+komplett ersetzt, statt nur überschrieben:
+
+```bash
+cd /var/www/html/moodle45_aliseadele/local
+rm -rf stackmatheditor.old && mv stackmatheditor stackmatheditor.old
+unzip -q ~/Downloads/sme_v1.2.0_NN.zip -d ..      # enthält local/stackmatheditor/
+cp -a stackmatheditor.old/.git stackmatheditor/    # Git-Historie behalten
+cd stackmatheditor && git status                   # gelöschte Dateien erscheinen als "deleted"
+```
+
+Release-Name dreistellig (`1.2.0`), Versionsnummer nach Datum und je Iteration hochgezählt
+(`2026091100`, `2026091101`, …).
