@@ -72,6 +72,7 @@ define([], function() {
      * @type {string[]}
      */
     var MAXIMA_OPERATOR_KEYWORDS = [
+        'nounor', 'nounand',
         'or', 'and', 'not', 'mod', 'div', 'iff',
         'implies', 'impliedby', 'notin', 'in',
         'union', 'intersect', 'setdiff',
@@ -619,34 +620,38 @@ define([], function() {
     }
 
     /**
-     * Expand plus-minus (±) and minus-plus (∓) markers into two Maxima
-     * expressions joined by " or ".
+     * Expand plus-minus (±) and minus-plus (∓) into two coupled alternatives
+     * joined by STACK's non-simplifying "nounor" (#30).
      *
-     * All ± are replaced synchronously: variant 1 uses +, variant 2 uses −.
-     * All ∓ flip in the opposite direction (variant 1 uses −, variant 2 uses +).
-     * This is non-recursive: no combinatorial explosion for multiple markers.
+     * The signs are coupled, not combined: variant A reads ± as + and ∓ as -,
+     * variant B reads ± as - and ∓ as +. "x=a±b∓c" therefore yields exactly
+     * two alternatives, never four. Each sign is replaced in place, so the
+     * subtree it belongs to - and every bracket around it - stays unchanged.
      *
-     * In the positive variant (v1), any unary "+" that appears directly after
-     * "=", "(" or at the string start is stripped, because STACK / Maxima
-     * treats "+2" differently from "2" in those positions.
+     * A "+" that ends up in unary position (start, after a relation, "(", ","
+     * or "[") is dropped from variant A; it carries no meaning and must never
+     * read like "+x = ...". A binary "+" is never touched.
+     *
+     * Both alternatives are wrapped in brackets so that "nounor" never binds
+     * into a relation: (x=2) nounor (x=-2).
      *
      * @param {string} s Maxima string possibly containing ± or ∓.
      * @returns {string} Expanded string or unmodified input.
      */
     function expandPlusMinus(s) {
+        var v1;
+        var v2;
+
         if (s.indexOf('\u00b1') === -1
                 && s.indexOf('\u2213') === -1) {
             return s;
         }
-        var v1 = s.replace(/\u00b1/g, '+').replace(/\u2213/g, '-');
-        var v2 = s.replace(/\u00b1/g, '-').replace(/\u2213/g, '+');
+        v1 = s.replace(/\u00b1/g, '+').replace(/\u2213/g, '-');
+        v2 = s.replace(/\u00b1/g, '-').replace(/\u2213/g, '+');
 
-        // Strip unary '+' from positive variant: a '+' that appears
-        // directly after '=', '(' or at the very start of the string is
-        // unary, not a binary infix — STACK does not need it.
-        v1 = v1.replace(/(^|[=(])\+/g, '$1');
+        v1 = v1.replace(/(^|[=<>#(,[])\s*\+/g, '$1');
 
-        return v1 + ' or ' + v2;
+        return '(' + v1.trim() + ') nounor (' + v2.trim() + ')';
     }
 
     /**
@@ -901,6 +906,9 @@ define([], function() {
 
         s = resolveBoundaries(s);
         s = s.replace(/\s+/g, ' ').trim();
+        // A space next to a bracket or comma never separates two factors
+        // ("sqrt(pi )" from "\sqrt{\pi }"); drop it so the output is stable.
+        s = s.replace(/\s+([)\],}])/g, '$1').replace(/([([{,])\s+/g, '$1');
         s = expandPlusMinus(s);
         return s;
     }

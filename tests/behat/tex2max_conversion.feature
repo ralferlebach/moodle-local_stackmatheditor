@@ -80,17 +80,27 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
   # ── pm / ± expansion (#30) ────────────────────────────────────────────────────
 
   @javascript
-  Scenario: Prefix pm produces two variants with unary plus stripped
+  Scenario: Prefix pm produces two nounor alternatives with unary plus stripped
     When I enter latex "x=\pm 2" into the MathQuill field for "ans1"
-    Then the underlying STACK input for "ans1" should contain "or"
-    And the underlying STACK input for "ans1" should contain "x=2"
-    And the underlying STACK input for "ans1" should contain "x=-2"
+    Then the underlying STACK input for "ans1" should be "(x=2) nounor (x=-2)"
     And the underlying STACK input for "ans1" should not contain "x=+2"
 
   @javascript
   Scenario: Infix pm retains both plus and minus signs
     When I enter latex "a\pm b" into the MathQuill field for "ans1"
-    Then the underlying STACK input for "ans1" should contain "a+b or a-b"
+    Then the underlying STACK input for "ans1" should be "(a+b) nounor (a-b)"
+
+  @javascript
+  Scenario: Coupled pm and mp give exactly two alternatives
+    When I enter latex "x=a\pm b\mp c" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "(x=a+b-c) nounor (x=a-b+c)"
+
+  @javascript
+  Scenario: A unary pm inside parentheses keeps the parentheses
+    When I enter latex "x=a\left(\pm b+c\right)" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should contain "(b+c)"
+    And the underlying STACK input for "ans1" should contain "(-b+c)"
+    And the underlying STACK input for "ans1" should contain "nounor"
 
   # ── Square root (#39) ────────────────────────────────────────────────────────
 

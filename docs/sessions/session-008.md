@@ -153,5 +153,34 @@ Tests: `tests/jest/tex2max_sqrt.test.js` (98 cases incl. all mandatory inputs ×
 roundtrips), Jest fixture of the real definitions plus `tests/unit/jest_fixture_test.php`,
 two Behat scenarios in `tex2max_conversion.feature`.
 
-Still open for #30: the `±` alternatives are joined with `or` and rendered back as `\lor`
-(not collapsed to `\pm`).
+Delivered as `sme_v1.2.0_01.zip` (2026091100).
+
+## 8. Iteration 3 (2026-09-11) — 2026091101: #30 (and the nounor part of #42)
+
+### Root causes
+
+- `tex2max.expandPlusMinus()` joined the alternatives with a bare `or` and without brackets.
+- `max2tex.collapsePlusMinus()` ran at the very end on the LaTeX output — by then
+  `processLogicKeywords()` had already turned `or` into `\lor`, so the collapse never matched and
+  every `±` came back as `A \lor B`.
+- Found on the way: with the real definitions `pi` was replaced twice in max2tex (constants pass,
+  then the bare-`pi` fallback) and rendered as `\\pi` — a LaTeX line break followed by "pi".
+
+### Fix
+
+- tex2max: coupled expansion `(A) nounor (B)`; a unary `+` is dropped from A after start,
+  relations (`= < > #`), `(`, `,` and `[` only; binary `+` untouched; each sign replaced in
+  place, so no sign changes its subtree. Spaces next to brackets/commas are removed for a stable
+  output.
+- max2tex: collapse on the Maxima string *before* any keyword processing. Reads `nounor` and
+  legacy `or` (with or without brackets), exactly two alternatives, walks both in parallel:
+  `+`/`-` → `\pm`, `-`/`+` → `\mp`, a sign missing in unary position counts as `+`. Any other
+  difference leaves an ordinary disjunction (`\lor`). `nounor`/`nounand` render as `\lor`/`\land`.
+- max2tex: `pi` is no longer replaced after a backslash.
+
+### Tests
+
+`tests/jest/plusminus.test.js` (61 cases: all eight fixtures of the issue in all five modes as
+TeX → Maxima → TeX → Maxima, exact expansions, coupled signs, legacy `or`, non-sign differences);
+Behat ± scenarios updated to the exact `nounor` output plus two new ones (coupled signs,
+parentheses). Jest total: 163.

@@ -141,6 +141,8 @@ define([], function() {
         s = s.replace(/\bforall\b/g, '\\forall ');
         s = s.replace(/\bexists\b/g, '\\exists ');
         s = s.replace(/\bnot\b/g, '\\neg ');
+        s = s.replace(/\bnounand\b/g, '\\land ');
+        s = s.replace(/\bnounor\b/g, '\\lor ');
         s = s.replace(/\band\b/g, '\\land ');
         s = s.replace(/\bor\b/g, '\\lor ');
         s = s.replace(/\bimpliedby\b/g, '\\Leftarrow ');
@@ -284,87 +286,103 @@ define([], function() {
     }
 
     /**
-     * Attempt to collapse a Maxima " or " expression back into a
-     * single LaTeX expression using \pm and \mp.
+     * Characters after which a sign is unary (mirrors tex2max's expansion).
      *
-     * Handles two cases:
-     * 1. Symmetric: v1 and v2 have equal length and differ only in +/-.
-     * 2. Asymmetric: v1 is shorter by exactly one character because
-     *    tex2max stripped a leading unary '+' from the positive variant.
-     *    In this case a synthetic '+' is re-inserted at the divergence
-     *    point before doing the character-by-character comparison.
-     *
-     * Works on the final LaTeX output of convert(). Both sides of
-     * " or " must be equal length (after normalisation) and differ
-     * only in "+" vs "-" positions.  Where variant 1 has "+" and
-     * variant 2 has "-", the result gets \pm; where variant 1 has
-     * "-" and variant 2 has "+", the result gets \mp.
-     *
-     * @param {string} s Converted string that may contain " or ".
-     * @returns {string} Collapsed string or unmodified input.
+     * @type {RegExp}
      */
-    function collapsePlusMinus(s) {
-        var orIdx = s.indexOf(' or ');
-        if (orIdx === -1) {
-            return s;
-        }
+    var UNARY_BOUNDARY = /[=<>#(,[]/;
 
-        var v1 = s.substring(0, orIdx);
-        var v2 = s.substring(orIdx + 4);
+    /**
+     * Merge two alternatives that differ only in coupled signs into one
+     * expression carrying ± (\u00b1) and ∓ (\u2213) (#30).
+     *
+     * Walks both strings in parallel. Equal characters are copied; "+" against
+     * "-" becomes ±, "-" against "+" becomes ∓. A sign present in only one
+     * variant is accepted in unary position (start, after a relation, "(",
+     * "," or "["), because tex2max drops the unary "+" of the positive
+     * alternative: "x=2" against "x=-2" becomes "x=±2". Any other difference
+     * means the alternatives are not a ± pair, and null is returned.
+     *
+     * @param {string} v1 First alternative (Maxima).
+     * @param {string} v2 Second alternative (Maxima).
+     * @returns {?string} Merged expression, or null when not collapsible.
+     */
+    function mergeSignAlternatives(v1, v2) {
+        var out = '';
+        var i = 0;
+        var j = 0;
+        var hasSign = false;
+        var atBoundary;
+        var a;
+        var b;
 
-        // Only handle exactly two variants.
-        if (v2.indexOf(' or ') !== -1) {
-            return s;
-        }
-
-        // Handle asymmetric case: v1 is shorter by 1 because a leading
-        // unary '+' was stripped by tex2max's expandPlusMinus fix.
-        if (v1.length + 1 === v2.length) {
-            // Find the first position where v1 and v2 diverge.
-            var di = 0;
-            while (di < v1.length && v1[di] === v2[di]) {
-                di++;
-            }
-            // If v2[di] is '-' and the preceding character is a valid
-            // unary-prefix boundary (=, (, start of string), restore '+'.
-            if (di < v2.length && v2[di] === '-') {
-                var before = di > 0 ? v2[di - 1] : '';
-                if (!before || /[=(]/.test(before)) {
-                    v1 = v1.substring(0, di) + '+' + v1.substring(di);
-                }
-            }
-        }
-
-        // Both sides must have equal length for character comparison.
-        if (v1.length !== v2.length) {
-            return s;
-        }
-
-        var result = '';
-        var hasPm = false;
-        var i;
-
-        for (i = 0; i < v1.length; i++) {
-            if (v1[i] === v2[i]) {
-                result += v1[i];
-            } else if (v1[i] === '+' && v2[i] === '-') {
-                result += '\\pm ';
-                hasPm = true;
-            } else if (v1[i] === '-' && v2[i] === '+') {
-                result += '\\mp ';
-                hasPm = true;
+        while (i < v1.length || j < v2.length) {
+            a = v1.charAt(i);
+            b = v2.charAt(j);
+            atBoundary = out === '' || UNARY_BOUNDARY.test(out.charAt(out.length - 1));
+            if (a === b && a !== '') {
+                out += a;
+                i++;
+                j++;
+            } else if (a === '+' && b === '-') {
+                out += '\u00b1';
+                hasSign = true;
+                i++;
+                j++;
+            } else if (a === '-' && b === '+') {
+                out += '\u2213';
+                hasSign = true;
+                i++;
+                j++;
+            } else if (atBoundary && b === '-' && a !== '+' && a !== '-') {
+                // Unary "+" omitted in the first alternative.
+                out += '\u00b1';
+                hasSign = true;
+                j++;
+            } else if (atBoundary && a === '-' && b !== '+' && b !== '-') {
+                // Unary "+" omitted in the second alternative.
+                out += '\u2213';
+                hasSign = true;
+                i++;
             } else {
-                // Non +/- difference — cannot collapse.
-                return s;
+                return null;
             }
         }
-
-        if (!hasPm) {
-            return s;
-        }
-        return result.replace(/\s+/g, ' ').trim();
+        return hasSign ? out : null;
     }
 
+    /**
+     * Collapse exactly two sign alternatives back into one ± expression (#30).
+     *
+     * Reads the current form "(A) nounor (B)" as well as the legacy forms
+     * "(A) or (B)" and "A or B". Anything else - more than two alternatives,
+     * or alternatives that differ in more than coupled signs - is returned
+     * unchanged and later rendered as an ordinary disjunction.
+     *
+     * @param {string} s Maxima expression.
+     * @returns {string} Expression with ± / ∓, or the unmodified input.
+     */
+    function collapsePlusMinus(s) {
+        var keywords = ['nounor', 'or'];
+        var k;
+        var parts;
+        var merged;
+
+        for (k = 0; k < keywords.length; k++) {
+            parts = splitTopLevelKeyword(s, keywords[k]);
+            if (parts.length !== 2) {
+                continue;
+            }
+            merged = mergeSignAlternatives(
+                stripEnclosingParens(parts[0]),
+                stripEnclosingParens(parts[1])
+            );
+            if (merged !== null) {
+                return merged;
+            }
+        }
+        return s;
+    }
 
     /**
      * Strip one level of enclosing parentheses if they wrap the whole string.
@@ -544,7 +562,7 @@ define([], function() {
 
             if (conMaxima === '%pi' || conMaxima === 'pi') {
                 s = s.replace(/%pi/g, '\\pi ');
-                s = s.replace(/\bpi\b/g, '\\pi ');
+                s = s.replace(/(?<!\\)\bpi\b/g, '\\pi ');
             } else if (conMaxima === 'inf') {
                 s = s.replace(/\binf\b/g, '\\infty ');
             } else if (conMaxima === 'minf') {
@@ -731,7 +749,7 @@ define([], function() {
         var opts = options || {};
         var commaDecimal = opts.commaDecimal || false;
         var defs = opts.defs || {};
-        var s = convertRelationSystemToCases(maxima.trim());
+        var s = convertRelationSystemToCases(collapsePlusMinus(maxima.trim()));
         var prev;
 
         if (!s) {
@@ -756,7 +774,9 @@ define([], function() {
             s = s.replace(/%pi/g, '\\pi ');
         }
         // Bare "pi" → \pi (after logic keyword processing, "pi" no longer matches "implies" etc.).
-        s = s.replace(/\bpi\b/g, '\\pi ');
+        // Not after a backslash: the constants pass may already have produced "\pi", and a second
+        // replacement turned it into "\\pi", a LaTeX line break followed by the letters pi.
+        s = s.replace(/(?<!\\)\bpi\b/g, '\\pi ');
         if (s.indexOf('inf') >= 0) {
             s = s.replace(/\bminf\b/g, '-\\infty ');
             s = s.replace(/\binf\b/g, '\\infty ');
@@ -831,8 +851,10 @@ define([], function() {
             s = s.replace(/(\d)\.(\d)/g, '$1,$2');
         }
 
+        // Coupled signs restored by collapsePlusMinus().
+        s = s.replace(/\u00b1/g, '\\pm ').replace(/\u2213/g, '\\mp ');
+
         s = s.replace(/\s+/g, ' ').trim();
-        s = collapsePlusMinus(s);
         return s;
     }
 
