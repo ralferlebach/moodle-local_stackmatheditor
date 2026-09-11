@@ -27,6 +27,9 @@ const {test, expect} = require('@playwright/test');
 const {env, loginAs, open} = require('./helpers');
 
 test.describe('local_stackmatheditor smoke', () => {
+    // Measured on GitHub (11.09.2026): 1.3 s, 4.2 s and 0.02 s per test.
+    test.describe.configure({timeout: 20000});
+
     test('the login page is reachable', async({page}) => {
         await open(page, '/login/index.php');
         await expect(page.locator('form[action*="login/index.php"]').first()).toBeVisible();

@@ -42,7 +42,9 @@ export const options = {
         // A failed check fails the run; without this k6 only reports it and exits 0.
         checks: ['rate>0.99'],
         http_req_failed: ['rate<0.01'],
-        http_req_duration: ['p(95)<3000'],
+        // Measured on GitHub (main, 11.09.2026, 5 VUs): p95 57-95 ms, max 150-359 ms. The max
+        // leaves room for the cold first request after the site build.
+        http_req_duration: ['p(95)<500', 'max<3000'],
     },
 };
 
