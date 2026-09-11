@@ -450,6 +450,141 @@ JS;
     }
 
     /**
+     * Create a quiz with one STACK question whose input is a multi-line textarea.
+     *
+     * Uses qtype_stack's 'textarea_input' generator template, which the plugin renders with the
+     * multiline MathQuill editor.
+     *
+     * @Given a STACK quiz :quizname with textarea input exists in :shortname
+     * @param string $quizname  Quiz name.
+     * @param string $shortname Course shortname.
+     */
+    public function a_stack_quiz_with_textarea_input_exists_in(
+        string $quizname,
+        string $shortname
+    ): void {
+        global $DB;
+
+        $course = $DB->get_record('course', ['shortname' => $shortname], '*', MUST_EXIST);
+        if (!$DB->record_exists('quiz', ['name' => $quizname, 'course' => $course->id])) {
+            $quizdata = testing_util::get_data_generator()->create_module('quiz', [
+                'course'             => $course->id,
+                'name'               => $quizname,
+                'grade'              => 10,
+                'sumgrades'          => 1,
+                'preferredbehaviour' => 'adaptive',
+            ]);
+            $this->assert_quiz_behaviour_is_available(
+                $DB->get_record('quiz', ['id' => $quizdata->id], '*', MUST_EXIST)
+            );
+        }
+        $this->ensure_stack_question_in_quiz($quizname, 'Test STACK textarea Q', 'textarea_input');
+    }
+
+    // Multiline (textarea / equiv) editor.
+
+    /**
+     * JavaScript expression that finds the rows of the multiline editor for a STACK input.
+     *
+     * @param string $inputname STACK input name (e.g. "ans1").
+     * @return string JavaScript expression evaluating to an array of row elements, or null.
+     */
+    protected function multiline_rows_js(string $inputname): string {
+        $jsinput = json_encode($inputname);
+        return <<<JS
+(function() {
+    var n = {$jsinput};
+    var input = document.querySelector('[name$="_' + n + '"]') || document.querySelector('[name="' + n + '"]');
+    if (!input) { return null; }
+    var que = input.closest('.que') || document;
+    return Array.prototype.slice.call(que.querySelectorAll('.sme-equiv-row'));
+})()
+JS;
+    }
+
+    /**
+     * Put the keyboard focus at the end of one row of the multiline editor.
+     *
+     * Following key steps ("I type", "I press the backspace key") then go to that row.
+     *
+     * @When I focus row :row of the multiline MathQuill editor for :inputname
+     * @param int    $row       1-based row number.
+     * @param string $inputname STACK input name.
+     */
+    public function i_focus_multiline_row(int $row, string $inputname): void {
+        $rows = $this->multiline_rows_js($inputname);
+        $index = $row - 1;
+        $result = $this->getSession()->evaluateScript(<<<JS
+(function() {
+    var rows = {$rows};
+    if (!rows) { return 'no-stack-input'; }
+    if (!rows[{$index}]) { return 'no row {$row} of ' + rows.length; }
+    var editable = rows[{$index}].querySelector('.mq-editable-field');
+    if (!editable || !window.MathQuill) { return 'no-mathquill'; }
+    var field = window.MathQuill.getInterface(2)(editable);
+    field.focus();
+    field.moveToRightEnd();
+    return 'ok';
+})()
+JS);
+        if ($result !== 'ok') {
+            throw new ExpectationException(
+                "Could not focus row {$row} of the multiline editor for '{$inputname}' ({$result}).",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Assert the number of rows of the multiline editor (waits up to 3 s).
+     *
+     * @Then the multiline MathQuill editor for :inputname should have :count rows
+     * @param string $inputname STACK input name.
+     * @param int    $count     Expected number of rows.
+     */
+    public function the_multiline_editor_should_have_rows(string $inputname, int $count): void {
+        $rows = $this->multiline_rows_js($inputname);
+        $this->getSession()->wait(3000, "(function() { var r = {$rows}; return !!r && r.length === {$count}; })()");
+        $actual = $this->getSession()->evaluateScript("(function() { var r = {$rows}; return r ? r.length : -1; })()");
+        if ((int)$actual !== $count) {
+            throw new ExpectationException(
+                "The multiline editor for '{$inputname}' has {$actual} rows, expected {$count}.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Assert the lines of the underlying STACK textarea, "|"-separated (waits up to 3 s).
+     *
+     * "x=1||x=2" means three lines with an empty second line. The wait covers the editor's
+     * debounced sync.
+     *
+     * @Then the lines of the underlying STACK input for :inputname should be :lines
+     * @param string $inputname STACK input name.
+     * @param string $lines     Expected lines separated by "|".
+     */
+    public function the_lines_of_the_underlying_input_should_be(string $inputname, string $lines): void {
+        $jsinput = json_encode($inputname);
+        $jslines = json_encode($lines);
+        $read = <<<JS
+(function() {
+    var n = {$jsinput};
+    var input = document.querySelector('[name$="_' + n + '"]') || document.querySelector('[name="' + n + '"]');
+    return input ? input.value.split(/\\r?\\n/).join('|') : '__missing_input__';
+})()
+JS;
+        $this->getSession()->wait(3000, "{$read} === {$jslines}");
+        $actual = $this->getSession()->evaluateScript($read);
+        if ($actual !== $lines) {
+            throw new ExpectationException(
+                "The lines of STACK input '{$inputname}' are '{$actual}', expected '{$lines}'.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
      * Create a STACK question (any name) and add it to the named quiz.
      *
      * @Given a STACK question exists in quiz :quizname
@@ -590,15 +725,17 @@ JS;
     /**
      * Internal helper: find-or-create a STACK question in a quiz.
      *
-     * Uses qtype_stack's 'algebraic' generator template.
+     * Uses a qtype_stack generator template ('algebraic_input' by default).
      *
      * @param string $quizname     Quiz name.
      * @param string $questionname Question name.
+     * @param string $template     qtype_stack generator template.
      * @return stdClass The question record.
      */
     protected function ensure_stack_question_in_quiz(
         string $quizname,
-        string $questionname
+        string $questionname,
+        string $template = 'algebraic_input'
     ): stdClass {
         global $DB, $CFG;
         require_once($CFG->dirroot . '/mod/quiz/locallib.php');
@@ -648,7 +785,7 @@ JS;
         // Create STACK question via the plugin generator.
         $gen      = testing_util::get_data_generator();
         $qgen     = $gen->get_plugin_generator('core_question');
-        $question = $qgen->create_question('stack', 'algebraic_input', [
+        $question = $qgen->create_question('stack', $template, [
             'name'     => $questionname,
             'category' => $cat->id,
         ]);

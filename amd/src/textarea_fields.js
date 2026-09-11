@@ -380,12 +380,14 @@ define([
      * @returns {string[][]} Parsed editor steps.
      */
     function parseInitialSteps(value, inputType) {
+        // Leading/trailing blank lines are dropped (STACK trims the value as well); inner empty
+        // lines are real lines of the answer and are kept (#41).
         var raw = (value || '').trim();
         var lines;
         if (!raw) {
             return [['']];
         }
-        lines = raw.split('\n').map(function(line) {
+        lines = raw.split(/\r?\n/).map(function(line) {
             return line.trim();
         });
         if (inputType === 'equiv') {
@@ -406,6 +408,16 @@ define([
         return step.fields.map(function(fieldData) {
             return fieldData.maxima || '';
         });
+    }
+
+    /**
+     * True when a MathQuill field holds no content.
+     *
+     * @param {string} latex Field LaTeX.
+     * @returns {boolean} Whether the field is empty.
+     */
+    function isEmptyLatex(latex) {
+        return !latex || !latex.trim();
     }
 
     /**
@@ -527,6 +539,8 @@ define([
                 }
                 self.addStep(template);
                 self.focusStep(self.rows.length - 1, 0);
+                // The "+" (Add line) button adds a line like Enter does, and says so (#43).
+                Bridge.signalEnter(self.$ta[0], {trigger: 'button', inputType: self.inputType, slot: self.slot});
             });
         this.$wrap.append(this.$addBtn);
 
@@ -735,20 +749,39 @@ define([
                 self.setActive(pos.stepIdx, pos.fieldIdx);
             }
         });
-        $mqWrap.on('keydown', function(e) {
-            var pos = self.indexOfField(mq);
-            if (!pos) {
+        // Normal lines (#41): two-stage deletion. MathQuill deletes the content down to an
+        // empty line, which then stays as a real empty line; only Backspace or Delete in a line
+        // that was ALREADY empty removes it. The capture phase runs before MathQuill's own key
+        // handler, so it sees the line as it was before this key. At least one line remains.
+        $mqWrap[0].addEventListener('keydown', function(e) {
+            var pos;
+            if (e.key !== 'Backspace' && e.key !== 'Delete') {
                 return;
             }
-            if (e.key === 'Backspace' && (!mq.latex() || mq.latex().trim() === '')) {
-                if (self.rows[pos.stepIdx].fields.length > 1) {
-                    e.preventDefault();
-                    self.removeField(pos.stepIdx, pos.fieldIdx);
-                } else if (self.rows.length > 1) {
-                    e.preventDefault();
-                    self.removeStep(pos.stepIdx);
-                    self.focusStep(Math.max(0, pos.stepIdx - 1), 0);
-                }
+            pos = self.indexOfField(mq);
+            if (!pos || self.rows[pos.stepIdx].fields.length > 1) {
+                return;
+            }
+            if (!isEmptyLatex(mq.latex()) || self.rows.length <= 1) {
+                return;
+            }
+            // Only here a structure is removed, and only here the key is claimed.
+            e.preventDefault();
+            self.removeStep(pos.stepIdx);
+            self.focusStep(e.key === 'Backspace'
+                ? Math.max(0, pos.stepIdx - 1)
+                : Math.min(pos.stepIdx, self.rows.length - 1), 0);
+        }, true);
+        // Equation-system sub-rows keep their behaviour: a Backspace that leaves a sub-row
+        // empty removes that sub-row.
+        $mqWrap.on('keydown', function(e) {
+            var pos = self.indexOfField(mq);
+            if (!pos || e.key !== 'Backspace' || !isEmptyLatex(mq.latex())) {
+                return;
+            }
+            if (self.rows[pos.stepIdx].fields.length > 1) {
+                e.preventDefault();
+                self.removeField(pos.stepIdx, pos.fieldIdx);
             }
         });
 

@@ -378,3 +378,48 @@ Note: the Check control in STACK 4.13 is a `<button name="…-submit">`, not an 
 
 `toolbar.js` stops propagation of mousedown/click on its own buttons (keeps focus in the
 editor). These are not input or submit events and are outside the #43 contract.
+
+Delivered as `sme_v1.2.0_07.zip` (2026091106).
+
+## 14. Iteration 9 (2026-09-11) — 2026091107: #41 (and a #43 addition)
+
+### Root cause
+
+The keydown handler sat on the editor wrapper and ran in the bubbling phase, i.e. after
+MathQuill had already processed the key. The Backspace that deleted the last character therefore
+saw an empty line and removed the whole line at once.
+
+### Fix (`textarea_fields.js`)
+
+- Normal lines: a capture-phase handler on the wrapper runs before MathQuill and removes a line
+  only if it was already empty before this Backspace/Delete; only then `preventDefault()`. At
+  least one line remains; Backspace moves to the previous line, Delete stays in place.
+- Equation-system sub-rows: unchanged (Backspace that empties a sub-row removes it).
+- Serialisation already kept empty lines (`lines.join('\n')`); parsing now splits on `\r?\n`.
+- #43 addition: the global "Add line" button (fa-plus) of the textarea editor now raises the
+  Enter signal as well - it is the "+" button that adds a line exactly like Enter.
+
+### Finding: STACK drops empty lines on the server
+
+`stack_textarea_input::response_to_contents()` and `stack_equiv_input::response_to_contents()`
+(STACK 4.13.1) skip every blank line and re-render the textarea as `implode("\n", contents)`.
+Empty lines therefore exist in the editor and in the posted value, but not after STACK processed
+a submission: acceptance criterion "load/save/load keeps inner empty lines" cannot be met by the
+plugin without changing STACK (out of scope per the issue). Reproduced in a real attempt: after
+Check the reloaded textarea is `x=1\nx=2`.
+
+### Behat infrastructure
+
+- `a STACK quiz :quizname with textarea input exists in :shortname` (STACK template
+  `textarea_input`); `ensure_stack_question_in_quiz()` takes a template parameter.
+- `I focus row :row of the multiline MathQuill editor for :inputname`,
+  `the multiline MathQuill editor for :inputname should have :count rows`,
+  `the lines of the underlying STACK input for :inputname should be :lines` ("|"-separated;
+  both assertions wait up to 3 s for the debounced sync).
+- New `tests/behat/multiline_editor.feature`: two-stage Backspace, Delete, last line, and the #48
+  transient-fraction scenario, all with real key presses.
+
+### Verification
+
+All four scenarios replayed with Playwright against Moodle 4.5 + STACK 4.13.1 using the same
+selectors and key sequences: green. The Behat run itself happens in CI.
