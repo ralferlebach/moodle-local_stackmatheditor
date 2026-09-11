@@ -125,7 +125,9 @@ class behat_local_stackmatheditor extends behat_base {
             ['cmid' => $cm->id]
         );
         $this->getSession()->visit($url->out(false));
-        $this->getSession()->wait(2000, "document.readyState === 'complete'");
+        if ($this->running_javascript()) {
+            $this->getSession()->wait(2000, "document.readyState === 'complete'");
+        }
     }
 
     /**
@@ -144,7 +146,9 @@ class behat_local_stackmatheditor extends behat_base {
             ['cmid' => $cm->id, 'returnurl' => $returnurl]
         );
         $this->getSession()->visit($url->out(false));
-        $this->getSession()->wait(2000, "document.readyState === 'complete'");
+        if ($this->running_javascript()) {
+            $this->getSession()->wait(2000, "document.readyState === 'complete'");
+        }
     }
 
     /**
@@ -161,7 +165,10 @@ class behat_local_stackmatheditor extends behat_base {
         $expectedpath = $pagetype === 'edit' ? '/mod/quiz/edit.php' : '/mod/quiz/view.php';
         $expectedparam = $pagetype === 'edit' ? 'cmid' : 'id';
 
-        $this->getSession()->wait(3000, "document.readyState === 'complete'");
+        // Waiting needs JavaScript; without it (BrowserKit) the page is complete already.
+        if ($this->running_javascript()) {
+            $this->getSession()->wait(3000, "document.readyState === 'complete'");
+        }
         $current = $this->getSession()->getCurrentUrl();
         $path = (string) parse_url($current, PHP_URL_PATH);
         parse_str((string) parse_url($current, PHP_URL_QUERY), $query);

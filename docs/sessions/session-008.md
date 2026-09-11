@@ -540,3 +540,55 @@ workflow runs on main) and MDL Shield via the shields.io endpoint
 
 Correction to iteration 12: the uppercase Greek buttons that look like Latin letters (Α, Β, Ε, …)
 are offered and write the Latin letter; the README now says so.
+
+Delivered as `sme_v1.2.0_13.zip` (2026091112).
+
+## 20. Iteration 15 (2026-09-11) — 2026091113: Behat fix + #44
+
+### Behat
+
+44 scenarios, 43 green. The non-JS scenario "A direct call ignores an external return URL" failed
+with `UnsupportedDriverActionException: JS is not supported by BrowserKitDriver`: the new steps
+waited for `document.readyState` unconditionally. All three config-page steps now wait only when
+`running_javascript()`.
+
+### #44 decisions (Ralf, issue comment)
+
+Direct MathQuill template; no `integrate(expr)` for an incomplete integral - keep the editor state
+and validate locally; read `integrate`, `int`, `'int`, `'integrate`; only atomic variables in V1
+(`∫g(f(x))df` not serialised); hide `∮`.
+
+STACK 4.13 check: `integrate` is a student alias of `int`; both have the noun function `nounint`
+(STACK turns student `int`/`diff` into nouns) - read as well.
+
+### Implementation
+
+- tex2max: `extractIntegrals()` parses `\int[_a^b]` + integrand + differential on the LaTeX, with
+  nesting (inner integrals consume their own `d`), `\mathrm{d}x` preferred, bare `dx` accepted
+  (last candidate); parts converted recursively; the result travels as an atomic placeholder
+  token through the pipeline (implicit multiplication works around it; stack mode never fuses
+  `xintegrate`). New `analyse()` returns `{maxima, problems}`; problems:
+  `integral_variable_missing`, `integral_limit_missing`, `integral_integrand_missing`,
+  `integral_variable_composite` - then `maxima` is empty.
+- max2tex: `integrate|int|'int|'integrate|nounint` with 2 or 4 arguments →
+  `\int_{a}^{b} expr\mathrm{d}x` (brackets only for sums). No `\,` - MathQuill cannot parse it
+  and would drop the whole pre-filled answer (found in the browser).
+- New `local_validation.js` (core/str): message box below the editor, `role=status`; used by
+  input_fields (single line and system rows) and textarea_fields (all rows).
+- Toolbar: optional `left` on a `write` element moves the cursor back into the template;
+  "Integral calculus" group active (not default) with one ∫ template
+  `\int_{}^{}\left(\right)\mathrm{d}x`, cursor in the integrand; `∮` removed.
+- Strings en/de for the button and the four messages.
+
+### Verification
+
+Jest `integral.test.js` (39 cases incl. every mode, incomplete cases, all 12 read forms,
+roundtrips); total 677. Real browser (Moodle 4.5 + STACK 4.13.1): template + 5×Left → cursor in
+the integrand, `x^2` → `integrate(x^2,x)`; deleting `x` → value empty + message "Incomplete
+integral: the integration variable (dx) is missing."; typing `x` again → value back, message
+hidden; pre-fill from `'int(x^2,x,0,1)` renders in MathQuill and yields `integrate(x^2,x,0,1)`.
+
+### Not preserved
+
+Noun vs. verb (`'int` vs. `integrate`) is not visible and is written as `integrate` - an explicit
+option would be needed (Ralf's comment).

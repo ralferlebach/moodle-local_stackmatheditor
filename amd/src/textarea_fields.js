@@ -29,8 +29,9 @@ define([
     'local_stackmatheditor/max2tex',
     'local_stackmatheditor/toolbar',
     'local_stackmatheditor/operator_map',
-    'local_stackmatheditor/stack_bridge'
-], function($, tex2max, max2tex, toolbar, OperatorMap, Bridge) {
+    'local_stackmatheditor/stack_bridge',
+    'local_stackmatheditor/local_validation'
+], function($, tex2max, max2tex, toolbar, OperatorMap, Bridge, LocalValidation) {
     'use strict';
 
     var TYPES = ['equiv', 'textarea'];
@@ -425,14 +426,20 @@ define([
      *
      * @param {string} latex LaTeX input.
      * @param {Object} convOpts Converter options.
-     * @returns {string} Converted Maxima expression.
+     * @param {string[]} [problems] Collects codes of incomplete structures (#44).
+     * @returns {string} Converted Maxima expression (empty for an incomplete structure).
      */
-    function maximaFromLatex(latex, convOpts) {
+    function maximaFromLatex(latex, convOpts, problems) {
+        var result;
         if (!latex || !latex.trim()) {
             return '';
         }
         try {
-            return tex2max.convert(latex, convOpts);
+            result = tex2max.analyse(latex, convOpts);
+            if (problems) {
+                Array.prototype.push.apply(problems, result.problems);
+            }
+            return result.maxima;
         } catch (e) {
             return latex;
         }
@@ -990,9 +997,10 @@ define([
             clearTimeout(this.syncTimer);
             this.syncTimer = null;
         }
+        var problems = [];
         var lines = this.rows.map(function(step) {
             var parts = step.fields.map(function(fieldData) {
-                fieldData.maxima = maximaFromLatex(fieldData.mq.latex(), self.convOpts);
+                fieldData.maxima = maximaFromLatex(fieldData.mq.latex(), self.convOpts, problems);
                 return fieldData.maxima;
             });
             if (parts.length > 1) {
@@ -1004,6 +1012,7 @@ define([
         });
         var value = lines.join('\n');
         var oldVal = this.$ta.val();
+        LocalValidation.show(this.$rows[0], problems);
         this.$ta.val(value);
         if (value !== oldVal && !silent) {
             Bridge.triggerValidation(this.$ta[0]);

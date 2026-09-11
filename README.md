@@ -63,12 +63,17 @@ Features
 * Check and Submit always send exactly what the editor shows, even directly after the last key.
 * Documented integration events for external scripts (see "Integration events").
 * Configuration pages return to the page they were opened from.
+* Integral template (group "Integral calculus"): limits, integrand and variable, serialised as
+  `integrate(expr,x)` or `integrate(expr,x,a,b)`; `integrate`, `int` and their noun forms are read
+  back. An incomplete integral is kept in the editor and explained below it, but never sent as a
+  made-up CAS expression. Only simple integration variables (dx, dt, dθ, …).
 
 ### Planned
 
-* Structured integral editor serialising to `integrate(expr, x[, a, b])` (issue #44).
-* Structured derivative editor serialising to `diff(expr, x[, n], ...)` (issue #46).
+* Structured derivative templates serialising to `diff(expr, x[, n], ...)` (issue #46).
 
+The quantifier buttons (∀, ∃, ∄) are disabled: STACK does not know `forall`, `exists` or `nexists`,
+so every answer written with them would be invalid. They are rarely needed outside of proofs.
 
 
 Installation

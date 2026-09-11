@@ -463,6 +463,62 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Replace integral calls by placeholders holding their LaTeX (#44).
+     *
+     * Reads the evaluated form integrate(…) / int(…) and the noun forms 'int(…), 'integrate(…)
+     * and nounint(…) - with 2 arguments (indefinite) or 4 (definite). Other arities are left
+     * alone. Written back as \int_{a}^{b} expr\,\mathrm{d}x, the form tex2max reads.
+     *
+     * @param {string} s Maxima expression.
+     * @param {Object} options Conversion options.
+     * @param {string[]} store Collected LaTeX snippets.
+     * @returns {string} Expression with placeholders.
+     */
+    function extractIntegralCalls(s, options, store) {
+        var re = /(^|[^A-Za-z0-9_%])('?)(integrate|int|nounint)\(/;
+        var out = '';
+        var rest = s;
+        var m;
+        var start;
+        var open;
+        var close;
+        var args;
+        var body;
+        var tex;
+
+        while ((m = rest.match(re)) !== null) {
+            start = m.index + m[1].length;
+            open = start + m[2].length + m[3].length;
+            close = findCloseParen(rest, open);
+            if (close === -1) {
+                break;
+            }
+            args = splitArguments(rest.substring(open + 1, close));
+            if (args.length !== 2 && args.length !== 4) {
+                out += rest.substring(0, close + 1);
+                rest = rest.substring(close + 1);
+                continue;
+            }
+            body = convert(args[0], options);
+            // Brackets only where the integrand is a sum; the differential ends it anyway.
+            if (/[+-]/.test(stripEnclosingParens(args[0]).replace(/^[-+]/, '').replace(/\([^()]*\)/g, ''))) {
+                body = '\\left(' + body + '\\right)';
+            }
+            tex = '\\int';
+            if (args.length === 4) {
+                tex += '_{' + convert(args[2], options) + '}^{' + convert(args[3], options) + '}';
+            }
+            // No "\\," before the differential: MathQuill cannot parse it and would drop the
+            // whole pre-filled answer.
+            tex += ' ' + body + '\\mathrm{d}' + convert(args[1], options);
+            out += rest.substring(0, start) + '\uE060' + store.length + '\uE061';
+            store.push(tex);
+            rest = rest.substring(close + 1);
+        }
+        return out + rest;
+    }
+
+    /**
      * Collapse "(A implies B) and (B implies A)" back into A ⇔ B (#35).
      *
      * @param {string} s Maxima expression.
@@ -955,6 +1011,9 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         var defs = opts.defs || {};
         var s = collapsePlusMinus(maxima.trim());
         var prev;
+        var integrals = [];
+
+        s = extractIntegralCalls(s, opts, integrals);
 
         // Maxima braces are set literals; LaTeX braces are grouping. Protect the
         // literals now and write them as \\left\\{ ... \\right\\} at the end.
@@ -1061,6 +1120,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         if (commaDecimal) {
             s = s.replace(/(\d)\.(\d)/g, '$1,$2');
         }
+
+        s = s.replace(/\uE060(\d+)\uE061/g, function(match, index) {
+            return integrals[Number(index)];
+        });
 
         // Coupled signs restored by collapsePlusMinus().
         s = s.replace(/\u00b1/g, '\\pm ').replace(/\u2213/g, '\\mp ');

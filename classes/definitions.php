@@ -252,6 +252,19 @@ class definitions {
                 ],
             ],
 
+            // Integral calculus (#44): one structured template - limits (leave empty for an
+            // indefinite integral), integrand in brackets, atomic variable after d. The cursor
+            // starts in the integrand. The contour integral has no STACK semantics and is not
+            // offered.
+            'integral_operators' => [
+                'label'           => get_string('group_integral_operators', $p),
+                'default_enabled' => false,
+                'elements'        => [
+                    ['display' => '∫', 'write' => '\\int_{}^{}\\left(\\right)\\mathrm{d}x', 'left' => 5,
+                        'tooltip' => get_string('btn_integral', $p)],
+                ],
+            ],
+
             // 8. Brackets.
             'brackets' => [
                 'label'           => get_string('group_brackets', $p),
@@ -433,15 +446,6 @@ class definitions {
             ],
 
             // 19. Integral calculus.
-            'integral_operators' => [
-                'label'           => get_string('group_integral_operators', $p),
-                'default_enabled' => false,
-                'elements'        => [
-                    ['display' => '∫', 'write' => '\\int_{}^{}',
-                        'tooltip' => get_string('btn_integral', $p)],
-                    ['display' => '∮', 'write' => '\\oint_{}^{}',
-                        'tooltip' => get_string('btn_contour_integral', $p)],
-                ],
             ],
 
             // 20. Statistics.

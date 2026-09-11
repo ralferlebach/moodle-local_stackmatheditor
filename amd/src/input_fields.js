@@ -30,8 +30,9 @@ define([
     'local_stackmatheditor/max2tex',
     'local_stackmatheditor/toolbar',
     'local_stackmatheditor/operator_map',
-    'local_stackmatheditor/stack_bridge'
-], function($, tex2max, max2tex, toolbar, OperatorMap, Bridge) {
+    'local_stackmatheditor/stack_bridge',
+    'local_stackmatheditor/local_validation'
+], function($, tex2max, max2tex, toolbar, OperatorMap, Bridge, LocalValidation) {
     'use strict';
 
     var TYPES = ['algebraic', 'units'];
@@ -75,12 +76,18 @@ define([
     function syncToInput(mqField, $input, convOpts, dbg, silent) {
         var latex = mqField.latex();
         var maxima = '';
+        var result;
         if (latex && latex.trim()) {
             try {
-                maxima = tex2max.convert(latex, convOpts);
+                // An incomplete structure (#44) yields no CAS text and a local message.
+                result = tex2max.analyse(latex, convOpts);
+                maxima = result.maxima;
+                LocalValidation.show(mqField.el(), result.problems);
             } catch (e) {
                 maxima = latex;
             }
+        } else {
+            LocalValidation.show(mqField.el(), []);
         }
         var oldVal = $input.val();
         $input.val(maxima);
@@ -245,11 +252,15 @@ define([
      */
     function latexFieldToMaxima(mqField, convOpts) {
         var latex = mqField.latex();
+        var result;
         if (!latex || !latex.trim()) {
+            LocalValidation.show(mqField.el(), []);
             return '';
         }
         try {
-            return tex2max.convert(latex, convOpts);
+            result = tex2max.analyse(latex, convOpts);
+            LocalValidation.show(mqField.el(), result.problems);
+            return result.maxima;
         } catch (e) {
             return latex;
         }

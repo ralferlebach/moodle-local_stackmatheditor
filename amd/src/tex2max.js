@@ -92,7 +92,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         'sqrt', 'abs', 'sgn', 'exp', 'log', 'ln',
         'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
         'arcsin', 'arccos', 'arctan', 'asin', 'acos', 'atan',
-        'sinh', 'cosh', 'tanh', 'binomial'
+        'sinh', 'cosh', 'tanh', 'binomial', 'integrate', 'diff'
     ];
 
     /**
@@ -289,6 +289,14 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
             }
 
             rest = s.substring(i);
+
+            // Placeholder of an already converted structure (integral): one atomic operand.
+            m = rest.match(/^\uE050\d+\uE051/);
+            if (m) {
+                tokens.push({type: 'ident', value: m[0]});
+                i += m[0].length;
+                continue;
+            }
 
             m = rest.match(/^\d+(?:[.,]\d+)?/);
             if (m) {
@@ -1071,14 +1079,273 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
      * @returns {string} Maxima expression string.
      */
     function convert(latex, options) {
-        var opts = options || {};
+        return analyse(latex, options).maxima;
+    }
+
+    /**
+     * Convert and report structures that cannot be serialised yet (#44).
+     *
+     * An integral without a (simple) integration variable is a visible but incomplete editor
+     * state, not a CAS expression: no "integrate(expr)" is ever invented. In that case maxima is
+     * the empty string and problems names what is missing, so the editor can say so.
+     *
+     * @param {string} latex   LaTeX string from MathQuill.
+     * @param {Object} options Conversion options (see convert()).
+     * @returns {Object} {maxima: string, problems: string[]}.
+     */
+    function analyse(latex, options) {
+        var ctx = {problems: []};
+        var maxima = convertInner(latex || '', options || {}, ctx, false);
+        return {maxima: ctx.problems.length ? '' : maxima, problems: ctx.problems};
+    }
+
+    /**
+     * Read one LaTeX argument starting at pos: {…} group, control word, or single character.
+     *
+     * @param {string} s LaTeX.
+     * @param {number} pos Start index.
+     * @returns {?Object} {text, end} or null.
+     */
+    function readLatexArgument(s, pos) {
+        var depth = 0;
+        var i;
+        var m;
+
+        if (s.charAt(pos) === '{') {
+            for (i = pos; i < s.length; i++) {
+                if (s.charAt(i) === '\\') {
+                    i++;
+                    continue;
+                }
+                if (s.charAt(i) === '{') {
+                    depth++;
+                } else if (s.charAt(i) === '}') {
+                    depth--;
+                    if (depth === 0) {
+                        return {text: s.substring(pos + 1, i), end: i + 1};
+                    }
+                }
+            }
+            return null;
+        }
+        m = s.substring(pos).match(/^\\[a-zA-Z]+|^[^\s{}]/);
+        return m ? {text: m[0], end: pos + m[0].length} : null;
+    }
+
+    /**
+     * Match the differential "\mathrm{d}x" / "dx" at pos.
+     *
+     * @param {string} s LaTeX.
+     * @param {number} pos Index.
+     * @param {boolean} allowBare Also accept a bare "d".
+     * @returns {?Object} {variable, atomic, end} or null.
+     */
+    function matchDifferential(s, pos, allowBare) {
+        var rest = s.substring(pos);
+        var m = rest.match(/^(?:\\[,;:!]|\s)*(\\mathrm\{d\}|\\text\{d\}|d)\s*/);
+        var after;
+        var v;
+
+        if (!m || (m[1] === 'd' && !allowBare)) {
+            return null;
+        }
+        after = rest.substring(m[0].length);
+        v = after.match(/^(?:[A-Za-z]|\\[a-zA-Z]+)(?:_\{[^{}]*\}|_[A-Za-z0-9])?/);
+        if (!v) {
+            return m[1] === 'd' ? null : {variable: '', atomic: false, end: pos + m[0].length};
+        }
+        // A bracket right after the variable means d(f(x)) / d f(x): a composite quantity.
+        return {
+            variable: v[0],
+            atomic: !/^\s*(?:\(|\\left)/.test(after.substring(v[0].length)),
+            end: pos + m[0].length + v[0].length
+        };
+    }
+
+    /**
+     * Read the optional limits "_{a}^{b}" (either order) after \\int.
+     *
+     * @param {string} s LaTeX.
+     * @param {number} pos Index right after "\\int".
+     * @returns {Object} {lower, upper, end}; a missing limit is null.
+     */
+    function readIntegralLimits(s, pos) {
+        var result = {lower: null, upper: null, end: pos};
+        var arg;
+
+        while (s.charAt(result.end) === '_' || s.charAt(result.end) === '^') {
+            arg = readLatexArgument(s, result.end + 1);
+            if (!arg) {
+                break;
+            }
+            result[s.charAt(result.end) === '_' ? 'lower' : 'upper'] = arg.text.trim();
+            result.end = arg.end;
+        }
+        return result;
+    }
+
+    /**
+     * True when a bare differential "dx" starts at i (not the "d" inside a longer word).
+     *
+     * @param {string} s LaTeX.
+     * @param {number} i Index.
+     * @param {number} bodyStart Start of the integrand.
+     * @returns {boolean} Whether a bare differential starts here.
+     */
+    function isBareDifferentialAt(s, i, bodyStart) {
+        return s.charAt(i) === 'd' && i > bodyStart && !/[A-Za-z]/.test(s.charAt(i - 1))
+            && !!matchDifferential(s, i, true);
+    }
+
+    /**
+     * Find the differential that closes the integral whose integrand starts at bodyStart.
+     *
+     * Inner integrals consume their own differential. "\\mathrm{d}x" wins; otherwise the last
+     * bare "dx" on the same level is taken.
+     *
+     * @param {string} s LaTeX.
+     * @param {number} bodyStart Start of the integrand.
+     * @returns {?Object} {differential, bodyEnd} or null.
+     */
+    function findIntegralEnd(s, bodyStart) {
+        var depth = 0;
+        var nested = 0;
+        var lastBare = null;
+        var found;
+        var ch;
+        var i;
+
+        for (i = bodyStart; i < s.length; i++) {
+            ch = s.charAt(i);
+            if (ch === '\\' && /[{}]/.test(s.charAt(i + 1))) {
+                i++;
+            } else if ('({['.indexOf(ch) !== -1) {
+                depth++;
+            } else if (')}]'.indexOf(ch) !== -1) {
+                depth--;
+                if (depth < 0) {
+                    break;
+                }
+            } else if (depth === 0 && /^\\int(?![a-zA-Z])/.test(s.substring(i))) {
+                nested++;
+            } else if (depth === 0 && /^(?:\\[,;:!]|\s)*\\(?:mathrm|text)\{d\}/.test(s.substring(i))) {
+                found = matchDifferential(s, i, false);
+                if (nested === 0) {
+                    return found ? {differential: found, bodyEnd: i} : null;
+                }
+                // The differential of an inner integral: skip it completely.
+                nested--;
+                i = (found ? found.end : i + 1) - 1;
+            } else if (depth === 0 && nested === 0 && isBareDifferentialAt(s, i, bodyStart)) {
+                lastBare = i;
+            }
+        }
+        return lastBare === null ? null : {differential: matchDifferential(s, lastBare, true), bodyEnd: lastBare};
+    }
+
+    /**
+     * Classify an integral that cannot be serialised yet.
+     *
+     * @param {?Object} end Result of findIntegralEnd().
+     * @param {Object} limits Result of readIntegralLimits().
+     * @returns {?string} Problem code or null.
+     */
+    function integralProblem(end, limits) {
+        if (!end || !end.differential.variable) {
+            return 'integral_variable_missing';
+        }
+        if (!end.differential.atomic) {
+            return 'integral_variable_composite';
+        }
+        if (!limits.lower !== !limits.upper) {
+            return 'integral_limit_missing';
+        }
+        return null;
+    }
+
+    /**
+     * Replace every \\int … d<var> by a placeholder for integrate(…) (#44).
+     *
+     * @param {string} s LaTeX.
+     * @param {Object} opts Conversion options.
+     * @param {Object} ctx Context {problems, placeholders}.
+     * @returns {string} LaTeX with placeholders.
+     */
+    function extractIntegrals(s, opts, ctx) {
+        var start = s.search(/\\int(?![a-zA-Z])/);
+        var limits;
+        var end;
+        var problem;
+        var body;
+        var parts;
+        var index;
+
+        if (start === -1) {
+            return s;
+        }
+        limits = readIntegralLimits(s, start + 4);
+        end = findIntegralEnd(s, limits.end);
+        problem = integralProblem(end, limits);
+        body = end ? s.substring(limits.end, end.bodyEnd).trim() : '';
+        if (!problem && !body) {
+            problem = 'integral_integrand_missing';
+        }
+        if (problem) {
+            ctx.problems.push(problem);
+            return s.substring(0, start) + ' ' + s.substring(start + 4);
+        }
+
+        parts = [
+            unwrapArgument(convertInner(body, opts, ctx, true)),
+            convertInner(end.differential.variable, opts, ctx, true)
+        ];
+        if (limits.lower) {
+            parts.push(unwrapArgument(convertInner(limits.lower, opts, ctx, true)));
+            parts.push(unwrapArgument(convertInner(limits.upper, opts, ctx, true)));
+        }
+        index = ctx.placeholders.length;
+        ctx.placeholders.push('integrate(' + parts.join(',') + ')');
+        return extractIntegrals(
+            s.substring(0, start) + '\uE050' + index + '\uE051' + s.substring(end.differential.end),
+            opts,
+            ctx
+        );
+    }
+
+    /**
+     * Remove brackets that enclose a whole function argument.
+     *
+     * @param {string} x Maxima expression.
+     * @returns {string} Argument.
+     */
+    function unwrapArgument(x) {
+        x = x.trim();
+        while (x.charAt(0) === '(' && matchingBracket(x, 0) === x.length - 1) {
+            x = x.substring(1, x.length - 1).trim();
+        }
+        return x;
+    }
+
+    /**
+     * The conversion pipeline.
+     *
+     * @param {string} latex LaTeX input.
+     * @param {Object} opts Conversion options.
+     * @param {Object} ctx Context {problems, placeholders}.
+     * @param {boolean} fragment True for a part of a structure (no ± expansion).
+     * @returns {string} Maxima.
+     */
+    function convertInner(latex, opts, ctx, fragment) {
         var commaDecimal = opts.commaDecimal || false;
         var defs = opts.defs || {};
         var variableMode = opts.variableMode || 'stack';
         var s = latex;
         var maxIter = 20;
+        var placeholders = [];
+        var local = {problems: ctx.problems, placeholders: placeholders};
 
         s = s.replace(/\s+/g, ' ').trim();
+        s = extractIntegrals(s, opts, local);
         // A space after a control word only ends the command's name (LaTeX ignores it). In front
         // of anything but a letter or digit it carries nothing and would otherwise survive in
         // stack mode ("gamma (x)", "epsilon _0").
@@ -1251,11 +1518,18 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // ("sqrt(pi )" from "\sqrt{\pi }"); drop it so the output is stable.
         s = s.replace(/\s+([)\],}])/g, '$1').replace(/([([{,])\s+/g, '$1');
         s = convertStructuredOperators(s);
-        s = expandPlusMinus(s);
+        s = s.replace(/(^|[\s\S])\uE050(\d+)\uE051/g, function(match, before, index) {
+            // Never fuse with a preceding identifier ("xintegrate(...)" in stack mode).
+            return before + (/[A-Za-z_]/.test(before) ? ' ' : '') + placeholders[Number(index)];
+        });
+        if (!fragment) {
+            s = expandPlusMinus(s);
+        }
         return s;
     }
 
     return /** @alias module:local_stackmatheditor/tex2max */ {
-        convert: convert
+        convert: convert,
+        analyse: analyse
     };
 });
