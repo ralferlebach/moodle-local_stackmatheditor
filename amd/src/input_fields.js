@@ -330,6 +330,9 @@ define([
                         return;
                     }
                     syncSystemToInput(rows, $input, convOpts, ctx.dbg);
+                },
+                enter: function() {
+                    Bridge.signalEnter($input[0], {trigger: 'key', inputType: 'system'});
                 }
             }
         });
@@ -605,6 +608,8 @@ define([
                 row.prefilling = false;
                 row.mqField.focus();
                 syncSystemToInput(rows, $input, convOpts, ctx.dbg);
+                // The "+" button adds a row like Enter does, and says so (#43).
+                Bridge.signalEnter($input[0], {trigger: 'button', inputType: 'system'});
             });
 
             toolbar.typeset($tb);
@@ -634,6 +639,10 @@ define([
                     syncToInput(
                         mqField, $input,
                         convOpts, ctx.dbg);
+                },
+                enter: function() {
+                    // No editor action on Enter; the signal stays observable (#43).
+                    Bridge.signalEnter($input[0], {trigger: 'key', inputType: 'algebraic'});
                 }
             }
         });

@@ -19,7 +19,7 @@ Regenerate it from the Moodle root with
 | `tex2max_sqrt.test.js` | #39: `\sqrt` stays atomic in every mode, no backslash in the CAS string |
 | `plusminus.test.js` | #30: coupled `\pm`/`\mp` expansion with `nounor`, collapse back (incl. legacy `or`), roundtrips in every mode |
 | `sets_logic.test.js` | #35: every set/logic operator of `amd/src/operator_map.js` → STACK-valid Maxima and back, precedence, legacy spellings |
-| `stack_bridge.test.js` | #48 (jsdom): one input/change per sync, flush before Check/Submit without extra events, stale-invalid re-validation once per value |
+| `stack_bridge.test.js` | #48/#43 (jsdom): one input/change per sync, flush before Check/Submit without extra events, stale-invalid re-validation once per value, integration events (enter, input, beforecheck, beforesubmit) |
 
 ```bash
 make jest            # from the plugin root; runs npm ci on first use

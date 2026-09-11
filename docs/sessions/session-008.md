@@ -340,3 +340,41 @@ still turns ci-complete red through `behat`, which needs it.
 
 - No Behat scenario for a textarea/equiv question yet (the Behat context only creates algebraic
   questions); STACK's generator template `textarea_input` would be the basis.
+
+Delivered as `sme_v1.2.0_06.zip` (2026091105).
+
+## 13. Iteration 8 (2026-09-11) — 2026091106: #43
+
+Issue comment (Ralf): pressing the "+" button must also raise an Enter event in the bridge.
+Interpreted as the buttons that add a row - `.sme-equiv-subadd` in the textarea/equiv editor and
+the "+" of the single-line system editor - not the "+" operator of the toolbar.
+
+### Contract (documented in README.md, "Integration events")
+
+| Event | On | When |
+|---|---|---|
+| `stackmatheditor:input` | original input | after each changed sync (native input + change first, once each) |
+| `stackmatheditor:enter` | original input | Enter in the editor (`trigger: 'key'`), "+" buttons (`trigger: 'button'`) |
+| `stackmatheditor:beforecheck` | STACK Check button | click on Check, after the flush |
+| `stackmatheditor:beforesubmit` | form | submit, after the flush |
+
+Plus a non-bubbling keydown/keyup Enter mirror (keyCode/which 13) on the original input: direct
+listeners on the field see Enter, document delegation still sees exactly one (the real, trusted
+key event of the editor). No stopPropagation / preventDefault on relevant events; no project-
+specific code for math-digital-mentoring. Single-line fields and system rows got an `enter`
+handler that only signals (no behaviour change).
+
+### Verification
+
+- Jest (jsdom): 5 new cases, total 438 (one bridge instance per file, as in the browser).
+- Real attempt (Playwright, Moodle 4.5 + STACK 4.13.1, textarea question): Enter creates the
+  second row; document keydown sees one trusted Enter; `enter:key` once, `enter:button` once
+  ("+"), each with the field-level mirror; Check → `beforecheck`, `beforesubmit`, native submit,
+  in that order, with the visible value already in the original textarea.
+
+Note: the Check control in STACK 4.13 is a `<button name="…-submit">`, not an `<input>`.
+
+### Left as is
+
+`toolbar.js` stops propagation of mousedown/click on its own buttons (keeps focus in the
+editor). These are not input or submit events and are outside the #43 contract.

@@ -701,6 +701,8 @@ define([
                     }
                     self.addStep(template, pos.stepIdx + 1);
                     self.focusStep(pos.stepIdx + 1, pos.fieldIdx < template.length ? pos.fieldIdx : 0);
+                    // Enter stays observable for external scripts (#43).
+                    Bridge.signalEnter(self.$ta[0], {trigger: 'key', inputType: self.inputType, slot: self.slot});
                 }
             }
         });
@@ -873,6 +875,8 @@ define([
             }
             self.addField(self.rows.indexOf(stepData), templateValue, focusField + 1);
             self.focusStep(self.rows.indexOf(stepData), focusField + 1);
+            // The "+" button adds a row like Enter does, and says so (#43).
+            Bridge.signalEnter(self.$ta[0], {trigger: 'button', inputType: self.inputType, slot: self.slot});
         });
 
         $del.on('click', function(e) {

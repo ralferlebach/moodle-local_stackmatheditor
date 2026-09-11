@@ -32,6 +32,16 @@
  *   When that can have happened, validation of the current value is requested once more;
  *   STACK answers from its cache if the value was already validated.
  *
+ * Integration contract for external scripts (#43) - see README.md, "Integration events".
+ * All events bubble and carry detail.source = 'local_stackmatheditor':
+ * - stackmatheditor:input        on the original input, after the editor changed its value;
+ * - stackmatheditor:enter        on the original input, for Enter in the visible editor and
+ *                                for the "+" (add row) buttons; plus a non-bubbling keydown /
+ *                                keyup Enter mirror on the original input;
+ * - stackmatheditor:beforecheck  on a STACK Check button, after all editors were flushed;
+ * - stackmatheditor:beforesubmit on the form, after all editors were flushed.
+ * The editor never cancels, replaces or isolates the native events.
+ *
  * @module     local_stackmatheditor/stack_bridge
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -82,6 +92,24 @@ define([], function() {
         return String(el.value || '').replace(/^\s+|\s+$/g, '');
     }
 
+    /** @type {string} Prefix of all documented integration events. */
+    var EVENT_PREFIX = 'stackmatheditor:';
+
+    /**
+     * Dispatch one documented integration event.
+     *
+     * @param {EventTarget} target Element to dispatch on.
+     * @param {string} name Event name without prefix.
+     * @param {Object} [detail] Event detail.
+     */
+    function emit(target, name, detail) {
+        var data = {source: 'local_stackmatheditor'};
+        Object.keys(detail || {}).forEach(function(key) {
+            data[key] = detail[key];
+        });
+        target.dispatchEvent(new CustomEvent(EVENT_PREFIX + name, {bubbles: true, detail: data}));
+    }
+
     /**
      * Notify STACK and other listeners that the original input changed.
      *
@@ -91,6 +119,43 @@ define([], function() {
         stateOf(el).dispatched = Date.now();
         el.dispatchEvent(new Event('input', {bubbles: true, cancelable: true}));
         el.dispatchEvent(new Event('change', {bubbles: true, cancelable: true}));
+        emit(el, 'input', {name: el.name, value: el.value});
+    }
+
+    /**
+     * Signal an Enter of the visible editor to integrations (#43).
+     *
+     * The documented CustomEvent bubbles. The keyboard mirror does not: listeners on the
+     * original field receive an Enter keydown/keyup they would otherwise never see, while
+     * document-level delegation keeps receiving only the real key event from the editor -
+     * nobody gets Enter twice. Synthetic key events are untrusted and never submit a form.
+     *
+     * @param {HTMLElement} el Original STACK input.
+     * @param {Object} [info] {trigger: 'key'|'button', inputType, slot}.
+     */
+    function signalEnter(el, info) {
+        var detail = {name: el.name, trigger: 'key'};
+        Object.keys(info || {}).forEach(function(key) {
+            detail[key] = info[key];
+        });
+        emit(el, 'enter', detail);
+        ['keydown', 'keyup'].forEach(function(type) {
+            var ev = new KeyboardEvent(type, {key: 'Enter', code: 'Enter', bubbles: false, cancelable: true});
+            // Older scripts test keyCode / which, which the constructor cannot set.
+            Object.defineProperty(ev, 'keyCode', {value: 13});
+            Object.defineProperty(ev, 'which', {value: 13});
+            el.dispatchEvent(ev);
+        });
+    }
+
+    /**
+     * True for STACK's per-question Check button (name "<prefix>-submit").
+     *
+     * @param {HTMLElement} el Submit control.
+     * @returns {boolean} Whether it is a Check button.
+     */
+    function isCheckButton(el) {
+        return /-submit$/.test(el.getAttribute('name') || '');
     }
 
     /**
@@ -107,20 +172,20 @@ define([], function() {
     }
 
     /**
-     * True for elements that submit their form when activated.
+     * The submit control an event target belongs to.
      *
      * @param {EventTarget} target Event target.
-     * @returns {boolean} Whether target is (inside) a submit control.
+     * @returns {?HTMLElement} Submit control or null.
      */
-    function isSubmitControl(target) {
+    function submitControl(target) {
         var el = target && target.closest ? target.closest('button, input') : null;
         var type;
 
         if (!el || !el.form) {
-            return false;
+            return null;
         }
         type = (el.getAttribute('type') || (el.tagName === 'BUTTON' ? 'submit' : '')).toLowerCase();
-        return type === 'submit' || type === 'image';
+        return type === 'submit' || type === 'image' ? el : null;
     }
 
     /**
@@ -131,19 +196,33 @@ define([], function() {
             return;
         }
         installed = true;
-        // Pointerdown precedes the click, so the value is written before STACK sees the button.
+        // Pointerdown precedes the click: the value is written silently before a pending
+        // debounced sync could make STACK disable the button.
         document.addEventListener('pointerdown', function(e) {
-            if (isSubmitControl(e.target)) {
+            if (submitControl(e.target)) {
                 flushAll();
             }
         }, true);
         document.addEventListener('keydown', function(e) {
-            if ((e.key === 'Enter' || e.key === ' ') && isSubmitControl(e.target)) {
+            if ((e.key === 'Enter' || e.key === ' ') && submitControl(e.target)) {
                 flushAll();
             }
         }, true);
+        // Click (mouse or keyboard) on a STACK Check button: announce the check.
+        document.addEventListener('click', function(e) {
+            var control = submitControl(e.target);
+            if (control && isCheckButton(control)) {
+                flushAll();
+                emit(control, 'beforecheck', {name: control.getAttribute('name')});
+            }
+        }, true);
         // The form data set is built after the submit event, so this is the last safe moment.
-        document.addEventListener('submit', flushAll, true);
+        document.addEventListener('submit', function(e) {
+            flushAll();
+            emit(e.target, 'beforesubmit', {
+                submitter: e.submitter ? e.submitter.getAttribute('name') : null
+            });
+        }, true);
     }
 
     /**
@@ -187,7 +266,9 @@ define([], function() {
 
     return /** @alias module:local_stackmatheditor/stack_bridge */ {
         STACK_TYPING_DELAY: STACK_TYPING_DELAY,
+        EVENT_PREFIX: EVENT_PREFIX,
         triggerValidation: triggerValidation,
+        signalEnter: signalEnter,
         register: register,
         flushAll: flushAll,
         guardStaleValidation: guardStaleValidation

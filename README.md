@@ -18,6 +18,12 @@ The plugin injects a configurable toolbar for mathematical input, supports **LaT
 - support of **small an mobile displays** by automatic linebreaks of long blocks of buttons
 - added plus/minus and minus/plus functionality
 
+### Version 1.2 ###
+- Square roots, set-theory and logic operators are converted to syntax STACK accepts (`sqrt`, `elementp`, `union`, `subsetp`, … ; `and`/`or` for logic).
+- Plus/minus becomes a solution set (`nounor`), equation systems are joined with `nounand`, and both are read back losslessly.
+- Check and Submit always send exactly what the editor shows.
+- Documented integration events for external scripts (see "Integration events").
+
 ## Requirements ##
 
 - Moodle **4.5 or later**
@@ -80,6 +86,41 @@ Depending on the calling context, the plugin resolves the question bank entry au
 - the variable mode for that question
 
 The configuration form also shows the quiz name, question name including version, and a collapsible question preview.
+
+## Integration events (for external scripts) ##
+
+The editor is an input surface, not an event gateway: it never cancels, replaces or isolates
+Moodle's or STACK's own events. External scripts (learning or mentoring tools) should listen to
+the **original STACK input** and to the documented `stackmatheditor:*` events below. They must
+not depend on the internal `.sme-*` DOM structure, which may change without notice.
+
+All events are `CustomEvent`s that bubble; `event.detail.source` is `'local_stackmatheditor'`.
+
+| Event | Dispatched on | When | `detail` |
+|---|---|---|---|
+| `stackmatheditor:input` | original STACK input | after the editor wrote a changed value (the native `input` and `change` events fire right before it, once each) | `name`, `value` |
+| `stackmatheditor:enter` | original STACK input | Enter in the visible editor, and the "+" buttons that add a row | `name`, `trigger` (`'key'` or `'button'`), `inputType`, `slot` (textarea/equiv) |
+| `stackmatheditor:beforecheck` | STACK's Check button | click on Check, after every editor wrote its visible state | `name` (button name) |
+| `stackmatheditor:beforesubmit` | the form | form submission, after every editor wrote its visible state | `submitter` (name of the submitting button, if any) |
+
+Additionally, every Enter signal is mirrored as a non-bubbling `keydown`/`keyup` with
+`key: 'Enter'` (`keyCode`/`which` 13) on the original input, for scripts that listen directly on
+that field. The mirror does not bubble, so document-level delegation still sees exactly one Enter:
+the real key event of the visible editor. Synthetic key events are untrusted and never submit a
+form.
+
+A Check click raises `beforecheck` followed by `beforesubmit`, then the native submission runs
+unchanged, exactly once.
+
+```javascript
+const input = document.querySelector('textarea[name$="_ans1"]');
+input.addEventListener('stackmatheditor:enter', (e) => {
+    // e.detail.trigger is 'key' or 'button'.
+});
+document.addEventListener('stackmatheditor:beforecheck', () => {
+    // The original STACK inputs already hold the visible editor state here.
+});
+```
 
 ## Limitations ##
 
