@@ -699,3 +699,14 @@ attempt may hold an earlier answer).
 
 Replayed locally with exactly the GitHub-style environment file (KEY=VALUE, the same sed):
 settings 6/6 (3.4 min, longest test 47 s), smoke 3/3, performance 1/1, a11y 2/2.
+
+Delivered as `sme_v1.2.0_19.zip` (2026091118).
+
+## 26. Iteration 21 (2026-09-11) — 2026091119: README badge
+
+- The log uploaded again (`logs_93728539984`) is byte-identical to the one analysed in
+  iteration 20; its seed step still shows the old `sed` filter without digits, i.e. the run
+  predates `_19`. Nothing new to fix there.
+- README: MDL Shield badge now links to the public plugin page
+  `https://mdlshield.com/plugins/local_stackmatheditor` (image URL unchanged; the badge
+  currently shows grade "A").
