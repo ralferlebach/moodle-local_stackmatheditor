@@ -27,8 +27,9 @@ define([
     'jquery',
     'local_stackmatheditor/tex2max',
     'local_stackmatheditor/max2tex',
-    'local_stackmatheditor/toolbar'
-], function($, tex2max, max2tex, toolbar) {
+    'local_stackmatheditor/toolbar',
+    'local_stackmatheditor/operator_map'
+], function($, tex2max, max2tex, toolbar, OperatorMap) {
     'use strict';
 
     var TYPES = ['equiv', 'textarea'];
@@ -263,7 +264,7 @@ define([
     }
 
     /**
-     * Split a Maxima expression by top-level and connectors.
+     * Split a Maxima expression at the top-level system join (nounand).
      *
      * @param {string} expr Source expression.
      * @returns {string[]} Split top-level parts.
@@ -275,6 +276,7 @@ define([
         var i;
         var prev;
         var next;
+        var kw = OperatorMap.SYSTEM_JOIN;
 
         for (i = 0; i < expr.length; i++) {
             if (expr.charAt(i) === '(') {
@@ -283,13 +285,13 @@ define([
                 depth = Math.max(0, depth - 1);
             }
 
-            if (depth === 0 && expr.substr(i, 3) === 'and') {
+            if (depth === 0 && expr.substr(i, kw.length) === kw) {
                 prev = i > 0 ? expr.charAt(i - 1) : '';
-                next = i + 3 < expr.length ? expr.charAt(i + 3) : '';
+                next = i + kw.length < expr.length ? expr.charAt(i + kw.length) : '';
                 if (isAndBoundaryChar(prev) && isAndBoundaryChar(next)) {
                     parts.push(expr.substring(start, i).trim());
-                    start = i + 3;
-                    i += 2;
+                    start = i + kw.length;
+                    i += kw.length - 1;
                 }
             }
         }
@@ -954,7 +956,7 @@ define([
             if (parts.length > 1) {
                 return parts.map(function(part) {
                     return '(' + part + ')';
-                }).join(' and ');
+                }).join(' ' + OperatorMap.SYSTEM_JOIN + ' ');
             }
             return parts[0] || '';
         });

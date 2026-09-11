@@ -583,7 +583,8 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Convert a LaTeX cases environment to and-connected relation rows.
+     * Convert a LaTeX cases environment to an equation system: the rows are
+     * joined by STACK's nounand, so that every row is assessed on its own.
      *
      * @param {string} s Input.
      * @returns {string} Converted string.
@@ -614,7 +615,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
                     return match;
                 }
 
-                return parts.join(' and ');
+                return parts.join(' ' + OperatorMap.SYSTEM_JOIN + ' ');
             }
         );
     }
@@ -761,11 +762,37 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Maxima form of one set relation (#35). Proper subsets are a logical
+     * statement and therefore use "and", not the structural nounand.
+     *
+     * @param {string} name Relation name from the operator table.
+     * @param {string} left Left operand (Maxima).
+     * @param {string} right Right operand (Maxima).
+     * @returns {string} Maxima predicate.
+     */
+    function setRelation(name, left, right) {
+        switch (name) {
+            case 'in':
+                return 'elementp(' + left + ',' + right + ')';
+            case 'notin':
+                return 'not elementp(' + left + ',' + right + ')';
+            case 'subseteq':
+                return 'subsetp(' + left + ',' + right + ')';
+            case 'supseteq':
+                return 'subsetp(' + right + ',' + left + ')';
+            case 'subset':
+                return '(subsetp(' + left + ',' + right + ') and ' + left + '#' + right + ')';
+            default:
+                return '(subsetp(' + right + ',' + left + ') and ' + right + '#' + left + ')';
+        }
+    }
+
+    /**
      * Turn one set-level segment (no logic operator, relation or comma at top
      * level) into Maxima function calls.
      *
-     * Relations bind loosest, then ∖, ∪, ∩ (tightest). ∖ is left-associative,
-     * ∪ and ∩ are n-ary.
+     * Relations bind loosest (a chain becomes a conjunction), then ∖, ∪, ∩
+     * (tightest). ∖ is left-associative, ∪ and ∩ are n-ary.
      *
      * @param {string} seg Segment.
      * @returns {string} Converted segment.
@@ -775,30 +802,26 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         var relations = ['notin', 'in', 'subseteq', 'supseteq', 'subset', 'supset'];
         var relMarkers = relations.map(marker);
         var idx;
-        var name;
         var left;
         var right;
         var parts;
+        var operands;
+        var start;
 
         idx = topLevelIndices(t, relMarkers);
         if (idx.length) {
-            name = relations[relMarkers.indexOf(t.charAt(idx[0]))];
-            left = unwrap(convertSetSegment(t.substring(0, idx[0])));
-            right = unwrap(convertSetSegment(t.substring(idx[0] + 1)));
-            switch (name) {
-                case 'in':
-                    return 'elementp(' + left + ',' + right + ')';
-                case 'notin':
-                    return 'not elementp(' + left + ',' + right + ')';
-                case 'subseteq':
-                    return 'subsetp(' + left + ',' + right + ')';
-                case 'supseteq':
-                    return 'subsetp(' + right + ',' + left + ')';
-                case 'subset':
-                    return '(subsetp(' + left + ',' + right + ') nounand ' + left + '#' + right + ')';
-                default:
-                    return '(subsetp(' + right + ',' + left + ') nounand ' + right + '#' + left + ')';
-            }
+            // A chain "A ⊃ B ⊂ C" means "A ⊃ B and B ⊂ C" (like a<b<c): each
+            // relation gets its two neighbouring operands.
+            operands = [];
+            start = 0;
+            idx.forEach(function(pos) {
+                operands.push(unwrap(convertSetSegment(t.substring(start, pos))));
+                start = pos + 1;
+            });
+            operands.push(unwrap(convertSetSegment(t.substring(start))));
+            return idx.map(function(pos, k) {
+                return setRelation(relations[relMarkers.indexOf(t.charAt(pos))], operands[k], operands[k + 1]);
+            }).join(' and ');
         }
 
         idx = topLevelIndices(t, [marker('setminus')]);
@@ -866,8 +889,8 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     /**
      * Convert the operator markers of one bracket level, innermost first (#35).
      *
-     * ⇔ becomes a conjunction of both implications and ⇐ a swapped implication,
-     * because STACK knows neither "iff" nor "impliedby".
+     * ⇔ becomes the logical conjunction of both implications and ⇐ a swapped
+     * implication, because STACK knows neither "iff" nor "impliedby".
      *
      * @param {string} s Expression.
      * @returns {string} Expression with Maxima function calls.
@@ -898,7 +921,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         if (idx.length) {
             a = wrap(convertLevel(s.substring(0, idx[0])));
             b = wrap(convertLevel(s.substring(idx[0] + 1)));
-            return '(' + a + ' implies ' + b + ') nounand (' + b + ' implies ' + a + ')';
+            return '(' + a + ' implies ' + b + ') and (' + b + ' implies ' + a + ')';
         }
         idx = topLevelIndices(s, [marker('impliedby')]);
         if (idx.length) {
@@ -954,7 +977,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
 
         v1 = v1.replace(/(^|[=<>#(,[])\s*\+/g, '$1');
 
-        return '(' + v1.trim() + ') nounor (' + v2.trim() + ')';
+        return '(' + v1.trim() + ') ' + OperatorMap.SOLUTION_JOIN + ' (' + v2.trim() + ')';
     }
 
     /**

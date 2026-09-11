@@ -89,8 +89,6 @@ describe.each(VARIABLE_MODES)('roundtrip in mode %s', (mode) => {
 describe('max2tex: collapsing alternatives', () => {
     test.each([
         ['(x=2) nounor (x=-2)', 'x=\\pm 2'],
-        ['(x=2) or (x=-2)', 'x=\\pm 2'],
-        ['x=2 or x=-2', 'x=\\pm 2'],
         ['(x=a+b-c) nounor (x=a-b+c)', 'x=a\\pm b\\mp c'],
         ['(x=-2) nounor (x=2)', 'x=\\mp 2'],
     ])('%s -> %s', (maxima, expected) => {
@@ -101,6 +99,9 @@ describe('max2tex: collapsing alternatives', () => {
         ['(x=1) nounor (x=2)'],
         ['(x>0) or (x<0)'],
         ['(a) nounor (b) nounor (c)'],
+        // A logical "or" (∨ button) is a statement, never a solution set.
+        ['(x=2) or (x=-2)'],
+        ['x=2 or x=-2'],
     ])('%s is an ordinary disjunction, not a +/- pair', (maxima) => {
         const tex = toTex(maxima);
         expect(tex).not.toMatch(/\\pm|\\mp/);

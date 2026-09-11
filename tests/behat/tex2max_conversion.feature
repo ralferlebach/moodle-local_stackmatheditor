@@ -139,12 +139,12 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
   @javascript
   Scenario: A proper subset keeps its strictness
     When I enter latex "A\subset B" into the MathQuill field for "ans1"
-    Then the underlying STACK input for "ans1" should be "(subsetp(A,B) nounand A#B)"
+    Then the underlying STACK input for "ans1" should be "(subsetp(A,B) and A#B)"
 
   @javascript
-  Scenario: Logical and/or become the non-simplifying noun operators
+  Scenario: Logic buttons write and/or, not the structural noun operators
     When I enter latex "p\land q\lor r" into the MathQuill field for "ans1"
-    Then the underlying STACK input for "ans1" should be "p nounand q nounor r"
+    Then the underlying STACK input for "ans1" should be "p and q or r"
 
   @javascript
   Scenario: Implied-by is rewritten as a swapped implication

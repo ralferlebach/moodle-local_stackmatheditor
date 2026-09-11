@@ -212,8 +212,7 @@ lookahead.
   set operations next to ∖.
 - ⊆ → `subsetp(A,B)`, ⊇ → `subsetp(B,A)`; ⊂ (proper) → `(subsetp(A,B) nounand A#B)`,
   ⊃ → `(subsetp(B,A) nounand B#A)`. Toolbar: new buttons ⊆/⊇, ⊂/⊃ relabelled "proper".
-- ∧ → `nounand`, ∨ → `nounor`, ¬ → `not` (unchanged), ⇒ → `implies`, ⇐ → swapped `implies`,
-  ⇔ → `(p implies q) nounand (q implies p)`, collapsed back to ⇔ by max2tex.
+- ∧ → `nounand`, ∨ → `nounor` — **revised in iteration 5**, see below.
 - Reading: canonical forms plus legacy `in`, `notin`, `union` … infix and `and`/`or`.
 - Set literals: Maxima `{…}` is rendered as `\left\{…\right\}` (was plain grouping braces).
 
@@ -228,3 +227,45 @@ browser via requirejs (production mode).
 
 - ∀ / ∃ / ∄ (logic group) produce `forall`/`exists`/`nexists`, which STACK does not know
   either. Not part of #35; decision needed (hide buttons or map to something STACK accepts).
+
+Delivered as `sme_v1.2.0_03.zip` (2026091102).
+
+## 10. Iteration 5 (2026-09-11) — 2026091103: and/or vs. nounand/nounor (correction to #35)
+
+### Ralf's clarification (binding)
+
+- Genuine logical expressions use `and` / `or`: STACK judges the whole statement.
+- `nounand` / `nounor` are markers for structures whose parts STACK evaluates one by one:
+  solution sets (`x=±2` → `x=-2 nounor x=2`) and equation systems
+  (`a+2b=5 nounand 2a+6b=-2`). A part-by-part evaluation of a logical statement makes no sense
+  didactically.
+- ⊂ / ⊃ mean **proper** subset / superset.
+- Quantifier buttons (∀ ∃ ∄) are commented out for now.
+- `A ⊃ B` displayed as `B ⊂ A` after a roundtrip is fine.
+
+### Implementation
+
+- `operator_map.js`: ∧ → `and`, ∨ → `or`; new constants `SOLUTION_JOIN = 'nounor'` and
+  `SYSTEM_JOIN = 'nounand'`, used by tex2max (±, cases), input_fields and textarea_fields
+  (system rows: writer and reader), max2tex (± collapse, cases rendering).
+- Proper subset and ⇔ are logical statements: `(subsetp(A,B) and A#B)`,
+  `(p implies q) and (q implies p)`.
+- Equation systems: `\begin{cases}` rows, the system editor (input_fields) and multi-field steps
+  (textarea_fields) now join with `nounand` (were `and`); only `nounand` is read back as a system.
+- max2tex collapses only `nounor` into ±; a logical `or` stays `\lor` (it would otherwise turn
+  into `nounor` on the next save).
+- Chained set relations (`A ⊃ B ⊂ C`) become the conjunction of neighbouring relations:
+  `(subsetp(B,A) and B#A) and (subsetp(B,C) and B#C)`, displayed as `B ⊂ A ∧ B ⊂ C`.
+- Quantifier buttons commented out in `classes/definitions.php` (conversion rules kept).
+
+### Consequence for existing data
+
+Answers saved by earlier versions with `and` between system rows or `or` between ± alternatives
+are shown as logical `∧` / `∨` from now on and keep that meaning when edited. New input uses the
+structural operators.
+
+### Tests
+
+Jest 425 (new: logic vs. structure, chains, systems; legacy `or` no longer collapses). Changed
+AMD modules (tex2max, max2tex, operator_map, input_fields, textarea_fields) verified in a real
+browser via requirejs.

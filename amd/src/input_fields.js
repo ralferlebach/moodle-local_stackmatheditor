@@ -28,8 +28,9 @@ define([
     'jquery',
     'local_stackmatheditor/tex2max',
     'local_stackmatheditor/max2tex',
-    'local_stackmatheditor/toolbar'
-], function($, tex2max, max2tex, toolbar) {
+    'local_stackmatheditor/toolbar',
+    'local_stackmatheditor/operator_map'
+], function($, tex2max, max2tex, toolbar, OperatorMap) {
     'use strict';
 
     var TYPES = ['algebraic', 'units'];
@@ -145,7 +146,7 @@ define([
     }
 
     /**
-     * Split a top-level Maxima and-chain.
+     * Split a Maxima expression at the top-level system join (nounand).
      *
      * @param {string} expr Maxima expression.
      * @returns {string[]} Parts or the original expression.
@@ -158,6 +159,7 @@ define([
         var prev;
         var next;
         var part;
+        var kw = OperatorMap.SYSTEM_JOIN;
 
         for (i = 0; i < expr.length; i++) {
             if (expr.charAt(i) === '(') {
@@ -168,11 +170,11 @@ define([
                 depth = Math.max(0, depth - 1);
                 continue;
             }
-            if (depth !== 0 || expr.slice(i, i + 3) !== 'and') {
+            if (depth !== 0 || expr.slice(i, i + kw.length) !== kw) {
                 continue;
             }
             prev = i > 0 ? expr.charAt(i - 1) : '';
-            next = i + 3 < expr.length ? expr.charAt(i + 3) : '';
+            next = i + kw.length < expr.length ? expr.charAt(i + kw.length) : '';
             if ((prev && /[A-Za-z0-9_]/.test(prev)) ||
                     (next && /[A-Za-z0-9_]/.test(next))) {
                 continue;
@@ -181,8 +183,8 @@ define([
             if (part) {
                 parts.push(part);
             }
-            start = i + 3;
-            i += 2;
+            start = i + kw.length;
+            i += kw.length - 1;
         }
 
         part = expr.slice(start).trim();
@@ -224,7 +226,8 @@ define([
     }
 
     /**
-     * Detect a relation system represented by top-level and-connections.
+     * Detect a relation system: relations joined by the structural nounand.
+     * A logical "and" (∧ button) is a statement, not a system.
      *
      * @param {string} maxima Maxima input.
      * @returns {?Array} Relation parts or null.
@@ -283,7 +286,7 @@ define([
             return !!value;
         }).map(function(value) {
             return '(' + value + ')';
-        }).join(' and ');
+        }).join(' ' + OperatorMap.SYSTEM_JOIN + ' ');
         var oldVal = $input.val();
 
         $input.val(maxima);

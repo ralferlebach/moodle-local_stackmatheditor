@@ -272,7 +272,9 @@ Before changing code:
 4. Conversion rules live in amd/src/tex2max.js and amd/src/max2tex.js only; set-theory and
    logic operators come from the central table amd/src/operator_map.js, whose Maxima side must
    be valid in STACK's security map (set operations are functions there: union, intersection,
-   setdifference, elementp, subsetp; logic uses nounand/nounor). Every rule change gets Jest
+   setdifference, elementp, subsetp). Logic buttons write and/or (STACK judges the statement as
+   a whole); nounand/nounor are reserved for structures whose parts STACK assesses one by one:
+   equation systems (SYSTEM_JOIN) and ± solution sets (SOLUTION_JOIN). Every rule change gets Jest
    cases (tests/jest) and, where MathQuill's own normalisation matters, a Behat scenario.
 5. Toolbar entries are defined server-side (classes/definitions.php) and exported to JS; the
    client does not invent operators the server does not know.

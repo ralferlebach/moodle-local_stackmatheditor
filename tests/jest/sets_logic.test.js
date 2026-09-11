@@ -17,8 +17,9 @@
  * Issue #35: every set/logic toolbar operator maps to STACK-valid Maxima and back.
  *
  * Verified against the STACK 4.13 security map: set operations exist only as functions
- * (union, intersection, setdifference, elementp, subsetp); logic uses nounand / nounor,
- * implies is allowed, impliedby and iff are not and are rewritten.
+ * (union, intersection, setdifference, elementp, subsetp); implies is allowed, impliedby and iff
+ * are not and are rewritten. Logic buttons write and/or (a statement judged as a whole); nounand /
+ * nounor are reserved for structures: equation systems and ± solution sets.
  *
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -43,14 +44,14 @@ const MAPPINGS = [
     ['A \\setminus B', 'setdifference(A,B)'],
     ['A \\subseteq B', 'subsetp(A,B)'],
     ['A \\supseteq B', 'subsetp(B,A)'],
-    ['A \\subset B', '(subsetp(A,B) nounand A#B)'],
-    ['A \\supset B', '(subsetp(B,A) nounand B#A)'],
-    ['p \\land q', 'p nounand q'],
-    ['p \\lor q', 'p nounor q'],
+    ['A \\subset B', '(subsetp(A,B) and A#B)'],
+    ['A \\supset B', '(subsetp(B,A) and B#A)'],
+    ['p \\land q', 'p and q'],
+    ['p \\lor q', 'p or q'],
     ['\\neg p', 'not p'],
     ['p \\Rightarrow q', 'p implies q'],
     ['p \\Leftarrow q', 'q implies p'],
-    ['p \\Leftrightarrow q', '(p implies q) nounand (q implies p)'],
+    ['p \\Leftrightarrow q', '(p implies q) and (q implies p)'],
 ];
 
 /** Words STACK 4.13 does not know as set/logic operators, or knows with another meaning. */
@@ -82,10 +83,13 @@ describe('tex2max: operand structure and precedence', () => {
         ['A\\cup B\\cup C', 'union(A,B,C)'],
         ['A\\setminus B\\setminus C', 'setdifference(setdifference(A,B),C)'],
         ['\\left\\{1,2\\right\\}\\cup\\left\\{3\\right\\}', 'union({1,2},{3})'],
-        ['x\\in A\\land y\\notin B', 'elementp(x,A) nounand not elementp(y,B)'],
-        ['p\\land q\\Leftarrow r', 'r implies (p nounand q)'],
-        ['p \\wedge q', 'p nounand q'],
-        ['p\\vee q', 'p nounor q'],
+        ['x\\in A\\land y\\notin B', 'elementp(x,A) and not elementp(y,B)'],
+        ['p\\land q\\Leftarrow r', 'r implies (p and q)'],
+        ['p \\wedge q', 'p and q'],
+        ['p\\vee q', 'p or q'],
+        // A chain of relations is a conjunction of neighbouring relations (like a<b<c).
+        ['A\\supset B\\subset C', '(subsetp(B,A) and B#A) and (subsetp(B,C) and B#C)'],
+        ['x\\in A\\subseteq B', 'elementp(x,A) and subsetp(A,B)'],
     ])('%s -> %s', (latex, expected) => {
         expect(toMaxima(latex)).toBe(expected);
     });
@@ -105,8 +109,9 @@ describe('max2tex: reading canonical and legacy forms', () => {
         ['union(A,intersection(B,C))', 'A \\cup B \\cap C'],
         ['setdifference(A,union(B,C))', 'A \\setminus (B \\cup C)'],
         ['subsetp(A,B)', 'A \\subseteq B'],
-        ['(subsetp(A,B) nounand A#B)', 'A \\subset B'],
-        ['(p implies q) nounand (q implies p)', 'p \\Leftrightarrow q'],
+        ['(subsetp(A,B) and A#B)', 'A \\subset B'],
+        ['(p implies q) and (q implies p)', 'p \\Leftrightarrow q'],
+        ['(subsetp(B,A) and B#A) and (subsetp(B,C) and B#C)', 'B \\subset A \\land B \\subset C'],
         ['union({1,2},{3})', '\\left\\{1,2\\right\\} \\cup \\left\\{3\\right\\}'],
         // Legacy spellings written by earlier versions of the editor.
         ['x in A', 'x \\in A'],
@@ -134,5 +139,23 @@ describe('central operator table', () => {
     test('marker characters are unique', () => {
         const markers = all.filter((op) => op.marker).map((op) => op.marker);
         expect(new Set(markers).size).toBe(markers.length);
+    });
+});
+
+describe('logic vs. structure: and/or against nounand/nounor', () => {
+    test('logic buttons write and/or, never the noun operators', () => {
+        const out = toMaxima('p\\land q\\lor r');
+        expect(out).toBe('p and q or r');
+        expect(out).not.toMatch(/noun/);
+    });
+
+    test('an equation system joins its rows with nounand', () => {
+        expect(toMaxima('\\begin{cases}a+2b=5\\\\2a+6b=-2\\end{cases}'))
+            .toBe('(a+2*b=5) nounand (2*a+6*b=-2)');
+    });
+
+    test('a nounand system is rendered as cases, a logical and is not', () => {
+        expect(toTex('(a+2*b=5) nounand (2*a+6*b=-2)')).toContain('\\begin{cases}');
+        expect(toTex('(x>0) and (x<5)')).toBe('(x>0) \\land (x<5)');
     });
 });

@@ -395,7 +395,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
      *
      * union(A,B) → A ∪ B, intersection → ∩, setdifference → ∖, elementp → ∈,
      * not elementp → ∉, subsetp → ⊆, and the proper-subset form
-     * "subsetp(A,B) nounand A#B" written by tex2max → ⊂. Brackets are added
+     * "subsetp(A,B) and A#B" written by tex2max → ⊂. Brackets are added
      * where the precedence ∩ > ∪ requires them, and always around a set
      * operation next to ∖.
      *
@@ -433,7 +433,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
             if (m[3] === 'elementp' && args.length === 2) {
                 text = nodes[0].text + ' ' + opMarker(m[2] ? 'notin' : 'in') + ' ' + nodes[1].text;
             } else if (m[3] === 'subsetp' && args.length === 2) {
-                proper = after.match(/^\s*nounand\s*/);
+                proper = after.match(/^\s*(?:and|nounand)\s*/);
                 if (proper && after.substring(proper[0].length).indexOf(args[0] + '#' + args[1]) === 0) {
                     after = after.substring(proper[0].length + (args[0] + '#' + args[1]).length);
                     text = nodes[0].text + ' ' + opMarker('subset') + ' ' + nodes[1].text;
@@ -463,13 +463,13 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Collapse "(A implies B) nounand (B implies A)" back into A ⇔ B (#35).
+     * Collapse "(A implies B) and (B implies A)" back into A ⇔ B (#35).
      *
      * @param {string} s Maxima expression.
      * @returns {string} Expression with the ⇔ marker, or unchanged.
      */
     function collapseIff(s) {
-        var parts = splitTopLevelKeyword(s, 'nounand');
+        var parts = splitTopLevelKeyword(s, 'and');
         var first;
         var second;
 
@@ -554,16 +554,19 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     /**
      * Collapse exactly two sign alternatives back into one ± expression (#30).
      *
-     * Reads the current form "(A) nounor (B)" as well as the legacy forms
-     * "(A) or (B)" and "A or B". Anything else - more than two alternatives,
-     * or alternatives that differ in more than coupled signs - is returned
-     * unchanged and later rendered as an ordinary disjunction.
+     * Reads "(A) nounor (B)" only. A logical "or" is never collapsed: it is a
+     * statement a student made with the ∨ button, and turning it into ± would
+     * change its meaning on the next save. Anything else - more than two
+     * alternatives, or alternatives that differ in more than coupled signs -
+     * is returned unchanged and later rendered as a disjunction.
      *
      * @param {string} s Maxima expression.
      * @returns {string} Expression with ± / ∓, or the unmodified input.
      */
     function collapsePlusMinus(s) {
-        var keywords = ['nounor', 'or'];
+        // Only the structural nounor: a logical "or" typed with the ∨ button must
+        // stay a logical statement and is never reinterpreted as a solution set.
+        var keywords = [OperatorMap.SOLUTION_JOIN];
         var k;
         var parts;
         var merged;
@@ -704,7 +707,8 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
      */
     function convertRelationSystemToCases(s) {
         var normalized = stripEnclosingParens(s);
-        var parts = splitTopLevelKeyword(normalized, 'and');
+        // Only the structural nounand: a logical "and" is not an equation system.
+        var parts = splitTopLevelKeyword(normalized, OperatorMap.SYSTEM_JOIN);
         var rows = [];
         var i;
         var relation;

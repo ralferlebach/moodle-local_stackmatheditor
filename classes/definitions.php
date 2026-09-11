@@ -225,12 +225,18 @@ class definitions {
                 'label'           => get_string('group_logic', $p),
                 'default_enabled' => false,
                 'elements'        => [
+                    // @codingStandardsIgnoreStart
+                    /*
+                    // Quantifiers: deferred - STACK 4.13 knows neither forall, exists nor
+                    // nexists, so every answer written with these buttons would be invalid.
                     ['display' => '∀', 'cmd' => '\\forall',
                         'tooltip' => get_string('btn_forall', $p)],
                     ['display' => '∃', 'cmd' => '\\exists',
                         'tooltip' => get_string('btn_exists', $p)],
                     ['display' => '∄', 'cmd' => '\\nexists',
                         'tooltip' => get_string('btn_nexists', $p)],
+                    */
+                    // @codingStandardsIgnoreEnd
                     ['display' => '¬', 'cmd' => '\\neg',
                         'tooltip' => get_string('btn_neg', $p)],
                     ['display' => '∧', 'cmd' => '\\land',
