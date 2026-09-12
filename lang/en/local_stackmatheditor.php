@@ -241,6 +241,8 @@ $string['privacy:metadata:allowed_elements'] = 'JSON toolbar configuration inclu
 $string['privacy:metadata:cmid'] = 'The course module ID of the quiz.';
 $string['privacy:metadata:local_stackmatheditor'] = 'Stores toolbar configuration per quiz and question (or as a quiz default when questionbankentryid is NULL).';
 $string['privacy:metadata:questionbankentryid'] = 'The question bank entry ID (version-independent); NULL = quiz-level default.';
+$string['privacy:metadata:timecreated'] = 'When the configuration was created.';
+$string['privacy:metadata:timemodified'] = 'When the configuration was last changed.';
 $string['privacy:metadata:usermodified'] = 'The person who last modified the configuration.';
 $string['questionpreview'] = 'Question preview';
 $string['save'] = 'Save configuration';

@@ -27,12 +27,15 @@
 const {test, expect} = require('@playwright/test');
 const {env, loginAs} = require('./helpers');
 
-const CMID = env('SME_LOAD_CMID');
-/** Upper bound for "all ten editors ready" on the CI runner (PHP built-in server). */
-const READY_BUDGET_MS = Number(process.env.SME_READY_BUDGET_MS || 10000);
+/**
+ * Upper bound for "all ten editors ready" (local reference: 1.2-2.3 s). Provisional with CI
+ * headroom until the first GitHub run.
+ */
+const READY_BUDGET_MS = Number(process.env.SME_READY_BUDGET_MS || 6000);
 
 test('ten STACK questions: every editor ready in time, exactly once, also after reloading', async({browser}, info) => {
-    test.setTimeout(180000);
+    test.setTimeout(90000);
+    const CMID = env('SME_LOAD_CMID');
     const admin = await (await browser.newContext()).newPage();
     await loginAs(admin, env('SME_ADMIN_USER', 'admin'), env('SME_ADMIN_PASS'));
     await admin.goto('/admin/settings.php?section=local_stackmatheditor');

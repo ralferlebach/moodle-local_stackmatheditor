@@ -175,15 +175,16 @@ class hook_callbacks {
         $iseditor    = self::is_editor_page();
         $isconfigure = self::is_configure_page();
 
+        if (!$iseditor && !$isconfigure) {
+            return;
+        }
+
+        // Behind the page gate: no trace for pages this plugin does not touch (#53).
         quiz_helper::dbg(
             'before_footer: page=' . $PAGE->pagetype
             . ' editor=' . ($iseditor ? 'Y' : 'N')
             . ' configure=' . ($isconfigure ? 'Y' : 'N')
         );
-
-        if (!$iseditor && !$isconfigure) {
-            return;
-        }
 
         $cmid = quiz_helper::get_cmid();
 

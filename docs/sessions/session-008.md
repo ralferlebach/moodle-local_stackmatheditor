@@ -665,3 +665,120 @@ Ralf: #40 not yet; #34 as a supplementary issue comment (download
 - Plugins directory "phplint FAIL – Log file not found": see `docs/REVIEW-2026-09-11.md`,
   section 6; `PHP Lint` next to `Validating` in the dev quality job; new main job that checks the
   exact release ZIP with PHP 8.1 and publishes it as artifact.
+
+Delivered as `sme_v1.2.0_17.zip` (2026091116).
+
+## 24. Iteration 19 (2026-09-11) — 2026091117: runtimes, limits, plugins-directory comparison
+
+- Evaluation of the manual runs (Playwright, k6, JMeter; all green): they ran on `main` at
+  `e55ea52` - smoke suites only; the settings matrix, performance, a11y and attempt load tests of
+  `_16`/`_17` were not yet on that ref (the xdebug JIT warning is still in that server log too).
+- Runtimes from the GitHub API documented in `docs/ENTWICKLUNGSUMGEBUNG.md` ("Laufzeiten und
+  Höchstlaufzeiten"); `timeout-minutes` on every job; k6 thresholds (smoke p95 < 500 ms,
+  max < 3 s; attempt provisional), JMeter Duration Assertions, Playwright timeouts/budgets.
+- Ralf: no extra step. Plugin-directory job and extra dev `PHP Lint` step removed again.
+- Comparison with FlexAccess (see `docs/REVIEW-2026-09-11.md`, section 6): `$plugin->supported`
+  was missing (added `[405, 502]`); privacy metadata referenced a missing string for a dropped
+  column (fixed) - new `language_strings_test`.
+
+Delivered as `sme_v1.2.0_18.zip` (2026091117).
+
+## 25. Iteration 20 (2026-09-11) — 2026091118: Playwright workflow environment
+
+First GitHub run of the new Playwright suites (log `logs_93728539984`): the whole run aborted
+before the first test with `Environment variable SME_SETTINGS_QBE1 is not set`. The seed printed
+the variable, but the workflow copies the `export` lines into `$GITHUB_ENV` with
+`sed "s/^export \([A-Z_][A-Z_]*\)=…"` - no digits allowed, so `SME_SETTINGS_QBE1/2` were
+dropped (locally the file was sourced, which is why it never showed). Fixed in all three
+workflows (`[A-Z_][A-Z0-9_]*`).
+
+Hardening: `settings.spec.js` and `performance.spec.js` read their variables when the suite
+starts, not when the file is loaded - a missing variable now fails only that suite (checked:
+smoke still runs). `a11y.spec.js` empties the field before the keyboard check (a continued
+attempt may hold an earlier answer).
+
+Replayed locally with exactly the GitHub-style environment file (KEY=VALUE, the same sed):
+settings 6/6 (3.4 min, longest test 47 s), smoke 3/3, performance 1/1, a11y 2/2.
+
+Delivered as `sme_v1.2.0_19.zip` (2026091118).
+
+## 26. Iteration 21 (2026-09-11) — 2026091119: README badge
+
+- The log uploaded again (`logs_93728539984`) is byte-identical to the one analysed in
+  iteration 20; its seed step still shows the old `sed` filter without digits, i.e. the run
+  predates `_19`. Nothing new to fix there.
+- README: MDL Shield badge now links to the public plugin page
+  `https://mdlshield.com/plugins/local_stackmatheditor` (image URL unchanged; the badge
+  currently shows grade "A").
+
+Delivered as `sme_v1.2.0_20.zip` (2026091119).
+
+## 27. Iteration 22 (2026-09-11) — 2026091120: broken STACK questions on the CI test site
+
+Playwright run `93772663516` (with the environment fix): smoke 3/3 and the configuration-page
+a11y test green; settings "admin on/off", performance and attempt a11y red - no editor appeared
+at all. The screenshot shows every STACK question with "This question generated an unexpected
+internal error … The question has been marked as broken during editing or import."
+
+Root cause: STACK validates each imported question with the CAS and sets `isbroken` when it
+fails. A freshly installed site (build-test-site.sh) has `qtype_stack | maximacommand` unset, so
+the CAS was unreachable during the seed import. Locally the site had been configured with
+`setup-stack-cas.php` before seeding - which is why it passed here.
+
+Fix in `seed.php`: configure the CAS (platform linux, maxima, maximalocal) and require a genuine
+connection before importing; after each import fail with a clear message if STACK marked the
+question broken.
+
+Verified on a freshly built site exactly like CI (`build-test-site.sh`, `maximacommand` unset):
+0 of 12 STACK questions broken; Playwright with the GitHub-style environment: smoke 3/3,
+settings 6/6 (2.6 min), performance 1/1, a11y 2/2.
+
+Delivered as `sme_v1.2.0_21.zip` (2026091120).
+
+## 28. Iteration 23 (2026-09-11) — 2026091121: cold CAS herd in the attempt load test
+
+JMeter run `93835264702`: smoke 100/100; attempt plan: `POST start attempt` 0/10, then 71 failed
+logins. The failed logins are a follow-up: with `on_sample_error=startnextloop` each thread
+re-ran its once-only login while already logged in.
+
+Reproduced on a site built exactly like CI (fresh, CAS cache empty, 8 PHP workers, 10 threads,
+ramp-up 5 s): every `POST startattempt.php` took ~108 s - ten students start at once, each start
+instantiates ten STACK questions with a fresh Maxima process. After warming the CAS result cache
+once, the same run starts the attempts in 0.5-2.6 s and is green (197 attempt pages, 191
+get_config calls, 0 errors).
+
+Fix:
+- `seed.php` instantiates every seeded STACK question once (question usage, not saved) and so
+  fills STACK's CAS result cache before any test (12 questions in ~10 s locally).
+- JMeter attempt plan: errors in the loop no longer restart the thread; a failed login or attempt
+  start stops that thread (Result Status Action Handler) instead of producing follow-up errors.
+- Start-attempt limit 20 s (once per student).
+
+Note for real courses (not a plugin issue): the first attempts of a STACK quiz started by many
+students at the same moment pay the cold-CAS cost; STACK's optimised Maxima image and the CAS
+cache reduce it.
+
+Delivered as `sme_v1.2.0_22.zip` (2026091121).
+
+## 29. Iteration 24 (2026-09-11) — load tests green on GitHub
+
+Both manual load workflows green with the warmed CAS cache. Measured on the runner:
+
+| | k6 (10 VUs, 60 s) | JMeter (10 threads, 60 s) |
+|---|---|---|
+| Requests / samples | 365, 0 failed, 755/755 checks | 578, 0 failed |
+| Attempt page (10 STACK questions) | p95 221 ms, max 452 ms | p95 157 ms, max 243 ms |
+| `get_config` | p95 52 ms, max 144 ms | p95 30 ms, max 50 ms |
+| Attempt start (once per student) | — | max 743 ms |
+
+Smoke unchanged: k6 300/300 checks, p95 42 ms; JMeter 100/100, login page max 83 ms.
+
+One observation: k6's `http_req_duration` max is 43 s, while every measured page and service call
+stays well below 0.5 s. The peak is the once-per-VU setup (login + startattempt), which all ten
+VUs run at the same second - the same herd effect the seed warm-up fixed for STACK, here on
+Moodle's login/attempt creation. It is outside the trends the test judges (`sme_*`), so the run is
+green and the numbers for the page and the web service are unaffected. JMeter ramps up over 5 s
+and shows the same step at 743 ms.
+
+Runtimes and limits in `docs/ENTWICKLUNGSUMGEBUNG.md` updated with the GitHub figures; the
+"vorläufig" marks are gone for the attempt load.

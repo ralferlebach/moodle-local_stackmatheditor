@@ -71,6 +71,7 @@ jobs:
   lint-php:
     name: "PHP"
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
         with:
@@ -113,6 +114,7 @@ jobs:
   codeanalysis:
     name: "Code analysis (phpmd + phpcpd, advisory)"
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
         with:
@@ -160,6 +162,7 @@ jobs:
   quality:
     name: "Quality (codechecker / phpdoc / savepoints / validate / mustache / gherkinlint)"
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -207,11 +210,6 @@ jobs:
           MOODLE_BRANCH: MOODLE_405_STABLE
       # After install: NO <plugin> argument. The default comes from ci/.env and points to the
       # installed copy inside the Moodle tree - which is what makes the tree-only sniffs fire.
-      # Also here (not only in the "PHP" job): tools that read one job's log - such as the
-      # Moodle plugins directory checker - then find phplint next to validate.
-      - name: PHP Lint
-        if: ${{ always() }}
-        run: moodle-plugin-ci phplint 2>&1 | tee ci-logs/phplint-tree.log
       - name: Moodle Code Checker
         if: ${{ always() }}
         run: moodle-plugin-ci codechecker --max-warnings 0 --exclude=PSR1.Classes.ClassDeclaration,moodle.Commenting.TodoComment 2>&1 | tee ci-logs/codechecker.log
@@ -247,6 +245,7 @@ jobs:
   javascript:
     name: "JS/CSS"
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -331,6 +330,7 @@ jobs:
   phpunit:
     name: "PHPUnit / ${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.database }}"
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     needs: [lint-php]
     services:
       postgres:
@@ -418,6 +418,7 @@ jobs:
   behat:
     name: "Behat / MOODLE_405_STABLE / PHP 8.2 / Chrome"
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     needs: [lint-php, javascript]
     services:
       mariadb:
@@ -515,6 +516,7 @@ jobs:
   stale-files:
     name: Stale files
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - name: Check out plugin
         uses: actions/checkout@v6
@@ -546,6 +548,7 @@ jobs:
     name: CI complete
     needs: [lint-php, codeanalysis, quality, phpunit, behat, stale-files]
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     if: always()
     steps:
       - name: All dev jobs must have succeeded

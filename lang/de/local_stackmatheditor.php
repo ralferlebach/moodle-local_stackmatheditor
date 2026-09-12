@@ -241,6 +241,8 @@ $string['privacy:metadata:allowed_elements'] = 'JSON-Toolbar-Konfiguration inkl.
 $string['privacy:metadata:cmid'] = 'Die Kursmodul-ID des Quiz.';
 $string['privacy:metadata:local_stackmatheditor'] = 'Speichert die Toolbar-Konfiguration pro Quiz und Frage (oder als Quiz-Standard, wenn questionbankentryid NULL ist).';
 $string['privacy:metadata:questionbankentryid'] = 'Die Fragenbank-Eintrags-ID (versionsunabhängig); NULL = Quiz-Standard.';
+$string['privacy:metadata:timecreated'] = 'Zeitpunkt, zu dem die Konfiguration angelegt wurde.';
+$string['privacy:metadata:timemodified'] = 'Zeitpunkt der letzten Änderung der Konfiguration.';
 $string['privacy:metadata:usermodified'] = 'Die Person, die die Konfiguration zuletzt geändert hat.';
 $string['questionpreview'] = 'Fragenvorschau';
 $string['save'] = 'Konfiguration speichern';

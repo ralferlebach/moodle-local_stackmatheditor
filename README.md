@@ -2,7 +2,7 @@ moodle-local_stackmatheditor
 ============================
 
 [![Moodle Plugin CI](https://github.com/ralferlebach/moodle-local_stackmatheditor/actions/workflows/moodle-plugin-ci-main.yml/badge.svg?branch=main)](https://github.com/ralferlebach/moodle-local_stackmatheditor/actions/workflows/moodle-plugin-ci-main.yml?query=branch%3Amain)
-[![MDL Shield](https://img.shields.io/endpoint?url=https%3A%2F%2Fmdlshield.com%2Fapi%2Fbadge%2Flocal_stackmatheditor)](https://mdlshield.com/dashboard/plugins/local_stackmatheditor)
+[![MDL Shield](https://img.shields.io/endpoint?url=https%3A%2F%2Fmdlshield.com%2Fapi%2Fbadge%2Flocal_stackmatheditor)](https://mdlshield.com/plugins/local_stackmatheditor)
 
 STACK Math Editor replaces the plain text answer inputs of **STACK** questions with a visual
 **MathQuill** formula editor and a configurable toolbar. Students write mathematics as they would
@@ -37,6 +37,12 @@ question which toolbar groups are offered.
 
 Features
 --------
+
+### Version 1.3 (in development)
+
+* Privacy: full Moodle privacy API support - a data request reports, exports and anonymises the
+  "last modified by" reference of toolbar configurations (the configurations themselves are
+  course data and are kept).
 
 ### Version 1.2
 

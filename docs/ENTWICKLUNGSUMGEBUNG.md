@@ -242,6 +242,39 @@ gepinnt.
 es muss im selben Schritt wie die Tests *gesourct* werden, weil ein Server aus einem früheren
 Schritt nicht zuverlässig weiterlebt.
 
+### Laufzeiten und Höchstlaufzeiten
+
+Gemessen auf GitHub am 11.09.2026 (Commit `e55ea52`, `main`). Die `timeout-minutes` der Jobs und
+die Schwellen der Tests sind daraus mit Puffer abgeleitet; ein Lauf, der sie überschreitet, ist
+rot. Werte mit „(vorläufig)" stammen aus lokalen Referenzläufen und werden nach dem ersten
+GitHub-Lauf der neuen Suiten nachgeschärft.
+
+| Workflow / Job | gemessen | Höchstlaufzeit |
+|---|---|---|
+| Main: `CI / <Moodle> / <PHP> / <DB>` (8 Zellen) | 14,1–20,1 min (davon Behat 9,8–15,3 min) | 35 min |
+| Main: Coverage | 3,4 min | 12 min |
+| Main: Jest / Release-Artefakt / Stale files / Gates | je < 0,5 min | je 5 min |
+| Main gesamt | 20,5 min | – |
+| Dev gesamt | 14,3–17,3 min | Jobs: PHP/Codeanalyse 10, Quality/JS-CSS 15, PHPUnit 20, Behat 30, Rest 5 min |
+| Playwright (nur Smoke) | 2,7–4,5 min | 20 min (inkl. Matrix, Performance, a11y) |
+| k6 (nur Smoke) | 2,8–3,2 min | 15 min (inkl. Attempt-Last) |
+| JMeter (nur Smoke) | 2,8–3,2 min | 15 min (inkl. Attempt-Last) |
+| k6 mit Attempt-Last (60 s) | 5,6 min | 15 min |
+| JMeter mit Attempt-Last (60 s) | 5,5 min | 15 min |
+
+| Test | gemessen | Grenze |
+|---|---|---|
+| Playwright Smoke (je Test) | 1,3 s / 4,2 s / 0,02 s | 20 s |
+| Playwright Einstellungsmatrix (je Test) | lokal 9–40 s | 120 s |
+| Playwright Performance: 10 Editoren bereit | lokal 1,2–2,3 s | 6 s (vorläufig) |
+| Playwright a11y | lokal 30 s | 90 s |
+| k6 Smoke `http_req_duration` | p95 42–95 ms, max 125–359 ms | p95 < 500 ms, max < 3 s |
+| k6 Attempt: Versuchsseite (10 STACK-Fragen) | p95 221 ms, max 452 ms | p95 < 3 s, max < 8 s |
+| k6 Attempt: `get_config` | p95 52 ms, max 144 ms | p95 < 0,8 s, max < 3 s |
+| k6 Attempt: Anmeldung + Versuchsstart (einmal je VU) | max 43 s beim gleichzeitigen Start der 10 VUs | keine eigene Schwelle (`http_req_duration` bewertet nur die Schleife) |
+| JMeter Smoke: Login-Seite / AMD-Modul | max 83 ms / 5 ms | 3000 ms (kalter erster Aufruf bis ~2 s) / 500 ms |
+| JMeter Attempt: Seite / `get_config` / Start | max 243 ms / 50 ms / 743 ms | 8000 / 3000 / 20000 ms |
+
 ### Artefakte
 
 Jeder Job lädt ein `error-summary-*`-ZIP mit allen Logs hoch. Behat legt `behat_dump` und
@@ -329,6 +362,9 @@ Before finishing:
 | Behat-Schritt findet deutschen Text nicht | Feature-Dateien müssen englische UI-Strings verwenden |
 | JMeter-Job grün, obwohl alles 404 war | JMeter endet immer mit 0 — nur `check_jtl.py` entscheidet |
 | Stale-files-Job rot | Datei aus `db/removed_files.txt` liegt noch im Repo — `git rm` |
+| Testseite: STACK-Fragen zeigen „unexpected internal error … marked as broken during editing or import", kein Editor | Beim Import validiert STACK jede Frage mit dem CAS; auf einer frisch installierten Seite ist `maximacommand` leer. `seed.php` richtet den CAS jetzt vor dem Import ein und bricht ab, falls eine Frage als defekt markiert wird |
+| Last-Test: „POST start attempt" scheitert oder dauert > 100 s | Kalter CAS: alle simulierten Studierenden starten gleichzeitig, jeder Start instanziiert zehn STACK-Fragen mit frischem Maxima. `seed.php` wärmt den CAS-Ergebnis-Cache vorher an (lokal gemessen: kalt ~108 s je Start, vorgewärmt 0,5–2,6 s) |
+| Playwright/Last-Workflow: „Environment variable SME_… is not set" | Variablen aus `seed.php` erreichen `$GITHUB_ENV` nur, wenn der `sed`-Filter Ziffern im Namen zulässt (`[A-Z_][A-Z0-9_]*`) |
 
 ---
 

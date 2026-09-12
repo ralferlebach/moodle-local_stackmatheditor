@@ -50,6 +50,26 @@ foreach (['local_stackmatheditor', 'qtype_stack'] as $component) {
 // Enrolment notifications would try to send mail on a site without a mail setup.
 $CFG->noemailever = true;
 
+// STACK validates every imported question with the CAS and marks it broken when Maxima cannot be
+// reached - students then see "unexpected internal error" and no editor. A freshly installed
+// site has no working CAS configuration yet, so set it up and prove the connection first.
+require_once($CFG->dirroot . '/question/type/stack/stack/cas/installhelper.class.php');
+require_once($CFG->dirroot . '/question/type/stack/stack/cas/connectorhelper.class.php');
+if (get_config('qtype_stack', 'platform') !== 'linux' || !get_config('qtype_stack', 'maximacommand')) {
+    set_config('platform', 'linux', 'qtype_stack');
+    set_config('maximacommand', 'maxima', 'qtype_stack');
+    set_config('maximaversion', 'default', 'qtype_stack');
+    set_config('casresultscache', 'db', 'qtype_stack');
+    set_config('castimeout', '30', 'qtype_stack');
+    purge_all_caches();
+}
+stack_cas_configuration::create_maximalocal();
+[$casmessage, $casdebug, $casok] = stack_connection_helper::stackmaxima_genuine_connect();
+if (!$casok) {
+    fwrite(STDERR, "STACK cannot reach Maxima - the imported questions would be broken.\n{$casmessage}\n{$casdebug}\n");
+    exit(1);
+}
+
 $students = (int) (getenv('SME_STUDENTS') ?: 20);
 $password = 'Test!2345';
 $gen = new testing_data_generator();
@@ -64,6 +84,7 @@ $gen = new testing_data_generator();
  * @return int Question id.
  */
 function local_stackmatheditor_seed_import(string $file, stdClass $category, stdClass $course, string $name): int {
+    global $DB;
     $xml = file_get_contents(__DIR__ . '/../fixtures/' . $file);
     $xml = preg_replace('~<name>\s*<text>[^<]*</text>~', '<name><text>' . $name . '</text>', $xml, 1);
     $tmp = make_request_directory() . '/' . $file;
@@ -81,7 +102,11 @@ function local_stackmatheditor_seed_import(string $file, stdClass $category, std
     if (!$ok || empty($format->questionids)) {
         throw new moodle_exception('Import of ' . $file . ' failed.');
     }
-    return (int) reset($format->questionids);
+    $questionid = (int) reset($format->questionids);
+    if ($DB->get_field('qtype_stack_options', 'isbroken', ['questionid' => $questionid])) {
+        throw new moodle_exception('STACK marked the imported question from ' . $file . ' as broken.');
+    }
+    return $questionid;
 }
 
 /**
@@ -157,6 +182,33 @@ $loadcm = local_stackmatheditor_seed_quiz(
     'SME Load Quiz',
     array_merge(array_fill(0, 8, 'stack_algebraic.xml'), array_fill(0, 2, 'stack_textarea.xml'))
 );
+
+// Warm STACK's CAS result cache: instantiate every question once now. Otherwise the first
+// attempts of all simulated students start at the same moment, each instantiating ten STACK
+// questions with a fresh Maxima process, and the herd runs into the CAS timeout on a small CI
+// runner - the load test would then measure the cold CAS, not the page and the plugin.
+$started = microtime(true);
+$questionids = $DB->get_fieldset_sql(
+    "SELECT qv.questionid
+       FROM {quiz_slots} qs
+       JOIN {quiz} q ON q.id = qs.quizid
+       JOIN {question_references} qr ON qr.itemid = qs.id
+            AND qr.component = 'mod_quiz' AND qr.questionarea = 'slot'
+       JOIN {question_versions} qv ON qv.questionbankentryid = qr.questionbankentryid
+      WHERE q.course = :courseid",
+    ['courseid' => $course->id]
+);
+$quba = question_engine::make_questions_usage_by_activity('local_stackmatheditor', $context);
+$quba->set_preferred_behaviour('adaptive');
+foreach (array_unique($questionids) as $questionid) {
+    $quba->add_question(question_bank::load_question($questionid));
+}
+$quba->start_all_questions();
+fwrite(STDERR, sprintf(
+    "STACK CAS cache warmed for %d questions in %.1f s.\n",
+    count(array_unique($questionids)),
+    microtime(true) - $started
+));
 
 // Question bank entry ids of the settings quiz, in slot order (question-level configuration).
 $qbeids = $DB->get_fieldset_sql(

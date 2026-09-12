@@ -152,6 +152,42 @@ class behat_local_stackmatheditor extends behat_base {
     }
 
     /**
+     * Open the quiz-level configuration page for a given question case (#54).
+     *
+     * @Given I am on the STACK MathQuill quiz configuration page for :quizname with question :case
+     * @param string $quizname Quiz name.
+     * @param string $case     "stack" for the quiz's STACK question, anything else for a
+     *                         question bank entry id that does not exist.
+     */
+    public function i_am_on_quiz_config_page_with_question(string $quizname, string $case): void {
+        global $DB;
+
+        $quiz = $DB->get_record('quiz', ['name' => $quizname], '*', MUST_EXIST);
+        $cm = get_coursemodule_from_instance('quiz', $quiz->id, 0, false, MUST_EXIST);
+        $qbeid = 999999999;
+        if ($case === 'stack') {
+            $qbeid = (int) $DB->get_field_sql(
+                "SELECT qr.questionbankentryid
+                   FROM {quiz_slots} qs
+                   JOIN {question_references} qr ON qr.itemid = qs.id
+                        AND qr.component = 'mod_quiz' AND qr.questionarea = 'slot'
+                  WHERE qs.quizid = :quizid
+               ORDER BY qs.slot",
+                ['quizid' => $quiz->id],
+                IGNORE_MULTIPLE
+            );
+        }
+        $url = new \moodle_url(
+            '/local/stackmatheditor/configure.php',
+            ['cmid' => $cm->id, 'qbeid' => $qbeid]
+        );
+        $this->getSession()->visit($url->out(false));
+        if ($this->running_javascript()) {
+            $this->getSession()->wait(2000, "document.readyState === 'complete'");
+        }
+    }
+
+    /**
      * Assert that the browser shows the view or edit page of a quiz (#47).
      *
      * @Then I should be on the quiz :pagetype page of :quizname

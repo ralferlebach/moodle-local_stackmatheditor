@@ -61,7 +61,18 @@ if (!$isquiz && !$isadaptivequiz) {
 
 $course = get_course($cm->course);
 
-// Load the activity record.
+// Authentication and authorisation FIRST: nothing question-specific happens before the login and
+// capability gates, so an anonymous request cannot tell existing from missing or STACK from
+// non-STACK questions, and runs no question-bank queries (#54).
+$context = \context_module::instance($cmid);
+require_login($course, false, $cm);
+
+// Mod_adaptivequiz does not define a :manage capability; :viewreport is
+// granted to editingteacher and manager and is the closest equivalent.
+$capname = $isadaptivequiz ? 'mod/adaptivequiz:viewreport' : 'mod/quiz:manage';
+require_capability($capname, $context);
+
+// Load the activity record (not needed for the login gate).
 $activity = $DB->get_record($modname, ['id' => $cm->instance], '*', MUST_EXIST);
 
 // Determine operating mode.
@@ -95,15 +106,6 @@ if (!$quizmode) {
     }
     $questionid = (int) $questionrecord->id;
 }
-
-// Context and permissions.
-$context = \context_module::instance($cmid);
-require_login($course, false, $cm);
-
-// Mod_adaptivequiz does not define a :manage capability; :viewreport is
-// granted to editingteacher and manager and is the closest equivalent.
-$capname = $isadaptivequiz ? 'mod/adaptivequiz:viewreport' : 'mod/quiz:manage';
-require_capability($capname, $context);
 
 // Return URL: the calling page passed by every configuration link; only a direct call without
 // (or with an unusable) returnurl falls back to the activity's view page (#47).

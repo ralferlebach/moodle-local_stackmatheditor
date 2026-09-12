@@ -50,9 +50,11 @@ export const options = {
     thresholds: {
         'checks': ['rate>0.99'],
         'http_req_failed': ['rate<0.01'],
-        // Ten STACK questions per page, PHP's built-in server in CI: generous, but bounded.
-        'sme_attempt_page_duration': ['p(95)<8000'],
-        'sme_get_config_duration': ['p(95)<1500'],
+        // Local reference (10 VUs, PHP built-in server with 16 workers): attempt page p95 941 ms,
+        // max 1.2 s; get_config p95 219 ms, max 688 ms. Provisional limits with CI headroom -
+        // tighten after the first GitHub run (docs/ENTWICKLUNGSUMGEBUNG.md, section 7).
+        'sme_attempt_page_duration': ['p(95)<3000', 'max<8000'],
+        'sme_get_config_duration': ['p(95)<800', 'max<3000'],
     },
 };
 

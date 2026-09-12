@@ -24,9 +24,6 @@
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 function xmldb_local_stackmatheditor_upgrade(int $oldversion): bool {
-    global $DB;
-    $dbman = $DB->get_manager();
-    $targettable = new xmldb_table('local_stackmatheditor');
-
+    // No upgrade steps yet; a fresh install comes from db/install.xml (#56).
     return true;
 }
