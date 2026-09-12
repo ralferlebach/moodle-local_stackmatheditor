@@ -71,3 +71,48 @@ a schema change.
 
 phplint, codechecker (max-warnings 0), phpdoc, validate, savepoints, gherkinlint, grunt: green.
 PHPUnit 80 tests / 815 assertions. Jest unchanged at 711.
+
+---
+
+## 7. #40 work package A – Desmos fork evaluated and rolled back (2026091201 → 2026091202)
+
+### What was tried
+
+`desmosinc/mathquill` was built from the pinned commit `bb9974ab637e1dd57673fe8c96a00c85cfc3da37`
+(2026-08-07, `npm install && make`), its runtime artefacts were vendored, and the whole browser
+suite ran against it: new `mathquill_api.spec.js` (interface factory, field on an existing and a
+new element, latex/write/cmd/typedText/keystroke/focus/el/moveToRightEnd, StaticMath, edit and
+enter handlers, no page errors), smoke 3/3, performance 1/1, a11y 2/2, settings 6/6. Technically
+the migration worked.
+
+### Why it was rolled back (Ralf's decision)
+
+The fork contains **no matrix or vector commands either** (`LatexCmds.matrix` and friends are
+absent; a full-text search of the build finds no matrix implementation). The migration was the
+stated technical basis for work packages B and C - but those have to be plugin-side structured
+editors in either case, exactly like the existing multi-line editor. Without that benefit the
+change only buys a different vendor, a larger unminified build and a permanent local
+modification, so it was reverted.
+
+State after the rollback: `thirdparty/mathquill` (files byte-identical to 1.2.0),
+`thirdparty/readme_moodle.txt`, `thirdpartylibs.xml` and the README third-party section are back
+on MathQuill 0.10.1 from `mathquill/mathquill`.
+
+### Kept
+
+`tests/playwright/mathquill_api.spec.js` stays: it guards the vendored runtime the plugin
+actually ships and would catch a regression in any future vendor change. It is green against
+0.10.1.
+
+### Findings worth keeping (for a later decision on #40 A)
+
+- The fork dropped the jQuery dependency of 0.10.1; the plugin sets `window.jQuery` before
+  loading anyway, so nothing depends on it either way.
+- `handlers.enter` does not fire for a programmatic `keystroke('Enter')` in either build - only
+  a real key press triggers it. The API test uses a real one.
+- Neither build offers matrices or vectors; B and C are plugin work regardless of the vendor.
+
+### Open in #40
+
+A is on hold (no benefit without matrix support upstream); B (matrix editor) and C (vector
+editor) are open; D and E are done (#44, #46 in 1.2.0).
