@@ -1002,6 +1002,92 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Operator names MathQuill recognises while typing (#58, #60).
+     *
+     * MathQuill scans every contiguous run of letters and un-italicises any operator name it
+     * finds inside it, at any position. Typing "Umax" therefore produces the LaTeX "U\\max ",
+     * and "maximum" produces "\\max imum". The user typed one identifier; MathQuill split it.
+     *
+     * The list mirrors MathQuill's own defaults (BuiltInOpNames plus AutoOpNames). It has to be
+     * kept in sync when the MathQuill configuration changes, which is why it is built the same
+     * way MathQuill builds it instead of being written out by hand.
+     *
+     * @returns {Object} Word set of operator names.
+     */
+    function buildAutoOperatorNames() {
+        var names = (
+            'arg deg det dim exp gcd hom inf ker lg lim ln log max min sup ' +
+            'limsup liminf injlim projlim Pr gcf hcf lcm proj span'
+        ).split(' ');
+        var trigs = 'sin cos tan sec cosec csc cotan cot ctg'.split(' ');
+        var i;
+
+        for (i = 0; i < trigs.length; i++) {
+            names.push(trigs[i]);
+            names.push('arc' + trigs[i]);
+            names.push(trigs[i] + 'h');
+            names.push('ar' + trigs[i] + 'h');
+            names.push('arc' + trigs[i] + 'h');
+        }
+
+        return buildWordSet(names);
+    }
+
+    var AUTO_OPERATOR_NAMES = buildAutoOperatorNames();
+
+    /**
+     * Re-join operator names that MathQuill split out of a longer identifier (#58, #60).
+     *
+     * The editor cannot tell "Umax" (one variable) from "U max" (a product) once MathQuill has
+     * turned the input into "U\\max ". The deciding question is whether the operator name is
+     * applied to anything: a name followed by an opening delimiter is a function call and stays
+     * one, everything else is part of the identifier the user typed.
+     *
+     *     U\\max              -> Umax          (one identifier, #58)
+     *     \\max imum          -> maximum       (one identifier)
+     *     a\\sin\\left(x\\right) -> unchanged    (a times sin of x)
+     *     \\max\\left(a,b\\right) -> unchanged    (the function max)
+     *
+     * This runs before markControlWords(), so a re-joined name never gets a token boundary and
+     * can no longer be separated by resolveBoundaries() or split by the variable-mode logic.
+     *
+     * @param {string} s LaTeX input.
+     * @returns {string} Input with glued operator names merged into their identifier.
+     */
+    function mergeGluedOperatorNames(s) {
+        // \operatorname{word} (MathQuill's form for names LaTeX does not know) and \word.
+        var pattern = /\\operatorname\{([A-Za-z]+)\}|\\([A-Za-z]+)( ?)/g;
+
+        return s.replace(pattern, function(match, braced, bare, space, offset) {
+            var name = braced || bare;
+            var before = offset > 0 ? s.charAt(offset - 1) : '';
+            var after = s.substring(offset + match.length);
+
+            if (!AUTO_OPERATOR_NAMES[name]) {
+                return match;
+            }
+
+            // Applied to an argument: a function call, not part of a name.
+            if (/^(\(|\\left|\{|\^|_)/.test(after)) {
+                return match;
+            }
+
+            // Letters follow directly: the user typed one longer word.
+            if (/^[A-Za-z]/.test(after)) {
+                return name;
+            }
+
+            // An identifier character precedes: the name is its tail. The \operatorname form
+            // has no trailing space group, hence the fallback.
+            if (/[A-Za-z0-9]/.test(before)) {
+                return name + (space || '');
+            }
+
+            return match;
+        });
+    }
+
+    /**
      * Put a token boundary in front of every LaTeX control word.
      *
      * Only control words (backslash + letters) are marked; the LaTeX row break
@@ -1485,6 +1571,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // stack mode ("gamma (x)", "epsilon _0").
         s = s.replace(/(\\[a-zA-Z]+)\s+(?=[^A-Za-z0-9\s])/g, '$1');
         s = convertCasesToAndRelations(s);
+        s = mergeGluedOperatorNames(s);
         s = markControlWords(s);
         // Set braces survive the generic brace removal below (#39: no
         // backslash may reach the CAS string).
@@ -1532,6 +1619,11 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = s.replace(/\\text\{([^{}]*)\}/g, '$1');
         s = s.replace(/\\operatorname\{([^{}]*)\}/g, '$1');
         s = s.replace(/\^\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g, '^($1)');
+        // A subscript group that is followed directly by more characters is not part of the
+        // subscript (#59): U_{m}ax is U_m followed by ax, and must never collapse into U_max,
+        // which is what U_{max} means. The boundary marker keeps the two apart for the
+        // variable-mode logic and for resolveBoundaries().
+        s = s.replace(/_\{([^{}]*)\}(?=[A-Za-z0-9])/g, '_$1' + BOUNDARY);
         s = s.replace(/_\{([^{}]*)\}/g, '_$1');
 
         var funcs = [
