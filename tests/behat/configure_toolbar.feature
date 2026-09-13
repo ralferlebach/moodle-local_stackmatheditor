@@ -125,6 +125,4 @@ Feature: MathQuill toolbar configuration
   Scenario: A logged-in user without the manage capability is stopped before the question is resolved
     Given a STACK question exists in quiz "Test Quiz"
     And I log in as "student1"
-    When I am on the STACK MathQuill quiz configuration page for "Test Quiz" with question "nonexistent"
-    Then I should see "Sorry, but you do not currently have permissions to do that"
-    And I should not see "Cannot resolve the question"
+    Then the STACK MathQuill quiz configuration page for "Test Quiz" with question "nonexistent" is denied to me

@@ -188,6 +188,44 @@ class behat_local_stackmatheditor extends behat_base {
     }
 
     /**
+     * Assert that the configuration page refuses a user without the capability (#54).
+     *
+     * Moodle renders a permission error as an exception page, and Behat's after-step hook fails
+     * any step that ends on one. The check therefore happens inside this step, which then leaves
+     * the error page again so the hook sees a clean page.
+     *
+     * @Then the STACK MathQuill quiz configuration page for :quizname with question :case is denied to me
+     * @param string $quizname Quiz name.
+     * @param string $case     "stack" for the quiz's STACK question, anything else for a
+     *                         question bank entry id that does not exist.
+     */
+    public function quiz_config_page_is_denied(string $quizname, string $case): void {
+        $this->i_am_on_quiz_config_page_with_question($quizname, $case);
+
+        $text = $this->getSession()->getPage()->getText();
+
+        if (strpos($text, 'do not currently have permissions') === false) {
+            throw new ExpectationException(
+                'Expected a permission error on the configuration page, got: ' . $text,
+                $this->getSession()
+            );
+        }
+
+        if (strpos($text, 'Cannot resolve the question') !== false) {
+            throw new ExpectationException(
+                'The question was resolved before the capability was checked.',
+                $this->getSession()
+            );
+        }
+
+        // Leave the exception page before the after-step hook inspects it.
+        $this->getSession()->visit((new \moodle_url('/'))->out(false));
+        if ($this->running_javascript()) {
+            $this->getSession()->wait(2000, "document.readyState === 'complete'");
+        }
+    }
+
+    /**
      * Assert that the browser shows the view or edit page of a quiz (#47).
      *
      * @Then I should be on the quiz :pagetype page of :quizname

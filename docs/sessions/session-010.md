@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091302 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091303 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -169,7 +169,49 @@ is invented behind the author's back.
 can — that is the point of the specification, but it is worth a look during the first real
 question test.
 
-## 7. Next steps
+## 7. Iteration 4 (2026091303): the two Behat failures from the CI run
+
+The dev run was green everywhere except Behat: 45 of 47 scenarios passed.
+
+### `sqrt((p^(2))/(4-q))` instead of `sqrt((p^2)/(4-q))`
+
+A direct consequence of the MathQuill upgrade, not of the matrix work. The 2017 release wrote a
+squared term as `p^2`; the current build normalises it to `p^{2}`, and tex2max turned every
+`^{…}` into `^(…)`. Every squared term in every answer was therefore reaching the CAS with an
+extra pair of parentheses.
+
+The superscript rule now drops the parentheses when the exponent is a single digit group or a
+single letter, and keeps them otherwise:
+
+    p^{2}   -> p^2         x^{n+1} -> x^(n+1)
+    x^{10}  -> x^10        x^{ab}  -> x^(ab)
+    e^{x}   -> e^x         x^{-1}  -> x^(-1)
+
+`x^{ab}` deliberately keeps its parentheses: `x^ab` would be split into `x^a*b` by implicit
+multiplication. Seven cases were added to `conversion.test.js`.
+
+### The capability scenario could never pass
+
+`configure.php` answers a request without `mod/quiz:manage` with `required_capability_exception`,
+which is correct and is what the scenario wanted to prove. But Moodle renders that as an
+exception page, and Behat's after-step hook fails *any* step that ends on one — so the
+`When I am on the … configuration page` step failed before the `Then` could assert anything. The
+scenario was unrunnable as written, independently of this branch.
+
+The check now lives in a step of its own, `… with question "nonexistent" is denied to me`: it
+visits the page, asserts the permission message, asserts that "Cannot resolve the question" is
+*not* there (the actual point of #54 — the capability gate comes before question resolution) and
+then navigates away, so the after-step hook sees a clean page.
+
+### Verification of iteration 4
+
+- Jest: 760 green (753 before).
+- `grunt amd`: rebuilt, included.
+- PHPCS over `classes`, `lang`, `tests`, `settings.php`, `configure.php`, `version.php`: green.
+- Behat itself could not be run here (no database). The gherkin change is one line; the step is
+  new code and is the thing to watch in the next run.
+
+## 8. Next steps
 
 1. Behat for the matrix path: insert through the toolbar, fill, save, reload and check that the
    pre-filled answer is the same matrix.

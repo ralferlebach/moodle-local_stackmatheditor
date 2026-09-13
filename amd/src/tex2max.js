@@ -1636,7 +1636,20 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = s.replace(/\\mathrm\{([^{}]*)\}/g, '$1');
         s = s.replace(/\\text\{([^{}]*)\}/g, '$1');
         s = s.replace(/\\operatorname\{([^{}]*)\}/g, '$1');
-        s = s.replace(/\^\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g, '^($1)');
+        // A superscript keeps its parentheses unless the exponent is a single unambiguous token.
+        // MathQuill writes x^{2} where older versions wrote x^2, and x^(2) would otherwise reach
+        // the CAS for every squared term. Anything longer than one digit group or one letter stays
+        // wrapped: x^ab would be split into x^a*b by implicit multiplication.
+        s = s.replace(
+            /\^\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
+            function(match, exponent) {
+                if (/^\d+$/.test(exponent) || /^[A-Za-z]$/.test(exponent)) {
+                    return '^' + exponent;
+                }
+
+                return '^(' + exponent + ')';
+            }
+        );
         s = s.replace(/_\{([^{}]*)\}/g, '_$1');
 
         var funcs = [
