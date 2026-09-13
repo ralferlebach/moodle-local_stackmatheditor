@@ -325,7 +325,10 @@ answers remain in STACK.
 Third-party libraries
 ---------------------
 
-MathQuill 0.10.1 (https://mathquill.com), Mozilla Public License 2.0 – see `thirdpartylibs.xml`.
+MathQuill 0.10.1-sme.1 (https://mathquill.com), Mozilla Public License 2.0 – see
+`thirdpartylibs.xml`. This is a build of the fork
+https://github.com/ralferlebach/mathquill, which adds editable matrix and vector
+environments; `thirdparty/readme_moodle.txt` records the base commit and the build steps.
 
 
 Maintainers
