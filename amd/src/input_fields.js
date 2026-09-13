@@ -339,6 +339,9 @@ define([
             // Typing "U_max" would otherwise give U_{\max}: a subscript is a label, not a
             // function call (#61). Ignored by MathQuill 0.10.1, which lacks the option.
             disableAutoSubstitutionInSubscripts: true,
+            // "Umax" is one variable, not U times max (#58, #61): an operator name counts only
+            // when it is the whole word. Needs the fork build; MathQuill 0.10.1 ignores it.
+            autoOperatorNamesOnlyWholeWord: true,
             handlers: {
                 edit: function() {
                     if (row.prefilling) {
@@ -650,6 +653,9 @@ define([
             // Typing "U_max" would otherwise give U_{\max}: a subscript is a label, not a
             // function call (#61). Ignored by MathQuill 0.10.1, which lacks the option.
             disableAutoSubstitutionInSubscripts: true,
+            // "Umax" is one variable, not U times max (#58, #61): an operator name counts only
+            // when it is the whole word. Needs the fork build; MathQuill 0.10.1 ignores it.
+            autoOperatorNamesOnlyWholeWord: true,
             handlers: {
                 edit: function() {
                     if (prefilling) {

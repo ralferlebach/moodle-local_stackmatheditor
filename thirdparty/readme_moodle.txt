@@ -2,7 +2,7 @@ This plugin includes the following third-party library:
 
 * MathQuill
   - Location: thirdparty/mathquill
-  - Version: 0.10.1-sme.1
+  - Version: 0.10.1-sme.2
   - License: MPL-2.0
   - Upstream repository: https://github.com/mathquill/mathquill
   - Fork used here:      https://github.com/ralferlebach/mathquill
@@ -17,8 +17,15 @@ MathQuill is included here as a build of a fork, not as an upstream release.
   Fork:   ralferlebach/mathquill, branch feature/matrix-environments
   Change: editable LaTeX matrix environments (matrix, pmatrix, bmatrix,
           Bmatrix, vmatrix, Vmatrix), the public API insertMatrix /
-          insertColumnVector / insertRowVector, and the browser test
-          automation around them.
+          insertColumnVector / insertRowVector, the configuration option
+          autoOperatorNamesOnlyWholeWord, and the browser test automation
+          around them.
+
+  sme.2:  adds autoOperatorNamesOnlyWholeWord. With it, MathQuill accepts an
+          operator name only when it covers the whole run of letters, so
+          typing "Umax" stays one identifier instead of becoming U \max
+          (#58, #61). The option defaults to false upstream; this plugin
+          switches it on for every editable field.
 
 The version string 0.10.1-sme.1 identifies this build; -sme.N is incremented
 whenever a new fork build is imported.

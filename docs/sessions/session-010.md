@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091306 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091307 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -346,3 +346,48 @@ The captured browser output is now a test table in `identifiers.test.js` — the
 measured, not assumed.
 
 Jest: 833 green in 1.3.0, 784 in 1.2.1.
+
+
+## 12. Iteration 8 (2026091307): the display follows the value
+
+Until now the converter repaired what MathQuill had already split: the value handed to STACK was
+right, but while typing, "Umax" still showed "max" in roman type. That part cannot be fixed in
+the plugin — it happens in `autoUnItalicize()`, which un-italicises an operator name wherever it
+occurs inside a run of letters.
+
+The fork now has an option for it, `autoOperatorNamesOnlyWholeWord` (default false, so the
+library's own tests and any other user of the fork are unaffected). A name is recognised only
+when it covers the whole run:
+
+| typed      | option off             | option on              |
+| ---------- | ---------------------- | ---------------------- |
+| `max`      | `\max`                 | `\max`                 |
+| `max(x,y)` | `\max\left(x,y\right)`  | `\max\left(x,y\right)`  |
+| `Umax`     | `U\max`                | `Umax`                 |
+| `argmax`   | `\arg\max`             | `argmax`               |
+| `maximum`  | `\max imum`            | `maximum`              |
+| `sinvalue` | `\sin value`           | `sinvalue`             |
+| `U_max`    | `U_{\max}`             | `U_{max}`              |
+
+This iteration imports the fork build that carries the option (`0.10.1-sme.2`) and switches it
+on at all three `MQ.MathField()` call sites, next to
+`disableAutoSubstitutionInSubscripts`. Measured against the vendored file in a browser, with
+exactly the options the plugin passes — the table above is that measurement.
+
+The converter merge from iteration 5 stays. It is now a safety net rather than the main fix:
+answers stored before this version still contain `U\max`, and a field configured elsewhere
+without the option still produces it.
+
+1.2.1 keeps the converter-only solution. MathQuill 0.10.1 has neither option and ignores both.
+
+### Verification
+
+- Typed behaviour measured in a browser against `thirdparty/mathquill/mathquill.min.js`
+- Jest 833 green, PHPCS green, `amd/build` rebuilt for `input_fields` and `textarea_fields`
+- `thirdpartylibs.xml` and `thirdparty/readme_moodle.txt` record `0.10.1-sme.2` and what
+  changed in it
+
+### Still open
+
+Behat and Playwright have not run here (no database). The library swap touches the editor in
+every quiz attempt, so the full suite matters more than usual before this leaves `development`.
