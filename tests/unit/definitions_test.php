@@ -75,7 +75,7 @@ final class definitions_test extends advanced_testcase {
     }
 
     /**
-     * Every element must have either 'write' or 'cmd', and a display key.
+     * Every element must have 'write', 'cmd' or 'matrix', and a display key.
      *
      * Elements may use 'display' (plain text) or 'display_html' (HTML literal).
      */
@@ -85,9 +85,30 @@ final class definitions_test extends advanced_testcase {
             foreach ($group['elements'] as $i => $el) {
                 $ref = "Group '$groupkey' element[$i]";
                 $this->assertTrue(
-                    isset($el['write']) || isset($el['cmd']),
-                    "$ref must have 'write' or 'cmd'"
+                    isset($el['write']) || isset($el['cmd']) || isset($el['matrix']),
+                    "$ref must have 'write', 'cmd' or 'matrix'"
                 );
+                if (isset($el['matrix'])) {
+                    // A matrix button carries a structure, not a LaTeX string: it is inserted
+                    // through MathQuill's insertMatrix(), which needs both dimensions.
+                    $this->assertIsArray($el['matrix'], "$ref 'matrix' must be an array");
+                    foreach (['rows', 'columns'] as $key) {
+                        $this->assertArrayHasKey(
+                            $key,
+                            $el['matrix'],
+                            "$ref 'matrix' must have '$key'"
+                        );
+                        $this->assertIsInt(
+                            $el['matrix'][$key],
+                            "$ref 'matrix' $key must be an integer"
+                        );
+                        $this->assertGreaterThanOrEqual(
+                            1,
+                            $el['matrix'][$key],
+                            "$ref 'matrix' $key must be at least 1"
+                        );
+                    }
+                }
                 // Accept 'display' (plain text) or 'display_html' (HTML label).
                 $hasdisplay = isset($el['display']) || isset($el['display_html']);
                 $this->assertTrue(

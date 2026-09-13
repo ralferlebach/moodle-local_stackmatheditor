@@ -591,6 +591,75 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Convert LaTeX matrix environments to Maxima's matrix() call.
+     *
+     * All six environments (matrix, pmatrix, bmatrix, Bmatrix, vmatrix, Vmatrix) map to the same
+     * Maxima structure; the delimiters are presentation, not semantics. Cell contents stay LaTeX
+     * here and are converted by the remaining pipeline.
+     *
+     * Innermost environments are converted first, so a matrix inside a matrix cell works.
+     * Short rows are padded with empty cells, which Maxima rejects loudly rather than silently
+     * computing with a ragged structure.
+     *
+     * An empty cell is an incomplete editor state, not a value: it is reported through the
+     * problem channel (#44) instead of being padded with a zero, which would silently change the
+     * answer.
+     *
+     * @param {string} s Input.
+     * @param {Object} local Conversion state; local.problems collects incomplete structures.
+     * @returns {string} Converted string.
+     */
+    function convertMatrixEnvironments(s, local) {
+        // A body without a nested \\begin: this matches the innermost environment first.
+        var pattern = new RegExp(
+            '\\\\begin\\{(matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix)\\}' +
+                '((?:(?!\\\\begin\\{)[\\s\\S])*?)' +
+                '\\\\end\\{\\1\\}',
+            'g'
+        );
+        var maxIter = 20;
+        var previous;
+
+        do {
+            previous = s;
+            s = s.replace(pattern, function(match, environment, body) {
+                var rows = splitTopLevel(body, '\\\\');
+                var converted = [];
+                var columns = 0;
+                var cells;
+                var i;
+                var j;
+
+                for (i = 0; i < rows.length; i++) {
+                    cells = splitTopLevel(rows[i], '&');
+                    for (j = 0; j < cells.length; j++) {
+                        cells[j] = stripOuterBraces(cells[j]).replace(/\s+/g, ' ').trim();
+                    }
+                    columns = Math.max(columns, cells.length);
+                    converted.push(cells);
+                }
+
+                for (i = 0; i < converted.length; i++) {
+                    while (converted[i].length < columns) {
+                        converted[i].push('');
+                    }
+                    for (j = 0; j < converted[i].length; j++) {
+                        if (converted[i][j] === '') {
+                            local.problems.push('matrix_cell_empty');
+                        }
+                    }
+                    converted[i] = '[' + converted[i].join(',') + ']';
+                }
+
+                return 'matrix(' + converted.join(',') + ')';
+            });
+            maxIter--;
+        } while (s !== previous && maxIter > 0);
+
+        return s;
+    }
+
+    /**
      * Convert a LaTeX cases environment to an equation system: the rows are
      * joined by STACK's nounand, so that every row is assessed on its own.
      *
@@ -1484,6 +1553,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // of anything but a letter or digit it carries nothing and would otherwise survive in
         // stack mode ("gamma (x)", "epsilon _0").
         s = s.replace(/(\\[a-zA-Z]+)\s+(?=[^A-Za-z0-9\s])/g, '$1');
+        s = convertMatrixEnvironments(s, local);
         s = convertCasesToAndRelations(s);
         s = markControlWords(s);
         // Set braces survive the generic brace removal below (#39: no

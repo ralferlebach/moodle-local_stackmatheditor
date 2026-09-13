@@ -96,12 +96,19 @@ define(['jquery'], function($) {
      * - {write: "\\frac{}{}")}    → write("\\frac{}{}")
      * - {latex: "\\pi"}           → cmd("\\pi")
      * - {keystroke: "Backspace"}  → keystroke(...)
+     * - {matrix: {rows, columns}} → insertMatrix(...)
      * - {action: "write", cmd: …} → explicit action
      *
      * @param {Object} el Element definition.
      * @returns {Object} {action, command} or null.
      */
     function resolveCommand(el) {
+        // "matrix" property → insertMatrix action. A matrix is a structure with its own API in
+        // MathQuill, not a LaTeX string that could be written into the field.
+        if (el.matrix) {
+            return {action: 'matrix', command: el.matrix};
+        }
+
         // Explicit action property.
         if (el.action && el.cmd) {
             return {action: el.action, command: el.cmd};
@@ -261,6 +268,12 @@ define(['jquery'], function($) {
                     }
                 } else if (action === 'keystroke') {
                     f.keystroke(command);
+                } else if (action === 'matrix') {
+                    f.insertMatrix({
+                        rows: parseInt(command.rows, 10) || 2,
+                        columns: parseInt(command.columns, 10) || 2,
+                        environment: command.environment || 'pmatrix'
+                    });
                 } else {
                     f.cmd(command);
                 }

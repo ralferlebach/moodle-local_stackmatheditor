@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091300 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091301 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -71,12 +71,62 @@ Expected side effects to watch for: the extra root-block class, SVG brackets in 
 `mathquill.js` growing from 173 KB to 490 KB (the minified file, which the injector prefers, is
 166 KB and thus close to the old unminified size).
 
-## 5. Next steps (not in this iteration)
+## 5. Iteration 2 (2026091301): conversion rules and toolbar
 
-1. tex2max / max2tex: `\begin{bmatrix}a&b\\c&d\end{bmatrix}` ↔ `matrix([a,b],[c,d])`, vectors as
-   n×1 / 1×n, with Jest roundtrip tables and Behat where MathQuill normalises.
-   `convertCasesToAndRelations` in `tex2max.js` is the pattern to follow.
-2. Toolbar: the `matrix_operators` group currently only has 𝟙, Aᵀ, A*, A†. Matrix insertion needs
-   a new element type — the existing buttons all go through `write` with a LaTeX string, which is
-   the wrong mechanism for a structure that has a dedicated API.
-3. Decide whether the `\,` workaround in the converter can go.
+### tex2max
+
+`convertMatrixEnvironments()` converts all six environments to Maxima's `matrix()`. It runs
+before the `\left` / `\right` and brace passes, matches the innermost environment first (so a
+matrix inside a cell works) and leaves cell contents to the rest of the pipeline.
+
+    \begin{bmatrix}a&b\\c&d\end{bmatrix}   ->  matrix([a,b],[c,d])
+    \begin{pmatrix}x\\y\\z\end{pmatrix}    ->  matrix([x],[y],[z])
+    \begin{bmatrix}\frac{1}{2}&\sqrt{x}\end{bmatrix}  ->  matrix([(1)/(2),sqrt(x)])
+
+An empty cell is not padded with a zero — that would silently change the answer. It is reported
+through the problem channel introduced for #44: `analyse()` returns an empty `maxima` and the
+code `matrix_cell_empty`, which `local_validation.js` renders using the new language string. A
+short row is padded structurally and reported the same way.
+
+### max2tex
+
+`extractMatrixCalls()` follows the integral pattern: the matrix goes into the placeholder store
+so that the row and column separators survive the later passes, and every cell is converted on
+its own. `matrix(a,b)` without row lists and ragged matrices are left untouched rather than
+rendered as a structure they do not have.
+
+The write-back environment is `pmatrix` (`MATRIX_ENVIRONMENT` in max2tex.js) and the toolbar
+inserts the same. This keeps the pre-fill loop visually stable: a reloaded attempt looks like
+what the student typed. Inserting bmatrix and writing back pmatrix would change the brackets on
+every save.
+
+### Toolbar
+
+`toolbar.js` gains the action `matrix`, which calls MathQuill's `insertMatrix()`. A matrix is a
+structure with its own API, not a LaTeX string that could go through `write`. The
+`matrix_operators` group in `definitions.php` gains four buttons: 2x2, 3x3, row vector (1x3),
+column vector (3x1). `definitions_test.php` accepts the new element type and checks that both
+dimensions are present and are positive integers.
+
+The Jest definitions fixture is unaffected: it only carries the conversion-relevant keys, not
+`elementGroups`.
+
+### Verification of iteration 2
+
+- Jest: 744 tests green (711 before, 33 new). No regression.
+- ESLint over `amd/src` via grunt: green.
+- `grunt amd` in a real Moodle 4.5 tree: `amd/build` rebuilt for max2tex, tex2max and toolbar,
+  including the source maps. They are part of this delivery.
+- PHPCS, Moodle standard, errors *and* warnings, run inside the Moodle tree over `classes`,
+  `lang`, `tests/unit` and `version.php`: green.
+- Still outstanding: PHPUnit (needs a database), Behat, Playwright and a manual look at a real
+  STACK input.
+
+## 6. Next steps
+
+1. Behat for the matrix path: insert through the toolbar, fill, save, reload and check that the
+   pre-filled answer is the same matrix.
+2. Decide whether the `\,` workaround in the converter can go now that MathQuill is current.
+3. Consider whether a 1xn matrix should convert to a Maxima list instead. It currently does not:
+   `matrix([a,b,c])` keeps the matrix semantics, which is the honest reading of what the editor
+   shows.

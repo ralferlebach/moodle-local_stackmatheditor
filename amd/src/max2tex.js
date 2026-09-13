@@ -519,6 +519,97 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Environment used when a Maxima matrix is written back as LaTeX.
+     *
+     * Maxima itself renders matrices with round brackets, and the toolbar inserts the same
+     * environment, so a pre-filled answer looks like what the student typed.
+     *
+     * @type {string}
+     */
+    var MATRIX_ENVIRONMENT = 'pmatrix';
+
+    /**
+     * Replace matrix(...) calls by a LaTeX matrix environment.
+     *
+     * Extracted into the placeholder store like integrals: the row and column separators must
+     * not be touched by the later passes, and each cell is converted on its own.
+     *
+     * A matrix whose arguments are not all rows (Maxima allows matrix(a, b) with list-valued
+     * variables) is left alone rather than rendered as something it is not.
+     *
+     * @param {string} s       Maxima expression.
+     * @param {Object} options Conversion options.
+     * @param {Array}  store   Placeholder store.
+     * @returns {string} String with matrices replaced by placeholders.
+     */
+    function extractMatrixCalls(s, options, store) {
+        var re = /(^|[^A-Za-z0-9_%])('?)(matrix)\(/;
+        var out = '';
+        var rest = s;
+        var m;
+        var start;
+        var open;
+        var close;
+        var args;
+        var rows;
+        var cells;
+        var row;
+        var i;
+        var j;
+        var columns;
+        var ok;
+
+        while ((m = rest.match(re)) !== null) {
+            start = m.index + m[1].length;
+            open = start + m[2].length + m[3].length;
+            close = findCloseParen(rest, open);
+            if (close === -1) {
+                break;
+            }
+
+            args = splitArguments(rest.substring(open + 1, close));
+            rows = [];
+            columns = -1;
+            ok = args.length > 0;
+
+            for (i = 0; i < args.length && ok; i++) {
+                row = args[i].trim();
+                if (row.charAt(0) !== '[' || row.charAt(row.length - 1) !== ']') {
+                    ok = false;
+                    break;
+                }
+                cells = splitArguments(row.substring(1, row.length - 1));
+                if (columns === -1) {
+                    columns = cells.length;
+                } else if (cells.length !== columns) {
+                    ok = false;
+                    break;
+                }
+                for (j = 0; j < cells.length; j++) {
+                    cells[j] = convert(cells[j], options);
+                }
+                rows.push(cells.join('&'));
+            }
+
+            if (!ok) {
+                out += rest.substring(0, close + 1);
+                rest = rest.substring(close + 1);
+                continue;
+            }
+
+            out += rest.substring(0, start) + '\uE060' + store.length + '\uE061';
+            store.push(
+                '\\begin{' + MATRIX_ENVIRONMENT + '}' +
+                    rows.join('\\\\') +
+                    '\\end{' + MATRIX_ENVIRONMENT + '}'
+            );
+            rest = rest.substring(close + 1);
+        }
+
+        return out + rest;
+    }
+
+    /**
      * LaTeX of a derivative diff(expr, x[, n][, y, m …]) with the canonical ∂ (#46).
      *
      * diff(…) does not record whether d or ∂ was written, so ∂ is used throughout (Ralf's
@@ -1099,6 +1190,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
 
         s = extractIntegralCalls(s, opts, integrals);
         s = extractDerivativeCalls(s, opts, integrals);
+        s = extractMatrixCalls(s, opts, integrals);
 
         // Maxima braces are set literals; LaTeX braces are grouping. Protect the
         // literals now and write them as \\left\\{ ... \\right\\} at the end.
