@@ -156,3 +156,50 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
   Scenario: Implied-by is rewritten as a swapped implication
     When I enter latex "p\Leftarrow q" into the MathQuill field for "ans1"
     Then the underlying STACK input for "ans1" should be "q implies p"
+
+  # ── Identifiers containing an operator name (#58, #60) ───────────────────────
+
+  @javascript
+  Scenario Outline: An operator name inside a longer identifier stays part of it
+    When the tex2max output for latex "<latex>" in variableMode "stack" is evaluated
+    Then the tex2max result should be "<expected>"
+
+    Examples:
+      | latex             | expected |
+      | U\max             | Umax     |
+      | U\min             | Umin     |
+      | \max imum         | maximum  |
+      | \arg\max          | argmax   |
+      | \log value        | logvalue |
+      | \sin value        | sinvalue |
+
+  @javascript
+  Scenario: An operator name applied to an argument is still a function
+    When the tex2max output for latex "a\sin\left(x\right)" in variableMode "stack" is evaluated
+    Then the tex2max result should contain "sin(x)"
+    And the tex2max result should not contain "asin"
+
+  # ── Multi-character subscripts (#59) ─────────────────────────────────────────
+
+  @javascript
+  Scenario Outline: A multi-character subscript is one identifier
+    When the tex2max output for latex "<latex>" in variableMode "stack" is evaluated
+    Then the tex2max result should be "<expected>"
+
+    Examples:
+      | latex     | expected |
+      | U_{max}   | U_max    |
+      | U_{eff}   | U_eff    |
+      | x_{12}    | x_12     |
+
+  @javascript
+  Scenario Outline: Characters after a subscript group stay separate
+    When the tex2max output for latex "<latex>" in variableMode "<mode>" is evaluated
+    Then the tex2max result should be "<expected>"
+
+    Examples:
+      | latex     | mode            | expected |
+      | U_{m}ax   | stack           | U_m ax   |
+      | U_{m}ax   | explicit_single | U_m*a*x  |
+      | U_{m}ax   | explicit_multi  | U_m*ax   |
+      | U_{e}ff   | stack           | U_e ff   |

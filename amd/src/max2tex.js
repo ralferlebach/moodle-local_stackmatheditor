@@ -265,7 +265,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // First: _(content) -> _{content}.
         s = fixpoint(s, /_\(([^()]*?)\)/, '_{$1}');
         // Then: _x (single char not already in braces) -> _{x}.
-        s = s.replace(/_([a-zA-Z0-9])(?!\{)(?!\()/g, '_{$1}');
+        // Group the whole subscript, not just its first character (#59): U_max is one
+        // identifier and has to be drawn as U_{max}. Grouping only the first character produced
+        // U_{m}ax, which means something else entirely and does not survive a roundtrip.
+        s = s.replace(/_([a-zA-Z0-9]+)(?!\{)(?!\()/g, '_{$1}');
         return s;
     }
 

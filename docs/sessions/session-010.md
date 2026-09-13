@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091303 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091304 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -219,3 +219,63 @@ then navigates away, so the after-step hook sees a clean page.
 3. Consider whether a 1xn matrix should convert to a Maxima list instead. It currently does not:
    `matrix([a,b,c])` keeps the matrix semantics, which is the honest reading of what the editor
    shows.
+
+
+## 9. Iteration 5 (2026091304): #58, #59, #60 — identifier integrity
+
+Applied to 1.3.0 and, identically, to 1.2.0 (released as 1.2.1, version 2026091300).
+
+### #58 / #60 — an operator name inside a longer identifier
+
+`Umax` reached STACK as `U max`. The cause is not the reserved-words logic — in the "leave
+untouched" mode that code does not even run, as #60 established. MathQuill un-italicises an
+operator name wherever it finds one inside a run of letters, so typing `Umax` yields the LaTeX
+`U\max `. `markControlWords()` then put a token boundary in front of `\max`, and
+`resolveBoundaries()` turned that boundary into a space, because it separates an identifier
+from a following word. That rule is right for `a\sqrt{b}` (#39) and wrong here.
+
+`mergeGluedOperatorNames()` now runs before `markControlWords()` and re-joins such a name with
+the identifier it belongs to. The deciding question is whether the name is applied to anything:
+
+    U\max                  -> Umax          one identifier (#58)
+    \max imum              -> maximum       one identifier
+    a\sin\left(x\right)     -> a sin(x)      unchanged, a times sin of x
+    \max\left(a,b\right)    -> max(a,b)      unchanged, the function max
+    a\sqrt{b}              -> a sqrt(b)     unchanged, \sqrt is not an operator name
+
+The name list mirrors MathQuill's own defaults and is built the same way MathQuill builds it,
+so it can be compared against the library when the configuration changes.
+
+### #59 — multi-character subscripts
+
+`max2tex` grouped only the first character after `_`, so `U_max` was drawn as `U_{m}ax`. It now
+groups the whole alphanumeric suffix: `U_{max}`, `x_{12}`, `T_{amb}`.
+
+`tex2max` collapsed `U_{m}ax` into `U_max`, which is a different expression and made the two
+forms indistinguishable. A subscript group that is followed directly by more characters now
+keeps a boundary marker, so the existing variable-mode logic decides what happens at that
+boundary:
+
+| LaTeX     | stack     | explicit_single | explicit_multi |
+| --------- | --------- | --------------- | -------------- |
+| `U_{max}` | `U_max`   | `U_max`         | `U_max`        |
+| `U_{m}ax` | `U_m ax`  | `U_m*a*x`       | `U_m*ax`       |
+
+The roundtrip `U_max -> U_{max} -> U_max` is stable and covered by tests.
+
+### Verification
+
+- Jest: 809 green in 1.3.0 (760 before), 760 green in 1.2.1 (711 before). The 49 new cases are
+  in `tests/jest/identifiers.test.js`.
+- `grunt amd` in a Moodle 4.5 tree: `tex2max` and `max2tex` rebuilt in both versions.
+- PHPCS, Moodle standard: green.
+- New Behat scenarios in `tests/behat/tex2max_conversion.feature` use the existing
+  `tex2max output for latex ... in variableMode ...` step; every expected value in them was
+  checked against the real converter, but Behat itself was not run (no database here).
+
+### Not done deliberately
+
+No language strings were touched, and MathQuill itself was not changed. The fix is in the
+converter, which is what both versions share; 1.2.x ships MathQuill 0.10.1 and could not take a
+library change anyway. The editor still *displays* `U max` in roman type while typing — the
+value handed to STACK is now correct, the display is a MathQuill matter and belongs in the fork.
