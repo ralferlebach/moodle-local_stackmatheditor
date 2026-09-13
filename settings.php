@@ -73,6 +73,27 @@ if ($hassiteconfig) {
         0
     ));
 
+    // How a one-row or one-column matrix is written to Maxima.
+    $settings->add(new admin_setting_configselect(
+        'local_stackmatheditor/vectorformat',
+        get_string('setting_vectorformat', 'local_stackmatheditor'),
+        get_string('setting_vectorformat_desc', 'local_stackmatheditor'),
+        'matrix',
+        [
+            'matrix' => get_string('setting_vectorformat_matrix', 'local_stackmatheditor'),
+            'list'   => get_string('setting_vectorformat_list', 'local_stackmatheditor'),
+        ]
+    ));
+
+    // Maxima function a norm is written to.
+    $settings->add(new admin_setting_configtext(
+        'local_stackmatheditor/normfunction',
+        get_string('setting_normfunction', 'local_stackmatheditor'),
+        get_string('setting_normfunction_desc', 'local_stackmatheditor'),
+        'norm',
+        PARAM_ALPHANUMEXT
+    ));
+
     // Default element groups multiselect.
     $grouplabels = \local_stackmatheditor\definitions::get_group_labels_with_examples();
     $groups      = \local_stackmatheditor\definitions::get_element_groups();

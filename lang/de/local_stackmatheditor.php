@@ -256,10 +256,16 @@ $string['setting_defaultgroups_desc'] = 'Wählen Sie die standardmäßig aktivie
 $string['setting_defaultgroups_help'] = 'Wählen Sie, welche Toolbar-Elementgruppen im MathQuill-Editor verfügbar sein sollen. Halten Sie Strg (Cmd auf Mac) gedrückt, um mehrere Gruppen auszuwählen.';
 $string['setting_enabled'] = 'Plugin-Aktivierung (instanzweit)';
 $string['setting_enabled_desc'] = 'Legt fest, ob und wie der visuelle Mathe-Editor instanzweit gesteuert wird.';
+$string['setting_normfunction'] = 'Maxima-Funktion für die Norm';
+$string['setting_normfunction_desc'] = 'Maxima kennt keine Normfunktion, die Vektoren und Matrizen gleichermaßen abdeckt. Der Editor schreibt ‖…‖ als Aufruf dieser Funktion; in den Fragevariablen wird sie definiert, zum Beispiel <code>norm(v) := sqrt(v . v)</code>.';
 $string['setting_usepercentpi']      = 'Prozent-Pi-Notation für π verwenden';
 $string['setting_usepercentpi_desc'] = 'Wenn aktiv, wird π als %pi an Maxima gesendet (kompatibel mit STACK-Auswertung). Wenn inaktiv, wird pi ohne Prozentzeichen gesendet (kompatibel mit STACK star-options).';
 $string['setting_variablemode'] = 'Umgang mit impliziter Multiplikation (Standard)';
 $string['setting_variablemode_desc'] = 'Legt fest, wie implizite Multiplikation bei der Übersetzung der MathQuill-Eingabe behandelt wird.';
+$string['setting_vectorformat'] = 'Vektoren in Maxima';
+$string['setting_vectorformat_desc'] = 'Wie eine einzeilige oder einspaltige Matrix nach Maxima geschrieben wird. Bitte die Form wählen, die die STACK-Fragen erwarten: Ein Antworttest, der eine Liste mit einer Matrix vergleicht, schlägt auch bei identischen Einträgen fehl. Eine Liste hat keine Orientierung; im Listenmodus kommt eine vorbelegte Antwort deshalb immer als Zeile zurück.';
+$string['setting_vectorformat_list'] = 'Liste: [a,b,c]';
+$string['setting_vectorformat_matrix'] = 'Matrix: matrix([a,b,c])';
 $string['unit_a']         = 'Ampere (Strom)';
 $string['unit_atm']       = 'Atmosphäre (Druck)';
 $string['unit_bar']       = 'Bar (Druck)';

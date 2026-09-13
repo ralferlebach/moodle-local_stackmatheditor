@@ -519,94 +519,271 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Environment used when a Maxima matrix is written back as LaTeX.
+     * Environments used when Maxima structures are written back as LaTeX.
      *
-     * Maxima itself renders matrices with round brackets, and the toolbar inserts the same
-     * environment, so a pre-filled answer looks like what the student typed.
+     * Vectors keep round brackets, matrices square ones, mirroring the toolbar. |...| is a
+     * determinant and ‖...‖ a norm, so those two are not a matter of taste.
      *
-     * @type {string}
+     * @type {Object}
      */
-    var MATRIX_ENVIRONMENT = 'pmatrix';
+    var MATRIX_ENVIRONMENTS = {
+        vector: 'pmatrix',
+        matrix: 'bmatrix',
+        determinant: 'vmatrix',
+        norm: 'Vmatrix'
+    };
 
     /**
-     * Replace matrix(...) calls by a LaTeX matrix environment.
+     * Wrap rows in a LaTeX matrix environment.
+     *
+     * @param {string[]} rows Rows, cells already joined with &.
+     * @param {string} environment Environment name.
+     * @returns {string} LaTeX.
+     */
+    function matrixEnvironment(rows, environment) {
+        return '\\begin{' + environment + '}' +
+            rows.join('\\\\') +
+            '\\end{' + environment + '}';
+    }
+
+    /**
+     * Split a Maxima matrix(...) call into its rows.
+     *
+     * @param {string} s Argument list of matrix(...), without the surrounding call.
+     * @returns {?string[][]} Rows of raw cells, or null if the argument list is not a matrix.
+     */
+    function matrixRows(s) {
+        var args = splitArguments(s);
+        var rows = [];
+        var columns = -1;
+        var row;
+        var cells;
+        var i;
+
+        if (!args.length) {
+            return null;
+        }
+
+        for (i = 0; i < args.length; i++) {
+            row = args[i].trim();
+            if (row.charAt(0) !== '[' || row.charAt(row.length - 1) !== ']') {
+                return null;
+            }
+            cells = splitArguments(row.substring(1, row.length - 1));
+            if (columns === -1) {
+                columns = cells.length;
+            } else if (cells.length !== columns) {
+                return null;
+            }
+            rows.push(cells);
+        }
+
+        return rows;
+    }
+
+    /**
+     * LaTeX for a Maxima matrix(...) call.
+     *
+     * @param {string[][]} rows Raw cells.
+     * @param {Object} options Conversion options.
+     * @param {?string} environment Forced environment, or null for the shape-dependent default.
+     * @returns {string} LaTeX.
+     */
+    function matrixLatex(rows, options, environment) {
+        var isvector = rows.length === 1 || rows[0].length === 1;
+        var rendered = rows.map(function(cells) {
+            return cells.map(function(cell) {
+                return convert(cell, options);
+            }).join('&');
+        });
+
+        return matrixEnvironment(
+            rendered,
+            environment || (isvector ? MATRIX_ENVIRONMENTS.vector : MATRIX_ENVIRONMENTS.matrix)
+        );
+    }
+
+    /**
+     * Replace matrix(), determinant() and the configured norm function by LaTeX environments.
      *
      * Extracted into the placeholder store like integrals: the row and column separators must
      * not be touched by the later passes, and each cell is converted on its own.
      *
-     * A matrix whose arguments are not all rows (Maxima allows matrix(a, b) with list-valued
-     * variables) is left alone rather than rendered as something it is not.
+     * A matrix whose arguments are not all rows of equal length (Maxima allows matrix(a, b) with
+     * list-valued variables) is left alone rather than rendered as something it is not. The same
+     * holds for a determinant or norm of anything that is not a literal matrix: those become
+     * ‖x‖ resp. |x| around the converted argument.
+     *
+     * With the vector format set to "list", a Maxima list is drawn as a row vector, because in
+     * that mode a list is how the editor writes vectors. A list has no orientation, so a column
+     * vector comes back as a row.
      *
      * @param {string} s       Maxima expression.
      * @param {Object} options Conversion options.
      * @param {Array}  store   Placeholder store.
-     * @returns {string} String with matrices replaced by placeholders.
+     * @returns {string} String with structures replaced by placeholders.
      */
     function extractMatrixCalls(s, options, store) {
-        var re = /(^|[^A-Za-z0-9_%])('?)(matrix)\(/;
+        var defs = options.defs || {};
+        var normfunction = defs.normFunction || 'norm';
+        var names = ['matrix', 'determinant', 'det', normfunction];
+        var re = new RegExp(
+            '(^|[^A-Za-z0-9_%])(\'?)(' + names.join('|') + ')\\('
+        );
         var out = '';
         var rest = s;
         var m;
+        var name;
         var start;
         var open;
         var close;
-        var args;
+        var body;
         var rows;
-        var cells;
-        var row;
-        var i;
-        var j;
-        var columns;
-        var ok;
+        var inner;
+        var tex;
 
         while ((m = rest.match(re)) !== null) {
             start = m.index + m[1].length;
-            open = start + m[2].length + m[3].length;
+            name = m[3];
+            open = start + m[2].length + name.length;
             close = findCloseParen(rest, open);
             if (close === -1) {
                 break;
             }
 
-            args = splitArguments(rest.substring(open + 1, close));
-            rows = [];
-            columns = -1;
-            ok = args.length > 0;
+            body = rest.substring(open + 1, close);
+            tex = null;
 
-            for (i = 0; i < args.length && ok; i++) {
-                row = args[i].trim();
-                if (row.charAt(0) !== '[' || row.charAt(row.length - 1) !== ']') {
-                    ok = false;
-                    break;
+            if (name === 'matrix') {
+                rows = matrixRows(body);
+                if (rows) {
+                    tex = matrixLatex(rows, options, null);
                 }
-                cells = splitArguments(row.substring(1, row.length - 1));
-                if (columns === -1) {
-                    columns = cells.length;
-                } else if (cells.length !== columns) {
-                    ok = false;
-                    break;
+            } else {
+                inner = body.trim();
+                rows = null;
+                if (inner.indexOf('matrix(') === 0 && findCloseParen(inner, 6) === inner.length - 1) {
+                    rows = matrixRows(inner.substring(7, inner.length - 1));
                 }
-                for (j = 0; j < cells.length; j++) {
-                    cells[j] = convert(cells[j], options);
+                if (name === 'determinant' || name === 'det') {
+                    tex = rows
+                        ? matrixLatex(rows, options, MATRIX_ENVIRONMENTS.determinant)
+                        : matrixEnvironment(
+                            [convert(body, options)],
+                            MATRIX_ENVIRONMENTS.determinant
+                        );
+                } else {
+                    // ‖(x, y)‖: a vector keeps its own brackets inside the norm, a matrix does
+                    // not — the norm bars replace its brackets.
+                    tex = rows && !(rows.length === 1 || rows[0].length === 1)
+                        ? matrixLatex(rows, options, MATRIX_ENVIRONMENTS.norm)
+                        : matrixEnvironment(
+                            [convert(body, options)],
+                            MATRIX_ENVIRONMENTS.norm
+                        );
                 }
-                rows.push(cells.join('&'));
             }
 
-            if (!ok) {
+            if (tex === null) {
                 out += rest.substring(0, close + 1);
                 rest = rest.substring(close + 1);
                 continue;
             }
 
             out += rest.substring(0, start) + '\uE060' + store.length + '\uE061';
-            store.push(
-                '\\begin{' + MATRIX_ENVIRONMENT + '}' +
-                    rows.join('\\\\') +
-                    '\\end{' + MATRIX_ENVIRONMENT + '}'
-            );
+            store.push(tex);
             rest = rest.substring(close + 1);
         }
 
         return out + rest;
+    }
+
+    /**
+     * In list mode, draw a Maxima list as a row vector.
+     *
+     * Only used when the vector format is "list": there a list is how the editor writes vectors,
+     * so a pre-filled answer has to come back as one. Orientation is not part of a list, so a
+     * column vector returns as a row — the trade-off the setting makes explicit.
+     *
+     * Indexing (a[1]) and nested lists are left alone.
+     *
+     * @param {string} s       Maxima expression.
+     * @param {Object} options Conversion options.
+     * @param {Array}  store   Placeholder store.
+     * @returns {string} String with lists replaced by placeholders.
+     */
+    function extractListVectors(s, options, store) {
+        var out = '';
+        var i = 0;
+        var depth;
+        var startidx;
+        var previous;
+        var body;
+        var cells;
+        var ok;
+        var j;
+
+        while (i < s.length) {
+            if (s.charAt(i) !== '[') {
+                out += s.charAt(i);
+                i++;
+                continue;
+            }
+
+            previous = out.replace(/\s+$/, '').slice(-1);
+            if (previous && /[A-Za-z0-9_\])]/.test(previous)) {
+                // An index, not a list.
+                out += s.charAt(i);
+                i++;
+                continue;
+            }
+
+            depth = 0;
+            startidx = i;
+            for (; i < s.length; i++) {
+                if (s.charAt(i) === '[') {
+                    depth++;
+                } else if (s.charAt(i) === ']') {
+                    depth--;
+                    if (depth === 0) {
+                        break;
+                    }
+                }
+            }
+
+            if (depth !== 0) {
+                out += s.substring(startidx);
+                return out;
+            }
+
+            body = s.substring(startidx + 1, i);
+            cells = splitArguments(body);
+            ok = cells.length > 0 && body.indexOf('[') === -1;
+            for (j = 0; j < cells.length && ok; j++) {
+                if (cells[j].trim() === '') {
+                    ok = false;
+                }
+            }
+
+            if (!ok) {
+                out += s.substring(startidx, i + 1);
+                i++;
+                continue;
+            }
+
+            out += '\uE060' + store.length + '\uE061';
+            store.push(
+                matrixEnvironment(
+                    [cells.map(function(cell) {
+                        return convert(cell, options);
+                    }).join('&')],
+                    MATRIX_ENVIRONMENTS.vector
+                )
+            );
+            i++;
+        }
+
+        return out;
     }
 
     /**
@@ -1191,6 +1368,9 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = extractIntegralCalls(s, opts, integrals);
         s = extractDerivativeCalls(s, opts, integrals);
         s = extractMatrixCalls(s, opts, integrals);
+        if ((opts.defs || {}).vectorFormat === 'list') {
+            s = extractListVectors(s, opts, integrals);
+        }
 
         // Maxima braces are set literals; LaTeX braces are grouping. Protect the
         // literals now and write them as \\left\\{ ... \\right\\} at the end.

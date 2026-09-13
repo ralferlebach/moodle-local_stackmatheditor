@@ -256,10 +256,16 @@ $string['setting_defaultgroups_desc'] = 'Select the toolbar groups enabled by de
 $string['setting_defaultgroups_help'] = 'Select which toolbar element groups are available in the MathQuill editor. Hold Ctrl (Cmd on Mac) to select multiple groups.';
 $string['setting_enabled'] = 'Plugin activation (instance-wide)';
 $string['setting_enabled_desc'] = 'Controls how the visual math editor is enabled across the instance.';
+$string['setting_normfunction'] = 'Maxima function for a norm';
+$string['setting_normfunction_desc'] = 'Maxima has no norm function that covers both vectors and matrices. The editor writes ‖…‖ as a call to this function; question authors define it in the question variables, for example <code>norm(v) := sqrt(v . v)</code>.';
 $string['setting_usepercentpi']      = 'Use percent-pi notation for π';
 $string['setting_usepercentpi_desc'] = 'When enabled, π is sent to Maxima as %pi (compatible with STACK evaluation). When disabled, plain pi is used (compatible with STACK star-options mode).';
 $string['setting_variablemode'] = 'Handling of implicit multiplication (default)';
 $string['setting_variablemode_desc'] = 'Controls how implicit multiplication is translated from MathQuill input.';
+$string['setting_vectorformat'] = 'Vectors in Maxima';
+$string['setting_vectorformat_desc'] = 'How a one-row or one-column matrix is written to Maxima. Choose the form your STACK questions expect: an answer test comparing a list with a matrix fails even when the entries are identical. A list has no orientation, so in list mode a pre-filled answer always comes back as a row.';
+$string['setting_vectorformat_list'] = 'List: [a,b,c]';
+$string['setting_vectorformat_matrix'] = 'Matrix: matrix([a,b,c])';
 $string['unit_a']         = 'Ampere (current)';
 $string['unit_atm']       = 'Atmosphere (pressure)';
 $string['unit_bar']       = 'Bar (pressure)';

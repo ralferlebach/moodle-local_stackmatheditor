@@ -601,32 +601,41 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
      * Short rows are padded with empty cells, which Maxima rejects loudly rather than silently
      * computing with a ragged structure.
      *
+     * The delimiters are presentation with two exceptions: |...| is a determinant and ‖...‖ is a
+     * norm, both of which become function calls. \\det in front of any matrix environment means
+     * the same as |...|.
+     *
      * An empty cell is an incomplete editor state, not a value: it is reported through the
      * problem channel (#44) instead of being padded with a zero, which would silently change the
      * answer.
      *
      * @param {string} s Input.
      * @param {Object} local Conversion state; local.problems collects incomplete structures.
+     * @param {Object} defs Runtime definitions (normFunction, vectorFormat).
      * @returns {string} Converted string.
      */
-    function convertMatrixEnvironments(s, local) {
+    function convertMatrixEnvironments(s, local, defs) {
         // A body without a nested \\begin: this matches the innermost environment first.
         var pattern = new RegExp(
-            '\\\\begin\\{(matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix)\\}' +
+            '(\\\\det\\s*)?' +
+                '\\\\begin\\{(matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix)\\}' +
                 '((?:(?!\\\\begin\\{)[\\s\\S])*?)' +
-                '\\\\end\\{\\1\\}',
+                '\\\\end\\{\\2\\}',
             'g'
         );
+        var normfunction = (defs && defs.normFunction) || 'norm';
+        var aslist = defs && defs.vectorFormat === 'list';
         var maxIter = 20;
         var previous;
 
         do {
             previous = s;
-            s = s.replace(pattern, function(match, environment, body) {
+            s = s.replace(pattern, function(match, det, environment, body) {
                 var rows = splitTopLevel(body, '\\\\');
                 var converted = [];
                 var columns = 0;
                 var cells;
+                var structure;
                 var i;
                 var j;
 
@@ -648,10 +657,36 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
                             local.problems.push('matrix_cell_empty');
                         }
                     }
-                    converted[i] = '[' + converted[i].join(',') + ']';
                 }
 
-                return 'matrix(' + converted.join(',') + ')';
+                // ‖(x, y)‖ and |A| wrap a single structure: the inner environment has already
+                // been converted, so it is used as it stands instead of being wrapped again.
+                if (
+                    converted.length === 1 &&
+                    converted[0].length === 1 &&
+                    (environment === 'vmatrix' || environment === 'Vmatrix')
+                ) {
+                    structure = converted[0][0];
+                } else if (aslist && converted.length === 1) {
+                    structure = '[' + converted[0].join(',') + ']';
+                } else if (aslist && columns === 1) {
+                    structure = '[' + converted.map(function(row) {
+                        return row[0];
+                    }).join(',') + ']';
+                } else {
+                    structure = 'matrix(' + converted.map(function(row) {
+                        return '[' + row.join(',') + ']';
+                    }).join(',') + ')';
+                }
+
+                if (environment === 'vmatrix' || det) {
+                    return 'determinant(' + structure + ')';
+                }
+                if (environment === 'Vmatrix') {
+                    return normfunction + '(' + structure + ')';
+                }
+
+                return structure;
             });
             maxIter--;
         } while (s !== previous && maxIter > 0);
@@ -1553,7 +1588,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // of anything but a letter or digit it carries nothing and would otherwise survive in
         // stack mode ("gamma (x)", "epsilon _0").
         s = s.replace(/(\\[a-zA-Z]+)\s+(?=[^A-Za-z0-9\s])/g, '$1');
-        s = convertMatrixEnvironments(s, local);
+        s = convertMatrixEnvironments(s, local, defs);
         s = convertCasesToAndRelations(s);
         s = markControlWords(s);
         // Set braces survive the generic brace removal below (#39: no

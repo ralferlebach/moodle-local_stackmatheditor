@@ -449,14 +449,26 @@ class definitions {
                 'label'           => get_string('group_matrix_operators', $p),
                 'default_enabled' => false,
                 'elements'        => [
-                    ['display' => '(⋮)', 'matrix' => ['rows' => 2, 'columns' => 2],
-                        'tooltip' => get_string('btn_matrix_2x2', $p)],
-                    ['display' => '(⋮⋮)', 'matrix' => ['rows' => 3, 'columns' => 3],
-                        'tooltip' => get_string('btn_matrix_3x3', $p)],
-                    ['display' => '(a b)', 'matrix' => ['rows' => 1, 'columns' => 3],
-                        'tooltip' => get_string('btn_row_vector', $p)],
-                    ['display' => '(a⋮b)', 'matrix' => ['rows' => 3, 'columns' => 1],
-                        'tooltip' => get_string('btn_column_vector', $p)],
+                    [
+                        'display' => '[⋮]',
+                        'matrix'  => ['rows' => 2, 'columns' => 2, 'environment' => 'bmatrix'],
+                        'tooltip' => get_string('btn_matrix_2x2', $p),
+                    ],
+                    [
+                        'display' => '[⋮⋮]',
+                        'matrix'  => ['rows' => 3, 'columns' => 3, 'environment' => 'bmatrix'],
+                        'tooltip' => get_string('btn_matrix_3x3', $p),
+                    ],
+                    [
+                        'display' => '(a b)',
+                        'matrix'  => ['rows' => 1, 'columns' => 3, 'environment' => 'pmatrix'],
+                        'tooltip' => get_string('btn_row_vector', $p),
+                    ],
+                    [
+                        'display' => '(a⋮b)',
+                        'matrix'  => ['rows' => 3, 'columns' => 1, 'environment' => 'pmatrix'],
+                        'tooltip' => get_string('btn_column_vector', $p),
+                    ],
                     ['display' => '𝟙', 'write' => '\\mathbb{1}',
                         'tooltip' => get_string('btn_unity_matrix', $p)],
                     ['display' => 'Aᵀ', 'write' => '^{\\intercal}',
@@ -708,6 +720,9 @@ class definitions {
             'sinh', 'cosh', 'tanh',
             'exp', 'log', 'ln',
             'sqrt', 'abs', 'sgn',
+            // Structural operators: without them, "det" and "norm" are split into single
+            // variables by implicit multiplication ("d*e*t").
+            'det', 'determinant', 'norm', 'transpose',
         ];
     }
 
@@ -751,6 +766,40 @@ class definitions {
     }
 
     /**
+     * How a one-row or one-column matrix is written to Maxima.
+     *
+     * 'matrix' keeps matrix([a,b,c]); 'list' writes [a,b,c], which is what STACK questions whose
+     * model answer is a list expect. The orientation of a vector is not part of a list, so the
+     * setting also decides how a list is drawn again on pre-fill.
+     *
+     * @return string Either 'matrix' or 'list'.
+     */
+    public static function get_vector_format(): string {
+        $value = get_config('local_stackmatheditor', 'vectorformat');
+
+        return $value === 'list' ? 'list' : 'matrix';
+    }
+
+    /**
+     * Name of the Maxima function a norm is written to.
+     *
+     * Maxima has no norm function that covers both vectors and matrices, so the name is a
+     * setting: question authors define it in the question variables (e.g. norm(v) :=
+     * sqrt(v . v)) and enter the same name here.
+     *
+     * @return string Maxima function name.
+     */
+    public static function get_norm_function(): string {
+        $value = trim((string)get_config('local_stackmatheditor', 'normfunction'));
+
+        if ($value === '' || !preg_match('/^[a-z_][a-z0-9_]*$/i', $value)) {
+            return 'norm';
+        }
+
+        return $value;
+    }
+
+    /**
      * Export all definitions as a data structure for JSON encoding.
      *
      * Called by mathjax_injector to pass definitions to JavaScript modules.
@@ -771,6 +820,8 @@ class definitions {
             'reservedWords'    => self::get_reserved_words(),
             'percentConstants' => self::get_percent_constants(),
             'usePercentPi'     => (bool)(int)get_config('local_stackmatheditor', 'usepercentpi'),
+            'vectorFormat'     => self::get_vector_format(),
+            'normFunction'     => self::get_norm_function(),
             // Accessible names of the editor's own controls, needed synchronously on page load.
             'strings'          => self::get_js_strings(),
         ];

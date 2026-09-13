@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091301 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091302 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -122,7 +122,54 @@ The Jest definitions fixture is unaffected: it only carries the conversion-relev
 - Still outstanding: PHPUnit (needs a database), Behat, Playwright and a manual look at a real
   STACK input.
 
-## 6. Next steps
+## 6. Iteration 3 (2026091302): delimiters carry meaning, and a setting for vectors
+
+Ralf's specification, implemented as given:
+
+| LaTeX | Maxima |
+| --- | --- |
+| `\begin{bmatrix}` (toolbar: matrices) | `matrix([a,b],[c,d])` |
+| `\begin{pmatrix}` (toolbar: vectors) | `matrix([x],[y])` |
+| `\begin{vmatrix}` or `\det` + any environment | `determinant(matrix(...))` |
+| `\begin{Vmatrix}` | `norm(matrix(...))` |
+| `\begin{Vmatrix}\begin{pmatrix}…` | `norm(matrix([x],[y]))` |
+
+Write-back: matrices as `bmatrix`, vectors (1×n, n×1) as `pmatrix`, `determinant()` as `vmatrix`,
+the norm function as `Vmatrix` — with the inner `pmatrix` kept for vectors and dropped for
+matrices, because there the norm bars replace the brackets.
+
+`det`, `determinant`, `norm` and `transpose` were added to the function names, so implicit
+multiplication no longer splits them into single variables.
+
+### Two settings
+
+`vectorformat` (matrix | list, default matrix) decides whether a one-row or one-column matrix is
+written as `matrix([a,b,c])` or as the list `[a,b,c]`. This is an answer-test question, not a
+display question: `ATAlgEquiv` fails when a list meets a matrix. In list mode `max2tex` draws a
+list as a row vector — a list has no orientation, so a column vector comes back as a row. The
+setting description says so.
+
+`normfunction` (default `norm`) is the Maxima function a norm is written to. Maxima has no norm
+that covers vectors and matrices alike, so the name belongs to the question author, who defines
+it in the question variables (`norm(v) := sqrt(v . v)`) and enters the same name here. Nothing
+is invented behind the author's back.
+
+### Verification of iteration 3
+
+- Jest: 753 tests green (744 before).
+- ESLint via grunt: green after one trailing-space fix; `amd/build` rebuilt and included.
+- PHPCS, Moodle standard, errors and warnings, over `classes`, `lang`, `tests/unit`,
+  `settings.php`, `version.php`: green.
+- The Jest definitions fixture was updated for the new function names; it does not carry
+  `elementGroups`, so the toolbar change does not affect it.
+
+### Open question
+
+`vmatrix` now means determinant. A student who wants to write "the matrix with bars" no longer
+can — that is the point of the specification, but it is worth a look during the first real
+question test.
+
+## 7. Next steps
 
 1. Behat for the matrix path: insert through the toolbar, fill, save, reload and check that the
    pre-filled answer is the same matrix.

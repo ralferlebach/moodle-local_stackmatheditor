@@ -140,7 +140,11 @@
         "ln",
         "sqrt",
         "abs",
-        "sgn"
+        "sgn",
+        "det",
+        "determinant",
+        "norm",
+        "transpose"
     ],
     "reservedWords": [
         "if",

@@ -33,9 +33,50 @@ const max2tex = loadAmd('max2tex');
 const ENVIRONMENTS = ['matrix', 'pmatrix', 'bmatrix', 'Bmatrix', 'vmatrix', 'Vmatrix'];
 
 describe('tex2max: matrix environments', () => {
-    test.each(ENVIRONMENTS)('%s becomes matrix()', (environment) => {
-        const latex = '\\begin{' + environment + '}a&b\\\\c&d\\end{' + environment + '}';
-        expect(tex2max.convert(latex)).toBe('matrix([a,b],[c,d])');
+    test.each(['matrix', 'pmatrix', 'bmatrix', 'Bmatrix'])(
+        '%s becomes matrix()',
+        (environment) => {
+            const latex = '\\begin{' + environment + '}a&b\\\\c&d\\end{' + environment + '}';
+            expect(tex2max.convert(latex)).toBe('matrix([a,b],[c,d])');
+        }
+    );
+
+    test('vmatrix is a determinant, not a matrix', () => {
+        expect(tex2max.convert('\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}'))
+            .toBe('determinant(matrix([a,b],[c,d]))');
+    });
+
+    test('\\det in front of any environment means the same', () => {
+        expect(tex2max.convert('\\det\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}'))
+            .toBe('determinant(matrix([a,b],[c,d]))');
+        expect(tex2max.convert('\\det \\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}'))
+            .toBe('determinant(matrix([a,b],[c,d]))');
+    });
+
+    test('Vmatrix is a norm', () => {
+        expect(tex2max.convert('\\begin{Vmatrix}a&b\\\\c&d\\end{Vmatrix}'))
+            .toBe('norm(matrix([a,b],[c,d]))');
+    });
+
+    test('a norm of a vector keeps the inner brackets', () => {
+        expect(tex2max.convert(
+            '\\begin{Vmatrix}\\begin{pmatrix}x\\\\y\\end{pmatrix}\\end{Vmatrix}'
+        )).toBe('norm(matrix([x],[y]))');
+    });
+
+    test('the norm function name is configurable', () => {
+        expect(tex2max.convert(
+            '\\begin{Vmatrix}v\\end{Vmatrix}',
+            {defs: {normFunction: 'vnorm'}}
+        )).toBe('vnorm(v)');
+    });
+
+    test('list mode writes vectors as lists, matrices stay matrices', () => {
+        const defs = {defs: {vectorFormat: 'list'}};
+        expect(tex2max.convert('\\begin{pmatrix}x&y&z\\end{pmatrix}', defs)).toBe('[x,y,z]');
+        expect(tex2max.convert('\\begin{pmatrix}x\\\\y\\end{pmatrix}', defs)).toBe('[x,y]');
+        expect(tex2max.convert('\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}', defs))
+            .toBe('matrix([a,b],[c,d])');
     });
 
     test('a column vector is an n x 1 matrix', () => {
@@ -90,16 +131,40 @@ describe('tex2max: matrix environments', () => {
 });
 
 describe('max2tex: matrix()', () => {
-    test('a matrix becomes the configured environment', () => {
+    test('a matrix uses square brackets', () => {
         expect(max2tex.convert('matrix([a,b],[c,d])'))
-            .toBe('\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}');
+            .toBe('\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}');
     });
 
-    test('vectors', () => {
+    test('vectors use round brackets', () => {
         expect(max2tex.convert('matrix([1],[2],[3])'))
             .toBe('\\begin{pmatrix}1\\\\2\\\\3\\end{pmatrix}');
         expect(max2tex.convert('matrix([1,2,3])'))
             .toBe('\\begin{pmatrix}1&2&3\\end{pmatrix}');
+    });
+
+    test('a determinant becomes vmatrix', () => {
+        expect(max2tex.convert('determinant(matrix([a,b],[c,d]))'))
+            .toBe('\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}');
+        expect(max2tex.convert('determinant(A)'))
+            .toBe('\\begin{vmatrix}A\\end{vmatrix}');
+    });
+
+    test('a norm becomes Vmatrix, with inner brackets for vectors', () => {
+        expect(max2tex.convert('norm(matrix([a,b],[c,d]))'))
+            .toBe('\\begin{Vmatrix}a&b\\\\c&d\\end{Vmatrix}');
+        expect(max2tex.convert('norm(matrix([x],[y]))'))
+            .toBe('\\begin{Vmatrix}\\begin{pmatrix}x\\\\y\\end{pmatrix}\\end{Vmatrix}');
+        expect(max2tex.convert('norm(v)')).toBe('\\begin{Vmatrix}v\\end{Vmatrix}');
+    });
+
+    test('list mode draws a list as a row vector', () => {
+        const defs = {defs: {vectorFormat: 'list'}};
+        expect(max2tex.convert('[a,b,c]', defs))
+            .toBe('\\begin{pmatrix}a&b&c\\end{pmatrix}');
+        expect(max2tex.convert('[a,b,c]')).toBe('[a,b,c]');
+        expect(max2tex.convert('a[1]+[x,y]', defs))
+            .toBe('a[1]+\\begin{pmatrix}x&y\\end{pmatrix}');
     });
 
     test('each cell is converted on its own', () => {
@@ -142,13 +207,34 @@ describe('roundtrip', () => {
         expect(tex2max.convert(latex)).toBe(maxima);
     });
 
-    test.each(ENVIRONMENTS)(
-        'LaTeX -> Maxima -> LaTeX normalises %s to the pre-fill environment',
+    test.each(['matrix', 'pmatrix', 'bmatrix', 'Bmatrix'])(
+        'LaTeX -> Maxima -> LaTeX normalises %s to bmatrix',
         (environment) => {
             const latex = '\\begin{' + environment + '}a&b\\\\c&d\\end{' + environment + '}';
-            const maxima = tex2max.convert(latex);
-            expect(max2tex.convert(maxima))
-                .toBe('\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}');
+            expect(max2tex.convert(tex2max.convert(latex)))
+                .toBe('\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}');
         }
     );
+
+    test('a determinant survives both directions', () => {
+        const latex = '\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}';
+        expect(max2tex.convert(tex2max.convert(latex))).toBe(latex);
+    });
+
+    test('a norm survives both directions', () => {
+        const latex = '\\begin{Vmatrix}a&b\\\\c&d\\end{Vmatrix}';
+        expect(max2tex.convert(tex2max.convert(latex))).toBe(latex);
+    });
+
+    test('a vector keeps its round brackets', () => {
+        const latex = '\\begin{pmatrix}x\\\\y\\end{pmatrix}';
+        expect(max2tex.convert(tex2max.convert(latex))).toBe(latex);
+    });
+
+    test('list mode is stable for row vectors', () => {
+        const defs = {defs: {vectorFormat: 'list'}};
+        const latex = '\\begin{pmatrix}x&y&z\\end{pmatrix}';
+        expect(tex2max.convert(latex, defs)).toBe('[x,y,z]');
+        expect(max2tex.convert('[x,y,z]', defs)).toBe(latex);
+    });
 });
