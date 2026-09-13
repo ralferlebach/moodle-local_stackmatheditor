@@ -140,7 +140,9 @@
         "ln",
         "sqrt",
         "abs",
-        "sgn"
+        "sgn",
+        "max",
+        "min"
     ],
     "reservedWords": [
         "if",

@@ -700,6 +700,9 @@ class definitions {
             'sinh', 'cosh', 'tanh',
             'exp', 'log', 'ln',
             'sqrt', 'abs', 'sgn',
+            // Complete-token functions (#61): max(x,y) and min(x,y) are function calls,
+            // while max inside Umax or argmax is just part of the identifier.
+            'max', 'min',
         ];
     }
 
