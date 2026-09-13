@@ -336,6 +336,9 @@ define([
 
         row.mqField = ctx.MQ.MathField($mqSpan[0], {
             spaceBehavesLikeTab: true,
+            // Typing "U_max" would otherwise give U_{\max}: a subscript is a label, not a
+            // function call (#61). Ignored by MathQuill 0.10.1, which lacks the option.
+            disableAutoSubstitutionInSubscripts: true,
             handlers: {
                 edit: function() {
                     if (row.prefilling) {
@@ -644,6 +647,9 @@ define([
         // Create MathQuill.
         mqField = ctx.MQ.MathField($mqSpan[0], {
             spaceBehavesLikeTab: true,
+            // Typing "U_max" would otherwise give U_{\max}: a subscript is a label, not a
+            // function call (#61). Ignored by MathQuill 0.10.1, which lacks the option.
+            disableAutoSubstitutionInSubscripts: true,
             handlers: {
                 edit: function() {
                     if (prefilling) {

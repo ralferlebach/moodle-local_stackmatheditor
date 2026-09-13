@@ -160,3 +160,96 @@ describe('roundtrip (#59)', () => {
         expect(tex2max.convert(max2tex.convert(maxima))).toBe(maxima);
     });
 });
+
+describe('acceptance matrix (#61)', () => {
+    // Column order: stack, explicit_multi, space_multi, explicit_single, space_single.
+    // The LaTeX column is what MathQuill produces for the typed text in the first column.
+    const MATRIX = [
+        ['max(x,y)', '\\max\\left(x,y\\right)',
+            ['max(x,y)', 'max(x,y)', 'max(x,y)', 'max(x,y)', 'max(x,y)']],
+        ['min(x,y)', '\\min\\left(x,y\\right)',
+            ['min(x,y)', 'min(x,y)', 'min(x,y)', 'min(x,y)', 'min(x,y)']],
+        ['Umax', 'U\\max ',
+            ['Umax', 'Umax', 'Umax', 'U*m*a*x', 'U m a x']],
+        ['maxU', '\\max U',
+            ['maxU', 'maxU', 'maxU', 'm*a*x*U', 'm a x U']],
+        ['argmax', '\\arg\\max ',
+            ['argmax', 'argmax', 'argmax', 'a*r*g*m*a*x', 'a r g m a x']],
+        ['maximum', '\\max imum',
+            ['maximum', 'maximum', 'maximum', 'm*a*x*i*m*u*m', 'm a x i m u m']],
+        ['Umin', 'U\\min ',
+            ['Umin', 'Umin', 'Umin', 'U*m*i*n', 'U m i n']],
+        ['minU', '\\min U',
+            ['minU', 'minU', 'minU', 'm*i*n*U', 'm i n U']],
+        ['logvalue', '\\log value',
+            ['logvalue', 'logvalue', 'logvalue', 'l*o*g*v*a*l*u*e', 'l o g v a l u e']],
+        ['valueexp', 'value\\exp ',
+            ['valueexp', 'valueexp', 'valueexp', 'v*a*l*u*e*e*x*p', 'v a l u e e x p']],
+        ['sinvalue', '\\sin value',
+            ['sinvalue', 'sinvalue', 'sinvalue', 's*i*n*v*a*l*u*e', 's i n v a l u e']]
+    ];
+
+    const ORDER = [
+        'stack',
+        'explicit_multi',
+        'space_multi',
+        'explicit_single',
+        'space_single'
+    ];
+
+    test.each(MATRIX)('typing %s', (typed, latex, expected) => {
+        ORDER.forEach((mode, index) => {
+            expect(tex2max.convert(latex, {variableMode: mode})).toBe(expected[index]);
+        });
+    });
+
+    test('a protected word is only protected as a complete token', () => {
+        // "max" inside Umax must never be pulled out, in any mode.
+        for (const mode of MODES) {
+            expect(tex2max.convert('U\\max ', {variableMode: mode})).not.toContain('U*max');
+            expect(tex2max.convert('U\\max ', {variableMode: mode})).not.toContain('U max');
+            expect(tex2max.convert('\\arg\\max ', {variableMode: mode}))
+                .not.toContain('arg*max');
+            expect(tex2max.convert('\\max imum', {variableMode: mode}))
+                .not.toContain('max*imum');
+        }
+    });
+
+    test('max and min are complete-token functions in every mode', () => {
+        for (const mode of MODES) {
+            expect(tex2max.convert('\\max\\left(x,y\\right)', {variableMode: mode}))
+                .toBe('max(x,y)');
+            expect(tex2max.convert('\\min\\left(x,y\\right)', {variableMode: mode}))
+                .toBe('min(x,y)');
+        }
+    });
+});
+
+describe('what MathQuill actually produces when typing (#61)', () => {
+    // Left column: the keystrokes. Right column: the LaTeX a real MathQuill field returns,
+    // captured in a browser rather than assumed.
+    test.each([
+        ['Umax', 'U\\max', 'Umax'],
+        ['max', '\\max', 'max'],
+        ['maxU', '\\max U', 'maxU'],
+        ['argmax', '\\arg\\max', 'argmax'],
+        ['maximum', '\\max imum', 'maximum'],
+        ['Umin', 'U\\min', 'Umin'],
+        ['sinvalue', '\\sin value', 'sinvalue'],
+        ['Umaximum', 'U\\max imum', 'Umaximum'],
+        ['U_max', 'U_{\\max}', 'U_max'],
+        ['U_max (with disableAutoSubstitutionInSubscripts)', 'U_{max}', 'U_max']
+    ])('typing %s', (typed, latex, expected) => {
+        expect(tex2max.convert(latex, {variableMode: 'stack'})).toBe(expected);
+    });
+
+    test('an operator name alone in a subscript is a label', () => {
+        // Without this, "U_ max" reached the CAS: the boundary marker in front of the control
+        // word survived the subscript and resolveBoundaries() turned it into a space.
+        for (const mode of MODES) {
+            expect(tex2max.convert('U_{\\max}', {variableMode: mode})).toBe('U_max');
+            expect(tex2max.convert('U_{\\min}', {variableMode: mode})).toBe('U_min');
+            expect(tex2max.convert('U_{\\max}', {variableMode: mode})).not.toContain(' ');
+        }
+    });
+});

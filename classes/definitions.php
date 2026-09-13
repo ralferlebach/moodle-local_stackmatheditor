@@ -720,6 +720,9 @@ class definitions {
             'sinh', 'cosh', 'tanh',
             'exp', 'log', 'ln',
             'sqrt', 'abs', 'sgn',
+            // Complete-token functions (#61): max(x,y) and min(x,y) are function calls,
+            // while max inside Umax or argmax is just part of the identifier.
+            'max', 'min',
             // Structural operators: without them, "det" and "norm" are split into single
             // variables by implicit multiplication ("d*e*t").
             'det', 'determinant', 'norm', 'transpose',

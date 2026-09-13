@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091304 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091306 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -279,3 +279,70 @@ No language strings were touched, and MathQuill itself was not changed. The fix 
 converter, which is what both versions share; 1.2.x ships MathQuill 0.10.1 and could not take a
 library change anyway. The editor still *displays* `U max` in roman type while typing — the
 value handed to STACK is now correct, the display is a MathQuill matter and belongs in the fork.
+
+
+## 10. Iteration 6 (2026091305): #61 checked against the fixed code
+
+#61 is the technical cross-check of #58 and comes with a full acceptance matrix. Running it
+against the code from iteration 5 showed that the identifier half was already satisfied and
+that one row was not: `max(x,y)`.
+
+`max` was in no function list of the plugin — neither in `BUILTIN_FUNCTION_NAMES` in
+`tex2max.js` nor in `definitions::get_function_names()`. In the multi-character modes that
+produced `max*(x,y)`, in single-character mode `m*a*x*(x,y)`. `min` fared slightly better
+because it is protected as a word elsewhere, but it still collected a star: `min*(x,y)`.
+`max` and `min` are now registered as functions in both places, and the Jest fixture follows.
+
+The complete matrix from #61 now holds, in all five modes:
+
+| typed      | stack      | explicit_multi | space_multi | explicit_single | space_single |
+| ---------- | ---------- | -------------- | ----------- | --------------- | ------------ |
+| `max(x,y)` | `max(x,y)` | `max(x,y)`     | `max(x,y)`  | `max(x,y)`      | `max(x,y)`   |
+| `Umax`     | `Umax`     | `Umax`         | `Umax`      | `U*m*a*x`       | `U m a x`    |
+| `maxU`     | `maxU`     | `maxU`         | `maxU`      | `m*a*x*U`       | `m a x U`    |
+| `argmax`   | `argmax`   | `argmax`       | `argmax`    | `a*r*g*m*a*x`   | `a r g m a x`|
+| `maximum`  | `maximum`  | `maximum`      | `maximum`   | `m*a*x*i*m*u*m` | `m a x i m u m` |
+
+Jest: 822 green in 1.3.0, 773 in 1.2.1. The matrix is a test table, not prose.
+
+### Where this implementation differs from the issue's recommendation
+
+#61 advises against repairing `U\max ` back into `Umax` afterwards, because control-word
+boundaries could be damaged. The repair is what iteration 5 does, deliberately: it is the only
+fix that works for 1.2.x as well, which ships MathQuill 0.10.1 and cannot take a library
+change. The risk the issue names is contained by construction — only names from MathQuill's own
+auto-operator list are merged, and only where the name is not applied to an argument, so
+`\sqrt`, `\frac`, `\pi` and every other control word are untouched (covered by tests).
+
+What the repair cannot fix is the display: while typing, `Umax` still shows "max" in roman
+type. That is MathQuill's doing and belongs in the fork, where `autoUnItalicize()` should only
+accept an operator name that spans the entire run of letters.
+
+
+## 11. Iteration 7 (2026091306): what typing actually produces
+
+The matrix in #61 lists typed words, not LaTeX. Everything so far had been tested against the
+LaTeX I assumed MathQuill produces. Typing the words into a real MathQuill field in a browser
+and reading `field.latex()` back confirmed the assumption for ten of eleven rows — and found one
+case nobody had written down:
+
+    typed "U_max"  ->  U_{\max}
+
+The operator-name substitution also fires inside a subscript. The converter turned that into
+`U_ max` in stack mode: the boundary marker in front of `\max` survived the subscript
+replacement, and `resolveBoundaries()` made a space out of it, because the text in front,
+`U_`, looks like an identifier. `U_ max` is not a valid CAS string.
+
+Two changes:
+
+* `mergeGluedOperatorNames()` also treats an operator name that fills a `{...}` group on its own
+  as a label rather than a function, so `U_{\max}` becomes `U_max` in every mode.
+* Every `MQ.MathField()` call now passes `disableAutoSubstitutionInSubscripts: true`, so the
+  substitution no longer happens in the first place: typing `U_max` yields `U_{max}`. Verified
+  in a browser. MathQuill 0.10.1 does not have the option and ignores it, which is why 1.2.1
+  needs the converter change and gets it.
+
+The captured browser output is now a test table in `identifiers.test.js` — the LaTeX column is
+measured, not assumed.
+
+Jest: 833 green in 1.3.0, 784 in 1.2.1.

@@ -92,7 +92,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         'sqrt', 'abs', 'sgn', 'exp', 'log', 'ln',
         'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
         'arcsin', 'arccos', 'arctan', 'asin', 'acos', 'atan',
-        'sinh', 'cosh', 'tanh', 'binomial', 'integrate', 'diff'
+        'sinh', 'cosh', 'tanh', 'binomial', 'integrate', 'diff',
+        // Maxima functions the editor has to know as complete tokens (#61): without them
+        // max(x,y) picks up an implicit multiplication star before the bracket.
+        'max', 'min'
     ];
 
     /**
@@ -1178,6 +1181,12 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
 
             // Letters follow directly: the user typed one longer word.
             if (/^[A-Za-z]/.test(after)) {
+                return name;
+            }
+
+            // The name fills a subscript or superscript group on its own: typing "U_max" gives
+            // U_{\max}, which is a label, not a function applied to something (#61).
+            if (before === '{' && /^\}/.test(after)) {
                 return name;
             }
 

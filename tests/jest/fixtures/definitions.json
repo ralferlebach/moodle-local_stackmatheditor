@@ -141,6 +141,8 @@
         "sqrt",
         "abs",
         "sgn",
+        "max",
+        "min",
         "det",
         "determinant",
         "norm",
