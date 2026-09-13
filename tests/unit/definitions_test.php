@@ -85,9 +85,19 @@ final class definitions_test extends advanced_testcase {
             foreach ($group['elements'] as $i => $el) {
                 $ref = "Group '$groupkey' element[$i]";
                 $this->assertTrue(
-                    isset($el['write']) || isset($el['cmd']) || isset($el['matrix']),
-                    "$ref must have 'write', 'cmd' or 'matrix'"
+                    isset($el['write']) || isset($el['cmd']) || isset($el['matrix'])
+                        || isset($el['popup']),
+                    "$ref must have 'write', 'cmd', 'matrix' or 'popup'"
                 );
+                if (isset($el['popup'])) {
+                    // A popup button names the chooser the toolbar opens (#62); the structure
+                    // itself comes from the structured model, not from this definition.
+                    $this->assertContains(
+                        $el['popup'],
+                        ['matrix', 'vector'],
+                        "$ref 'popup' must be 'matrix' or 'vector'"
+                    );
+                }
                 if (isset($el['matrix'])) {
                     // A matrix button carries a structure, not a LaTeX string: it is inserted
                     // through MathQuill's insertMatrix(), which needs both dimensions.

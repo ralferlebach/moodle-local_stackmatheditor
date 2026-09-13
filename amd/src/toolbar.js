@@ -22,7 +22,11 @@
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-define(['jquery'], function($) {
+define([
+    'jquery',
+    'local_stackmatheditor/structured_input',
+    'local_stackmatheditor/structured_popup'
+], function($, Model, Popup) {
     'use strict';
 
     /**
@@ -103,6 +107,12 @@ define(['jquery'], function($) {
      * @returns {Object} {action, command} or null.
      */
     function resolveCommand(el) {
+        // "popup" property → the toolbar opens a chooser (#62). The structure itself is built
+        // from the structured model, never from a LaTeX string.
+        if (el.popup) {
+            return {action: 'popup', command: el.popup};
+        }
+
         // "matrix" property → insertMatrix action. A matrix is a structure with its own API in
         // MathQuill, not a LaTeX string that could be written into the field.
         if (el.matrix) {
@@ -199,6 +209,58 @@ define(['jquery'], function($) {
     }
 
     /**
+     * Insert a structured model into the field.
+     *
+     * The model decides; MathQuill gets the shape through its own structure API, so no LaTeX
+     * string is assembled here (#62 §6).
+     *
+     * @param {Object} field MathQuill field.
+     * @param {Object} model Structured model.
+     */
+    function insertModel(field, model) {
+        var size = Model.dimensions(model);
+
+        if (model.type === 'vector') {
+            if (model.orientation === 'row') {
+                field.insertRowVector(model.elements.length, Model.ENVIRONMENTS.vector);
+            } else {
+                field.insertColumnVector(model.elements.length, Model.ENVIRONMENTS.vector);
+            }
+        } else {
+            field.insertMatrix({
+                rows: size.rows,
+                columns: size.columns,
+                environment: Model.ENVIRONMENTS.matrix
+            });
+        }
+
+        field.focus();
+    }
+
+    /**
+     * Open the chooser for a structure and insert what the user picked.
+     *
+     * @param {string} kind Either "matrix" or "vector".
+     * @param {HTMLElement} button Button that was activated.
+     * @param {Object|Function} target MQ field or getter.
+     */
+    function insertFromPopup(kind, button, target) {
+        var open = kind === 'vector' ? Popup.openVectorChooser : Popup.openMatrixGrid;
+
+        open(button, function(model) {
+            var f = resolve(target);
+            if (!f) {
+                return;
+            }
+            try {
+                insertModel(f, model);
+            } catch (ex) {
+                dbg('Error: ' + ex.message);
+            }
+        });
+    }
+
+    /**
      * Create one toolbar button.
      *
      * @param {Object} el Element definition.
@@ -249,9 +311,18 @@ define(['jquery'], function($) {
             e.stopPropagation();
         });
 
+        if (action === 'popup') {
+            $btn.attr('aria-haspopup', 'dialog').attr('aria-expanded', 'false');
+        }
+
         $btn.on('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
+
+            if (action === 'popup') {
+                insertFromPopup(command, this, target);
+                return;
+            }
 
             var f = resolve(target);
             if (!f) {
@@ -298,6 +369,11 @@ define(['jquery'], function($) {
          */
         build: function(target, config, defs) {
             var $bar = $('<div>').addClass('sme-toolbar');
+
+            // The popup labels come from the language pack via the definitions export.
+            if (defs && defs.popupStrings) {
+                Popup.setStrings(defs.popupStrings);
+            }
 
             var groups = defs.groups
                 || defs.elementGroups

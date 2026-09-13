@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091307 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091308 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -391,3 +391,61 @@ without the option still produces it.
 
 Behat and Playwright have not run here (no database). The library swap touches the editor in
 every quiz attempt, so the full suite matters more than usual before this leaves `development`.
+
+
+## 13. Iteration 9 (2026091308): #62 — matrix and vector input from the toolbar
+
+The four fixed buttons from iteration 3 are gone. In their place the matrix group has two
+buttons that open a chooser:
+
+    [⋮] ▾    grid, 5 × 5, highlights the block from (1,1) to the cell under the cursor
+    (a⋮b) ▾  dimension and orientation for a vector
+
+### Structured model instead of a LaTeX string
+
+The issue is explicit that complex structures must not be assembled as LaTeX and written into
+the field. Three new modules:
+
+* `structured_input.js` — the model. `createMatrix(rows, columns)`,
+  `createVector(dimension, orientation)`, validation, the shared size limit (10, quick pick 5),
+  and `toLatex()` for the cases where MathQuill has to be handed LaTeX.
+* `structured_serializer.js` — model ↔ Maxima. Parsing walks the string with a bracket counter,
+  not a global regular expression, because cells contain commas, brackets and nested matrices.
+* `structured_popup.js` — the two choosers. Keyboard first: arrows move, Enter confirms, Escape
+  closes and returns the focus to the button. The chosen size is written out as text
+  (`3 × 2 matrix`) in an `aria-live` region, so it is not carried by colour alone.
+
+`toolbar.js` gained the action `popup` and hands the model to MathQuill's structure API
+(`insertMatrix` / `insertRowVector` / `insertColumnVector`). It never builds a LaTeX string.
+
+### A vector is not a matrix
+
+The model keeps the distinction: `{type: 'vector', orientation, elements}` against
+`{type: 'matrix', rows}`. The serializer decides once what that means for the CAS —
+`matrix([a],[b],[c])` for a column vector, or a list when `vectorformat` is set to `list`.
+Reverse loading reads a single row or a single column back as a vector, which is what the
+editor offered in the first place.
+
+### Reverse loading and errors
+
+`fromMaxima()` returns null for anything that is not one of these structures —
+`matrix(a,b)` with list-valued variables, a ragged matrix, an unbalanced bracket. The caller
+keeps the generic editor behaviour rather than discarding the answer.
+
+### Verification
+
+- 33 new Jest cases in `structured_input.test.js`: model, serializer, reverse loading,
+  roundtrip for the four fixtures from the issue, and the popup under jsdom — arrow keys, the
+  selection staying inside the grid, click, Enter, Escape, focus return, ARIA roles, language
+  pack labels. Suite total 866 green.
+- ESLint and the AMD build via grunt in a Moodle 4.5 tree, PHPCS green.
+
+### Not covered by this iteration
+
+Changing the dimensions of an existing matrix still happens through the keyboard
+(`Shift-Enter`, `Shift-Spacebar`, Backspace on an empty row or column) from iteration 3, not
+through a context menu. §3 of the issue allows either; a menu would be the nicer UI and is the
+obvious follow-up.
+
+Behat and Playwright have not run here. The popup is tested under jsdom, which covers the
+logic but not the layout, the focus ring or the placement below the button.

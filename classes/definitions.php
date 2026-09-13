@@ -450,24 +450,14 @@ class definitions {
                 'default_enabled' => false,
                 'elements'        => [
                     [
-                        'display' => '[⋮]',
-                        'matrix'  => ['rows' => 2, 'columns' => 2, 'environment' => 'bmatrix'],
-                        'tooltip' => get_string('btn_matrix_2x2', $p),
+                        'display' => '[⋮] ▾',
+                        'popup'   => 'matrix',
+                        'tooltip' => get_string('btn_matrix_popup', $p),
                     ],
                     [
-                        'display' => '[⋮⋮]',
-                        'matrix'  => ['rows' => 3, 'columns' => 3, 'environment' => 'bmatrix'],
-                        'tooltip' => get_string('btn_matrix_3x3', $p),
-                    ],
-                    [
-                        'display' => '(a b)',
-                        'matrix'  => ['rows' => 1, 'columns' => 3, 'environment' => 'pmatrix'],
-                        'tooltip' => get_string('btn_row_vector', $p),
-                    ],
-                    [
-                        'display' => '(a⋮b)',
-                        'matrix'  => ['rows' => 3, 'columns' => 1, 'environment' => 'pmatrix'],
-                        'tooltip' => get_string('btn_column_vector', $p),
+                        'display' => '(a⋮b) ▾',
+                        'popup'   => 'vector',
+                        'tooltip' => get_string('btn_vector_popup', $p),
                     ],
                     ['display' => '𝟙', 'write' => '\\mathbb{1}',
                         'tooltip' => get_string('btn_unity_matrix', $p)],
@@ -769,6 +759,29 @@ class definitions {
     }
 
     /**
+     * Labels for the matrix and vector popups (#62).
+     *
+     * The popup runs in JavaScript and cannot call get_string(), so the strings travel with the
+     * definitions export.
+     *
+     * @return array Map of label keys to translated strings.
+     */
+    public static function get_popup_strings(): array {
+        $p = 'local_stackmatheditor';
+
+        return [
+            'matrixTitle'    => get_string('popup_matrix_title', $p),
+            'vectorTitle'    => get_string('popup_vector_title', $p),
+            'size'           => get_string('popup_matrix_size', $p),
+            'dimension'      => get_string('popup_dimension', $p),
+            'orientation'    => get_string('popup_orientation', $p),
+            'rowVector'      => get_string('popup_row_vector', $p),
+            'columnVector'   => get_string('popup_column_vector', $p),
+            'vectorSize'     => get_string('popup_vector_size', $p),
+        ];
+    }
+
+    /**
      * How a one-row or one-column matrix is written to Maxima.
      *
      * 'matrix' keeps matrix([a,b,c]); 'list' writes [a,b,c], which is what STACK questions whose
@@ -824,6 +837,7 @@ class definitions {
             'percentConstants' => self::get_percent_constants(),
             'usePercentPi'     => (bool)(int)get_config('local_stackmatheditor', 'usepercentpi'),
             'vectorFormat'     => self::get_vector_format(),
+            'popupStrings'     => self::get_popup_strings(),
             'normFunction'     => self::get_norm_function(),
             // Accessible names of the editor's own controls, needed synchronously on page load.
             'strings'          => self::get_js_strings(),

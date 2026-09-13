@@ -1,0 +1,325 @@
+/**
+ * @jest-environment jsdom
+ */
+// This file is part of Moodle - https://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
+
+/**
+ * Issue #62: matrices and vectors are built from a structured model, not from a LaTeX string.
+ *
+ * @copyright  2026 Ralf Erlebach
+ * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+const {loadAmd} = require('./amd_loader');
+
+const Model = loadAmd('structured_input');
+const Serializer = loadAmd('structured_serializer');
+
+describe('structured model', () => {
+    test('a matrix is created with empty cells', () => {
+        const model = Model.createMatrix(3, 2);
+        expect(model.type).toBe('matrix');
+        expect(model.rows.length).toBe(3);
+        expect(model.rows[0].length).toBe(2);
+        expect(model.rows[2][1]).toBe('');
+        expect(Model.dimensions(model)).toEqual({rows: 3, columns: 2});
+    });
+
+    test('a vector is not a matrix', () => {
+        const column = Model.createVector(3, 'column');
+        expect(column.type).toBe('vector');
+        expect(column.orientation).toBe('column');
+        expect(column.elements.length).toBe(3);
+        expect(column.rows).toBeUndefined();
+
+        const row = Model.createVector(3, 'row');
+        expect(Model.dimensions(row)).toEqual({rows: 1, columns: 3});
+        expect(Model.dimensions(column)).toEqual({rows: 3, columns: 1});
+    });
+
+    test('invalid dimensions are refused', () => {
+        expect(() => Model.createMatrix(0, 2)).toThrow();
+        expect(() => Model.createMatrix(2, 0)).toThrow();
+        expect(() => Model.createMatrix(-1, 2)).toThrow();
+        expect(() => Model.createMatrix(2.5, 2)).toThrow();
+        expect(() => Model.createMatrix(Model.MAX_DIMENSION + 1, 2)).toThrow();
+        expect(() => Model.createVector(0, 'row')).toThrow();
+        expect(() => Model.createVector(3, 'diagonal')).toThrow();
+    });
+
+    test('the limit is one number for the UI and the model', () => {
+        expect(Model.isValidDimension(Model.MAX_DIMENSION)).toBe(true);
+        expect(Model.isValidDimension(Model.MAX_DIMENSION + 1)).toBe(false);
+        expect(Model.QUICK_PICK_SIZE).toBeLessThanOrEqual(Model.MAX_DIMENSION);
+    });
+
+    test('a ragged model is invalid', () => {
+        const model = Model.createMatrix(2, 2);
+        model.rows[1] = ['a'];
+        expect(Model.isValid(model)).toBe(false);
+        expect(() => Model.toLatex(model)).toThrow();
+    });
+
+    test('LaTeX uses square brackets for matrices and round ones for vectors', () => {
+        const matrix = Model.createMatrix(2, 2);
+        matrix.rows = [['a', 'b'], ['c', 'd']];
+        expect(Model.toLatex(matrix)).toBe('\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}');
+
+        const column = Model.createVector(2, 'column');
+        column.elements = ['x', 'y'];
+        expect(Model.toLatex(column)).toBe('\\begin{pmatrix}x\\\\y\\end{pmatrix}');
+
+        const row = Model.createVector(3, 'row');
+        row.elements = ['x', 'y', 'z'];
+        expect(Model.toLatex(row)).toBe('\\begin{pmatrix}x&y&z\\end{pmatrix}');
+    });
+});
+
+describe('serializer: model to Maxima', () => {
+    function matrix(rows) {
+        const model = Model.createMatrix(rows.length, rows[0].length);
+        model.rows = rows;
+        return model;
+    }
+
+    test.each([
+        [[['1', '2'], ['3', '4']], 'matrix([1,2],[3,4])'],
+        [[['x', 'sqrt(y)'], ['sin(t)', '1/2']], 'matrix([x,sqrt(y)],[sin(t),1/2])'],
+        [[['a', 'b', 'c']], 'matrix([a,b,c])']
+    ])('%j becomes %s', (rows, expected) => {
+        expect(Serializer.toMaxima(matrix(rows))).toBe(expected);
+    });
+
+    test('a column vector keeps one entry per row', () => {
+        const model = Model.createVector(3, 'column');
+        model.elements = ['a', 'b', 'c'];
+        expect(Serializer.toMaxima(model)).toBe('matrix([a],[b],[c])');
+    });
+
+    test('a row vector is one row', () => {
+        const model = Model.createVector(3, 'row');
+        model.elements = ['a', 'b', 'c'];
+        expect(Serializer.toMaxima(model)).toBe('matrix([a,b,c])');
+    });
+
+    test('the list format is used when the setting asks for it', () => {
+        const model = Model.createVector(3, 'column');
+        model.elements = ['a', 'b', 'c'];
+        expect(Serializer.toMaxima(model, {defs: {vectorFormat: 'list'}})).toBe('[a,b,c]');
+    });
+
+    test('an invalid model is not serialized', () => {
+        expect(() => Serializer.toMaxima({type: 'matrix', rows: []})).toThrow();
+    });
+});
+
+describe('serializer: Maxima to model (reverse loading)', () => {
+    test('a matrix keeps its dimensions and cell order', () => {
+        const model = Serializer.fromMaxima('matrix([a,b],[c,d])');
+        expect(model.type).toBe('matrix');
+        expect(model.rows).toEqual([['a', 'b'], ['c', 'd']]);
+    });
+
+    test('nested expressions inside cells survive', () => {
+        const model = Serializer.fromMaxima('matrix([x,sqrt(y)],[sin(t),1/2])');
+        expect(model.rows[0][1]).toBe('sqrt(y)');
+        expect(model.rows[1][0]).toBe('sin(t)');
+    });
+
+    test('a nested matrix stays in its cell', () => {
+        const model = Serializer.fromMaxima('matrix([a,matrix([x],[y])])');
+        expect(model.type).toBe('vector');
+        expect(model.elements[1]).toBe('matrix([x],[y])');
+    });
+
+    test('single rows and single columns come back as vectors', () => {
+        const row = Serializer.fromMaxima('matrix([a,b,c])');
+        expect(row.type).toBe('vector');
+        expect(row.orientation).toBe('row');
+
+        const column = Serializer.fromMaxima('matrix([a],[b],[c])');
+        expect(column.type).toBe('vector');
+        expect(column.orientation).toBe('column');
+        expect(column.elements).toEqual(['a', 'b', 'c']);
+    });
+
+    test('a list is read as a row vector', () => {
+        const model = Serializer.fromMaxima('[a,b,c]');
+        expect(model.type).toBe('vector');
+        expect(model.elements).toEqual(['a', 'b', 'c']);
+    });
+
+    test('anything else is left to the generic editor', () => {
+        expect(Serializer.fromMaxima('matrix(a,b)')).toBeNull();
+        expect(Serializer.fromMaxima('matrix([a,b],[c])')).toBeNull();
+        expect(Serializer.fromMaxima('x+1')).toBeNull();
+        expect(Serializer.fromMaxima('')).toBeNull();
+        expect(Serializer.fromMaxima('matrix([a,b]')).toBeNull();
+    });
+});
+
+describe('roundtrip', () => {
+    test.each([
+        'matrix([1,2],[3,4])',
+        'matrix([x,sqrt(y)],[sin(t),1/2])',
+        'matrix([a,b,c])',
+        'matrix([a],[b],[c])'
+    ])('%s survives model -> Maxima', (maxima) => {
+        const model = Serializer.fromMaxima(maxima);
+        expect(model).not.toBeNull();
+        expect(Serializer.toMaxima(model)).toBe(maxima);
+    });
+
+    test('a 1x1 matrix keeps its type', () => {
+        const model = Serializer.fromMaxima('matrix([a])');
+        expect(model.type).toBe('matrix');
+        expect(Serializer.toMaxima(model)).toBe('matrix([a])');
+    });
+});
+
+describe('popup', () => {
+    let Popup;
+    let owner;
+
+    function key(element, name) {
+        const event = new window.KeyboardEvent('keydown', {key: name, bubbles: true});
+        element.dispatchEvent(event);
+    }
+
+    beforeEach(() => {
+        jest.resetModules();
+        Popup = loadAmd('structured_popup');
+        document.body.innerHTML = '';
+        owner = document.createElement('button');
+        document.body.appendChild(owner);
+    });
+
+    test('the grid offers the quick-pick size and announces the selection', () => {
+        const chosen = [];
+        Popup.openMatrixGrid(owner, (model) => chosen.push(model));
+
+        const cells = document.querySelectorAll('.sme-matrix-grid-cell');
+        expect(cells.length).toBe(Model.QUICK_PICK_SIZE * Model.QUICK_PICK_SIZE);
+        expect(owner.getAttribute('aria-expanded')).toBe('true');
+        expect(document.querySelector('.sme-structured-popup-label').textContent)
+            .toContain('1');
+        expect(chosen.length).toBe(0);
+    });
+
+    test('arrow keys select a block and Enter confirms it', () => {
+        const chosen = [];
+        Popup.openMatrixGrid(owner, (model) => chosen.push(model));
+        const grid = document.querySelector('.sme-matrix-grid');
+
+        key(grid, 'ArrowDown');
+        key(grid, 'ArrowDown');
+        key(grid, 'ArrowRight');
+
+        const selected = document.querySelectorAll('.sme-matrix-grid-cell.sme-selected');
+        expect(selected.length).toBe(6);
+        expect(document.querySelector('.sme-structured-popup-label').textContent)
+            .toBe('3 × 2 matrix');
+
+        key(grid, 'Enter');
+        expect(chosen.length).toBe(1);
+        expect(Model.dimensions(chosen[0])).toEqual({rows: 3, columns: 2});
+        expect(Popup.isOpen()).toBe(false);
+    });
+
+    test('the selection never leaves the grid', () => {
+        Popup.openMatrixGrid(owner, () => {});
+        const grid = document.querySelector('.sme-matrix-grid');
+
+        for (let i = 0; i < Model.QUICK_PICK_SIZE + 3; i += 1) {
+            key(grid, 'ArrowUp');
+            key(grid, 'ArrowLeft');
+        }
+        expect(document.querySelectorAll('.sme-matrix-grid-cell.sme-selected').length).toBe(1);
+
+        for (let i = 0; i < Model.QUICK_PICK_SIZE + 3; i += 1) {
+            key(grid, 'ArrowDown');
+            key(grid, 'ArrowRight');
+        }
+        expect(document.querySelectorAll('.sme-matrix-grid-cell.sme-selected').length)
+            .toBe(Model.QUICK_PICK_SIZE * Model.QUICK_PICK_SIZE);
+    });
+
+    test('a click picks the cell it is on', () => {
+        const chosen = [];
+        Popup.openMatrixGrid(owner, (model) => chosen.push(model));
+        const cells = document.querySelectorAll('.sme-matrix-grid-cell');
+
+        // Row 2, column 4 in a 5x5 grid.
+        cells[8].dispatchEvent(new window.MouseEvent('click', {bubbles: true}));
+        expect(Model.dimensions(chosen[0])).toEqual({rows: 2, columns: 4});
+    });
+
+    test('Escape closes without a selection and gives the focus back', () => {
+        const chosen = [];
+        Popup.openMatrixGrid(owner, (model) => chosen.push(model));
+
+        document.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'Escape'}));
+
+        expect(chosen.length).toBe(0);
+        expect(Popup.isOpen()).toBe(false);
+        expect(document.querySelector('.sme-structured-popup')).toBeNull();
+        expect(document.activeElement).toBe(owner);
+        expect(owner.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    test('the grid carries ARIA roles', () => {
+        Popup.openMatrixGrid(owner, () => {});
+        expect(document.querySelector('.sme-matrix-grid').getAttribute('role')).toBe('grid');
+        expect(document.querySelector('.sme-matrix-grid-row').getAttribute('role')).toBe('row');
+        expect(document.querySelector('.sme-matrix-grid-cell').getAttribute('role'))
+            .toBe('gridcell');
+        expect(document.querySelector('.sme-matrix-grid-cell').getAttribute('aria-selected'))
+            .toBe('true');
+    });
+
+    test('the vector chooser offers dimension and orientation', () => {
+        const chosen = [];
+        Popup.openVectorChooser(owner, (model) => chosen.push(model));
+
+        const dimensions = document.querySelectorAll('.sme-vector-dimension');
+        const orientations = document.querySelectorAll('.sme-vector-orientation');
+        expect(dimensions.length).toBeGreaterThan(1);
+        expect(orientations.length).toBe(2);
+
+        dimensions[1].dispatchEvent(new window.MouseEvent('click', {bubbles: true}));
+        orientations[1].dispatchEvent(new window.MouseEvent('click', {bubbles: true}));
+        key(document.querySelector('.sme-vector-popup'), 'Enter');
+
+        expect(chosen.length).toBe(1);
+        expect(chosen[0].type).toBe('vector');
+        expect(chosen[0].orientation).toBe('row');
+        expect(chosen[0].elements.length).toBe(3);
+    });
+
+    test('opening a second popup closes the first', () => {
+        Popup.openMatrixGrid(owner, () => {});
+        Popup.openVectorChooser(owner, () => {});
+        expect(document.querySelectorAll('.sme-structured-popup').length).toBe(1);
+        expect(document.querySelector('.sme-vector-popup')).not.toBeNull();
+    });
+
+    test('labels come from the language pack', () => {
+        Popup.setStrings({size: '{a} Zeilen, {b} Spalten'});
+        Popup.openMatrixGrid(owner, () => {});
+        expect(document.querySelector('.sme-structured-popup-label').textContent)
+            .toBe('1 Zeilen, 1 Spalten');
+    });
+});

@@ -423,3 +423,62 @@
     font-size: 0.7em;
     line-height: 1;
 }
+
+/* Matrix and vector popups (#62). */
+.sme-structured-popup {
+    background: var(--white, #fff);
+    border: 1px solid var(--gray-400, #ced4da);
+    border-radius: 0.25rem;
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.2);
+    padding: 0.5rem;
+}
+
+.sme-matrix-grid-row {
+    display: flex;
+}
+
+.sme-matrix-grid-cell {
+    background: var(--white, #fff);
+    border: 1px solid var(--gray-400, #ced4da);
+    height: 1.4rem;
+    margin: 1px;
+    padding: 0;
+    width: 1.4rem;
+}
+
+.sme-matrix-grid-cell.sme-selected {
+    background: var(--primary, #0f6cbf);
+    border-color: var(--primary, #0f6cbf);
+}
+
+.sme-matrix-grid-cell:focus {
+    outline: 2px solid var(--warning, #f0ad4e);
+    outline-offset: 1px;
+}
+
+.sme-vector-row {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 0.25rem;
+}
+
+.sme-vector-dimension,
+.sme-vector-orientation {
+    background: var(--white, #fff);
+    border: 1px solid var(--gray-400, #ced4da);
+    border-radius: 0.2rem;
+    padding: 0.1rem 0.4rem;
+}
+
+.sme-vector-dimension.sme-selected,
+.sme-vector-orientation.sme-selected {
+    background: var(--primary, #0f6cbf);
+    border-color: var(--primary, #0f6cbf);
+    color: var(--white, #fff);
+}
+
+.sme-structured-popup-label {
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+    white-space: nowrap;
+}
