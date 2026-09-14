@@ -17,6 +17,7 @@
 namespace local_stackmatheditor\output;
 
 use local_stackmatheditor\config_manager;
+use local_stackmatheditor\dependency_resolver;
 use local_stackmatheditor\definitions;
 use local_stackmatheditor\quiz_helper;
 use local_stackmatheditor\output\page_helper;
@@ -178,6 +179,12 @@ class editor_injector {
             }
         }
 
+        foreach ($stackdata['slotmap'] as $slot => $qid) {
+            if (isset($slotconfigs[$slot])) {
+                $slotconfigs[$slot] = self::drop_unavailable_groups($slotconfigs[$slot], $qid);
+            }
+        }
+
         return $slotconfigs;
     }
 
@@ -196,7 +203,34 @@ class editor_injector {
         if (!$qbeid) {
             return [];
         }
-        return [1 => config_manager::get_config($cmid, $qbeid)];
+        return [
+            1 => self::drop_unavailable_groups(
+                config_manager::get_config($cmid, $qbeid),
+                $questionid
+            ),
+        ];
+    }
+
+    /**
+     * Remove groups whose CAS packages are not available in this question (#66).
+     *
+     * A group that is configured but unavailable is switched off for the learner, who never
+     * learns why: a button that the question cannot execute is worse than no button, and the
+     * reason is an author's concern. The configuration itself is untouched - the author keeps
+     * their choice, and it takes effect as soon as the question loads the package.
+     *
+     * @param array $config Group key => enabled.
+     * @param int $questionid Question the editor is rendered for.
+     * @return array Config with unavailable groups switched off.
+     */
+    private static function drop_unavailable_groups(array $config, int $questionid): array {
+        foreach (dependency_resolver::get_unavailable_groups($questionid) as $group) {
+            if (array_key_exists($group, $config)) {
+                $config[$group] = 0;
+            }
+        }
+
+        return $config;
     }
 
     /**

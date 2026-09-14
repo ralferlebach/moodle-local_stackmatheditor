@@ -348,6 +348,11 @@ class definitions {
             'geometry' => [
                 'label'           => get_string('group_geometry', $p),
                 'default_enabled' => false,
+                // Distance, Angle and Length come from STACK's own geometry.mac (#66): core,
+                // so the group is available wherever STACK is.
+                'requires'        => [
+                    ['type' => 'stack_core', 'package' => 'geometry.mac'],
+                ],
                 'elements'        => array_merge(self::get_geometry_elements($p), [
                     ['label'   => '\\overline{AB}', 'write' => '\\overline{}',
                         'display' => 'AB̅',
@@ -434,6 +439,10 @@ class definitions {
             'vector_differential' => [
                 'label'           => get_string('group_vector_differential', $p),
                 'default_enabled' => false,
+                // grad, div and curl live in Maxima's vect package and need express() (#66).
+                'requires'        => [
+                    ['type' => 'maxima_share', 'package' => 'vect'],
+                ],
                 'elements'        => self::get_differential_operator_elements($p),
             ],
 

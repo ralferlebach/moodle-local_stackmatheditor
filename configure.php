@@ -246,6 +246,7 @@ $mform = new configure_form($pageurl->out(false), [
     'previewhtml'    => $questionpreviewhtml,
     'returnurl'      => $returnurl,
     'instancemode'   => $instancemode,
+    'dependencies'   => \local_stackmatheditor\dependency_resolver::get_group_status($questionid),
     'stacksemantics' => \local_stackmatheditor\stack_inputs::get_semantics_summary(
         $questionid,
         (int) $course->id,

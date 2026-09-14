@@ -222,6 +222,50 @@ class configure_form extends \moodleform {
             'local_stackmatheditor'
         );
 
+        // Groups whose CAS packages this question does not load (#66). The choice can still be
+        // made and saved: the author configures the group now and loads the package afterwards.
+        // Until then the group stays hidden from learners, and here is what to add.
+        $dependencies = $customdata['dependencies'] ?? [];
+
+        foreach ($dependencies as $key => $status) {
+            if (!empty($status['available'])) {
+                continue;
+            }
+
+            $label = $grouplabels[$key] ?? $key;
+            $lines = [];
+
+            if (!empty($status['unknown'])) {
+                $lines[] = get_string('dependency_unknown', 'local_stackmatheditor');
+            }
+
+            foreach ($status['requirements'] as $requirement) {
+                if (!empty($requirement['satisfied']) || $requirement['instruction'] === '') {
+                    continue;
+                }
+                $lines[] = get_string(
+                    'dependency_missing',
+                    'local_stackmatheditor',
+                    (object) [
+                        'package'     => s($requirement['package']),
+                        'instruction' => s($requirement['instruction']),
+                    ]
+                );
+            }
+
+            $mform->addElement(
+                'static',
+                'dependency_' . $key,
+                \html_writer::span(
+                    get_string('dependency_marker', 'local_stackmatheditor', s($label))
+                ),
+                \html_writer::div(
+                    implode(\html_writer::empty_tag('br'), $lines),
+                    'text-muted small'
+                )
+            );
+        }
+
         // STACK input semantics (#65). Read-only: STACK stores "insert stars" per input, and
         // that is where it is edited. The editor only makes the value visible where the toolbar
         // is configured.

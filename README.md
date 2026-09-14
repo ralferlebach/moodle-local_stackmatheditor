@@ -137,6 +137,24 @@ that input:
     saved answer -> max2tex -> MathQuill
 
 Supported STACK input types: algebraic, units, textarea and equivalence reasoning.
+### Which buttons a question offers
+
+A button is shown when two things hold: its mapping to STACK is verified, and the CAS packages
+it needs are available in that particular question.
+
+| Group | Needs | Where it comes from |
+|---|---|---|
+| Geometry (points, distance, angle) | `geometry.mac` | STACK core, always there |
+| Vector differential (grad, div, rot, Δ) | Maxima package `vect` | `load("vect");` in the question variables |
+
+A group whose packages are missing can still be selected and saved on the configuration page -
+it is marked there, with the line to add - but it is not rendered for students. No second
+"available" flag is stored anywhere: the question variables are the only source. Add the line
+and the group appears on the next reload; remove it and the group disappears again.
+
+The editor never writes `load(...)` or `stack_include_contrib(...)` into a question. That is the
+author's decision.
+
 ### Where the editor runs
 
 The editor extends STACK questions, not a quiz module. Wherever the Moodle question engine

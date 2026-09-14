@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091319 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091320 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -937,3 +937,61 @@ changes.
 green on 4.5, 5.0 and 5.2, plus JS/CSS, quality, stale files and PHP lint - Behat was the only
 red job, and the 41 scenarios that passed did so with the new MathQuill build, the space
 handling from #64 and the read-only rule from #50 in place.
+
+
+## 25. Iteration 21 (2026091320): #66 — a button needs its CAS package too
+
+#34 says a button must have a verified mapping. #66 adds the second condition, and it is the one
+that closes the points left open by #45 and #63:
+
+    Visible button = verified mapping AND the package is available in this question.
+
+### The resolver
+
+`classes/dependency_resolver.php` reads `qtype_stack_options.questionvariables` and answers one
+question per group: are its packages loaded here? Three requirement types:
+
+* `stack_core` - loaded by `stackmaxima.mac`, always satisfied. `geometry.mac` with `Distance`,
+  `Angle` and `Length` is core, so the geometry group from #63 is never marked.
+* `stack_contrib` - needs `stack_include_contrib("...");` in the question.
+* `maxima_share` - needs `load("...");`.
+
+Detection normalises before it matches: Maxima comments are removed first (a `load("vect")`
+inside `/* ... */` is not a load), whitespace is collapsed, and both quote styles are accepted.
+`load ( 'vect' )` counts, `myload("vect")` and `load("vectors")` do not.
+
+It is feature detection and nothing else: no CAS code runs, no question variables are written,
+no package is loaded. What it cannot read counts as not loaded - never the other way round.
+
+### Where it takes effect
+
+* `definitions.php`: the groups declare their requirements. `vector_differential` needs `vect`;
+  `geometry` declares `geometry.mac` as core, so the declaration is complete rather than absent.
+* `editor_injector`: a group whose packages are missing is switched off in the configuration
+  that reaches the browser - per slot, per question. A student sees no button and no reason.
+* `configure_form`: the author sees the group marked with `*`, with the exact line to add. The
+  choice can still be saved: configure now, load the package afterwards, and the group appears on
+  the next reload. Nothing about availability is persisted - the question variables are the only
+  truth.
+
+### Verification
+
+12 new PHPUnit cases: every documented syntax variant, what must not count (comments, a longer
+package name, a different function), core without a load, the instruction text per type, several
+requirements as an AND, a group without requirements, the declared dependencies of the toolbar
+being well formed, and the fail-safe for a question that cannot be read. PHPCS green over the
+whole plugin.
+
+### What this changes for #45 and #63
+
+The differential operators now have two gates: an admin has to name the Maxima function
+(iteration 13), and the question has to load `vect`. Both are the author's decisions, and
+neither is guessed. The geometry group needs no action - `geometry.mac` is core.
+
+### Still open
+
+Behat for the dynamic case - add the line, reload, group appears; remove it, group disappears -
+needs a live instance. And the CI matrix from #34 §CI, which would fail the build when a visible
+group has no declared dependency, is not written: the PHPUnit test asserts the declarations are
+well formed, but not that every group with CAS-dependent buttons has declared one. That check
+needs the catalogue from #34 to exist first.
