@@ -80,6 +80,7 @@ $string['btn_curly_brackets'] = 'Curly brackets { }';
 $string['btn_degree'] = 'Degree (°)';
 $string['btn_delta'] = 'Delta (δ)';
 $string['btn_deriv'] = 'Derivative (d/dx)';
+$string['btn_determinant'] = 'Determinant det(A)';
 $string['btn_distance'] = 'Distance between two points';
 $string['btn_div'] = 'Division (÷)';
 $string['btn_div_op'] = 'Divergence (div)';

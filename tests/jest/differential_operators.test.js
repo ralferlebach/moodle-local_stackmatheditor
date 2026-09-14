@@ -161,3 +161,29 @@ describe('roundtrip (#45)', () => {
         expect(tex2max.convert(max2tex.convert(maxima, CONFIGURED), CONFIGURED)).toBe(maxima);
     });
 });
+
+describe('determinant and norm from the toolbar (#34)', () => {
+    test('det(A) is Maxima\'s determinant()', () => {
+        expect(tex2max.convert('\\det\\left(A\\right)')).toBe('determinant(A)');
+        expect(tex2max.convert('det\\left(A\\right)')).toBe('determinant(A)');
+        expect(tex2max.convert('\\det\\left(\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}\\right)'))
+            .toBe('determinant(matrix([a,b],[c,d]))');
+    });
+
+    test('a variable whose name starts with det is left alone', () => {
+        expect(tex2max.convert('detergent')).toBe('detergent');
+        expect(tex2max.convert('2det')).toBe('2det');
+    });
+
+    test('the double bar is a norm, the single bar an absolute value', () => {
+        const configured = {defs: {normFunction: 'norm'}};
+        expect(tex2max.convert('\\left\\|v\\right\\|', configured)).toBe('norm(v)');
+        expect(tex2max.convert('\\left\\|a+b\\right\\|', configured)).toBe('norm(a+b)');
+        expect(tex2max.convert('\\left|x\\right|', configured)).toBe('abs(x)');
+    });
+
+    test('without a configured norm function nothing changes', () => {
+        // The site has not said what its norm is called; the previous behaviour stands.
+        expect(tex2max.convert('\\left\\|v\\right\\|')).toBe('abs(v)');
+    });
+});

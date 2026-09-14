@@ -80,6 +80,7 @@ $string['btn_curly_brackets'] = 'Geschweifte Klammern { }';
 $string['btn_degree'] = 'Grad (°)';
 $string['btn_delta'] = 'Delta (δ)';
 $string['btn_deriv'] = 'Ableitung (d/dx)';
+$string['btn_determinant'] = 'Determinante det(A)';
 $string['btn_distance'] = 'Abstand zweier Punkte';
 $string['btn_div'] = 'Division (÷)';
 $string['btn_div_op'] = 'Divergenz (div)';

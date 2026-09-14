@@ -394,4 +394,48 @@ final class definitions_test extends advanced_testcase {
             }
         }
     }
+
+    /**
+     * The groups a teacher can pick must actually be in the catalogue (#34).
+     *
+     * Vectors, matrices and geometry lived inside a comment block for a long time, which is not
+     * visible from the outside: the settings page simply did not list them.
+     *
+     * @return void
+     */
+    public function test_the_expected_groups_are_offered(): void {
+        $groups = definitions::get_element_groups();
+
+        foreach (
+            [
+            'vector_operators',
+            'vector_differential',
+            'matrix_operators',
+            'geometry',
+            ] as $key
+        ) {
+            $this->assertArrayHasKey($key, $groups, "group $key is missing");
+            $this->assertArrayHasKey(
+                $key,
+                definitions::get_group_labels_with_examples(),
+                "group $key is not offered in the settings"
+            );
+        }
+    }
+
+    /**
+     * A group that is offered has buttons - except where a setting decides (#45).
+     *
+     * @return void
+     */
+    public function test_offered_groups_have_buttons(): void {
+        $maybeempty = ['vector_differential'];
+
+        foreach (definitions::get_element_groups() as $key => $group) {
+            if (in_array($key, $maybeempty, true)) {
+                continue;
+            }
+            $this->assertNotEmpty($group['elements'] ?? [], "group $key has no buttons");
+        }
+    }
 }

@@ -343,6 +343,8 @@ class definitions {
                         'tooltip' => get_string('btn_permeability', $p)],
                 ],
             ],
+            */
+            // @codingStandardsIgnoreEnd
 
             // 11. Geometry.
             'geometry' => [
@@ -357,16 +359,11 @@ class definitions {
                     ['label'   => '\\overline{AB}', 'write' => '\\overline{}',
                         'display' => 'AB̅',
                         'tooltip' => get_string('btn_overline', $p)],
-                    ['display' => '°', 'cmd'   => '\\circ',
-                        'tooltip' => get_string('btn_degree', $p)],
-                    ['display' => '∠', 'cmd'   => '\\angle',
-                        'tooltip' => get_string('btn_angle', $p)],
-                    ['display' => '⊥', 'cmd'   => '\\perp',
-                        'tooltip' => get_string('btn_perp', $p)],
+                    // The degree sign, the bare angle symbol and the perpendicular sign have no
+                    // Maxima counterpart - "90circ", "angle" and "a perp b" are not expressions
+                    // (#34). The angle itself is among the structured entries above.
                 ]),
             ],
-            */
-            // @codingStandardsIgnoreEnd
 
             // 12. Trigonometry.
             'trigonometry' => [
@@ -414,43 +411,27 @@ class definitions {
                         'tooltip' => get_string('btn_prod', $p)],
                 ],
             ],
+            */
+            // @codingStandardsIgnoreEnd
 
             // 15. Vectors.
             'vector_operators' => [
                 'label'           => get_string('group_vector_operators', $p),
                 'default_enabled' => false,
-                'elements'        => [
-                    ['label'   => '\\vec{v}', 'write' => '\\vec{}',
-                        'display' => 'v⃗',
-                        'tooltip' => get_string('btn_vec', $p)],
-                    ['display' => '‖v‖', 'write' => '\\left\\|\\right\\|',
-                        'tooltip' => get_string('btn_norm', $p)],
-                    ['display' => '·', 'cmd'   => '\\cdot',
-                        'tooltip' => get_string('btn_cdot', $p)],
-                    ['display' => '×', 'cmd'   => '\\times',
-                        'tooltip' => get_string('btn_cross', $p)],
-                ],
-            ],
-
-            // 16. Differential calculus.
+                // The cross product is not here: LaTeX's times sign is multiplication, and
+                // Maxima needs express(a ~ b) from the vect package for a cross product (#34).
+                'elements'        => self::get_vector_elements($p),
             ],
 
             // 17. Vector differential.
             'vector_differential' => [
                 'label'           => get_string('group_vector_differential', $p),
                 'default_enabled' => false,
-                // grad, div and curl live in Maxima's vect package and need express() (#66).
+                // The vect package provides grad, div and curl, and they need express() (#66).
                 'requires'        => [
                     ['type' => 'maxima_share', 'package' => 'vect'],
                 ],
                 'elements'        => self::get_differential_operator_elements($p),
-            ],
-
-            // 17b. Elementary geometry (#63).
-            'geometry' => [
-                'label'           => get_string('group_geometry', $p),
-                'default_enabled' => false,
-                'elements'        => self::get_geometry_elements($p),
             ],
 
             // 18. Matrices.
@@ -468,17 +449,31 @@ class definitions {
                         'popup'   => 'vector',
                         'tooltip' => get_string('btn_vector_popup', $p),
                     ],
-                    ['display' => '𝟙', 'write' => '\\mathbb{1}',
-                        'tooltip' => get_string('btn_unity_matrix', $p)],
-                    ['display' => 'Aᵀ', 'write' => '^{\\intercal}',
-                        'tooltip' => get_string('btn_transpose', $p)],
-                    ['display' => 'A*', 'write' => '^{*}',
-                        'tooltip' => get_string('btn_conjugate', $p)],
-                    ['display' => 'A†', 'write' => '^{\\dagger}',
-                        'tooltip' => get_string('btn_adjoint', $p)],
+                    [
+                        'display' => 'det',
+                        'write'   => '\\det\\left(\\right)',
+                        'left'    => 1,
+                        'tooltip' => get_string('btn_determinant', $p),
+                    ],
+                    [
+                        'display' => 'ident',
+                        'write'   => '\\operatorname{ident}\\left(\\right)',
+                        'left'    => 1,
+                        'tooltip' => get_string('btn_unity_matrix', $p),
+                    ],
+                    [
+                        'display' => 'Aᵀ',
+                        'write'   => '\\operatorname{transpose}\\left(\\right)',
+                        'left'    => 1,
+                        'tooltip' => get_string('btn_transpose', $p),
+                    ],
+                    // A* and A-dagger are not here: "A^(*)" is not an expression Maxima
+                    // accepts, and there is no verified mapping for them (#34).
                 ],
             ],
 
+            // @codingStandardsIgnoreStart
+            /*
             // 19. Integral calculus.
             ],
 
@@ -774,6 +769,43 @@ class definitions {
             $strings[$key] = get_string($key, 'local_stackmatheditor');
         }
         return $strings;
+    }
+
+    /**
+     * Toolbar entries for vector operations (#34).
+     *
+     * Only what the converter can map: the arrow is decoration and disappears, the dot is
+     * multiplication. The norm needs a Maxima function, so its button appears only once the site
+     * has named one - without that, the double bar would become abs(), a different function.
+     *
+     * @param string $p Plugin component name for get_string().
+     * @return array Toolbar elements.
+     */
+    private static function get_vector_elements(string $p): array {
+        $elements = [
+            [
+                'label'   => '\\vec{v}',
+                'write'   => '\\vec{}',
+                'display' => 'v⃗',
+                'tooltip' => get_string('btn_vec', $p),
+            ],
+            [
+                'display' => '·',
+                'cmd'     => '\\cdot',
+                'tooltip' => get_string('btn_cdot', $p),
+            ],
+        ];
+
+        if (self::get_norm_function() !== '') {
+            $elements[] = [
+                'display' => '‖v‖',
+                'write'   => '\\left\\\\|\\right\\\\|',
+                'left'    => 1,
+                'tooltip' => get_string('btn_norm', $p),
+            ];
+        }
+
+        return $elements;
     }
 
     /**

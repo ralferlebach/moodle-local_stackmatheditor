@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091320 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091322 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -995,3 +995,100 @@ needs a live instance. And the CI matrix from #34 §CI, which would fail the bui
 group has no declared dependency, is not written: the PHPUnit test asserts the declarations are
 well formed, but not that every group with CAS-dependent buttons has declared one. That check
 needs the catalogue from #34 to exist first.
+
+
+## 26. Iteration 22 (2026091321): three things found by asking where the buttons are
+
+Ralf asked where vectors, matrices, cross and dot product, norm and det are. Answering it turned
+up two defects and one genuine gap.
+
+### The duplicate array key
+
+Iteration 15 (#63) added a group `'geometry'` while a group of that name already existed, and
+then merged the new entries into the old one as well. Two entries with the same key in one PHP
+array: the later one wins, silently. The effective geometry group was the new one - points,
+distance, angle - and the original symbols (overline, degree, angle, perpendicular) had
+disappeared, along with the `requires` declaration from #66.
+
+The duplicate is removed; the merged group from iteration 15 is the one that stays.
+
+### The norm button promised something it did not deliver
+
+`‖v‖` wrote `\left\|…\right\|`, which the converter turned into `abs(v)`. For a vector that is
+not the norm, it is a different function - exactly the kind of button #34 forbids. With a
+configured norm function (#45) the double bar now becomes `norm(v)`; the single bar stays
+`abs(x)`, which is right. Without a configured function nothing changes, and the site has said
+nothing about what its norm is called.
+
+### det had no button at all
+
+The conversions existed since #61 and #45 - `|A|` as a vmatrix, and `\det` in front of a matrix
+environment - but no button offered them. There is one now, in the matrix group, and `det(A)`
+from the keyboard is converted too: Maxima calls it `determinant()`.
+
+### Verification
+
+4 new Jest cases, suite at 968 green. ESLint, PHPCS green.
+
+### Where the buttons live, for the record
+
+| Wanted | Group | Default |
+| ------ | ----- | ------- |
+| Matrices, vectors (the two choosers) | Matrix operations | off |
+| Vector arrow, norm, dot, cross | Vector operations | off |
+| det | Matrix operations | off |
+| Points, distance, angle, overline, degree | Geometry | off |
+| grad, div, rot, Δ | Vector differential | off, and needs `load("vect");` |
+
+Groups that are off by default have to be switched on in the site settings or per quiz/question.
+
+
+## 27. Iteration 23 (2026091322): the groups were inside a comment
+
+The screenshots settle the question from iteration 22. The settings page offers 14 groups, and
+vectors, matrices and geometry are not among them. The reason is in `definitions.php`:
+
+    // @codingStandardsIgnoreStart
+    /*
+    // 10. Physical constants.
+    ...
+    // 20. Statistics.
+    */
+    // @codingStandardsIgnoreEnd
+
+Two block comments hold eight groups: physical constants, geometry, hyperbolic functions,
+calculus operators, vectors, vector differential, matrices and statistics. They were parked
+there - the same discipline as #34, features waiting for a verified mapping - and every
+iteration since #45 has been editing code inside those comments without noticing. The matrix
+choosers from #62, the operators from #45, the geometry entries from #63: all written, all
+tested by Jest through the converter, and none of them reachable from the settings page.
+
+A harness that evaluates `get_element_groups()` outside Moodle made it visible in one line: 14
+groups instead of 22.
+
+### What is activated now, and what is not
+
+Four groups leave the comment: geometry, vector operations, vector differential, matrices. Each
+keeps only the buttons whose mapping I could verify, which is the point of #34:
+
+| Group | Buttons | Dropped, and why |
+| --- | --- | --- |
+| Geometry | P(x\|y), P(x\|y\|z), d(A,B), angle ABC, \|AB\|, overline | degree sign, bare angle, perpendicular - `90circ`, `angle` and `a perp b` are not Maxima expressions |
+| Vectors | arrow, dot, norm | the cross product: LaTeX's times sign is multiplication, and a cross product needs `express(a ~ b)` from vect |
+| Matrices | matrix chooser, vector chooser, det, ident, transpose | `A^T`, `A^*`, `A^†` - they became `A^(T)`, `A^(*)`, `A^(dagger)`, none of which Maxima accepts. ident and transpose are now function templates that do convert |
+| Vector differential | grad, div, rot, Δ | nothing; the group is empty until an admin names the Maxima functions (#45) and is hidden without `load("vect")` (#66) |
+
+Physical constants, hyperbolic functions, calculus operators and statistics stay in the comment:
+they were not asked for, and I have not checked their mappings.
+
+### The regression that should have existed
+
+`definitions_test.php` now asserts that these four groups are in the catalogue and in the
+settings list, and that an offered group has buttons - `vector_differential` excepted, because
+there a setting decides. A group inside a comment is invisible from the outside: nothing failed,
+the settings page was simply shorter than the code suggested.
+
+### Verification
+
+PHPCS green over the whole plugin, Jest 968 green, the group list checked with the harness: 18
+groups, with the expected buttons per group.

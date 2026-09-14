@@ -1837,7 +1837,19 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // of anything but a letter or digit it carries nothing and would otherwise survive in
         // stack mode ("gamma (x)", "epsilon _0").
         s = s.replace(/(\\[a-zA-Z]+)\s+(?=[^A-Za-z0-9\s])/g, '$1');
+        // "det(A)" is what the button writes and what a student types; Maxima calls it
+        // determinant() (#45). A variable named det is left alone: only a call counts.
+        s = s.replace(/(^|[^A-Za-z0-9_%])det(\s*(?:\\left)?\()/g, '$1determinant$2');
         s = convertGeometry(s, defs);
+        // The double bar is a norm, not an absolute value: abs() of a vector is not what the
+        // button promises (#34). Only with a configured norm function - otherwise the old
+        // behaviour stands, and the operator is reported like any other unavailable one.
+        if (defs && defs.normFunction) {
+            s = s.replace(
+                /\\left\\\|([\s\S]*?)\\right\\\|/g,
+                defs.normFunction + '($1)'
+            );
+        }
         s = convertDifferentialOperators(s, local, defs);
         s = convertMatrixEnvironments(s, local, defs);
         s = convertCasesToAndRelations(s);
