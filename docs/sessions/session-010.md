@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091311 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091312 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -581,3 +581,64 @@ The AMD rebuild here runs `grunt amd --force`, copied from the plugin's makefile
 turns an ESLint failure into a printed warning that the exit code no longer reflects. The CI
 runs `moodle-plugin-ci grunt --max-lint-warnings 0`, which does not forgive. Since this
 iteration the local rebuild runs without `--force`, so the two agree.
+
+
+## 17. Iteration 13 (2026091312): #45 — differential operators
+
+The three buttons that existed wrote `\mathrm{grad}\,` and friends. What reached the CAS was
+`gradf` — one identifier, silently wrong. `rot` would have gone to Maxima as `rot`, which is a
+German label, not a function.
+
+### The mapping is a setting, not an assumption
+
+Maxima has no gradient, divergence or curl that works everywhere: they live in the `vect`
+package, need `express()` and depend on the coordinate system, and many STACK questions define
+their own. Which of these a given site has cannot be decided in this plugin, so each operator
+gets a site setting holding the Maxima function name:
+
+    diffopgradient      diffopdivergence      diffopcurl      diffoplaplacian
+
+An empty setting means the operator does not exist here, and then **the button is not offered
+at all**. If such an operator still turns up in an answer — an old one, or an import — the
+converter reports `diffop_unavailable` through the problem channel and hands STACK nothing,
+rather than an expression the CAS would reject.
+
+### Label and CAS name are separate levels
+
+| button | LaTeX | CAS (example configuration) |
+| ------ | ----- | --------------------------- |
+| grad   | `\operatorname{grad}(...)` | `grad(...)` |
+| div    | `\operatorname{div}(...)`  | `div(...)`  |
+| rot    | `\operatorname{rot}(...)`  | `curl(...)` |
+| Δ      | `\Delta(...)`              | `laplacian(...)` |
+
+A site whose curl is called `curl` still shows `rot` to a German-speaking student, and back the
+other way the label returns. The operand is part of the template: the button writes the brackets
+and puts the cursor inside them.
+
+### Δ and ∇
+
+`\Delta` is the Laplace operator only when a bracket follows it. A bare `Δ`, `Δx` or `2Δ` stays
+the Greek letter — that distinction is what the issue asks for, and it is covered by tests.
+`\nabla` has no button: a free nabla without an operand is notation, not an operation. It still
+converts to the identifier `nabla` so that no backslash reaches the CAS (#39).
+
+An operator without a bracketed operand — what the old buttons produced — is reported as
+`diffop_operand_missing`. `grad f` is not a CAS call, and guessing where the operand ends would
+be inventing semantics.
+
+### Verification
+
+- 33 new Jest cases: the four operators configured and unconfigured, nested and multi-variable
+  operands, an operator on a vector, a site-specific name, the negative cases (free ∇, free Δ,
+  `rot` without operand, `div` without vector) and the roundtrip. Suite total 919 green.
+- ESLint via grunt **without `--force`** (see iteration 12), PHPCS green — which caught a
+  duplicated language key before it reached CI.
+
+### What is still unverified
+
+The wording of the issue is "verified STACK/Maxima mapping". What this iteration provides is the
+*mechanism* for a verified mapping plus the refusal to guess one. Whether `grad` exists on your
+installation, whether it needs `express()`, and in which coordinate system it works, has to be
+tried in a STACK question — I cannot test that here. Until an admin enters a name, the operators
+stay invisible, which is the state the issue asks for.

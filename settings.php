@@ -76,6 +76,19 @@ if ($hassiteconfig) {
         PARAM_ALPHANUMEXT
     ));
 
+    // CAS function names for the differential operators (#45). Empty means the operator is not
+    // offered: Maxima's gradient, divergence and curl live in the vect package and depend on the
+    // coordinate system, so the name has to come from whoever knows this installation.
+    foreach (['gradient', 'divergence', 'curl', 'laplacian'] as $smediffop) {
+        $settings->add(new admin_setting_configtext(
+            'local_stackmatheditor/diffop' . $smediffop,
+            get_string('setting_diffop_' . $smediffop, 'local_stackmatheditor'),
+            get_string('setting_diffop_' . $smediffop . '_desc', 'local_stackmatheditor'),
+            '',
+            PARAM_ALPHANUMEXT
+        ));
+    }
+
     // Default element groups multiselect.
     $grouplabels = \local_stackmatheditor\definitions::get_group_labels_with_examples();
     $groups      = \local_stackmatheditor\definitions::get_element_groups();

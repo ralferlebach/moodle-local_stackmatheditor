@@ -605,6 +605,79 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * UI label of each differential operator, by semantic id (#45).
+     *
+     * The label is what the student sees; the CAS name comes from the site settings. "rot" is
+     * the German name for what Maxima calls curl, and neither becomes the other by accident.
+     *
+     * @type {Object}
+     */
+    var DIFFERENTIAL_OPERATOR_LABELS = {
+        gradient: 'grad',
+        divergence: 'div',
+        curl: 'rot'
+    };
+
+    /**
+     * Convert the differential operators to their configured CAS function (#45).
+     *
+     * An operator that has no configured function is reported through the problem channel
+     * instead of being written out: "rot(F)" would be an identifier the CAS does not know, and a
+     * wrong answer is worse than a message. The Laplace operator is a Delta directly followed by
+     * a bracket; a bare Delta stays the Greek letter.
+     *
+     * @param {string} s Input.
+     * @param {Object} local Conversion state; local.problems collects unavailable operators.
+     * @param {Object} defs Runtime definitions; defs.diffOps holds the configured names.
+     * @returns {string} Converted string.
+     */
+    function convertDifferentialOperators(s, local, defs) {
+        var operators = (defs && defs.diffOps) || {};
+
+        Object.keys(DIFFERENTIAL_OPERATOR_LABELS).forEach(function(semantic) {
+            var label = DIFFERENTIAL_OPERATOR_LABELS[semantic];
+            var name = '(?:\\\\operatorname|\\\\mathrm)\\{' + label + '\\}(?:\\\\,)?';
+            var applied = new RegExp(name + '(\\s*(?:\\\\left)?\\()', 'g');
+            var bare = new RegExp(name, 'g');
+
+            if (!bare.test(s)) {
+                return;
+            }
+            bare.lastIndex = 0;
+
+            if (!operators[semantic]) {
+                // No verified CAS function on this site: the operator is not written out.
+                local.problems.push('diffop_unavailable');
+                s = s.replace(bare, '');
+                return;
+            }
+
+            s = s.replace(applied, operators[semantic] + '$1');
+
+            // What is left has no operand in brackets - an answer written with the older,
+            // display-only buttons. "grad f" is not a CAS call, so it is reported.
+            bare.lastIndex = 0;
+            if (bare.test(s)) {
+                bare.lastIndex = 0;
+                local.problems.push('diffop_operand_missing');
+                s = s.replace(bare, '');
+            }
+        });
+
+        // Laplace operator: a Delta with an operand. Without a bracket it is the Greek letter.
+        if (/\\Delta\s*(?:\\left)?\(/.test(s)) {
+            if (!operators.laplacian) {
+                local.problems.push('diffop_unavailable');
+                s = s.replace(/\\Delta(\s*(?:\\left)?\()/g, '$1');
+            } else {
+                s = s.replace(/\\Delta(\s*(?:\\left)?\()/g, operators.laplacian + '$1');
+            }
+        }
+
+        return s;
+    }
+
+    /**
      * Convert LaTeX matrix environments to Maxima's matrix() call.
      *
      * All six environments (matrix, pmatrix, bmatrix, Bmatrix, vmatrix, Vmatrix) map to the same
@@ -1694,6 +1767,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // of anything but a letter or digit it carries nothing and would otherwise survive in
         // stack mode ("gamma (x)", "epsilon _0").
         s = s.replace(/(\\[a-zA-Z]+)\s+(?=[^A-Za-z0-9\s])/g, '$1');
+        s = convertDifferentialOperators(s, local, defs);
         s = convertMatrixEnvironments(s, local, defs);
         s = convertCasesToAndRelations(s);
         s = mergeGluedOperatorNames(s);

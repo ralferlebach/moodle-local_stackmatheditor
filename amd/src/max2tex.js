@@ -1141,6 +1141,47 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * LaTeX label of each differential operator, by semantic id (#45).
+     *
+     * @type {Object}
+     */
+    var DIFFERENTIAL_OPERATOR_LATEX = {
+        gradient: '\\operatorname{grad}',
+        divergence: '\\operatorname{div}',
+        curl: '\\operatorname{rot}',
+        laplacian: '\\Delta'
+    };
+
+    /**
+     * Draw the configured differential operators with their label (#45).
+     *
+     * Runs on the finished LaTeX, where a function call is already \\left( ... \\right). Only
+     * names the site has configured are recognised; anything else stays the function call it
+     * is. The CAS name and the label are separate: a site whose curl is called "curl" still
+     * shows "rot" to a German-speaking student.
+     *
+     * @param {string} s Maxima expression.
+     * @param {Object} options Conversion options.
+     * @returns {string} Expression with operator names replaced by their LaTeX label.
+     */
+    function renderDifferentialOperators(s, options) {
+        var operators = ((options || {}).defs || {}).diffOps || {};
+
+        Object.keys(DIFFERENTIAL_OPERATOR_LATEX).forEach(function(semantic) {
+            var name = operators[semantic];
+            if (!name) {
+                return;
+            }
+            s = s.replace(
+                new RegExp('(^|[^A-Za-z0-9_%])' + name + '\\s*(?=(?:\\\\left)?\\()', 'g'),
+                '$1' + DIFFERENTIAL_OPERATOR_LATEX[semantic]
+            );
+        });
+
+        return s;
+    }
+
+    /**
      * Marker for a space that separates two factors in the CAS string (#64).
      *
      * @type {string}
@@ -1534,6 +1575,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
                 s = s.split(op.marker).join(op.tex + ' ');
             }
         });
+
+        // Late, on the finished LaTeX: the braces of \operatorname{...} must not be mistaken
+        // for a Maxima set literal, and the operand brackets are \left( ... \right) by now.
+        s = renderDifferentialOperators(s, options);
 
         s = s.replace(/\s+/g, ' ').trim();
         // A space the user meant becomes MathQuill's control space, so the editor shows the

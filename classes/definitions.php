@@ -434,14 +434,7 @@ class definitions {
             'vector_differential' => [
                 'label'           => get_string('group_vector_differential', $p),
                 'default_enabled' => false,
-                'elements'        => [
-                    ['display' => 'grad', 'write' => '\\mathrm{grad}\\,',
-                        'tooltip' => get_string('btn_grad', $p)],
-                    ['display' => 'div', 'write' => '\\mathrm{div}\\,',
-                        'tooltip' => get_string('btn_div_op', $p)],
-                    ['display' => 'rot', 'write' => '\\mathrm{rot}\\,',
-                        'tooltip' => get_string('btn_rot', $p)],
-                ],
+                'elements'        => self::get_differential_operator_elements($p),
             ],
 
             // 18. Matrices.
@@ -759,6 +752,84 @@ class definitions {
     }
 
     /**
+     * Toolbar entries for the vector differential operators (#45).
+     *
+     * A LaTeX symbol is not a CAS operation. Maxima has no gradient, divergence or curl that
+     * works everywhere: those functions live in the vect package, need express() and depend on
+     * the coordinate system, and whether a given STACK installation provides them - or a question
+     * defines its own - cannot be decided here. The CAS name therefore comes from a setting, and
+     * an operator without one is not offered at all, rather than producing an expression the CAS
+     * will reject.
+     *
+     * "rot" is the German label for what Maxima calls curl; the UI name never becomes the CAS
+     * name.
+     *
+     * @param string $p Plugin component name for get_string().
+     * @return array Toolbar elements, possibly empty.
+     */
+    private static function get_differential_operator_elements(string $p): array {
+        $operators = [
+            'gradient' => [
+                'display' => 'grad',
+                'latex'   => '\\operatorname{grad}',
+                'tooltip' => get_string('btn_grad', $p),
+            ],
+            'divergence' => [
+                'display' => 'div',
+                'latex'   => '\\operatorname{div}',
+                'tooltip' => get_string('btn_div_op', $p),
+            ],
+            'curl' => [
+                'display' => 'rot',
+                'latex'   => '\\operatorname{rot}',
+                'tooltip' => get_string('btn_rot', $p),
+            ],
+            'laplacian' => [
+                'display' => 'Δ',
+                'latex'   => '\\Delta',
+                'tooltip' => get_string('btn_laplacian', $p),
+            ],
+        ];
+
+        $configured = self::get_differential_operators();
+        $elements   = [];
+
+        foreach ($operators as $semantic => $operator) {
+            if (($configured[$semantic] ?? '') === '') {
+                continue;
+            }
+            $elements[] = [
+                'display'  => $operator['display'],
+                'semantic' => $semantic,
+                // The operand belongs to the template: the cursor lands inside the brackets.
+                'write'    => $operator['latex'] . '\\left(\\right)',
+                'left'     => 1,
+                'tooltip'  => $operator['tooltip'],
+            ];
+        }
+
+        return $elements;
+    }
+
+    /**
+     * CAS function names for the differential operators, from the site settings (#45).
+     *
+     * An empty value means the operator is not available on this site.
+     *
+     * @return array Semantic id => Maxima function name.
+     */
+    public static function get_differential_operators(): array {
+        $operators = [];
+
+        foreach (['gradient', 'divergence', 'curl', 'laplacian'] as $semantic) {
+            $value = trim((string) get_config('local_stackmatheditor', 'diffop' . $semantic));
+            $operators[$semantic] = preg_match('/^[a-z_][a-z0-9_]*$/i', $value) ? $value : '';
+        }
+
+        return $operators;
+    }
+
+    /**
      * Labels for the matrix and vector popups (#62).
      *
      * The popup runs in JavaScript and cannot call get_string(), so the strings travel with the
@@ -838,6 +909,7 @@ class definitions {
             'usePercentPi'     => (bool)(int)get_config('local_stackmatheditor', 'usepercentpi'),
             'vectorFormat'     => self::get_vector_format(),
             'popupStrings'     => self::get_popup_strings(),
+            'diffOps'          => self::get_differential_operators(),
             'normFunction'     => self::get_norm_function(),
             // Accessible names of the editor's own controls, needed synchronously on page load.
             'strings'          => self::get_js_strings(),
