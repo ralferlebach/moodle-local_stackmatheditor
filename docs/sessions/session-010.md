@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091317 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091318 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -856,3 +856,43 @@ the textarea editor, which has its own module.
 - ESLint `--max-warnings 0`, stylelint and PHPCS green.
 - Not verified here: how it looks and feels in a real quiz attempt. The switch uses the
   Bootstrap classes and brings its own CSS fallback, but the visual check is yours.
+
+
+## 23. Iteration 19 (2026091318): the switch for the system editor too
+
+The previous iteration left the relation-system editor without a switch, for fear of losing an
+answer on the way back. That fear was addressable, and here is how.
+
+**Off**: `syncSystemToInput()` already writes what the lines mean as one nounand-joined answer -
+`(a+2*b=5) nounand (2*a+6*b=-2)` - so handing over is exactly the existing function. The plain
+input comes back into its place with that value.
+
+**On**: the value is read back. If it is unchanged since the hand-over, the rows stay as they
+are, with their cursor position. If it changed - the student typed into the plain input - the
+rows are rebuilt from it with `getRelationSystemParts()`. An answer that is no longer a system
+(`x=1`) becomes one row instead of nothing: no answer is thrown away, which was the whole
+objection.
+
+### One bug found by writing the test
+
+The first application of the switch used to call the "read it back" direction as well. In the
+single-line editor that only re-prefilled a field that already held the answer; in the system
+editor it threw away rows that had just been built and rebuilt them from the input. Since the
+initial application the editor is left alone - it was built from that very value a moment ago.
+`apply(on, initial)` now only transfers when it is a real switch.
+
+### Refactoring
+
+`rebuildSystemRows()` and `attachSystemToggle()` are module-level functions, not nested ones:
+ESLint refuses a function declaration inside a block, and `initField()` was over the complexity
+limit again. Caught by `eslint --max-warnings 0` before the CI saw it, which is what iteration
+16 changed.
+
+### Verification
+
+4 further Jest cases: off writes the nounand answer, on without a change keeps the rows, an edit
+made while the editor was away is taken over, and an answer that is no longer a system is kept.
+Suite total 963 green. ESLint, stylelint, PHPCS green.
+
+Still not offered in the textarea editor, which has its own module and no line structure to
+rebuild.

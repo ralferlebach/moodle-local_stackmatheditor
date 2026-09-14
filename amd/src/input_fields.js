@@ -306,6 +306,82 @@ define([
     }
 
     /**
+     * Rebuild the rows of the system editor from a Maxima string (#13).
+     *
+     * Used when the editor comes back after the student has typed into the plain input: the
+     * rows on screen are stale then, and what counts is what the input holds. A value that is no
+     * longer a system becomes one row rather than nothing.
+     *
+     * @param {Object} spec Same object attachSystemToggle() works with.
+     * @param {string} maxima Current value of the input.
+     */
+    function rebuildSystemRows(spec, maxima) {
+        var parts = getRelationSystemParts(maxima);
+
+        if (!parts || !parts.length) {
+            parts = (maxima && maxima.trim()) ? [maxima.trim()] : [''];
+        }
+
+        spec.rows.length = 0;
+        spec.$rowsWrap.empty();
+        spec.getActiveField(null);
+
+        parts.forEach(function(part) {
+            createSystemRow(
+                spec.$rowsWrap,
+                spec.rows,
+                spec.ctx,
+                spec.$input,
+                spec.convOpts,
+                part,
+                spec.varMode,
+                spec.getActiveField
+            );
+        });
+
+        if (spec.rows.length) {
+            spec.getActiveField(spec.rows[0].mqField);
+            spec.rows[0].$row.addClass('sme-system-row-active');
+        }
+    }
+
+    /**
+     * Put the on/off switch above the system editor (#13).
+     *
+     * Off hands the lines over as one nounand-joined answer and brings the plain input back
+     * into its place; on reads that answer - or whatever was typed in the meantime - back into
+     * the lines.
+     *
+     * @param {Object} spec Everything the switch needs.
+     * @returns {Object} The toggle, as editor_toggle returns it.
+     */
+    function attachSystemToggle(spec) {
+        var handedOver = null;
+        var strings = (spec.ctx.defs && spec.ctx.defs.strings) || {};
+        var toggle = Toggle.create({
+            input: spec.$input[0],
+            editor: [spec.$tb[0], spec.$container[0]],
+            strings: strings,
+            id: 'sme-toggle-' + (spec.$input.attr('id') || spec.slot),
+            toInput: function() {
+                syncSystemToInput(spec.rows, spec.$input, spec.convOpts, spec.ctx.dbg, true);
+                handedOver = spec.$input.val();
+            },
+            toEditor: function() {
+                var current = spec.$input.val();
+                if (current !== handedOver) {
+                    rebuildSystemRows(spec, current);
+                }
+                spec.$input.val(current);
+            }
+        });
+
+        spec.$wrap.prepend(toggle.element);
+
+        return toggle;
+    }
+
+    /**
      * Create one graphical system row.
      *
      * @param {jQuery} $rowsWrap Rows wrapper.
@@ -665,11 +741,27 @@ define([
                 Bridge.signalEnter($input[0], {trigger: 'button', inputType: 'system'});
             });
 
+            // On/off switch for the system editor (#13); see attachSystemToggle().
+            var systemToggle = attachSystemToggle({
+                ctx: ctx,
+                $input: $input,
+                $wrap: $wrap,
+                $tb: $tb,
+                $container: $container,
+                $rowsWrap: $rowsWrap,
+                rows: rows,
+                convOpts: convOpts,
+                varMode: varMode,
+                getActiveField: getActiveField,
+                slot: slot
+            });
+
             toolbar.typeset($tb);
             setTimeout(function() {
                 $input.val(initialMaxima);
                 setTimeout(function() {
                     syncSystemToInput(rows, $input, convOpts, ctx.dbg);
+                    systemToggle.apply(!Toggle.startsOff(), true);
                 }, 0);
             }, 0);
 

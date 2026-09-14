@@ -155,7 +155,12 @@ define([], function() {
          */
         function apply(on, initial) {
             if (on) {
-                spec.toEditor();
+                // On the first application the editor already holds the answer - it was just
+                // built from it. Reading it back would rebuild the field for nothing, and in
+                // the system editor it would throw away rows that were created a moment ago.
+                if (!initial) {
+                    spec.toEditor();
+                }
                 hideOriginal(spec.input);
             } else {
                 spec.toInput();

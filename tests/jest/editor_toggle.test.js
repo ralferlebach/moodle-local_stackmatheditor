@@ -92,6 +92,15 @@ describe('editor toggle', () => {
         expect(container.classList.contains(Toggle.HIDDEN_CLASS)).toBe(true);
     });
 
+    test('the first application does not transfer anything back', () => {
+        const toggle = build();
+
+        toggle.apply(true, true);
+
+        expect(calls).toEqual([]);
+        expect(input.classList.contains(Toggle.HIDDEN_INPUT_CLASS)).toBe(true);
+    });
+
     test('switching on takes what is in the input now', () => {
         const toggle = build();
         toggle.apply(false, true);
@@ -174,5 +183,99 @@ describe('editor toggle', () => {
 
         setItem.mockRestore();
         getItem.mockRestore();
+    });
+});
+
+describe('the switch on a system of equations (#13)', () => {
+    // The system editor hands its lines over as one nounand-joined answer, and takes that
+    // answer - or whatever was typed while it was away - back into its rows.
+    let input;
+    let editor;
+    let rows;
+    let rebuilt;
+
+    const SYSTEM = '(a+2*b=5) nounand (2*a+6*b=-2)';
+
+    function joinRows() {
+        return rows.map((row) => '(' + row + ')').join(' nounand ');
+    }
+
+    function build() {
+        let handedOver = null;
+
+        return Toggle.create({
+            input: input,
+            editor: [editor],
+            strings: {},
+            id: 'sme-toggle-system',
+            toInput: () => {
+                input.value = joinRows();
+                handedOver = input.value;
+            },
+            toEditor: () => {
+                if (input.value !== handedOver) {
+                    rebuilt = input.value;
+                    rows = input.value
+                        ? input.value.split(' nounand ').map((part) => part.replace(/^\(|\)$/g, ''))
+                        : [''];
+                }
+            }
+        });
+    }
+
+    beforeEach(() => {
+        window.localStorage.clear();
+        document.body.innerHTML = '';
+        rebuilt = null;
+        rows = ['a+2*b=5', '2*a+6*b=-2'];
+        input = document.createElement('input');
+        editor = document.createElement('div');
+        document.body.append(editor, input);
+    });
+
+    test('switching off writes the lines as one nounand answer', () => {
+        const toggle = build();
+        toggle.apply(true, true);
+
+        toggle.apply(false, false);
+
+        expect(input.value).toBe(SYSTEM);
+        expect(input.classList.contains(Toggle.HIDDEN_INPUT_CLASS)).toBe(false);
+        expect(editor.classList.contains(Toggle.HIDDEN_CLASS)).toBe(true);
+    });
+
+    test('switching on without a change keeps the rows as they are', () => {
+        const toggle = build();
+        toggle.apply(true, true);
+        toggle.apply(false, false);
+
+        toggle.apply(true, false);
+
+        expect(rebuilt).toBeNull();
+        expect(rows).toEqual(['a+2*b=5', '2*a+6*b=-2']);
+        expect(input.classList.contains(Toggle.HIDDEN_INPUT_CLASS)).toBe(true);
+    });
+
+    test('an edit made while the editor was away is taken over', () => {
+        const toggle = build();
+        toggle.apply(true, true);
+        toggle.apply(false, false);
+
+        input.value = '(a=1) nounand (b=2) nounand (c=3)';
+        toggle.apply(true, false);
+
+        expect(rebuilt).toBe('(a=1) nounand (b=2) nounand (c=3)');
+        expect(rows).toEqual(['a=1', 'b=2', 'c=3']);
+    });
+
+    test('an answer that is no longer a system is not thrown away', () => {
+        const toggle = build();
+        toggle.apply(true, true);
+        toggle.apply(false, false);
+
+        input.value = 'x=1';
+        toggle.apply(true, false);
+
+        expect(rows).toEqual(['x=1']);
     });
 });
