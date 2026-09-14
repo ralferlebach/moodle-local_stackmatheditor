@@ -99,8 +99,12 @@ class config_manager {
      * @return string Normalised implicit multiplication mode.
      */
     public static function get_instance_variable_mode(): string {
-        $mode = get_config('local_stackmatheditor', 'variablemode');
-        return definitions::normalise_implicit_mode((string) $mode);
+        // Since #65 the editor no longer has a setting of its own for implicit multiplication.
+        // STACK stores "insert stars" per input and is the only source of truth; the converter
+        // therefore always hands STACK what was typed. Values stored by earlier versions are
+        // ignored rather than migrated, so that turning the decision back over to STACK does not
+        // depend on an upgrade step having run.
+        return definitions::IMPLICIT_STACK;
     }
 
     /**

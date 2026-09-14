@@ -213,9 +213,6 @@ foreach (array_keys($groups) as $key) {
     }
 }
 
-$currentvarmode = $config['_variableMode']
-    ?? config_manager::get_instance_variable_mode();
-
 // Determine initial enabled state.
 if ($instancemode === 0) {
     $currentenabled = false;
@@ -249,13 +246,18 @@ $mform = new configure_form($pageurl->out(false), [
     'previewhtml'    => $questionpreviewhtml,
     'returnurl'      => $returnurl,
     'instancemode'   => $instancemode,
+    'stacksemantics' => \local_stackmatheditor\stack_inputs::get_semantics_summary(
+        $questionid,
+        (int) $course->id,
+        $PAGE->url->out(false)
+    ),
 ]);
 
-// Set current values.
+// Set current values. Implicit multiplication is no longer an editor setting (#65): STACK owns
+// that semantics, the editor only shows it.
 $formdata = [
-    'groups'       => $selectedkeys,
-    'variablemode' => $currentvarmode,
-    'enabled'      => (int) $currentenabled,
+    'groups'  => $selectedkeys,
+    'enabled' => (int) $currentenabled,
 ];
 $mform->set_data($formdata);
 
@@ -271,9 +273,9 @@ if ($mform->is_cancelled()) {
         $elements[$key] = in_array($key, $selectedgroups);
     }
 
-    $varmode = $data->variablemode ?? definitions::IMPLICIT_STACK;
-    $varmode = definitions::normalise_implicit_mode((string) $varmode);
-    $elements['_variableMode'] = $varmode;
+    // The editor hands STACK what was typed and lets STACK's own "insert stars" setting decide
+    // (#65). Nothing about implicit multiplication is stored here any more.
+    $elements['_variableMode'] = definitions::IMPLICIT_STACK;
 
     // Store enabled flag when instance mode allows overrides.
     if ($instancemode === 2 || $instancemode === 3) {

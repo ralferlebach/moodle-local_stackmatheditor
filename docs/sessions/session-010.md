@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091309 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091310 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -505,3 +505,59 @@ expression again.
 Space no longer jumps out of a fraction or a subscript. That was a convenience; it is now
 Tab, Shift-Tab or the arrow keys. The trade is deliberate: without it, a whole family of STACK
 input configurations cannot be served at all.
+
+
+## 15. Iteration 11 (2026091310): #65 — STACK owns the input semantics
+
+The editor had its own setting for implicit multiplication next to STACK's. Two settings for one
+question, and the second one could contradict the first. It is gone.
+
+* `settings.php`: the admin default `variablemode` is removed.
+* `configure_form.php`: the select is replaced by a read-only section.
+* `config_manager::get_instance_variable_mode()` always returns the STACK mode. Values stored by
+  earlier versions are ignored rather than migrated — handing the decision back to STACK must not
+  depend on an upgrade step having run.
+* The four language strings of the removed setting are deleted.
+
+### What is shown instead
+
+`classes/stack_inputs.php` reads `qtype_stack_inputs.insertstars` — per input, because one
+question can have several inputs with different settings, and the global
+`qtype_stack/inputinsertstars` is only the default for new ones. The configuration page lists:
+
+    STACK input semantics
+    ans1    Don't insert stars
+    ans2    Insert stars for implied multiplication only
+    ans3    Insert stars assuming single-character variables, implied and for spaces
+
+    [Edit STACK input settings]
+
+The labels come from `qtype_stack`'s own language strings (the value map mirrors
+`stack_options::get_insert_star_options()`), so a teacher reads the same words as in the
+question editor, in their language. A value this plugin does not know is shown as a number
+rather than guessed at.
+
+The link appears only with the question edit capability; without it the values are still shown,
+because knowing the semantics is useful even when you may not change it. The editor never writes
+`qtype_stack_inputs`.
+
+### Verification
+
+- New `tests/unit/stack_inputs_test.php`: several inputs with different values, no inputs, the
+  labels against `qtype_stack`, an unknown value, and no link without a question. The tests skip
+  themselves where `qtype_stack` is not installed instead of failing.
+- `config_manager_test.php` now asserts the invariant instead of the removed setting: whatever
+  `variablemode` holds, the mode is STACK's.
+- PHPCS green, Jest unchanged at 886.
+
+### Interaction with #64
+
+#64 made a typed space reach STACK unchanged. This iteration is what makes that decision
+readable: a teacher configuring the toolbar now sees whether the input actually reads spaces
+(`Insert stars for spaces only` and friends) — without the editor interpreting anything.
+
+### Still open
+
+PHPUnit did not run here (no database), so the new tests are unexecuted. The Behat and
+Playwright scenarios from the issue — two inputs with different values, change in STACK, reload —
+need a live instance.

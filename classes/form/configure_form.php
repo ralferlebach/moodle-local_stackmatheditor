@@ -222,31 +222,50 @@ class configure_form extends \moodleform {
             'local_stackmatheditor'
         );
 
-        // Variable mode section.
-        $mform->addElement(
-            'header',
-            'variablesection',
-            get_string('label_variablemode', 'local_stackmatheditor')
-        );
-        $mform->setExpanded('variablesection', true);
+        // STACK input semantics (#65). Read-only: STACK stores "insert stars" per input, and
+        // that is where it is edited. The editor only makes the value visible where the toolbar
+        // is configured.
+        $semantics = $customdata['stacksemantics'] ?? ['inputs' => [], 'editurl' => null];
 
-        $varmodelabel = ($mode === 'quiz')
-            ? get_string('label_variablemode_quiz', 'local_stackmatheditor')
-            : get_string('label_variablemode', 'local_stackmatheditor');
+        if ($mode === 'question' && !empty($semantics['inputs'])) {
+            $mform->addElement(
+                'header',
+                'stacksemanticssection',
+                get_string('stacksemantics', 'local_stackmatheditor')
+            );
+            $mform->setExpanded('stacksemanticssection', true);
 
-        $mform->addElement('select', 'variablemode', $varmodelabel, [
-            definitions::IMPLICIT_EXPLICIT_SINGLE =>
-                get_string('implicitmode_explicit_single', 'local_stackmatheditor'),
-            definitions::IMPLICIT_EXPLICIT_MULTI =>
-                get_string('implicitmode_explicit_multi', 'local_stackmatheditor'),
-            definitions::IMPLICIT_SPACE_SINGLE =>
-                get_string('implicitmode_space_single', 'local_stackmatheditor'),
-            definitions::IMPLICIT_SPACE_MULTI =>
-                get_string('implicitmode_space_multi', 'local_stackmatheditor'),
-            definitions::IMPLICIT_STACK =>
-                get_string('implicitmode_stack', 'local_stackmatheditor'),
-        ]);
-        $mform->setDefault('variablemode', definitions::IMPLICIT_STACK);
+            foreach ($semantics['inputs'] as $index => $input) {
+                $mform->addElement(
+                    'static',
+                    'stackinsertstars' . $index,
+                    s($input['name']),
+                    \html_writer::span(s($input['label']))
+                );
+            }
+
+            $mform->addElement(
+                'static',
+                'stacksemanticsnote',
+                '',
+                \html_writer::span(
+                    get_string('stacksemantics_desc', 'local_stackmatheditor'),
+                    'text-muted'
+                )
+            );
+
+            if (!empty($semantics['editurl'])) {
+                $mform->addElement(
+                    'static',
+                    'stacksemanticsedit',
+                    '',
+                    \html_writer::link(
+                        $semantics['editurl'],
+                        get_string('stacksemantics_edit', 'local_stackmatheditor')
+                    )
+                );
+            }
+        }
 
         // Buttons.
         $buttons   = [];
