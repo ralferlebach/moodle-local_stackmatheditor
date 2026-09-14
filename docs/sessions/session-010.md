@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091322 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091323 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1092,3 +1092,34 @@ the settings page was simply shorter than the code suggested.
 
 PHPCS green over the whole plugin, Jest 968 green, the group list checked with the harness: 18
 groups, with the expected buttons per group.
+
+
+## 28. Iteration 24 (2026091323): the last two red tests, and the README
+
+Two CI runs, both red only in PHPUnit, and they tell the story of the last two iterations.
+
+The earlier run (2026091321) failed three tests of `dependency_resolver_test`: the group
+`vector_differential` was not in the catalogue. That was the comment-block problem, and
+iteration 23 fixed it.
+
+The later run (2026091322) fails two older tests of `definitions_test`: every group must have at
+least one element, and every label must carry an example. `vector_differential` has neither -
+its buttons exist only once an administrator has named the Maxima function for each of them
+(#45). Both assertions now skip the groups listed in a new `CONFIGURABLE_GROUPS` constant, with
+the reason in the docblock; the test from iteration 23 uses the same list instead of a local
+copy.
+
+The group stays in the catalogue although it is empty, on purpose: the settings page needs
+somewhere to show that it exists, and #66 needs somewhere to say which package is missing.
+
+### README
+
+The feature list for 1.3 now names what has been built since 1.2 - matrices and vectors,
+geometry, determinant and norm, the differential operators with their two gates, the typed
+space, the on/off switch, STACK owning the implicit multiplication, identifier integrity and the
+wider set of question contexts. The conversion section gains the matrix, determinant, point,
+operator and space rules, and the pitfalls gain the question people will actually ask: a button
+that is not there is a group switched off, a function not named, or a package not loaded.
+
+Physical constants, hyperbolic functions, calculus operators and statistics stay commented out
+as agreed - their mappings are unchecked, and #34 is clear about what that means.

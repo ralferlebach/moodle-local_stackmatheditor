@@ -40,6 +40,31 @@ Features
 
 ### Version 1.3 (in development)
 
+* Matrices and vectors: two choosers in the toolbar - a grid for the number of rows and columns,
+  and dimension plus orientation for a vector. The structure is built through MathQuill's own
+  API, never by writing a LaTeX string, and a vector keeps its own type on the way to Maxima.
+* Elementary geometry in school notation: `P(2|3)`, `d(A,B)`, `∠ABC` and the length of a segment,
+  mapped to STACK's `geometry.mac` (`[2,3]`, `Distance`, `Angle`). The coordinate separator is a
+  setting; it changes the notation, never the meaning.
+* Determinant, identity matrix and transpose as function templates; the norm becomes the Maxima
+  function the site names, instead of `abs()`.
+* Vector differential operators (grad, div, rot, Δ): each button appears only when an
+  administrator has named the Maxima function for it, and only when the question loads the
+  package it needs.
+* A typed space reaches STACK as a space: with STACK's space-sensitive "insert stars" variants,
+  `a b` and `ab` are different answers, and the editor can now produce that difference. Space no
+  longer jumps out of a fraction - that is Tab, Shift-Tab or the arrow keys.
+* Students can switch the editor off and back on. Off hands the answer to the original STACK
+  input in Maxima syntax and puts that input back in its place; on takes whatever is there now
+  back into the editor. Works for the multi-line editor too, where the lines are handed over as
+  one `nounand` answer.
+* Implicit multiplication is no longer an editor setting: STACK's "Insert stars" per input is the
+  only source, and the configuration page shows it read-only with a link into the question.
+* Identifiers survive intact: `Umax` is one variable rather than `U max`, and `U_max` keeps its
+  whole subscript in both directions.
+* The editor attaches to any editable STACK input the question engine renders - quiz, adaptive
+  quiz, question preview, CAPQuiz, StudentQuiz, embedded questions - and to questions that arrive
+  after page load. Read-only inputs keep their plain rendering.
 * Privacy: full Moodle privacy API support - a data request reports, exports and anonymises the
   "last modified by" reference of toolbar configurations (the configurations themselves are
   course data and are kept).
@@ -207,12 +232,27 @@ Function names (sqrt, sin, log, …), constants and Greek letter names are never
 * **Derivatives** become `diff(expr,x)`, `diff(expr,x,n)` or `diff(expr,x,n,y,m,…)`; the
   expression to differentiate is always written in the template's brackets. `diff` cannot tell
   whether d or ∂ was meant, so saved derivatives are always shown with ∂.
+* **Matrices** become `matrix([a,b],[c,d])`; a vector is a one-row or one-column matrix, or a
+  list when the vector format setting says so. Delimiters are notation: square brackets for a
+  matrix, round ones for a vector, `|A|` for a determinant and `‖A‖` for a norm.
+* **Determinants** become `determinant(...)`, whether written as `det(A)`, `\det` in front of a
+  matrix or with vertical bars around one.
+* **Points** become a list of coordinates: `P(2|3)` → `[2,3]`. The point name is a label and does
+  not reach the CAS. `d(A,B)` and `|AB|` become `Distance(A,B)`, `∠ABC` becomes `Angle(A,B,C)`
+  with B as the vertex.
+* **Differential operators** become the function the site has configured, so `rot` can be `curl`
+  in Maxima while the button still says `rot`. Δ is the Laplace operator only when a bracket
+  follows it; a bare Δ stays the Greek letter.
+* **A typed space** stays a space. `\,` and similar typographic spacing still carry no meaning.
 * **Greek letters** use STACK's own convention, the letter's name (`\alpha` ↔ `alpha`); variant
   glyphs map to their letter; the uppercase buttons that look like Latin letters write the Latin
   letter (STACK does not distinguish them either).
 
 ### Pitfalls
 
+* **A button that is not there** is usually a group that is switched off, a Maxima function that
+  has not been named in the settings, or a package the question does not load. The configuration
+  page says which of the three it is.
 * **Empty lines** can be edited in the multi-line editor, but STACK itself drops them when an
   answer is saved; after a reload they are gone.
 * A plain logical `or` is never turned back into `±` – only STACK's `nounor` is.

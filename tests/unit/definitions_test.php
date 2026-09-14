@@ -62,11 +62,24 @@ final class definitions_test extends advanced_testcase {
     }
 
     /**
+     * Groups whose buttons depend on a site setting and may therefore be empty (#45).
+     */
+    private const CONFIGURABLE_GROUPS = ['vector_differential'];
+
+    /**
      * Every group must have at least one element.
+     *
+     * Except the differential operators: their buttons exist only once an administrator has
+     * named the Maxima function for each of them (#45). A group that is empty because nothing
+     * has been configured is still listed, so that the setting and the dependency hint (#66)
+     * have somewhere to appear.
      */
     public function test_groups_have_elements(): void {
         $groups = definitions::get_element_groups();
         foreach ($groups as $key => $group) {
+            if (in_array($key, self::CONFIGURABLE_GROUPS, true)) {
+                continue;
+            }
             $this->assertNotEmpty(
                 $group['elements'],
                 "Group '$key' must have at least one element"
@@ -245,6 +258,10 @@ final class definitions_test extends advanced_testcase {
         $labels = definitions::get_group_labels_with_examples();
         foreach ($labels as $key => $label) {
             $this->assertIsString($label, "Label for '$key' must be string");
+            if (in_array($key, self::CONFIGURABLE_GROUPS, true)) {
+                // No buttons yet, so no examples to show (#45).
+                continue;
+            }
             // Each label should have the format "Name (x, y, z, …)" or similar.
             $this->assertStringContainsString(
                 '(',
@@ -429,10 +446,8 @@ final class definitions_test extends advanced_testcase {
      * @return void
      */
     public function test_offered_groups_have_buttons(): void {
-        $maybeempty = ['vector_differential'];
-
         foreach (definitions::get_element_groups() as $key => $group) {
-            if (in_array($key, $maybeempty, true)) {
+            if (in_array($key, self::CONFIGURABLE_GROUPS, true)) {
                 continue;
             }
             $this->assertNotEmpty($group['elements'] ?? [], "group $key has no buttons");
