@@ -750,7 +750,16 @@ class definitions {
      * @return array Map string key => text in the current language.
      */
     public static function get_js_strings(): array {
-        $keys = ['aria_add_line', 'aria_add_row', 'aria_formula_input', 'aria_remove_row', 'aria_remove_step'];
+        $keys = [
+            'aria_add_line',
+            'aria_add_row',
+            'aria_formula_input',
+            'aria_remove_row',
+            'aria_remove_step',
+            'toggle_editor',
+            'toggle_editor_off',
+            'toggle_editor_on',
+        ];
         $strings = [];
         foreach ($keys as $key) {
             $strings[$key] = get_string($key, 'local_stackmatheditor');

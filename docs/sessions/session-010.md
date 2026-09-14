@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091316 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091317 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -815,3 +815,44 @@ this correctly.
 
 The five workflow files parse and every upload step is guarded (checked mechanically, not by
 eye). No plugin code changed in this iteration.
+
+
+## 22. Iteration 18 (2026091317): #13 — students can put the editor away
+
+A switch above each editor. Off means: the answer goes into the original STACK input as Maxima,
+and that input comes back into its normal place, where it can be typed into directly. On means:
+whatever is in the input at that moment - including what was typed while the editor was away -
+goes back into the editor as LaTeX, and the input returns off screen.
+
+The preference is remembered in `localStorage`, for the site rather than per question: someone
+who switches the editor off to see more of a question on a phone wants it off on the next one
+too. Blocked storage (private mode) is not an error; the editor then simply starts on.
+
+### A module of its own
+
+`amd/src/editor_toggle.js` owns the switch and the two CSS classes and nothing else. What
+"hand over" means is passed in as two callbacks, because only the caller knows whether it drives
+one field or something else. The module has no dependencies - no jQuery, no MathQuill - which is
+why its behaviour can be tested under jsdom rather than reasoned about.
+
+The original input is parked with a class now instead of inline styles, and it is still parked
+off screen rather than hidden: `display:none` would take it out of the accessibility tree and
+move STACK's validation feedback.
+
+### Where it is not offered
+
+The relation-system editor (several lines with a brace) has no switch. Coming back from the
+plain input would mean rebuilding the rows from the text, and if that failed, the student's
+typing would be gone. Better no switch than a switch that loses an answer. The same applies to
+the textarea editor, which has its own module.
+
+### Verification
+
+- 8 Jest cases under jsdom: the switch is a labelled `role="switch"` checkbox, switching off
+  hands the answer over and reveals the input, switching on reads back what is in the input at
+  that moment, the input is never removed from the page, a click drives the same path, the state
+  is announced in an `aria-live` region, the choice is remembered but the initial application is
+  not a choice, and blocked storage does not break anything. Suite total 958 green.
+- ESLint `--max-warnings 0`, stylelint and PHPCS green.
+- Not verified here: how it looks and feels in a real quiz attempt. The switch uses the
+  Bootstrap classes and brings its own CSS fallback, but the visual check is yours.

@@ -32,8 +32,19 @@ define([
     'local_stackmatheditor/operator_map',
     'local_stackmatheditor/stack_bridge',
     'local_stackmatheditor/local_validation',
-    'local_stackmatheditor/a11y'
-], function($, tex2max, max2tex, toolbar, OperatorMap, Bridge, LocalValidation, A11y) {
+    'local_stackmatheditor/a11y',
+    'local_stackmatheditor/editor_toggle'
+], function(
+    $,
+    tex2max,
+    max2tex,
+    toolbar,
+    OperatorMap,
+    Bridge,
+    LocalValidation,
+    A11y,
+    Toggle
+) {
     'use strict';
 
     var TYPES = ['algebraic', 'units'];
@@ -556,13 +567,7 @@ define([
         // its original DOM position so STACK's
         // validation feedback stays correctly placed.
         $input.before($wrap);
-        $input.css({
-            'position': 'absolute',
-            'left': '-9999px',
-            'width': '1px',
-            'height': '1px',
-            'overflow': 'hidden'
-        });
+        Toggle.hideOriginal($input[0]);
         $input.attr('data-sme-init', '1');
 
         // Read the initial Maxima value from the HTML attribute (defaultValue)
@@ -705,6 +710,35 @@ define([
         });
         A11y.labelEditor(mqField);
 
+        // On/off switch for the editor (#13). Only for the single-line editor: a relation
+        // system would have to be rebuilt from the plain text on the way back, and silently
+        // dropping what a student typed while the editor was off is not an option.
+        var toggle = Toggle.create({
+            input: $input[0],
+            editor: [$tb[0], $container[0]],
+            strings: (ctx.defs && ctx.defs.strings) || {},
+            id: 'sme-toggle-' + ($input.attr('id') || slot),
+            toInput: function() {
+                if (!prefilling) {
+                    syncToInput(mqField, $input, convOpts, ctx.dbg, true);
+                }
+            },
+            toEditor: function() {
+                var current = $input.val();
+                prefilling = true;
+                if (current && current.trim()) {
+                    prefill(mqField, current, ctx.defs, varMode, ctx.dbg);
+                } else {
+                    mqField.latex('');
+                }
+                $input.val(current);
+                setTimeout(function() {
+                    prefilling = false;
+                }, 0);
+            }
+        });
+        $wrap.prepend(toggle.element);
+
         // Check / Submit always send the visible state (#48).
         Bridge.register(function() {
             if (!prefilling) {
@@ -715,6 +749,12 @@ define([
 
         // Typeset toolbar (delayed for MathJax).
         toolbar.typeset($tb);
+
+        // Apply the remembered choice after the pre-fill has settled, so that switching off
+        // right away still hands the answer over correctly (#13).
+        setTimeout(function() {
+            toggle.apply(!Toggle.startsOff(), true);
+        }, 0);
 
         // Pre-fill: two nested setTimeout(0) calls are used intentionally.
         //

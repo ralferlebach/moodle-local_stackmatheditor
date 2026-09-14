@@ -493,3 +493,78 @@
     display: inline-block;
     min-width: 0.35em;
 }
+
+/*
+ * On/off switch for the editor (#13). Students switch it off to see more of the question on a
+ * small screen, or to type plain STACK syntax; the original input comes back in its place.
+ */
+.sme-toggle {
+    align-items: center;
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 0.25rem;
+    min-height: 1.5rem;
+}
+
+.sme-toggle .sme-toggle-label {
+    color: var(--gray-600, #6a737b);
+    cursor: pointer;
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+/* Fallback for themes without the Bootstrap switch: a small sliding switch of our own. */
+.sme-toggle .sme-toggle-input {
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--gray-400, #ced4da);
+    border: 0;
+    border-radius: 0.65rem;
+    cursor: pointer;
+    height: 1.1rem;
+    margin: 0;
+    position: relative;
+    transition: background-color 0.15s ease-in-out;
+    width: 2rem;
+}
+
+.sme-toggle .sme-toggle-input::after {
+    background: var(--white, #fff);
+    border-radius: 50%;
+    content: "";
+    height: 0.9rem;
+    left: 0.1rem;
+    position: absolute;
+    top: 0.1rem;
+    transition: left 0.15s ease-in-out;
+    width: 0.9rem;
+}
+
+.sme-toggle .sme-toggle-input:checked {
+    background: var(--primary, #0f6cbf);
+}
+
+.sme-toggle .sme-toggle-input:checked::after {
+    left: 1rem;
+}
+
+.sme-toggle .sme-toggle-input:focus-visible {
+    outline: 2px solid var(--warning, #f0ad4e);
+    outline-offset: 2px;
+}
+
+.sme-hidden {
+    display: none;
+}
+
+/*
+ * The original STACK input while the editor is on: off screen, never display:none, so it keeps
+ * its place in the accessibility tree and STACK's validation feedback stays where it belongs.
+ */
+.sme-original-hidden {
+    height: 1px;
+    left: -9999px;
+    overflow: hidden;
+    position: absolute;
+    width: 1px;
+}
