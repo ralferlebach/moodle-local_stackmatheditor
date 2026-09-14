@@ -113,6 +113,17 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     var BOUNDARY = '\uE000';
 
     /**
+     * Marker for a space the user typed on purpose (#64).
+     *
+     * Distinct from BOUNDARY: a boundary is the converter's own token separator and may
+     * disappear, while this one is user input and always ends up as a space in the CAS
+     * string. STACK decides what the space means.
+     *
+     * @type {string}
+     */
+    var EXPLICIT_SPACE = '\uE003';
+
+    /**
      * Build a fast-lookup set from an array of strings.
      *
      * @param {Array} list Array of strings.
@@ -286,7 +297,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         while (i < s.length) {
             ch = s.charAt(i);
 
-            if (/\s/.test(ch) || ch === BOUNDARY) {
+            if (/\s/.test(ch) || ch === BOUNDARY || ch === EXPLICIT_SPACE) {
                 i++;
                 continue;
             }
@@ -1842,7 +1853,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = s.replace(/\\hbar(?![a-zA-Z])/g, 'hbar');
         s = s.replace(/\\dagger(?![a-zA-Z])/g, 'dagger');
         s = s.replace(/\\intercal(?![a-zA-Z])/g, 'T');
-        s = s.replace(/\\ /g, '');
+        // A typed space is a deliberate boundary, not decoration (#64): STACK's
+        // space-sensitive "insert stars" variants distinguish "a b" from "ab". The marker
+        // survives the passes below and becomes a plain space at the very end.
+        s = s.replace(/\\ /g, EXPLICIT_SPACE);
         // Spacing commands carry no mathematical meaning.
         s = s.replace(/\\[,;:!]/g, '');
         // Any control word still left is unknown to this converter. Keep its
@@ -1862,6 +1876,9 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         });
 
         s = resolveBoundaries(s);
+        // The typed space becomes an ordinary space here, after every pass that could have
+        // dropped it (#64). What it means is STACK's decision, not the editor's.
+        s = s.replace(new RegExp(EXPLICIT_SPACE, 'g'), ' ');
         // "lambda(" is Maxima's anonymous-function constructor. A Greek lambda written in front of
         // a bracket is always a product (#22); in stack mode, where no implicit multiplication is
         // inserted, make that explicit.

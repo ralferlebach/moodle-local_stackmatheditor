@@ -7717,8 +7717,10 @@ var __assign = (this && this.__assign) || function () {
         return class_5;
     }(Letter));
     // VanillaSymbol's
+    // The class is what a host application needs to style a typed space: where spaces carry
+    // meaning (a CAS input, for instance), "a b" has to be distinguishable from "ab".
     LatexCmds[' '] = LatexCmds.space = function () {
-        return new DigitGroupingChar('\\ ', h('span', {}, [h.text(U_NO_BREAK_SPACE)]), ' ');
+        return new DigitGroupingChar('\\ ', h('span', { class: 'mq-space' }, [h.text(U_NO_BREAK_SPACE)]), ' ');
     };
     LatexCmds['.'] = function () {
         return new DigitGroupingChar('.', h('span', { class: 'mq-digit' }, [h.text('.')]), '.');

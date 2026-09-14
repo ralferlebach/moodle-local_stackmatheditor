@@ -1141,6 +1141,40 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Marker for a space that separates two factors in the CAS string (#64).
+     *
+     * @type {string}
+     */
+    var EXPLICIT_SPACE = '\uE003';
+
+    /**
+     * Protect the spaces STACK considers meaningful.
+     *
+     * Only a space between two operands counts: "a b" is a boundary, the space in "1 + 2" is
+     * formatting. Runs after the keyword passes, so the spaces around "and", "in" or "union"
+     * have already done their work. The marker travels through the remaining passes and becomes
+     * a LaTeX control space at the end.
+     *
+     * @param {string} s Maxima expression.
+     * @returns {string} Expression with protected spaces.
+     */
+    function protectExplicitSpaces(s) {
+        return s.replace(
+            /([A-Za-z0-9_%)\]]) +(?=[A-Za-z0-9_%(\[])/g,
+            function(match, left, offset) {
+                // The keyword passes have already produced LaTeX such as "x \in A"; the space
+                // after a control word belongs to the command, not to the user.
+                var before = s.substring(0, offset + left.length);
+                if (/\\[A-Za-z]+$/.test(before)) {
+                    return match;
+                }
+
+                return left + EXPLICIT_SPACE;
+            }
+        );
+    }
+
+    /**
      * Main Maxima -> LaTeX conversion.
      *
      * @param {string} maxima Maxima expression.
@@ -1393,6 +1427,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = processSetTheoryKeywords(s);
         s = processLogicKeywords(s);
 
+        // Only now: before this point a space also separates keywords ("x in A", "p and q"),
+        // and protecting those would keep the keyword passes from matching (#64).
+        s = protectExplicitSpaces(s);
+
         // %-constants -> LaTeX (BEFORE Greek letter replacement).
         s = processConstantsList(s, defs.constants || []);
 
@@ -1498,6 +1536,9 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         });
 
         s = s.replace(/\s+/g, ' ').trim();
+        // A space the user meant becomes MathQuill's control space, so the editor shows the
+        // boundary again after a pre-fill (#64).
+        s = s.replace(new RegExp(EXPLICIT_SPACE, 'g'), '\\ ');
         return s;
     }
 

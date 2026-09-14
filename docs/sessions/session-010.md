@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091308 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091309 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -449,3 +449,59 @@ obvious follow-up.
 
 Behat and Playwright have not run here. The popup is tested under jsdom, which covers the
 logic but not the layout, the focus ring or the placement below the button.
+
+
+## 14. Iteration 10 (2026091309): #64 — the typed space is a boundary
+
+STACK has "insert stars" variants that read spaces: with them, `a b` and `ab` are different
+inputs. The editor could not produce that difference at all, because every field was created
+with `spaceBehavesLikeTab: true` — the space key navigated instead of typing. And even if it
+had, `tex2max` deleted the control space with `s.replace(/\\ /g, '')`.
+
+Both are fixed, and the editor still does not interpret the space; it passes it on.
+
+| typed     | field.latex() | CAS string |
+| --------- | ------------- | ---------- |
+| `a b`     | `a\ b`        | `a b`      |
+| `2 x`     | `2\ x`        | `2 x`      |
+| `x y z`   | `x\ y\ z`     | `x y z`    |
+| `a b+c d` | `a\ b+c\ d`   | `a b+c d`  |
+| `U max`   | `U\ \max`     | `U max`    |
+| `ab`      | `ab`          | `ab`       |
+
+The LaTeX column is measured in a browser against the vendored build, with the options the
+plugin passes. Tab and Shift-Tab still leave a block — checked in the same run by typing into a
+fraction denominator and tabbing out.
+
+### How the space survives
+
+`tex2max` turns the control space into its own marker, distinct from the token boundary the
+converter uses internally: a boundary may disappear, user input may not. The marker becomes a
+plain space at the very end, after every pass that could have swallowed it. Typographic spacing
+(`\,`, `\;`) still carries no meaning and is still dropped.
+
+`max2tex` goes the other way, but only for a space between two operands, and only after the
+keyword passes have run: before that, a space also separates `x in A` or `p and q`, and
+protecting those spaces kept the keyword rules from matching. A space that belongs to a control
+word (`\in A`) is left alone as well. Both mistakes were caught by the existing suite, which is
+what it is for.
+
+### Visibility
+
+The fork got a class for the typed space (`mq-space`, build `0.10.1-sme.3`) — MathQuill renders
+it as an unclassed span, which gives no stable styling hook. `styles.css` widens it slightly. No
+symbol is drawn: a middle dot would mean explicit multiplication, which is a different
+expression again.
+
+### Verification
+
+- 20 new Jest cases in `spaces.test.js`, suite total 886 green
+- Typing, the class and Tab navigation measured in Chromium against
+  `thirdparty/mathquill/mathquill.min.js`
+- ESLint and the AMD build through grunt, PHPCS green
+
+### What this changes for users
+
+Space no longer jumps out of a fraction or a subscript. That was a convenience; it is now
+Tab, Shift-Tab or the arrow keys. The trade is deliberate: without it, a whole family of STACK
+input configurations cannot be served at all.

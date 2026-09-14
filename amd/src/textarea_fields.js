@@ -703,7 +703,10 @@ define([
         }
 
         mq = self.ctx.MQ.MathField($mqSpan[0], {
-            spaceBehavesLikeTab: true,
+            // Space inserts a space, it does not navigate (#64). STACK's space-sensitive
+            // "insert stars" variants read "a b" differently from "ab", so the editor has to be
+            // able to produce that boundary at all. Tab and Shift-Tab still leave the block.
+            spaceBehavesLikeTab: false,
             // Typing "U_max" would otherwise give U_{\max}: a subscript is a label, not a
             // function call (#61). Ignored by MathQuill 0.10.1, which lacks the option.
             disableAutoSubstitutionInSubscripts: true,

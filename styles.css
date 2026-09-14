@@ -482,3 +482,14 @@
     margin-top: 0.25rem;
     white-space: nowrap;
 }
+
+/*
+ * A typed space is a multiplication boundary for STACK's space-sensitive "insert stars"
+ * variants (#64): "a b" must be distinguishable from "ab" on screen. No symbol is drawn -
+ * a dot would mean explicit multiplication - only a little more room than a bare nbsp.
+ */
+.sme-mq-field .mq-space,
+.sme-mq-wrap .mq-space {
+    display: inline-block;
+    min-width: 0.35em;
+}

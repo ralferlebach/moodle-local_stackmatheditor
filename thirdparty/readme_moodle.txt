@@ -2,7 +2,7 @@ This plugin includes the following third-party library:
 
 * MathQuill
   - Location: thirdparty/mathquill
-  - Version: 0.10.1-sme.2
+  - Version: 0.10.1-sme.3
   - License: MPL-2.0
   - Upstream repository: https://github.com/mathquill/mathquill
   - Fork used here:      https://github.com/ralferlebach/mathquill
@@ -20,6 +20,11 @@ MathQuill is included here as a build of a fork, not as an upstream release.
           insertColumnVector / insertRowVector, the configuration option
           autoOperatorNamesOnlyWholeWord, and the browser test automation
           around them.
+
+  sme.3:  gives the typed space the class mq-space, so a space the user
+          entered can be made visible (#64). Without a class there is no
+          stable hook: MathQuill renders it as an unclassed span with a
+          non-breaking space.
 
   sme.2:  adds autoOperatorNamesOnlyWholeWord. With it, MathQuill accepts an
           operator name only when it covers the whole run of letters, so
