@@ -126,6 +126,125 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
     }
 
     /**
+     * Trim every entry of a top-level split.
+     *
+     * @param {string} s Argument list without the enclosing brackets.
+     * @returns {Array} Trimmed entries.
+     */
+    function splitCells(s) {
+        return splitTopLevel(s).map(function(cell) {
+            return cell.trim();
+        });
+    }
+
+    /**
+     * Read a plain Maxima list, the alternative vector representation.
+     *
+     * @param {string} s Trimmed expression.
+     * @returns {?Object} Vector model or null.
+     */
+    function listToModel(s) {
+        var cells;
+        var model;
+
+        if (s.indexOf('[') !== 0 || findClose(s, 0) !== s.length - 1) {
+            return null;
+        }
+
+        cells = splitCells(s.substring(1, s.length - 1));
+        if (!cells.length) {
+            return null;
+        }
+        if (cells.some(function(cell) {
+            return cell === '' || cell.indexOf('[') !== -1;
+        })) {
+            return null;
+        }
+
+        model = Model.createVector(cells.length, 'row');
+        model.elements = cells;
+
+        return Model.isValid(model) ? model : null;
+    }
+
+    /**
+     * Read the rows of a matrix(...) call.
+     *
+     * @param {string} s Trimmed expression.
+     * @returns {?Array} Rows of raw cells, or null when this is not a rectangular matrix call.
+     */
+    function matrixCallRows(s) {
+        var close;
+        var rows = [];
+        var columns = -1;
+        var args;
+        var row;
+        var cells;
+        var i;
+
+        if (s.indexOf('matrix(') !== 0) {
+            return null;
+        }
+
+        close = findClose(s, 'matrix'.length);
+        if (close !== s.length - 1) {
+            return null;
+        }
+
+        args = splitTopLevel(s.substring('matrix'.length + 1, close));
+        for (i = 0; i < args.length; i++) {
+            row = args[i].trim();
+            if (row.charAt(0) !== '[' || row.charAt(row.length - 1) !== ']') {
+                return null;
+            }
+            cells = splitCells(row.substring(1, row.length - 1));
+            if (columns === -1) {
+                columns = cells.length;
+            } else if (cells.length !== columns) {
+                return null;
+            }
+            rows.push(cells);
+        }
+
+        return rows.length && columns >= 1 ? rows : null;
+    }
+
+    /**
+     * Turn rows into the model they describe.
+     *
+     * A single row or a single column becomes a vector: that is what the editor offers, and
+     * matrix([a],[b]) is how it wrote one.
+     *
+     * @param {Array} rows Rows of raw cells.
+     * @returns {?Object} Structured model or null.
+     */
+    function rowsToModel(rows) {
+        var columns = rows[0].length;
+        var model;
+        var i;
+        var j;
+
+        if (rows.length === 1 && columns > 1) {
+            model = Model.createVector(columns, 'row');
+            model.elements = rows[0];
+        } else if (columns === 1 && rows.length > 1) {
+            model = Model.createVector(rows.length, 'column');
+            model.elements = rows.map(function(row) {
+                return row[0];
+            });
+        } else {
+            model = Model.createMatrix(rows.length, columns);
+            for (i = 0; i < rows.length; i++) {
+                for (j = 0; j < columns; j++) {
+                    model.rows[i][j] = rows[i][j];
+                }
+            }
+        }
+
+        return Model.isValid(model) ? model : null;
+    }
+
+    /**
      * Read a Maxima expression back into a structured model.
      *
      * Returns null when the expression is not a structure this module owns. The caller then
@@ -136,85 +255,16 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
      */
     function fromMaxima(maxima) {
         var s = typeof maxima === 'string' ? maxima.trim() : '';
-        var open;
-        var close;
-        var args;
-        var rows = [];
-        var columns = -1;
-        var cells;
-        var i;
-        var j;
-        var model;
+        var list = listToModel(s);
+        var rows;
 
-        if (s.indexOf('[') === 0 && findClose(s, 0) === s.length - 1) {
-            // A plain list is the alternative vector representation.
-            cells = splitTopLevel(s.substring(1, s.length - 1)).map(function(cell) {
-                return cell.trim();
-            });
-            if (!cells.length || cells.some(function(cell) {
-                return cell === '' || cell.indexOf('[') !== -1;
-            })) {
-                return null;
-            }
-            model = Model.createVector(cells.length, 'row');
-            model.elements = cells;
-            return Model.isValid(model) ? model : null;
+        if (list) {
+            return list;
         }
 
-        if (s.indexOf('matrix(') !== 0) {
-            return null;
-        }
+        rows = matrixCallRows(s);
 
-        open = 'matrix'.length;
-        close = findClose(s, open);
-        if (close !== s.length - 1) {
-            return null;
-        }
-
-        args = splitTopLevel(s.substring(open + 1, close));
-        for (i = 0; i < args.length; i++) {
-            s = args[i].trim();
-            if (s.charAt(0) !== '[' || s.charAt(s.length - 1) !== ']') {
-                return null;
-            }
-            cells = splitTopLevel(s.substring(1, s.length - 1)).map(function(cell) {
-                return cell.trim();
-            });
-            if (columns === -1) {
-                columns = cells.length;
-            } else if (cells.length !== columns) {
-                return null;
-            }
-            rows.push(cells);
-        }
-
-        if (!rows.length || columns < 1) {
-            return null;
-        }
-
-        // A single row or a single column is read back as a vector: that is what the editor
-        // offers, and matrix([a],[b]) is how it wrote one.
-        if (rows.length === 1 && columns > 1) {
-            model = Model.createVector(columns, 'row');
-            model.elements = rows[0];
-            return Model.isValid(model) ? model : null;
-        }
-        if (columns === 1 && rows.length > 1) {
-            model = Model.createVector(rows.length, 'column');
-            model.elements = rows.map(function(row) {
-                return row[0];
-            });
-            return Model.isValid(model) ? model : null;
-        }
-
-        model = Model.createMatrix(rows.length, columns);
-        for (i = 0; i < rows.length; i++) {
-            for (j = 0; j < columns; j++) {
-                model.rows[i][j] = rows[i][j];
-            }
-        }
-
-        return Model.isValid(model) ? model : null;
+        return rows ? rowsToModel(rows) : null;
     }
 
     return /** @alias module:local_stackmatheditor/structured_serializer */ {

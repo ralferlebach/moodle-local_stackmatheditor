@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091310 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091311 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -561,3 +561,23 @@ readable: a teacher configuring the toolbar now sees whether the input actually 
 PHPUnit did not run here (no database), so the new tests are unexecuted. The Behat and
 Playwright scenarios from the issue — two inputs with different values, change in STACK, reload —
 need a live instance.
+
+
+## 16. Iteration 12 (2026091311): the ESLint complexity gate
+
+The CI run after iteration 11 was green everywhere except JS/CSS:
+
+    137:5  warning  Function 'fromMaxima' has a complexity of 25. Maximum allowed is 20
+    Warning: ESLint found too many warnings (maximum: 0)
+
+`fromMaxima()` from #62 did three jobs at once: recognise a list, read the rows of a
+`matrix(...)` call, and decide which model the rows describe. It is now three functions —
+`listToModel()`, `matrixCallRows()`, `rowsToModel()` — with `fromMaxima()` as four lines on top.
+Behaviour is unchanged; the 33 tests of the module pass as before.
+
+### Why this slipped through
+
+The AMD rebuild here runs `grunt amd --force`, copied from the plugin's makefile, and `--force`
+turns an ESLint failure into a printed warning that the exit code no longer reflects. The CI
+runs `moodle-plugin-ci grunt --max-lint-warnings 0`, which does not forgive. Since this
+iteration the local rebuild runs without `--force`, so the two agree.
