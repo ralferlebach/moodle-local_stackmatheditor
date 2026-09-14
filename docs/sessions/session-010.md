@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091313 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091314 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -688,3 +688,52 @@ embed iframe. The issue asks for that explicitly, and the page types are best gu
 respective module's URL structure - `mod-capquiz-view` may well be wrong for the version you
 have. If it is, the *Additional page types* setting fixes it without a release, which is one
 reason that setting exists.
+
+
+## 19. Iteration 15 (2026091314): #63 — elementary geometry
+
+School notation on the surface, STACK's `geometry.mac` underneath. The existing geometry group
+in the toolbar gains five structured entries; the symbols it already had stay.
+
+| button | editor | STACK |
+| ------ | ------ | ----- |
+| P(x\|y)   | `P\left(2\|3\right)` | `[2,3]` |
+| P(x\|y\|z) | `P\left(2\|3\|4\right)` | `[2,3,4]` |
+| d(A,B)   | `d\left(A,B\right)` | `Distance(A,B)` |
+| ∠ABC     | `\angle ABC` | `Angle(A,B,C)` — B is the vertex |
+| \|AB\|     | `\left\|\overline{AB}\right\|` | `Distance(A,B)` |
+
+The point name is a label: it does not reach the CAS. The coordinate separator is a setting
+(`|`, `;`, `,`) and changes notation only — STACK receives a list either way.
+
+### What is deliberately not in this iteration
+
+Segment, ray, line, circle and sphere have no STACK type. The issue says as much and forbids
+inventing one, and it leaves the representation open ("a documented parameter representation").
+Which one is right depends on what the questions compare against — a pair of points, a circle
+equation, two separate values — and that is a decision for the question author, not for me. The
+buttons are therefore not shipped. The same reasoning as for the differential operators in #45.
+
+### Reverse loading and a collision worth knowing about
+
+`Distance(A,B)` and `Angle(A,B,C)` are unambiguous and always come back as `d(A,B)` and `∠ABC`.
+A bare list is not: `[2,3]` is a point in a geometry question, a vector when the vector format is
+set to `list` (#62), and an ordinary list elsewhere. The editor cannot tell from the string, so
+drawing lists as points is a setting and it is **off by default**. With it on, `[2,3]` shows as
+`P(2|3)` and the roundtrip is stable.
+
+### Verification
+
+- 31 new Jest cases: points in 2D, 3D and all three separators, the name not reaching the CAS,
+  ordinary brackets and function calls staying what they are, distance in both directions, the
+  vertex of an angle, no degree conversion, `cos(∠ABC)` as the combination the issue describes,
+  the model itself, and regression against the vector, matrix and trigonometry rubrics. Suite
+  total 950 green.
+- ESLint via grunt without `--force`, PHPCS over the whole plugin: green.
+
+### Still open
+
+`geometry.mac` has to be loaded for `Distance` and `Angle` to exist in a question. Whether that
+happens automatically in your STACK version, and whether the GeoGebra binding passes points in
+exactly this form, needs a real question — as with #45, the editor produces the documented call
+and does not check the CAS.

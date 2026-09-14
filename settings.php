@@ -99,6 +99,23 @@ if ($hassiteconfig) {
         PARAM_RAW
     ));
 
+    // Coordinate separator for points (#63). Display only.
+    $settings->add(new admin_setting_configselect(
+        'local_stackmatheditor/coordinateseparator',
+        get_string('setting_coordinateseparator', 'local_stackmatheditor'),
+        get_string('setting_coordinateseparator_desc', 'local_stackmatheditor'),
+        '|',
+        ['|' => 'P(2 | 3)', ';' => 'P(2; 3)', ',' => 'P(2, 3)']
+    ));
+
+    // Whether a stored list is drawn as a point again (#63).
+    $settings->add(new admin_setting_configcheckbox(
+        'local_stackmatheditor/pointnotation',
+        get_string('setting_pointnotation', 'local_stackmatheditor'),
+        get_string('setting_pointnotation_desc', 'local_stackmatheditor'),
+        0
+    ));
+
     // Default element groups multiselect.
     $grouplabels = \local_stackmatheditor\definitions::get_group_labels_with_examples();
     $groups      = \local_stackmatheditor\definitions::get_element_groups();

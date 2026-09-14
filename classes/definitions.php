@@ -348,7 +348,7 @@ class definitions {
             'geometry' => [
                 'label'           => get_string('group_geometry', $p),
                 'default_enabled' => false,
-                'elements'        => [
+                'elements'        => array_merge(self::get_geometry_elements($p), [
                     ['label'   => '\\overline{AB}', 'write' => '\\overline{}',
                         'display' => 'AB̅',
                         'tooltip' => get_string('btn_overline', $p)],
@@ -358,7 +358,7 @@ class definitions {
                         'tooltip' => get_string('btn_angle', $p)],
                     ['display' => '⊥', 'cmd'   => '\\perp',
                         'tooltip' => get_string('btn_perp', $p)],
-                ],
+                ]),
             ],
             */
             // @codingStandardsIgnoreEnd
@@ -435,6 +435,13 @@ class definitions {
                 'label'           => get_string('group_vector_differential', $p),
                 'default_enabled' => false,
                 'elements'        => self::get_differential_operator_elements($p),
+            ],
+
+            // 17b. Elementary geometry (#63).
+            'geometry' => [
+                'label'           => get_string('group_geometry', $p),
+                'default_enabled' => false,
+                'elements'        => self::get_geometry_elements($p),
             ],
 
             // 18. Matrices.
@@ -752,6 +759,72 @@ class definitions {
     }
 
     /**
+     * Toolbar entries for elementary geometry (#63).
+     *
+     * School notation on the surface, STACK's geometry.mac underneath. Only the constructs with
+     * a documented STACK counterpart are offered: a point is a list of coordinates, a distance
+     * is Distance(A,B), an angle is Angle(A,B,C). A segment, ray, line, circle or sphere has no
+     * STACK type, and this plugin does not invent one.
+     *
+     * @param string $p Plugin component name for get_string().
+     * @return array Toolbar elements.
+     */
+    private static function get_geometry_elements(string $p): array {
+        $separator = self::get_coordinate_separator();
+
+        return [
+            [
+                'display' => 'P(x' . $separator . 'y)',
+                'semantic' => 'point2d',
+                'write'   => '\\left(' . $separator . '\\right)',
+                'left'    => 3,
+                'tooltip' => get_string('btn_point_2d', $p),
+            ],
+            [
+                'display' => 'P(x' . $separator . 'y' . $separator . 'z)',
+                'semantic' => 'point3d',
+                'write'   => '\\left(' . $separator . $separator . '\\right)',
+                'left'    => 5,
+                'tooltip' => get_string('btn_point_3d', $p),
+            ],
+            [
+                'display' => 'd(A,B)',
+                'semantic' => 'distance',
+                'write'   => 'd\\left(,\\right)',
+                'left'    => 3,
+                'tooltip' => get_string('btn_distance', $p),
+            ],
+            [
+                'display' => '\u{2220}ABC',
+                'semantic' => 'angle',
+                'write'   => '\\angle ',
+                'tooltip' => get_string('btn_angle_object', $p),
+            ],
+            [
+                'display' => '|AB|',
+                'semantic' => 'segmentlength',
+                'write'   => '\\left|\\overline{}\\right|',
+                'left'    => 1,
+                'tooltip' => get_string('btn_segment_length', $p),
+            ],
+        ];
+    }
+
+    /**
+     * Separator between the coordinates of a point (#63).
+     *
+     * Display only: it changes what a student sees and types, never the meaning. STACK receives
+     * a list either way.
+     *
+     * @return string One of "|", ";" or ",".
+     */
+    public static function get_coordinate_separator(): string {
+        $value = (string) get_config('local_stackmatheditor', 'coordinateseparator');
+
+        return in_array($value, ['|', ';', ','], true) ? $value : '|';
+    }
+
+    /**
      * Toolbar entries for the vector differential operators (#45).
      *
      * A LaTeX symbol is not a CAS operation. Maxima has no gradient, divergence or curl that
@@ -910,6 +983,11 @@ class definitions {
             'vectorFormat'     => self::get_vector_format(),
             'popupStrings'     => self::get_popup_strings(),
             'diffOps'          => self::get_differential_operators(),
+            'coordinateSeparator' => self::get_coordinate_separator(),
+            'pointNotation'    => (bool)(int)get_config(
+                'local_stackmatheditor',
+                'pointnotation'
+            ),
             'normFunction'     => self::get_norm_function(),
             // Accessible names of the editor's own controls, needed synchronously on page load.
             'strings'          => self::get_js_strings(),

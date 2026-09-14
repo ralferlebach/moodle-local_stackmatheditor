@@ -237,6 +237,86 @@ define([], function() {
             + '\\end{' + environment + '}';
     }
 
+
+    /**
+     * Coordinate separators a point may be written with (#63).
+     *
+     * Display only: the separator changes what a student sees and types, never the semantics.
+     *
+     * @type {Array}
+     */
+    var COORDINATE_SEPARATORS = ['|', ';', ','];
+
+    /**
+     * Build a point model.
+     *
+     * A point is a list of coordinates and, in school notation, usually a name. The name is
+     * label only: STACK receives the coordinates.
+     *
+     * @param {Array} coordinates Coordinate expressions.
+     * @param {string} name Optional point name.
+     * @returns {Object} Point model.
+     */
+    function createPoint(coordinates, name) {
+        if (!Array.isArray(coordinates) || !coordinates.length
+            || coordinates.length > MAX_DIMENSION) {
+            throw new Error(
+                'local_stackmatheditor: a point needs between 1 and ' + MAX_DIMENSION
+                + ' coordinates'
+            );
+        }
+
+        return {
+            type: 'point',
+            name: typeof name === 'string' ? name : '',
+            coordinates: coordinates.slice()
+        };
+    }
+
+    /**
+     * Build a distance model: the distance between two points.
+     *
+     * @param {string} left First point.
+     * @param {string} right Second point.
+     * @returns {Object} Distance model.
+     */
+    function createDistance(left, right) {
+        if (!left || !right) {
+            throw new Error('local_stackmatheditor: a distance needs two points');
+        }
+
+        return {type: 'distance', left: left, right: right};
+    }
+
+    /**
+     * Build an angle model. The vertex is the middle point, as in the school notation ABC.
+     *
+     * @param {string} first First leg.
+     * @param {string} vertex Vertex.
+     * @param {string} second Second leg.
+     * @returns {Object} Angle model.
+     */
+    function createAngle(first, vertex, second) {
+        if (!first || !vertex || !second) {
+            throw new Error('local_stackmatheditor: an angle needs three points');
+        }
+
+        return {type: 'angle', first: first, vertex: vertex, second: second};
+    }
+
+    /**
+     * Render a point in school notation, with the configured separator.
+     *
+     * @param {Object} model Point model.
+     * @param {string} separator One of COORDINATE_SEPARATORS.
+     * @returns {string} LaTeX.
+     */
+    function pointToLatex(model, separator) {
+        var glue = COORDINATE_SEPARATORS.indexOf(separator) === -1 ? '|' : separator;
+
+        return (model.name || '') + '\\left(' + model.coordinates.join(glue) + '\\right)';
+    }
+
     return /** @alias module:local_stackmatheditor/structured_input */ {
         MAX_DIMENSION: MAX_DIMENSION,
         QUICK_PICK_SIZE: QUICK_PICK_SIZE,
@@ -246,6 +326,11 @@ define([], function() {
         createVector: createVector,
         dimensions: dimensions,
         isValid: isValid,
-        toLatex: toLatex
+        toLatex: toLatex,
+        COORDINATE_SEPARATORS: COORDINATE_SEPARATORS,
+        createPoint: createPoint,
+        createDistance: createDistance,
+        createAngle: createAngle,
+        pointToLatex: pointToLatex
     };
 });

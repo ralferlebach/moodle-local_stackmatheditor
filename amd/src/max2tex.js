@@ -1141,6 +1141,56 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Draw STACK's geometry functions in school notation again (#63).
+     *
+     * Only the constructs whose STACK form is unambiguous:
+     *
+     *     Distance(A,B)  ->  d(A,B)
+     *     Angle(A,B,C)   ->  \angle ABC
+     *
+     * A list is only drawn as a point when the site asks for it: [2,3] is a point in a geometry
+     * question and an ordinary list everywhere else, and the editor cannot tell from the string.
+     *
+     * @param {string} s Maxima expression.
+     * @param {Object} options Conversion options.
+     * @returns {string} Expression in school notation.
+     */
+    function renderGeometry(s, options) {
+        var defs = (options || {}).defs || {};
+        var separator = defs.coordinateSeparator || '|';
+
+        s = s.replace(
+            /(^|[^A-Za-z0-9_%])Angle\(\s*([^(),]+?)\s*,\s*([^(),]+?)\s*,\s*([^(),]+?)\s*\)/g,
+            '$1\\angle $2$3$4'
+        );
+        s = s.replace(
+            /(^|[^A-Za-z0-9_%])Distance\(\s*([^(),]+?)\s*,\s*([^(),]+?)\s*\)/g,
+            '$1d\\left($2,$3\\right)'
+        );
+
+        if (defs.pointNotation) {
+            s = s.replace(
+                /(^|[^A-Za-z0-9_%\]])\[([^[\]]+)\]/g,
+                function(match, before, body) {
+                    var parts = body.split(',').map(function(part) {
+                        return part.trim();
+                    });
+
+                    if (parts.length < 2 || parts.some(function(part) {
+                        return part === '' || part.indexOf('[') !== -1;
+                    })) {
+                        return match;
+                    }
+
+                    return before + '\\left(' + parts.join(separator) + '\\right)';
+                }
+            );
+        }
+
+        return s;
+    }
+
+    /**
      * LaTeX label of each differential operator, by semantic id (#45).
      *
      * @type {Object}
@@ -1579,6 +1629,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // Late, on the finished LaTeX: the braces of \operatorname{...} must not be mistaken
         // for a Maxima set literal, and the operand brackets are \left( ... \right) by now.
         s = renderDifferentialOperators(s, options);
+        s = renderGeometry(s, options);
 
         s = s.replace(/\s+/g, ' ').trim();
         // A space the user meant becomes MathQuill's control space, so the editor shows the

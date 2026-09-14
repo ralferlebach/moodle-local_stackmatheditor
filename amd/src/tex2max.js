@@ -605,6 +605,76 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Convert the elementary geometry notation to STACK's geometry functions (#63).
+     *
+     * Only the three constructs that have a documented counterpart in STACK's geometry.mac are
+     * converted:
+     *
+     *     P(2|3)                  ->  [2,3]              a point is a list of coordinates
+     *     d(A,B)                  ->  Distance(A,B)
+     *     |AB| with the overline  ->  Distance(A,B)      the length of a segment is a distance
+     *     \angle ABC              ->  Angle(A,B,C)       B is the vertex, as in school notation
+     *
+     * A segment, ray, line, circle or sphere has no STACK type. Nothing is invented for them.
+     *
+     * @param {string} s Input.
+     * @param {Object} defs Runtime definitions; defs.coordinateSeparator selects the separator.
+     * @returns {string} Converted string.
+     */
+    function convertGeometry(s, defs) {
+        var separator = (defs && defs.coordinateSeparator) || '|';
+
+        // The length of a segment, written with the overline and vertical bars.
+        s = s.replace(
+            /\\left\|\\overline\{([A-Za-z])([A-Za-z])\}\\right\|/g,
+            'Distance($1,$2)'
+        );
+        s = s.replace(/\\overline\{([A-Za-z])([A-Za-z])\}/g, 'Distance($1,$2)');
+
+        // Angle: the school notation names both legs and the vertex in one go.
+        s = s.replace(
+            /\\angle\s*([A-Za-z])\s*([A-Za-z])\s*([A-Za-z])/g,
+            'Angle($1,$2,$3)'
+        );
+
+        // Distance written as d(A,B).
+        s = s.replace(
+            /(^|[^A-Za-z0-9_%])d\s*(?:\\left)?\(\s*([A-Za-z][A-Za-z0-9_]*)\s*,\s*([A-Za-z][A-Za-z0-9_]*)\s*(?:\\right)?\)/g,
+            '$1Distance($2,$3)'
+        );
+
+        // A point: coordinates in brackets, separated by the configured separator. The name in
+        // front is a label and does not travel to the CAS.
+        s = s.replace(
+            /(^|[^A-Za-z0-9_%])([A-Z][A-Za-z0-9_]*)?\s*(?:\\left)?\(([^()]*)(?:\\right)?\)/g,
+            function(match, before, name, body) {
+                var parts;
+
+                if (body.indexOf(separator) === -1) {
+                    return match;
+                }
+
+                parts = body.split(separator).map(function(part) {
+                    return part.trim();
+                });
+
+                if (parts.length < 2) {
+                    return match;
+                }
+                if (parts.some(function(part) {
+                    return part === '';
+                })) {
+                    return match;
+                }
+
+                return before + '[' + parts.join(',') + ']';
+            }
+        );
+
+        return s;
+    }
+
+    /**
      * UI label of each differential operator, by semantic id (#45).
      *
      * The label is what the student sees; the CAS name comes from the site settings. "rot" is
@@ -1767,6 +1837,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // of anything but a letter or digit it carries nothing and would otherwise survive in
         // stack mode ("gamma (x)", "epsilon _0").
         s = s.replace(/(\\[a-zA-Z]+)\s+(?=[^A-Za-z0-9\s])/g, '$1');
+        s = convertGeometry(s, defs);
         s = convertDifferentialOperators(s, local, defs);
         s = convertMatrixEnvironments(s, local, defs);
         s = convertCasesToAndRelations(s);
