@@ -156,7 +156,11 @@ final class stack_inputs_test extends \advanced_testcase {
         $this->setUser($this->getDataGenerator()->create_user());
 
         $this->assertNull(stack_inputs::get_edit_url(0, 0));
+
+        // A question id that no longer exists must not reach the question engine: it would
+        // answer with a debugging message rather than a decision.
         $this->assertNull(stack_inputs::get_edit_url(999999, 0));
+        $this->assertDebuggingNotCalled();
     }
 
     /**

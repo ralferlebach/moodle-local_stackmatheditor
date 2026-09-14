@@ -116,7 +116,16 @@ class stack_inputs {
         int $courseid,
         string $returnurl = ''
     ): ?\moodle_url {
+        global $DB;
+
         if ($questionid <= 0) {
+            return null;
+        }
+
+        // Ask before letting the question engine ask: a missing question makes
+        // question_has_capability_on() emit a debugging message, which is noise here and an
+        // error in a PHPUnit run.
+        if (!$DB->record_exists('question', ['id' => $questionid])) {
             return null;
         }
 
@@ -125,7 +134,7 @@ class stack_inputs {
                 return null;
             }
         } catch (\Throwable $e) {
-            // No question, no category, no answer: no link.
+            // No category, no context, no answer: no link.
             return null;
         }
 

@@ -441,6 +441,44 @@ define([
     }
 
     /**
+     * Decide whether an input is none of the editor's business.
+     *
+     * Split out of initField() so that both stay within the complexity the Moodle ESLint
+     * configuration allows (#50 added the read-only check).
+     *
+     * @param {jQuery} $input Candidate input.
+     * @param {Object} ctx Shared context.
+     * @returns {boolean} True when the input must be left alone.
+     */
+    function skipField($input, ctx) {
+        var name = $input.attr('name') || '';
+        var inputid = $input.attr('id') || '';
+
+        if ($input.attr('data-sme-init') === '1') {
+            return true;
+        }
+
+        // Only an editable input gets an editor (#50): a review page or a teacher-rendered
+        // answer shows the value read-only, and a MathQuill field there would suggest the
+        // answer could still be changed.
+        if ($input.prop('disabled') || $input.prop('readonly')) {
+            ctx.dbg('Skipping read-only input: ' + name);
+            return true;
+        }
+
+        // Skip inputs that matched *_ans patterns but are not STACK inputs.
+        // A genuine STACK algebraic input name ends with _ansN (one or more digits).
+        if (!$input.attr('data-stack-input-type')
+                && !/(^|_)ans\d+$/.test(name)
+                && !/(^|_)ans\d+$/.test(inputid)) {
+            ctx.dbg('Skipping non-STACK input: ' + name);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Initialize one field.
      *
      * @param {HTMLInputElement} input Original input.
@@ -449,31 +487,11 @@ define([
     function initField(input, ctx) {
         var $input = $(input);
 
-        if ($input.attr('data-sme-init') === '1') {
-            return;
-        }
-
-        // Only an editable input gets an editor (#50): a review page or a teacher-rendered
-        // answer shows the value read-only, and a MathQuill field there would suggest the
-        // answer could still be changed.
-        if ($input.prop('disabled') || $input.prop('readonly')) {
-            ctx.dbg('Skipping read-only input: ' + ($input.attr('name') || ''));
+        if (skipField($input, ctx)) {
             return;
         }
 
         var name = $input.attr('name') || '';
-        var inputid = $input.attr('id') || '';
-        var hasattr = !!$input.attr('data-stack-input-type');
-
-        // Skip inputs that matched *_ans patterns but are not STACK inputs.
-        // A genuine STACK algebraic input name ends with _ansN (one or more digits).
-        if (!hasattr
-                && !/(^|_)ans\d+$/.test(name)
-                && !/(^|_)ans\d+$/.test(inputid)) {
-            ctx.dbg('Skipping non-STACK input: ' + name);
-            return;
-        }
-
         var slot = ctx.extractSlot(name);
 
         // Check per-slot enabled map.

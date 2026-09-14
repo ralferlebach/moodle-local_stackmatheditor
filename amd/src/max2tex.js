@@ -1251,7 +1251,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
      */
     function protectExplicitSpaces(s) {
         return s.replace(
-            /([A-Za-z0-9_%)\]]) +(?=[A-Za-z0-9_%(\[])/g,
+            /([A-Za-z0-9_%)\]]) +(?=[A-Za-z0-9_%([])/g,
             function(match, left, offset) {
                 // The keyword passes have already produced LaTeX such as "x \in A"; the space
                 // after a control word belongs to the command, not to the user.

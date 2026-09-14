@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091314 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091315 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -737,3 +737,46 @@ drawing lists as points is a setting and it is **off by default**. With it on, `
 happens automatically in your STACK version, and whether the GeoGebra binding passes points in
 exactly this form, needs a real question — as with #45, the editor produces the documented call
 and does not check the CAS.
+
+
+## 20. Iteration 16 (2026091315): the CI run after #63
+
+Two jobs red, both from iteration 14 and 15, both from the same kind of gap between what I run
+here and what the CI runs.
+
+### PHPUnit: a debugging message counts as a failure
+
+`stack_inputs::get_edit_url()` asked `question_has_capability_on()` about a question id that does
+not exist. Moodle answers that with a `debugging()` message, and in a PHPUnit run an unexpected
+debugging message fails the test — two of them, on all three Moodle versions.
+
+The fix is better production behaviour as well: the question is looked up first, and a missing
+one means no link, without troubling the question engine. The test now asserts
+`assertDebuggingNotCalled()`, so the message cannot come back unnoticed.
+
+This was the first CI run in which the tests from #65 could fail at all. They ran green in the
+previous run because iteration 11 had not reached that runner yet.
+
+### ESLint: warnings, not errors
+
+    max2tex.js  1204:50  Unnecessary escape character: \[     no-useless-escape
+    input_fields.js 449  'initField' has a complexity of 23   complexity
+
+Both are warnings, and my local `grunt amd` tolerates warnings — the CI passes
+`--max-lint-warnings 0` to moodle-plugin-ci, which does not. Iteration 12 had already drawn the
+conclusion to drop `--force`; that was not enough, because `--force` and the warning threshold
+are two different things. The check that matches the CI is:
+
+    npx eslint --max-warnings 0 local/stackmatheditor/amd/src/*.js
+
+Note that `npx grunt amd --max-lint-warnings 0` is *not* it: grunt reads the 0 as a task name,
+reports "Task 0 not found" and exits non-zero for a reason that has nothing to do with the code.
+That is what I ran at first, and it looked like a real failure.
+
+The escape in the character class was simply superfluous. The complexity came from the read-only
+check that #50 added to `initField()`; the guard clauses now live in `skipField()`, which reads
+better anyway.
+
+### Verification
+
+Jest 950 green, PHPCS over the whole plugin green, `eslint --max-warnings 0` green.
