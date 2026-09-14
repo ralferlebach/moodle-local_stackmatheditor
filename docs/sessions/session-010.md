@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091315 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091316 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -780,3 +780,38 @@ better anyway.
 ### Verification
 
 Jest 950 green, PHPCS over the whole plugin green, `eslint --max-warnings 0` green.
+
+
+## 21. Iteration 17 (2026091316): a green job failed on its log upload
+
+The run after iteration 16 reported `lint-php: failure`, and with it `phpunit: skipped`,
+`behat: skipped`, `CI complete: failure`. The lint itself had passed:
+
+    Checked 40 files in 0.1 seconds
+    No syntax error found
+    job: lint-php
+    status: success
+
+What failed was the step after it:
+
+    Uploading artifact: error-summary-dev-lint-php.zip
+    Finished uploading artifact content to blob storage!
+    Finalizing artifact upload
+    ##[error]Failed to FinalizeArtifact: ... (403) Forbidden
+
+Three other jobs in the same run uploaded their summary without trouble, so this is GitHub's
+artifact service, not the workflow. No code change would have fixed it, and a re-run probably
+would have.
+
+That a transient upload error can take down a job whose checks passed - and skip everything
+downstream - is the part that is worth fixing. Every `actions/upload-artifact` step in all five
+workflows now carries `continue-on-error: true`. The logs are a convenience for reading a
+failure, never the gate.
+
+`ci-complete` itself stays strict: it still demands `success` from every job, and it reported
+this correctly.
+
+### Verification
+
+The five workflow files parse and every upload step is guarded (checked mechanically, not by
+eye). No plugin code changed in this iteration.

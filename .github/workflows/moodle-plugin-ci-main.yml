@@ -190,6 +190,10 @@ jobs:
           cat ci-logs/summary.txt
       - name: Upload error summary (ZIP)
         if: ${{ always() }}
+        # A failed artifact upload must not fail a job whose checks passed: the finalize call
+        # has answered 403 on an otherwise green run (2026-09-14). The logs are a convenience,
+        # not a gate.
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: error-summary-main-${{ matrix.moodle }}-${{ matrix.php }}-${{ matrix.database }}
@@ -337,6 +341,10 @@ jobs:
           COVERAGE_FLOOR: '40'
       - name: Upload the Clover report
         if: ${{ always() }}
+        # A failed artifact upload must not fail a job whose checks passed: the finalize call
+        # has answered 403 on an otherwise green run (2026-09-14). The logs are a convenience,
+        # not a gate.
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: coverage-clover

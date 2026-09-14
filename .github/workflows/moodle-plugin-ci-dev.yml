@@ -104,6 +104,10 @@ jobs:
           cat ci-logs/summary.txt
       - name: Upload error summary (ZIP)
         if: ${{ always() }}
+        # A failed artifact upload must not fail a job whose checks passed: the finalize call
+        # has answered 403 on an otherwise green run (2026-09-14). The logs are a convenience,
+        # not a gate.
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: error-summary-dev-lint-php
@@ -152,6 +156,10 @@ jobs:
           cat ci-logs/summary.txt
       - name: Upload error summary (ZIP)
         if: ${{ always() }}
+        # A failed artifact upload must not fail a job whose checks passed: the finalize call
+        # has answered 403 on an otherwise green run (2026-09-14). The logs are a convenience,
+        # not a gate.
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: error-summary-dev-codeanalysis
@@ -235,6 +243,10 @@ jobs:
           cat ci-logs/summary.txt
       - name: Upload error summary (ZIP)
         if: ${{ always() }}
+        # A failed artifact upload must not fail a job whose checks passed: the finalize call
+        # has answered 403 on an otherwise green run (2026-09-14). The logs are a convenience,
+        # not a gate.
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: error-summary-dev-quality
@@ -320,6 +332,10 @@ jobs:
           cat ci-logs/summary.txt
       - name: Upload error summary (ZIP)
         if: ${{ always() }}
+        # A failed artifact upload must not fail a job whose checks passed: the finalize call
+        # has answered 403 on an otherwise green run (2026-09-14). The logs are a convenience,
+        # not a gate.
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: error-summary-dev-javascript
@@ -408,6 +424,10 @@ jobs:
           cat ci-logs/summary.txt
       - name: Upload error summary (ZIP)
         if: ${{ always() }}
+        # A failed artifact upload must not fail a job whose checks passed: the finalize call
+        # has answered 403 on an otherwise green run (2026-09-14). The logs are a convenience,
+        # not a gate.
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: error-summary-dev-phpunit-${{ matrix.moodle }}-${{ matrix.php }}-${{ matrix.database }}
@@ -506,6 +526,10 @@ jobs:
           cat ci-logs/summary.txt
       - name: Upload error summary (ZIP)
         if: ${{ always() }}
+        # A failed artifact upload must not fail a job whose checks passed: the finalize call
+        # has answered 403 on an otherwise green run (2026-09-14). The logs are a convenience,
+        # not a gate.
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: error-summary-dev-behat
