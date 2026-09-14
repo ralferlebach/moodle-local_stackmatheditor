@@ -66,6 +66,23 @@ describe('editor toggle', () => {
         document.body.append(toolbar, container, input);
     });
 
+    test('the checkbox id can never look like a STACK input', () => {
+        // An id ending in _ans1 made the editor treat its own switch as an answer field, which
+        // built an editor around it, which added a switch, and so on (#13).
+        const first = build();
+        const second = build();
+        const ids = [
+            first.element.querySelector('input').id,
+            second.element.querySelector('input').id
+        ];
+
+        ids.forEach((id) => {
+            expect(id).not.toMatch(/_ans/);
+            expect(id).toMatch(/^sme-editor-switch-\d+$/);
+        });
+        expect(ids[0]).not.toBe(ids[1]);
+    });
+
     test('it is a switch, labelled and keyboard reachable', () => {
         const toggle = build({toggle_editor: 'Formeleditor'});
         document.body.prepend(toggle.element);
@@ -75,6 +92,7 @@ describe('editor toggle', () => {
         expect(box.getAttribute('role')).toBe('switch');
         expect(box.getAttribute('aria-label')).toBe('Formeleditor');
         expect(toggle.element.querySelector('label').getAttribute('for')).toBe(box.id);
+        expect(box.id).not.toMatch(/_ans/);
         expect(toggle.element.querySelector('label').textContent).toBe('Formeleditor');
     });
 

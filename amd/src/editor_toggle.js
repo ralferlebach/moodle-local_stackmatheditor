@@ -56,6 +56,17 @@ define([], function() {
     var HIDDEN_INPUT_CLASS = 'sme-original-hidden';
 
     /**
+     * Counter for the checkbox ids.
+     *
+     * The id must not look like a STACK input: the editor looks for "_ans" in name and id, and a
+     * switch called sme-toggle-q1:1_ans1 would be picked up as an input and get an editor of its
+     * own, and that one another one (#13).
+     *
+     * @type {number}
+     */
+    var switchCount = 0;
+
+    /**
      * Class that hides the editor.
      *
      * @type {string}
@@ -116,12 +127,11 @@ define([], function() {
      * @param {Function} spec.toInput Write the editor's answer into the input, as Maxima.
      * @param {Function} spec.toEditor Read the input's answer back into the editor.
      * @param {Object} spec.strings Language strings.
-     * @param {string} spec.id Id for the checkbox; one is generated when absent.
      * @returns {Object} The element and an apply(on, initial) function.
      */
     function create(spec) {
         var strings = spec.strings || {};
-        var id = spec.id || 'sme-toggle-' + Math.random().toString(36).slice(2);
+        var id = 'sme-editor-switch-' + (++switchCount);
         var element = document.createElement('div');
         var box = document.createElement('input');
         var label = document.createElement('label');

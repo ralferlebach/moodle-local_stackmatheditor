@@ -362,7 +362,6 @@ define([
             input: spec.$input[0],
             editor: [spec.$tb[0], spec.$container[0]],
             strings: strings,
-            id: 'sme-toggle-' + (spec.$input.attr('id') || spec.slot),
             toInput: function() {
                 syncSystemToInput(spec.rows, spec.$input, spec.convOpts, spec.ctx.dbg, true);
                 handedOver = spec.$input.val();
@@ -542,6 +541,20 @@ define([
         var inputid = $input.attr('id') || '';
 
         if ($input.attr('data-sme-init') === '1') {
+            return true;
+        }
+
+        // Anything the editor built itself is not an answer field (#13): the on/off switch is an
+        // <input> too, and an id ending in _ans1 made it look like a STACK input - which gave it
+        // an editor, whose switch got another one.
+        if ($input.closest('.sme-input-wrap').length) {
+            return true;
+        }
+
+        // A STACK answer is typed, not ticked.
+        if (['checkbox', 'radio', 'button', 'submit', 'file'].indexOf(
+            ($input.attr('type') || '').toLowerCase()
+        ) !== -1) {
             return true;
         }
 
@@ -809,7 +822,6 @@ define([
             input: $input[0],
             editor: [$tb[0], $container[0]],
             strings: (ctx.defs && ctx.defs.strings) || {},
-            id: 'sme-toggle-' + ($input.attr('id') || slot),
             toInput: function() {
                 if (!prefilling) {
                     syncToInput(mqField, $input, convOpts, ctx.dbg, true);

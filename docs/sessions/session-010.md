@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091318 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091319 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -896,3 +896,44 @@ Suite total 963 green. ESLint, stylelint, PHPCS green.
 
 Still not offered in the textarea editor, which has its own module and no line structure to
 rebuild.
+
+
+## 24. Iteration 20 (2026091319): the switch built editors around itself
+
+Behat ran for the first time since the library swap, and it was worth the wait: 20 of 61
+scenarios failed, all of them with the same root cause, and one that no unit test could have
+found.
+
+The DOM in the failure dump:
+
+    <div class="sme-input-wrap"><div class="sme-toggle ...">
+      <div class="sme-input-wrap"><div class="sme-toggle ...">
+        <div class="sme-input-wrap"><div class="sme-toggle ...">   (and so on, 1430 times)
+
+The editor finds its inputs with, among others, `input[id*="_ans"]`. The switch is an `<input>`
+as well, and its id was built from the input it belongs to: `sme-toggle-q1:1_ans1` - which
+contains `_ans`. So the switch looked like a STACK answer field, got an editor of its own, that
+editor added a switch, and the `MutationObserver` from #50 kept the cycle going. Nothing was
+typed into the real field any more, which is why a `latex()` came back as `"on"`: the value of a
+checkbox.
+
+Two changes, because one would have been enough and both are cheap:
+
+* The switch ids are now counted (`sme-editor-switch-1`), never derived from the input. A Jest
+  case asserts that the id cannot contain `_ans`.
+* `skipField()` refuses anything inside an `.sme-input-wrap` and anything that is a checkbox,
+  radio, button, submit or file input. A STACK answer is typed, not ticked.
+
+### What this says about the test setup
+
+Jest tests the modules, Behat tests the page. This bug lived exactly between them: every module
+behaved correctly, and their combination did not. The `MutationObserver` turned a small mistake
+into a runaway loop - a reminder that #50 added a mechanism that reacts to the editor's own DOM
+changes.
+
+### Verification
+
+964 Jest cases green, ESLint `--max-warnings 0`, PHPCS green. The CI run also shows PHPUnit
+green on 4.5, 5.0 and 5.2, plus JS/CSS, quality, stale files and PHP lint - Behat was the only
+red job, and the 41 scenarios that passed did so with the new MathQuill build, the space
+handling from #64 and the read-only rule from #50 in place.
