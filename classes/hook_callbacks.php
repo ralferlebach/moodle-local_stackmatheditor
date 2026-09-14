@@ -38,13 +38,20 @@ class hook_callbacks {
      *
      * @var string[]
      */
-    private const EDITOR_PAGES = [
-        'mod-quiz-attempt',
-        'mod-quiz-review',
-        'question-preview',
-        'question-bank-previewquestion',
-        'mod-adaptivequiz-view',
-    ];
+    /**
+     * Pages where the editor is loaded.
+     *
+     * Kept as a method rather than a constant since #50: the list also comes from
+     * context_resolver, which an administrator can extend for a question-engine consumer this
+     * plugin has never heard of.
+     *
+     * @return bool True when the current page may host an editable STACK input.
+     */
+    private static function page_may_host_stack(): bool {
+        global $PAGE;
+
+        return context_resolver::supports_page((string) $PAGE->pagetype);
+    }
 
     /**
      * Pages where mod_quiz configure links are injected via JavaScript.
@@ -96,14 +103,18 @@ class hook_callbacks {
     /**
      * Return true if the current page is one where the editor should run.
      *
-     * For mod-adaptivequiz-view, only the actual attempt page qualifies;
-     * the plain view page (student overview / teacher report) does not.
+     * The page type only decides whether the bootstrap is loaded (#50). Whether an editable
+     * STACK input is actually there is decided in the browser, against the rendered DOM, so a
+     * page that carries none costs a module load and nothing else.
+     *
+     * For mod-adaptivequiz-view, only the actual attempt page qualifies; the plain view page
+     * (student overview / teacher report) does not.
      *
      * @return bool
      */
     private static function is_editor_page(): bool {
         global $PAGE;
-        if (!in_array($PAGE->pagetype, self::EDITOR_PAGES)) {
+        if (!self::page_may_host_stack()) {
             return false;
         }
         if ($PAGE->pagetype === 'mod-adaptivequiz-view') {

@@ -89,6 +89,16 @@ if ($hassiteconfig) {
         ));
     }
 
+    // Page types of further question-engine consumers (#50). The editor already runs on the
+    // pages it knows; this is for a module it does not.
+    $settings->add(new admin_setting_configtextarea(
+        'local_stackmatheditor/extrapagetypes',
+        get_string('setting_extrapagetypes', 'local_stackmatheditor'),
+        get_string('setting_extrapagetypes_desc', 'local_stackmatheditor'),
+        '',
+        PARAM_RAW
+    ));
+
     // Default element groups multiselect.
     $grouplabels = \local_stackmatheditor\definitions::get_group_labels_with_examples();
     $groups      = \local_stackmatheditor\definitions::get_element_groups();

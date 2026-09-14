@@ -275,6 +275,8 @@ $string['setting_diffop_laplacian'] = 'Maxima function for the Laplace operator'
 $string['setting_diffop_laplacian_desc'] = 'Name of the Maxima function this site provides for the Laplace operator. Leave empty to hide the button; a bare Δ then stays the Greek letter.';
 $string['setting_enabled'] = 'Plugin activation (instance-wide)';
 $string['setting_enabled_desc'] = 'Controls how the visual math editor is enabled across the instance.';
+$string['setting_extrapagetypes'] = 'Additional page types';
+$string['setting_extrapagetypes_desc'] = 'Page types of further activities that render STACK questions through the Moodle question engine, one per line (for example mod-myactivity-attempt). The editor already runs on quiz, adaptive quiz, question preview, CAPQuiz, StudentQuiz and embedded questions. On a page without a STACK input nothing happens.';
 $string['setting_normfunction'] = 'Maxima function for a norm';
 $string['setting_normfunction_desc'] = 'Maxima has no norm function that covers both vectors and matrices. The editor writes ‖…‖ as a call to this function; question authors define it in the question variables, for example <code>norm(v) := sqrt(v . v)</code>.';
 $string['setting_usepercentpi']      = 'Use percent-pi notation for π';

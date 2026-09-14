@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091312 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091313 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -642,3 +642,49 @@ The wording of the issue is "verified STACK/Maxima mapping". What this iteration
 installation, whether it needs `express()`, and in which coordinate system it works, has to be
 tried in a STACK question — I cannot test that here. Until an admin enters a name, the operators
 stay invisible, which is the state the issue asks for.
+
+
+## 18. Iteration 14 (2026091313): #50 — the editor follows STACK, not the module name
+
+Two decisions were mixed up in one list of module names. They are separate now.
+
+**Runtime.** Whether an editor appears is decided in the browser, against the rendered DOM: a
+`qtype_stack` input that is editable gets one. The page type only decides whether the bootstrap
+is loaded at all, and that list is no longer a constant in the hook class but
+`context_resolver::supports_page()`, which knows the previous pages plus `mod-capquiz-*`,
+`mod-studentquiz-view` and `filter-embedquestion-showquestion` — and reads further ones from a
+site setting, so a new question-engine consumer needs no code change. On a page without a STACK
+input, the cost is one module load.
+
+**Configuration.** Resolving a question-bank entry, a capability and a return URL stays module
+specific, and the plugin only claims it for quiz and adaptive quiz. Everywhere else the editor
+runs with the site defaults instead of not running at all - which is what §5 of the issue asks
+for. `lib.php` asks `has_configuration_ui()` for the settings link rather than comparing module
+names.
+
+### Two smaller things that belong to the same issue
+
+A read-only or disabled input no longer gets an editor. It never should have: next to a
+teacher-rendered answer, a MathQuill field suggests the answer could still be changed.
+
+Questions rendered after page load — CAPQuiz and StudentQuiz replace them over AJAX — are picked
+up by a `MutationObserver`, throttled to one pass per burst. The pass is idempotent through the
+`data-sme-init` marker that was already there, so no input ever gets two editors.
+
+### Verification
+
+- New `context_resolver_test.php`: the old contexts keep working, the new ones are supported,
+  unrelated pages are not, the admin setting is honoured and validated (`*`, `<script>`,
+  `../etc/passwd` are ignored), and runtime and configuration are asserted to be separate
+  decisions - CAPQuiz gets the editor and no configuration page.
+- ESLint via grunt without `--force`, PHPCS over the whole plugin: green.
+- README: the sentence about mod_quiz and mod_adaptivequiz is replaced by a matrix.
+
+### What cannot be verified here
+
+Everything that needs a live instance: CAPQuiz, StudentQuiz and `filter_embedquestion` with a
+real STACK question, the AJAX question change, and whether the editor initialises inside the
+embed iframe. The issue asks for that explicitly, and the page types are best guesses from the
+respective module's URL structure - `mod-capquiz-view` may well be wrong for the version you
+have. If it is, the *Additional page types* setting fixes it without a release, which is one
+reason that setting exists.

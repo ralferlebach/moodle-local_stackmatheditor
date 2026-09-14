@@ -137,17 +137,38 @@ that input:
     saved answer -> max2tex -> MathQuill
 
 Supported STACK input types: algebraic, units, textarea and equivalence reasoning.
-Supported pages: quiz attempt and review, question preview, and mod_adaptivequiz.
+### Where the editor runs
+
+The editor extends STACK questions, not a quiz module. Wherever the Moodle question engine
+renders an editable `qtype_stack` input, the editor attaches itself to it.
+
+| Context | Editor | Per-question configuration |
+|---|---|---|
+| Quiz attempt | yes | yes |
+| Quiz review, where the answer is still editable | yes | yes |
+| Question preview | yes | yes |
+| Adaptive Quiz (`mod_adaptivequiz`) | yes | yes |
+| CAPQuiz (`mod_capquiz`) | yes | site defaults |
+| Embedded questions (`filter_embedquestion`), including Page, Book and Lesson content | yes | site defaults |
+| StudentQuiz (`mod_studentquiz`) | yes, where STACK is an allowed question type | site defaults |
+| Another question-engine consumer | add its page type under *Additional page types* | site defaults |
+
+Not supported, and not for want of trying: native Lesson question types and Offline Quiz do not
+use `qtype_stack`, and a mobile app that renders its own question UI has no Moodle question DOM
+to attach to.
+
+A read-only input never gets an editor: on a review page or next to a teacher-rendered answer
+the value stays as it is shown.
+
+Questions that arrive after page load — CAPQuiz and StudentQuiz replace them over AJAX — are
+picked up as well, and never twice: an input that already carries an editor is skipped.
+
 
 ### Implicit multiplication
 
-| Mode | `2ab` becomes |
-|---|---|
-| explicit multiplication, single-character variables | `2*a*b` |
-| explicit multiplication, multi-character variables | `2*ab` |
-| spaces, single-character variables | `2 a b` |
-| spaces, multi-character variables | `2 ab` |
-| leave untouched, let STACK handle it ("star options") | `2ab` |
+STACK decides this, not the editor. Its "Insert stars" setting lives per input in the STACK
+question; the editor hands STACK what was typed and shows the current setting on its
+configuration page, with a link into the question.
 
 Function names (sqrt, sin, log, …), constants and Greek letter names are never split.
 

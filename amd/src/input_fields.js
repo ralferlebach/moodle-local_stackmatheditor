@@ -453,6 +453,14 @@ define([
             return;
         }
 
+        // Only an editable input gets an editor (#50): a review page or a teacher-rendered
+        // answer shows the value read-only, and a MathQuill field there would suggest the
+        // answer could still be changed.
+        if ($input.prop('disabled') || $input.prop('readonly')) {
+            ctx.dbg('Skipping read-only input: ' + ($input.attr('name') || ''));
+            return;
+        }
+
         var name = $input.attr('name') || '';
         var inputid = $input.attr('id') || '';
         var hasattr = !!$input.attr('data-stack-input-type');
@@ -737,6 +745,39 @@ define([
         }
     }
 
+    /**
+     * Watch for questions rendered after page load (#50).
+     *
+     * CAPQuiz, StudentQuiz and embedded questions replace the question in place over AJAX. The
+     * observer is throttled through a timeout so that a burst of mutations leads to one pass,
+     * and the pass itself is idempotent.
+     *
+     * @param {Object} ctx Shared context.
+     * @param {Function} attach Called when new nodes may carry a STACK input.
+     */
+    function observe(ctx, attach) {
+        var pending = null;
+
+        if (typeof window.MutationObserver !== 'function' || !document.body) {
+            return;
+        }
+
+        new window.MutationObserver(function(mutations) {
+            var relevant = mutations.some(function(mutation) {
+                return mutation.addedNodes && mutation.addedNodes.length;
+            });
+
+            if (!relevant || pending) {
+                return;
+            }
+
+            pending = window.setTimeout(function() {
+                pending = null;
+                attach(ctx);
+            }, 50);
+        }).observe(document.body, {childList: true, subtree: true});
+    }
+
     return /** @alias module:local_stackmatheditor/input_fields */ {
 
         /**
@@ -746,14 +787,25 @@ define([
          */
         init: function(ctx) {
             A11y.useStrings(ctx.defs && ctx.defs.strings);
+            this.attach(ctx);
+            observe(ctx, this.attach.bind(this));
+        },
+
+        /**
+         * Attach an editor to every STACK input that does not have one yet.
+         *
+         * Idempotent: initField() leaves a marker on the input, so calling this again after a
+         * question has been replaced touches only the new one (#50).
+         *
+         * @param {Object} ctx Shared context.
+         */
+        attach: function(ctx) {
             var $inputs = $(selector());
             if (!$inputs.length) {
-                ctx.dbg(
-                    'No supported input fields found');
+                ctx.dbg('No supported input fields found');
                 return;
             }
-            ctx.dbg('Found ' + $inputs.length
-                + ' input fields');
+            ctx.dbg('Found ' + $inputs.length + ' input fields');
             $inputs.each(function() {
                 initField(this, ctx);
             });
