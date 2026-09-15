@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091506 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091507 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1464,3 +1464,30 @@ Jest is at 1089.
 
 The Playwright cross-level matrix. The suite that would host it is the one that had been broken
 since iteration 11, and I would rather see it green once before extending it.
+
+
+## 37. Iteration 33 (2026091507): the matrix test asserted a feature nobody asked for
+
+One PHPUnit case out of 125 failed on all three matrix jobs: case 5 of the #73 cross-level
+matrix. System editor on, quiz editor off, question editor on - the issue's table says the
+editor is off, the plugin says it is on.
+
+The plugin is right, and my test was wrong to encode the table without checking. Instance modes
+2 and 3 exist so that a question can decide for itself; the configuration page offers exactly
+that to teachers, and it has worked that way since 1.0. #73 is about the student switch and
+assumed the activation contract rather than changing it - Fall E even says so explicitly
+("sofern die bestehende globale Aktivierungslogik ebenfalls als harte Obergrenze definiert
+ist").
+
+So the editor keeps its contract and the switch follows the issue. The case now asserts what
+actually happens, with the reason in the docblock, and a new case covers what the issue was
+really after: a quiz that switches the editor off decides for every question that says nothing.
+
+If the activation contract should change - quiz off as a hard bound for its questions - that is
+a separate feature with its own migration story, not a test fix.
+
+### #70 recorded as a decision
+
+No tags: the release lane keeps installing STACK from its moving branches, deliberately, and the
+run writes down the revisions it tested against. `docs/RELEASE-CHECKLIST.md` now states that as
+an accepted residual risk rather than leaving it looking like an oversight.

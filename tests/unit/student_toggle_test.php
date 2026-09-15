@@ -117,6 +117,13 @@ final class student_toggle_test extends \advanced_testcase {
     /**
      * The whole matrix from the issue, level by level.
      *
+     * One row differs from the table in #73 on purpose. The issue assumes that a quiz that
+     * switches the editor off is a hard upper bound for the question below it. This plugin has
+     * never worked that way: instance modes 2 and 3 exist precisely so that a question can
+     * decide for itself, and the configuration page offers that to teachers. Changing it would
+     * be a different feature, and a silent one. So the editor keeps its own contract, the
+     * student switch follows the issue, and the two are tested separately.
+     *
      * @return void
      */
     public function test_the_cross_level_matrix(): void {
@@ -129,8 +136,11 @@ final class student_toggle_test extends \advanced_testcase {
             [1, false, true, true, true, true, true, false],
             [1, true, true, false, true, true, true, false],
             [1, true, true, true, true, false, true, false],
+            // The instance mode is the one hard bound: mode 0 is "off, no override".
             [0, true, true, true, true, true, false, false],
-            [1, true, false, true, true, true, false, false],
+            // The quiz says off, the question says on: the question decides about the editor,
+            // and the switch follows the editor.
+            [1, true, false, true, true, true, true, true],
             [1, true, true, true, false, true, false, false],
         ];
 
@@ -149,6 +159,22 @@ final class student_toggle_test extends \advanced_testcase {
             );
             $this->assertSame($switch, $this->effective(), "case $index: student switch");
         }
+    }
+
+    /**
+     * A quiz that switches the editor off decides for every question that says nothing.
+     *
+     * @return void
+     */
+    public function test_a_quiz_without_the_editor(): void {
+        $this->resetAfterTest();
+
+        $this->site(3, true);
+        $this->quiz(false, true);
+        $this->question(null, null);
+
+        $this->assertFalse(config_manager::get_effective_enabled(self::CMID, self::QBEID));
+        $this->assertFalse($this->effective(), 'no editor in this quiz, so no switch either');
     }
 
     /**

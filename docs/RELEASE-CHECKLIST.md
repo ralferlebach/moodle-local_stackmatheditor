@@ -50,7 +50,19 @@ Atomically, in one commit:
 Never a mixed state - `MATURITY_STABLE` next to "in development", or the other way round. The
 maturity change is the last step, not the start of the stable test.
 
-## 5. Provenance
+## 5. Dependency revisions: a deliberate non-pin
+
+The release lane installs STACK and its dependencies from their moving branches, not from tags.
+That is a decision, not an oversight: pinning would freeze the test bed against a STACK that
+keeps moving, and the value of this matrix is that it notices when STACK changes. What the run
+does instead is write down which revisions it actually tested against
+(`ci-logs/dependency-revisions.txt`), so a green run can be reconstructed afterwards even though
+it cannot be repeated exactly.
+
+The residual risk is stated plainly: the same plugin commit can be green today and red next week
+for reasons outside this repository. The evidence file names the SHAs that were green.
+
+## 6. Provenance
 
 The vendored MathQuill build is identified by its fork commit, not by a branch name, and
 `thirdparty/readme_moodle.txt` carries the commit, the toolchain and the checksums of the three
