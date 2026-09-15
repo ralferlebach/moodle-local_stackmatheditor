@@ -23,7 +23,7 @@ namespace local_stackmatheditor;
  *   1. Exact:      cmid + qbeid          (question-level)
  *   2. Quiz-def.:  cmid + qbeid IS NULL  (quiz-level default)  ← NEW
  *   3. Global:     cmid=0 + qbeid        (cross-quiz question default)
- *   4. Any qbeid   match                 (legacy fallback)
+ *   4. questionid field, same quiz or global (very old records)
  *   5. Legacy:     questionid field      (very old records)
  *   6. Instance defaults                 (settings.php)
  *
@@ -264,9 +264,11 @@ class config_manager {
      *   1. cmid + qbeid          (question-level)
      *   2. cmid + NULL           (quiz-level default)
      *   3. cmid=0 + qbeid        (global question default)
-     *   4. any qbeid match       (legacy)
-     *   5. questionid field      (very old records)
-     *   6. instance defaults     (settings.php)
+     *   4. questionid field      (very old records, same quiz or global only)
+     *   5. instance defaults     (settings.php)
+     *
+     * There is no "any qbeid" layer any more (#02): the same question bank entry used in
+     * another quiz is another context, and only the explicit global default crosses quizzes.
      *
      * @param int $cmid       Course module ID (0 for global).
      * @param int $qbeid      Question bank entry ID (0 to auto-resolve).
@@ -285,13 +287,16 @@ class config_manager {
 
         $qbeid = self::ensure_qbeid($qbeid, $questionid) ?? 0;
 
-        // Lowest-priority legacy/global fallbacks first.
+        // Lowest-priority legacy/global fallbacks first. Both are scoped: the same question bank
+        // entry in another quiz is a different context, and a configuration made there must not
+        // leak into this one (#02). Crossing quizzes is what the explicit global default
+        // (cmid = 0) is for.
         if ($questionid > 0) {
             $columns = $DB->get_columns(self::TABLE);
             if (isset($columns['questionid'])) {
                 $rec = self::get_one(
-                    "questionid = :qid AND questionid > 0",
-                    ['qid' => $questionid]
+                    "questionid = :qid AND questionid > 0 AND (cmid = 0 OR cmid = :cmid)",
+                    ['qid' => $questionid, 'cmid' => $cmid]
                 );
                 if ($rec) {
                     $result = self::merge_config_layer(
@@ -303,17 +308,6 @@ class config_manager {
         }
 
         if ($qbeid > 0) {
-            $rec = self::get_one(
-                "questionbankentryid = :qbeid",
-                ['qbeid' => $qbeid]
-            );
-            if ($rec) {
-                $result = self::merge_config_layer(
-                    $result,
-                    self::decode_raw_config($rec->$col)
-                );
-            }
-
             $rec = self::get_one(
                 "cmid = 0 AND questionbankentryid = :qbeid",
                 ['qbeid' => $qbeid]
@@ -419,9 +413,11 @@ class config_manager {
                     SQL_PARAMS_NAMED,
                     'lqid'
                 );
+                $legacyparams['lcmid'] = $cmid;
                 $legacyrecs = $DB->get_records_select(
                     self::TABLE,
-                    "questionid {$legacyinsql} AND questionid > 0",
+                    "questionid {$legacyinsql} AND questionid > 0"
+                        . " AND (cmid = 0 OR cmid = :lcmid)",
                     $legacyparams
                 );
                 // Index by questionid for O(1) lookup.
@@ -444,24 +440,10 @@ class config_manager {
             }
         }
 
-        // 2. Any qbeid match fallback.
+        // 2. Global question defaults (cmid=0 + qbeid). The batch path used to read every
+        // record with a matching qbeid here, whatever quiz it belonged to; that is gone (#02),
+        // so single and batch lookup follow the same hierarchy.
         [$insql, $params] = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
-        $records = $DB->get_records_select(
-            self::TABLE,
-            "questionbankentryid {$insql}",
-            $params
-        );
-        foreach ($records as $rec) {
-            $qbeid = (int) $rec->questionbankentryid;
-            if (isset($configs[$qbeid])) {
-                $configs[$qbeid] = self::merge_config_layer(
-                    $configs[$qbeid],
-                    self::decode_raw_config($rec->$col)
-                );
-            }
-        }
-
-        // 3. Global question defaults (cmid=0 + qbeid).
         $params['cmid'] = 0;
         $records = $DB->get_records_select(
             self::TABLE,
@@ -478,7 +460,7 @@ class config_manager {
             }
         }
 
-        // 4. Quiz-level default overrides lower layers for all slots.
+        // 3. Quiz-level default overrides lower layers for all slots.
         if ($cmid > 0) {
             $quizrec = self::get_one(
                 "cmid = :cmid AND questionbankentryid IS NULL",
@@ -492,7 +474,7 @@ class config_manager {
             }
         }
 
-        // 5. Exact question-level configs win last.
+        // 4. Exact question-level configs win last.
         if ($cmid > 0) {
             [$insql, $params] = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
             $params['cmid'] = $cmid;

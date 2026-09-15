@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091501 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091502 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1247,3 +1247,63 @@ dynamic browser check (add the line, reload, group appears). #58 now has the bro
 the issue asks for, but it has not run yet. #34 is not finished - there is no catalogue that
 assigns every visible button its verified mapping, and no CI check that fails when one is
 missing. The buttons activated in iteration 23 were checked by hand, one at a time.
+
+
+## 32. Iteration 28 (2026091502): the three remaining review findings
+
+### #02 - configuration travelled between quizzes
+
+`config_manager` documented five lookup layers, and one of them was "any qbeid match (legacy
+fallback)" - a query on `questionbankentryid` with no `cmid` at all. The same question used in
+two quizzes therefore shared whatever one of them had configured, although `cmid = 0 + qbeid`
+already exists as the explicit way to say "for this question everywhere".
+
+The layer is gone from both paths. The single lookup no longer reads an unscoped qbeid record,
+and the batch lookup - which had the same thing in bulk form - now starts at the global default.
+Single and batch follow the same hierarchy again, which they did not before.
+
+The other legacy layer, the one on the old `questionid` column, had the same hole and is now
+scoped to `cmid = 0 OR cmid = <this quiz>`: a genuinely old record still rescues the quiz it
+belongs to, and reaches no other.
+
+Six new PHPUnit cases in `config_cross_quiz_test.php`: a configuration in quiz A does not reach
+quiz B, the explicit global default does reach both, an exact configuration wins in its own quiz
+only, batch and single lookup agree, the batch path inherits the global default, and a quiz
+default stays in its quiz.
+
+### #04 - the vendored library is pinned to a commit
+
+`thirdparty/readme_moodle.txt` named a branch, which is not a pin: a rebuild of
+`feature/matrix-environments` next month produces something else. It now carries the fork commit
+`99c967df728178973084ebfe27577961348ffc56`, the upstream base, the toolchain (Node 22.22.2, npm
+10.9.7), the build command, the import date and the SHA-256 of the three imported files, plus the
+reproduction recipe that checks out the commit rather than the branch. The leftover sentence
+claiming this build was `sme.1` is corrected - it is `sme.3`.
+
+The main workflow gained a step that writes down which revisions a run actually tested against:
+the plugin SHA, the Moodle branch, the HEAD of every STACK dependency it installed, and the
+vendored MathQuill provenance. The branch variables stay as they are - testing against STACK
+master is what catches incompatibilities early - but a run now says what it meant.
+
+### #03 - evidence for the exact artefact
+
+A new workflow, `release-evidence.yml`, started by hand with the commit to certify. It records
+what is being certified (commit, version, maturity, vendored library with checksums), runs a
+dependency audit over both lock files, builds the release archive with its checksum, and writes
+the list of gates that no workflow can close - the manual accessibility sample, and the run links
+for Playwright, accessibility and load on that same commit.
+
+`docs/RELEASE-CHECKLIST.md` says the same thing in prose, including the part the issue is most
+insistent about: the maturity flip is the last step, atomically with README, release notes, tag
+and directory metadata, and never a mixed state.
+
+### What I did not do
+
+Option A of #03 - making Playwright, accessibility and load blocking jobs of the main workflow -
+is a decision about how long every push should take, and it is yours. The hybrid gate is built;
+turning it into a required check is a repository setting, as is branch protection for `main`
+(#03 finding C), which I cannot change from here.
+
+Nor did I close any issue or accept a residual risk. #34 in particular is not done: there is no
+catalogue that maps every visible button to its verified mapping, and no CI check that fails when
+one is missing.

@@ -14,7 +14,10 @@ MathQuill is included here as a build of a fork, not as an upstream release.
   Base:   mathquill/mathquill, branch main, commit bb9974ab
           (the build banner still reads "v0.10.1"; upstream has not tagged a
           release since 2017, so the banner is not a usable version marker.)
-  Fork:   ralferlebach/mathquill, branch feature/matrix-environments
+  Fork:   ralferlebach/mathquill
+  Fork commit: 99c967df728178973084ebfe27577961348ffc56
+          (branch feature/matrix-environments - informative only; the commit is
+           what identifies this build, a branch moves)
   Change: editable LaTeX matrix environments (matrix, pmatrix, bmatrix,
           Bmatrix, vmatrix, Vmatrix), the public API insertMatrix /
           insertColumnVector / insertRowVector, the configuration option
@@ -32,8 +35,35 @@ MathQuill is included here as a build of a fork, not as an upstream release.
           (#58, #61). The option defaults to false upstream; this plugin
           switches it on for every editable field.
 
-The version string 0.10.1-sme.1 identifies this build; -sme.N is incremented
+The version string 0.10.1-sme.3 identifies this build; -sme.N is incremented
 whenever a new fork build is imported.
+
+Build provenance of 0.10.1-sme.3
+--------------------------------
+  Upstream repository: https://github.com/mathquill/mathquill
+  Upstream base:       bb9974ab
+  Fork repository:     https://github.com/ralferlebach/mathquill
+  Fork commit:         99c967df728178973084ebfe27577961348ffc56
+  Branch:              feature/matrix-environments (informative only)
+  Built with:          Node 22.22.2, npm 10.9.7
+  Build command:       npm ci && make
+  Imported:            2026-09-14
+  License:             MPL-2.0
+
+  SHA-256 of the imported runtime files:
+    mathquill.js      fa2128f3fe505d05831712c366d212042ea4c483137f4fee7c80e8aa10c02153
+    mathquill.min.js  bb6d258ca2e1ba7d51329c47274946a493f6dc2a88f4b3cf9949dca255bd04e1
+    mathquill.css     25af0d2b872ae38cb2024599787d4617dbecfb3a0228301a8b296ed60c59cb78
+
+  Reproduce with:
+    git clone https://github.com/ralferlebach/mathquill
+    cd mathquill
+    git checkout 99c967df728178973084ebfe27577961348ffc56
+    npm ci
+    make
+
+  Not with "git checkout feature/matrix-environments": a branch name is not a
+  release pin, and a later build of it can produce different artefacts.
 
 MPL-2.0 requires modified files to be identifiable as modified. The
 modification is not applied to the distributed build by hand: it lives in the
@@ -51,7 +81,8 @@ To update this library:
      git clone https://github.com/ralferlebach/mathquill
      cd mathquill && npm ci && make
 
-2. Copy from the fork's build/ directory into
+2. Note the exact commit you built (git rev-parse HEAD) - it belongs in this
+   file. Then copy from the fork's build/ directory into
    local/stackmatheditor/thirdparty/mathquill:
 
      mathquill.js

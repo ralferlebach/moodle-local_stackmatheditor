@@ -121,6 +121,29 @@ jobs:
         env:
           DB: ${{ matrix.database }}
           MOODLE_BRANCH: ${{ matrix.moodle }}
+      # A run is only evidence if it says what it ran against (#04). The branch variables
+      # above are moving targets; these are the revisions this run actually used.
+      - name: Record dependency revisions
+        if: ${{ always() }}
+        run: |
+          mkdir -p ci-logs
+          {
+            echo "plugin: ${{ github.sha }}"
+            echo "moodle: ${{ matrix.moodle }}"
+            for dep in moodle/question/type/stack \
+                       moodle/question/behaviour/adaptivemultipart \
+                       moodle/question/behaviour/dfexplicitvaildate \
+                       moodle/question/behaviour/dfcbmexplicitvaildate \
+                       moodle/question/bank/importasversion; do
+              if [ -d "$dep/.git" ]; then
+                echo "$dep: $(git -C "$dep" rev-parse HEAD)"
+              fi
+            done
+            if [ -f plugin/thirdparty/readme_moodle.txt ]; then
+              grep -E 'Fork commit:|Upstream base:|Version:' plugin/thirdparty/readme_moodle.txt \
+                || true
+            fi
+          } | tee ci-logs/dependency-revisions.txt
       # After install: NO <plugin> argument (default from ci/.env = installed copy in the tree).
       - name: PHP Lint
         if: ${{ always() }}
