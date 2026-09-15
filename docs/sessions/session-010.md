@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091504 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091505 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1372,3 +1372,50 @@ the documented one. It does not prove the CAS agrees with the meaning - for the 
 the geometry functions that needs a real question with the packages from #66.
 
 Jest is at 1085 tests.
+
+
+## 35. Iteration 31 (2026091505 / 1.2.2): #72 - Android Blink dropped the first characters
+
+The issue is precise about the mechanism, and it is right. MathQuill's keyboard shim polls with
+`EveryTick`, whose handler starts as `noop`. `typedText` is registered only from the keypress and
+paste paths. Blink on Android delivers soft-keyboard text as `beforeinput`/`input` without a
+keypress the shim can use - so the poller still held `noop`, and every character was dropped
+until some other key registered it. Enter did, which is why Enter "healed" it.
+
+### The fix, in the input layer, in both versions
+
+`onInput()` is now a text-entry path of its own: for a non-composing insert event it registers
+`typedText` with the poller. Registering rather than calling is the whole trick for
+deduplication - `typedText()` empties the textarea when it inserts, so a second run on engines
+that also fire the classic path finds nothing to insert. No browser detection, no synthetic key,
+no new field, exactly as the issue asks.
+
+An IME commits a whole word at once, which `typedText()` cannot do - it inserts a single
+character. `compositionend` therefore commits the textarea content character by character and
+leaves it empty.
+
+* 1.3.x: fixed in the fork, `0.10.1-sme.4`, fork commit `5364d108`, rebuilt and vendored.
+* 1.2.x: MathQuill 0.10.1 is a plain upstream release there and cannot take a fork. The same
+  change is applied to the vendored `mathquill.js`, which makes it a modified library:
+  `thirdpartylibs.xml` now says `customised=true` with version `0.10.1-sme72`, and
+  `thirdparty/readme_moodle.txt` describes the patch, its reason, the SHA-256 of the patched
+  file and how to re-apply it after an update. Released as 1.2.2.
+
+### Verification
+
+Six new Mocha cases in the fork (`test/unit/androidInput.test.js`): a character without keydown
+or keypress, digits and operators, a fresh field needing no Enter first, a deletion left to the
+keystroke path, the classic desktop sequence typing exactly one character, and an IME commit
+arriving once. Mocha is at 822.
+
+Both builds were then driven in a real browser - the vendored 1.3 bundle and the patched 1.2
+bundle, each loaded on a blank page: typing `a`, `1`, `+` through input events alone produces
+`a1+` in both, and the classic keydown/keypress/input/keyup sequence produces exactly `q`.
+
+PHPCS green on both codebases, Jest 1085 (1.3) and 784 (1.2).
+
+### What is not covered
+
+A real Android device. The fix is verified against the event sequence the issue documents, not
+against Gboard on a phone. The browser matrix in the issue - Chrome, Opera, Firefox, Edge, Brave
+on Android - still has to be walked through by hand.

@@ -41,6 +41,8 @@ Features
 
 ### Version 1.3 (in development)
 
+* Android Chrome and Opera: the first characters typed on the soft keyboard no longer disappear
+  until Enter has been pressed once.
 * Elementary geometry in school notation: `P(2|3)`, `d(A,B)`, `∠ABC` and the length of a segment.
   The coordinate separator is a setting and changes the notation, not the meaning.
 * Vector calculus: a chooser for dimension and orientation, plus arrow, dot product and norm.
@@ -99,6 +101,8 @@ Release notes 1.3
 
 **Fixed**
 
+* On Android Chrome and Opera, a freshly focused field accepts the first soft-keyboard character
+  immediately. It used to drop everything until Enter had been pressed once.
 * `Umax` reaches STACK as `Umax`, not as `U max`, and `U_max` keeps its whole subscript in both
   directions.
 * The external service authorises: the course module has to be a quiz, the user has to be allowed

@@ -26,7 +26,7 @@
     <library>
         <location>thirdparty/mathquill</location>
         <name>MathQuill</name>
-        <version>0.10.1-sme.3</version>
+        <version>0.10.1-sme.4</version>
         <license>MPL-2.0</license>
         <licenseversion>2.0</licenseversion>
         <repository>https://github.com/ralferlebach/mathquill</repository>

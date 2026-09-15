@@ -3281,6 +3281,48 @@ var __assign = (this && this.__assign) || function () {
             }
             function onInput(e) {
                 everyTick.trigger(e);
+                if (e.target !== textarea)
+                    return;
+                // Blink on Android delivers soft-keyboard text as beforeinput/input, without a keypress
+                // and without a keydown this shim can use. Nothing has registered typedText with the
+                // poller at that point, so the first characters were dropped until some other key - Enter,
+                // typically - happened to register it. The input event is therefore its own entry point.
+                //
+                // Registering typedText rather than calling it keeps this safe on engines that also run
+                // the classic path: typedText() empties the textarea when it inserts, so a second run
+                // finds nothing to insert. That is the deduplication, and it needs no browser sniffing.
+                var inputEvent = e;
+                if (inputEvent.isComposing)
+                    return;
+                var inputType = inputEvent.inputType;
+                if (typeof inputType === 'string' && inputType.indexOf('insert') !== 0) {
+                    // deleteContentBackward and friends are handled by the keystroke path.
+                    return;
+                }
+                everyTick.listen(typedText);
+            }
+            function onCompositionEnd(e) {
+                everyTick.trigger(e);
+                if (e.target !== textarea)
+                    return;
+                if (!(textarea instanceof HTMLTextAreaElement))
+                    return;
+                // An IME commits a whole word at once, which typedText() does not handle: it only ever
+                // inserts a single character. Commit the characters one by one instead, and leave the
+                // textarea empty so nothing is inserted twice.
+                var text = textarea.value;
+                if (!text)
+                    return;
+                textarea.value = '';
+                for (var _i = 0, text_1 = text; _i < text_1.length; _i++) {
+                    var character = text_1[_i];
+                    if (controller.options && controller.options.overrideTypedText) {
+                        controller.options.overrideTypedText(character);
+                    }
+                    else {
+                        controller.typedText(character);
+                    }
+                }
             }
             function updateClipboardData(e) {
                 if (e === null || e === void 0 ? void 0 : e.clipboardData) {
@@ -3320,7 +3362,8 @@ var __assign = (this && this.__assign) || function () {
                         everyTick.trigger();
                         e.preventDefault();
                     },
-                    input: onInput
+                    input: onInput,
+                    compositionend: onCompositionEnd
                 });
             }
             else {
@@ -3353,7 +3396,8 @@ var __assign = (this && this.__assign) || function () {
                         updateClipboardData(clipboardEvent);
                     },
                     paste: onPaste,
-                    input: onInput
+                    input: onInput,
+                    compositionend: onCompositionEnd
                 });
             }
             // -*- export public methods -*- //

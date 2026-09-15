@@ -2,7 +2,7 @@ This plugin includes the following third-party library:
 
 * MathQuill
   - Location: thirdparty/mathquill
-  - Version: 0.10.1-sme.3
+  - Version: 0.10.1-sme.4
   - License: MPL-2.0
   - Upstream repository: https://github.com/mathquill/mathquill
   - Fork used here:      https://github.com/ralferlebach/mathquill
@@ -15,7 +15,7 @@ MathQuill is included here as a build of a fork, not as an upstream release.
           (the build banner still reads "v0.10.1"; upstream has not tagged a
           release since 2017, so the banner is not a usable version marker.)
   Fork:   ralferlebach/mathquill
-  Fork commit: 99c967df728178973084ebfe27577961348ffc56
+  Fork commit: 5364d108d1e62973e737630ba52ddf5db27b4a6b
           (branch feature/matrix-environments - informative only; the commit is
            what identifies this build, a branch moves)
   Change: editable LaTeX matrix environments (matrix, pmatrix, bmatrix,
@@ -23,6 +23,12 @@ MathQuill is included here as a build of a fork, not as an upstream release.
           insertColumnVector / insertRowVector, the configuration option
           autoOperatorNamesOnlyWholeWord, and the browser test automation
           around them.
+
+  sme.4:  makes the input event its own text-entry path (#72). Blink on
+          Android delivers soft-keyboard text without a keypress, so the
+          shim had never registered its typedText handler and dropped the
+          first characters until Enter was pressed. An IME commit is handled
+          on compositionend, character by character.
 
   sme.3:  gives the typed space the class mq-space, so a space the user
           entered can be made visible (#64). Without a class there is no
@@ -35,30 +41,30 @@ MathQuill is included here as a build of a fork, not as an upstream release.
           (#58, #61). The option defaults to false upstream; this plugin
           switches it on for every editable field.
 
-The version string 0.10.1-sme.3 identifies this build; -sme.N is incremented
+The version string 0.10.1-sme.4 identifies this build; -sme.N is incremented
 whenever a new fork build is imported.
 
-Build provenance of 0.10.1-sme.3
+Build provenance of 0.10.1-sme.4
 --------------------------------
   Upstream repository: https://github.com/mathquill/mathquill
   Upstream base:       bb9974ab
   Fork repository:     https://github.com/ralferlebach/mathquill
-  Fork commit:         99c967df728178973084ebfe27577961348ffc56
+  Fork commit:         5364d108d1e62973e737630ba52ddf5db27b4a6b
   Branch:              feature/matrix-environments (informative only)
   Built with:          Node 22.22.2, npm 10.9.7
   Build command:       npm ci && make
-  Imported:            2026-09-14
+  Imported:            2026-09-15
   License:             MPL-2.0
 
   SHA-256 of the imported runtime files:
-    mathquill.js      fa2128f3fe505d05831712c366d212042ea4c483137f4fee7c80e8aa10c02153
-    mathquill.min.js  bb6d258ca2e1ba7d51329c47274946a493f6dc2a88f4b3cf9949dca255bd04e1
+    mathquill.js      a8f0b253bf380ee2f625e71f9826fa585eece1087fa60b06bfe42a9747e3b0d5
+    mathquill.min.js  19be0bd1d948c1692db5bc905a0bb18955ef51a9a486542eb60b3dfcbb07cfce
     mathquill.css     25af0d2b872ae38cb2024599787d4617dbecfb3a0228301a8b296ed60c59cb78
 
   Reproduce with:
     git clone https://github.com/ralferlebach/mathquill
     cd mathquill
-    git checkout 99c967df728178973084ebfe27577961348ffc56
+    git checkout 5364d108d1e62973e737630ba52ddf5db27b4a6b
     npm ci
     make
 
