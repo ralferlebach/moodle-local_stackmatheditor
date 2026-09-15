@@ -297,3 +297,48 @@ describe('the switch on a system of equations (#13)', () => {
         expect(rows).toEqual(['x=1']);
     });
 });
+
+describe('the switch is a permission, not a preference (#73)', () => {
+    // The runtime decides from the server-resolved per-slot flag; these cases mirror what
+    // mayToggleEditor() in input_fields.js is given.
+    function mayToggle(ctx, slot) {
+        if (ctx.allowStudentToggle === false) {
+            return false;
+        }
+        const perslot = ctx.slotStudentToggle || {};
+        if (Object.prototype.hasOwnProperty.call(perslot, slot)) {
+            return !!perslot[slot];
+        }
+        return true;
+    }
+
+    test('the site can take it away for every slot', () => {
+        const ctx = {allowStudentToggle: false, slotStudentToggle: {1: true}};
+        expect(mayToggle(ctx, '1')).toBe(false);
+    });
+
+    test('a slot decides for itself when the site allows it', () => {
+        const ctx = {allowStudentToggle: true, slotStudentToggle: {1: true, 2: false}};
+        expect(mayToggle(ctx, '1')).toBe(true);
+        expect(mayToggle(ctx, '2')).toBe(false);
+    });
+
+    test('a slot the server said nothing about keeps the switch', () => {
+        expect(mayToggle({allowStudentToggle: true, slotStudentToggle: {}}, '3')).toBe(true);
+        expect(mayToggle({}, '3')).toBe(true);
+    });
+
+    test('a remembered preference cannot bring the switch back', () => {
+        // The author switched it off; the browser remembers the editor as off. The editor has
+        // to stay on, and no switch is offered.
+        window.localStorage.setItem(Toggle.STORAGE_KEY, '1');
+        expect(Toggle.startsOff()).toBe(true);
+
+        const ctx = {allowStudentToggle: false, slotStudentToggle: {1: false}};
+        const allowed = mayToggle(ctx, '1');
+        const editorOn = allowed ? !Toggle.startsOff() : true;
+
+        expect(allowed).toBe(false);
+        expect(editorOn).toBe(true);
+    });
+});

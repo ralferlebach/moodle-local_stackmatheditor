@@ -256,9 +256,23 @@ $mform = new configure_form($pageurl->out(false), [
 
 // Set current values. Implicit multiplication is no longer an editor setting (#65): STACK owns
 // that semantics, the editor only shows it.
+// The student switch (#73): the stored value of this level, else what the level above allows.
+if (isset($config['_allowStudentToggle'])) {
+    $currentstudenttoggle = (bool) $config['_allowStudentToggle'];
+} else {
+    $currentstudenttoggle = config_manager::get_instance_student_toggle();
+    if (!$quizmode) {
+        $parentconfig = config_manager::get_quiz_default($cmid);
+        if ($parentconfig !== null && isset($parentconfig['_allowStudentToggle'])) {
+            $currentstudenttoggle = (bool) $parentconfig['_allowStudentToggle'];
+        }
+    }
+}
+
 $formdata = [
-    'groups'  => $selectedkeys,
-    'enabled' => (int) $currentenabled,
+    'groups'             => $selectedkeys,
+    'enabled'            => (int) $currentenabled,
+    'allowstudenttoggle' => (int) ((bool) $currentstudenttoggle),
 ];
 $mform->set_data($formdata);
 
@@ -277,6 +291,12 @@ if ($mform->is_cancelled()) {
     // The editor hands STACK what was typed and lets STACK's own "insert stars" setting decide
     // (#65). Nothing about implicit multiplication is stored here any more.
     $elements['_variableMode'] = definitions::IMPLICIT_STACK;
+
+    // The student switch is stored like the activation itself (#73), and it is only ever stored
+    // as true when the editor is on here: a level that has no editor grants no permission.
+    $elements['_allowStudentToggle'] = (int) (
+        !empty($data->allowstudenttoggle) && !empty($data->enabled)
+    );
 
     // Store enabled flag when instance mode allows overrides.
     if ($instancemode === 2 || $instancemode === 3) {

@@ -76,6 +76,15 @@ if ($hassiteconfig) {
         PARAM_ALPHANUMEXT
     ));
 
+    // May students switch the editor off while answering? (#73) Subordinate to the activation
+    // above: with no editor there is no switch, whatever this says.
+    $settings->add(new admin_setting_configcheckbox(
+        'local_stackmatheditor/allowstudenttoggle',
+        get_string('setting_allowstudenttoggle', 'local_stackmatheditor'),
+        get_string('setting_allowstudenttoggle_desc', 'local_stackmatheditor'),
+        1
+    ));
+
     // CAS function names for the differential operators (#45). Empty means the operator is not
     // offered: Maxima's gradient, divergence and curl live in the vect package and depend on the
     // coordinate system, so the name has to come from whoever knows this installation.

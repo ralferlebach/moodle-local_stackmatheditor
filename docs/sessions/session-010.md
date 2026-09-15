@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091505 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091506 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1419,3 +1419,48 @@ PHPCS green on both codebases, Jest 1085 (1.3) and 784 (1.2).
 A real Android device. The fix is verified against the event sequence the issue documents, not
 against Gboard on a phone. The browser matrix in the issue - Chrome, Opera, Firefox, Edge, Brave
 on Android - still has to be walked through by hand.
+
+
+## 36. Iteration 32 (2026091506): the Playwright failure, and #73
+
+### The e2e failure was the same drift as #71, one layer down
+
+`settings.spec.js` timed out after two minutes on `admin: on/off`. The reason is in the helper,
+not in the test: `adminSettings()` selected `s_local_stackmatheditor_variablemode`, and
+`configure()` selected `variablemode` on the configuration page. #65 removed both in iteration
+11. Playwright waits for a locator that will never exist, and the test dies of a timeout rather
+than of a clear "element not found".
+
+The browser suite still described a product that had not existed for twenty iterations. Fixed:
+the helpers no longer touch the setting, the five-mode test became one - what is typed is what
+STACK receives - and the quiz/question tests assert groups and activation, which is what they
+were really about. The test that checked the removed setting is gone rather than adapted.
+
+### #73: the student switch becomes a permission
+
+Two things were mixed in one switch: whether the editor exists, and whether a student may put it
+away. They are separate now, and the second is subordinate to the first.
+
+* `allowstudenttoggle` as a site setting, default on, so an upgrade takes nothing away.
+* `_allowStudentToggle` in the quiz and question configuration, stored like the activation, and
+  only ever stored as true when the editor is on at that level.
+* `config_manager::get_effective_student_toggle()` resolves it as an AND: no editor, no switch;
+  the site can take it away; the quiz can; the question can; none of them can give it back.
+* The configuration form shows the checkbox directly under the activation one, with
+  `disabledIf` on it - the dependency is visible, and `configure.php` enforces it again when
+  saving, because a disabled control is not a validation.
+* The runtime receives the answer per slot and either renders the switch or does not. Not a
+  disabled control: a switch that cannot be used still says there is a decision to make.
+* A remembered browser preference cannot get around it. With no permission the editor stays in
+  the state the author configured, whatever localStorage holds - `Preference != Permission`, as
+  the issue puts it.
+
+Tests: the full cross-level matrix from the issue as a PHPUnit table, the downstream cases
+(system off / quiz on / question on, quiz off / question on), no editor means no switch, and the
+upgrade default. Four Jest cases for the runtime decision, including the stored-preference case.
+Jest is at 1089.
+
+### Not done for #73
+
+The Playwright cross-level matrix. The suite that would host it is the one that had been broken
+since iteration 11, and I would rather see it green once before extending it.

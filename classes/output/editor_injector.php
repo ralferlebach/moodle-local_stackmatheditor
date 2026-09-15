@@ -66,6 +66,8 @@ class editor_injector {
 
         // Build per-slot enabled map.
         $slotenabled = self::build_slot_enabled($slotconfigs);
+        // And, for every slot that has an editor, whether students may switch it off (#73).
+        $slottoggle = self::build_slot_student_toggle($slotconfigs, $slotenabled);
 
         $instancevarmode = config_manager::get_instance_variable_mode();
 
@@ -91,6 +93,8 @@ class editor_injector {
             'slotConfigs'      => !empty($slotconfigs) ? $slotconfigs : new \stdClass(),
             'slotVarModes'     => !empty($slotvarmodes) ? $slotvarmodes : new \stdClass(),
             'slotEnabled'      => !empty($slotenabled) ? $slotenabled : new \stdClass(),
+            'slotStudentToggle' => !empty($slottoggle) ? $slottoggle : new \stdClass(),
+            'allowStudentToggle' => config_manager::get_instance_student_toggle(),
             'instanceDefaults' => $instancedefaults,
         ]);
     }
@@ -290,5 +294,35 @@ class editor_injector {
         }
 
         return $enabled;
+    }
+
+    /**
+     * Per-slot permission for the student switch (#73).
+     *
+     * A subordinate permission: no editor, no switch, and any level that says no is final. The
+     * merged slot config carries the quiz and question values, so the AND is over the site
+     * setting and whatever the config holds.
+     *
+     * @param array $slotconfigs Slot => merged config array.
+     * @param array $slotenabled Slot => whether the editor is active there.
+     * @return array Slot => bool.
+     */
+    private static function build_slot_student_toggle(
+        array $slotconfigs,
+        array $slotenabled
+    ): array {
+        $site = config_manager::get_instance_student_toggle();
+        $toggle = [];
+
+        foreach ($slotconfigs as $slot => $cfg) {
+            if (empty($slotenabled[$slot]) || !$site) {
+                $toggle[$slot] = false;
+                continue;
+            }
+            $toggle[$slot] = !array_key_exists('_allowStudentToggle', $cfg)
+                || (bool) $cfg['_allowStudentToggle'];
+        }
+
+        return $toggle;
     }
 }

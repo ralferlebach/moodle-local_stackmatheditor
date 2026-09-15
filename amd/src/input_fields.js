@@ -375,7 +375,9 @@ define([
             }
         });
 
-        spec.$wrap.prepend(toggle.element);
+        if (spec.mayToggle) {
+            spec.$wrap.prepend(toggle.element);
+        }
 
         return toggle;
     }
@@ -524,6 +526,31 @@ define([
                 dbg('Pre-fill fallback error: ' + fallbackError.message);
             }
         }
+    }
+
+    /**
+     * May the student switch the editor off in this slot? (#73)
+     *
+     * A permission, not a preference: what the author switched off higher up cannot be switched
+     * on here, and a remembered browser state does not override it either. When this is false
+     * the switch is not rendered at all - a disabled control would suggest there is something to
+     * decide.
+     *
+     * @param {Object} ctx Shared context.
+     * @param {string} slot Slot number as a string.
+     * @returns {boolean} True when the switch may be shown.
+     */
+    function mayToggleEditor(ctx, slot) {
+        if (ctx.allowStudentToggle === false) {
+            return false;
+        }
+
+        var perslot = ctx.slotStudentToggle || {};
+        if (Object.prototype.hasOwnProperty.call(perslot, slot)) {
+            return !!perslot[slot];
+        }
+
+        return true;
     }
 
     /**
@@ -766,7 +793,8 @@ define([
                 convOpts: convOpts,
                 varMode: varMode,
                 getActiveField: getActiveField,
-                slot: slot
+                slot: slot,
+                mayToggle: mayToggleEditor(ctx, slot)
             });
 
             toolbar.typeset($tb);
@@ -774,7 +802,10 @@ define([
                 $input.val(initialMaxima);
                 setTimeout(function() {
                     syncSystemToInput(rows, $input, convOpts, ctx.dbg);
-                    systemToggle.apply(!Toggle.startsOff(), true);
+                    systemToggle.apply(
+                        mayToggleEditor(ctx, slot) ? !Toggle.startsOff() : true,
+                        true
+                    );
                 }, 0);
             }, 0);
 
@@ -818,6 +849,7 @@ define([
         // On/off switch for the editor (#13). Only for the single-line editor: a relation
         // system would have to be rebuilt from the plain text on the way back, and silently
         // dropping what a student typed while the editor was off is not an option.
+        var mayToggle = mayToggleEditor(ctx, slot);
         var toggle = Toggle.create({
             input: $input[0],
             editor: [$tb[0], $container[0]],
@@ -841,7 +873,9 @@ define([
                 }, 0);
             }
         });
-        $wrap.prepend(toggle.element);
+        if (mayToggle) {
+            $wrap.prepend(toggle.element);
+        }
 
         // Check / Submit always send the visible state (#48).
         Bridge.register(function() {
@@ -857,7 +891,9 @@ define([
         // Apply the remembered choice after the pre-fill has settled, so that switching off
         // right away still hands the answer over correctly (#13).
         setTimeout(function() {
-            toggle.apply(!Toggle.startsOff(), true);
+            // Without the permission the editor stays as the author configured it, whatever
+            // the browser remembers (#73).
+            toggle.apply(mayToggle ? !Toggle.startsOff() : true, true);
         }, 0);
 
         // Pre-fill: two nested setTimeout(0) calls are used intentionally.

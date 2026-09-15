@@ -185,6 +185,24 @@ class configure_form extends \moodleform {
                 'local_stackmatheditor'
             );
 
+            // Directly below, and only usable while the editor is on (#73): a subordinate
+            // permission, never a way to switch the editor on.
+            $mform->addElement(
+                'advcheckbox',
+                'allowstudenttoggle',
+                get_string('configure_studenttoggle_label', 'local_stackmatheditor'),
+                get_string('configure_studenttoggle_checkboxlabel', 'local_stackmatheditor'),
+                ['id' => 'id_sme_allowstudenttoggle'],
+                [0, 1]
+            );
+            $mform->setType('allowstudenttoggle', PARAM_INT);
+            $mform->addHelpButton(
+                'allowstudenttoggle',
+                'configure_studenttoggle_label',
+                'local_stackmatheditor'
+            );
+            $mform->disabledIf('allowstudenttoggle', 'enabled', 'notchecked');
+
             // Context hint: show what the parent default is.
             $parenthint = ($instancemode === 3)
                 ? get_string('configure_enabled_parenthint_on', 'local_stackmatheditor')

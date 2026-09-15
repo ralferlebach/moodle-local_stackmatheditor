@@ -645,4 +645,59 @@ class config_manager {
 
         return $defaultenabled;
     }
+
+    /**
+     * May students switch the editor off and on here? (#73)
+     *
+     * A subordinate permission: it is only ever asked when the editor is enabled at all, and any
+     * level that says no is final. Lower levels may take the permission away, never give it back
+     * - which is why this is an AND across the levels and not the usual "most specific wins".
+     *
+     * @param int $cmid Course module ID (0 = ignore quiz/question level).
+     * @param int $qbeid Question bank entry ID (0 = ignore question level).
+     * @return bool True when the switch may be rendered.
+     */
+    public static function get_effective_student_toggle(
+        int $cmid = 0,
+        int $qbeid = 0
+    ): bool {
+        // No editor, no switch. This is the hard upper bound of the whole feature.
+        if (!self::get_effective_enabled($cmid, $qbeid)) {
+            return false;
+        }
+
+        if (!self::get_instance_student_toggle()) {
+            return false;
+        }
+
+        if ($cmid > 0) {
+            $quiz = self::get_quiz_default($cmid) ?? [];
+            if (isset($quiz['_allowStudentToggle']) && !$quiz['_allowStudentToggle']) {
+                return false;
+            }
+        }
+
+        if ($cmid > 0 && $qbeid > 0) {
+            $question = self::get_config($cmid, $qbeid);
+            if (isset($question['_allowStudentToggle']) && !$question['_allowStudentToggle']) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Site-wide permission for the student switch (#73).
+     *
+     * Defaults to true: the switch was available to everyone before this setting existed, and an
+     * upgrade must not quietly take it away.
+     *
+     * @return bool
+     */
+    public static function get_instance_student_toggle(): bool {
+        $value = get_config('local_stackmatheditor', 'allowstudenttoggle');
+
+        return $value === false ? true : (bool) (int) $value;
+    }
 }

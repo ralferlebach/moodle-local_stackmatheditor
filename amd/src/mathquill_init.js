@@ -260,6 +260,8 @@ define([
             slotConfigs: slotConfigs,
             slotVarModes: slotVarModes,
             slotEnabled: slotEnabled,
+            slotStudentToggle: runtime.slotStudentToggle || {},
+            allowStudentToggle: runtime.allowStudentToggle !== false,
             instanceDefaults: instanceDefaults,
             instanceVarMode: instanceVarMode,
             localeComma: localeComma,

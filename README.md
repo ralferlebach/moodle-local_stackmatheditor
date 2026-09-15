@@ -52,7 +52,8 @@ Features
 * A typed space reaches STACK as a space - `a b` and `ab` are different answers to a
   space-sensitive input. Space no longer jumps out of a fraction; that is Tab or the arrow keys.
 * Students can switch the editor off and back on. The answer travels with it, in either
-  direction, including in the multi-line editor.
+  direction, including in the multi-line editor. Whether they may is decided by the site, the
+  quiz and the question: any level can take the permission away, none can give it back.
 * The editor attaches to any editable STACK input the question engine renders - quiz, adaptive
   quiz, question preview, CAPQuiz, StudentQuiz, embedded questions - and to questions that arrive
   after page load. Read-only inputs keep their plain rendering.
@@ -160,6 +161,8 @@ There, you find these settings:
   Empty means the button is not offered on this site.
 * **Coordinate separator** – how the coordinates of a point are separated on screen. Notation
   only; STACK always receives a list.
+* **Allow students to switch the editor on and off** – the site-wide permission for the student
+  switch. A quiz or a question can take it away as well; none of them can give it back.
 * **Draw lists as points** – whether a stored list such as `[2,3]` is shown as `P(2|3)` again.
 * **Additional page types** – further activities that render STACK questions through the question
   engine.
