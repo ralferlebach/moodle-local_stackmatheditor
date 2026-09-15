@@ -135,6 +135,59 @@ class quiz_helper {
     }
 
     /**
+     * Every question bank entry used by a quiz, regardless of question type (#67).
+     *
+     * The external service needs to know which questions belong to a quiz before it answers
+     * anything about them. Unlike load_quiz_stack_questions() this does not filter by question
+     * type: the question is "does this quiz use it", not "is it a STACK question".
+     *
+     * @param int $quizinstanceid Quiz instance id.
+     * @return array Question bank entry ids, as a set (qbeid => true).
+     */
+    public static function load_quiz_qbeids(int $quizinstanceid): array {
+        global $DB;
+
+        $qbeids = [];
+
+        try {
+            if (self::slots_have_qbeid()) {
+                $rows = $DB->get_records(
+                    'quiz_slots',
+                    ['quizid' => $quizinstanceid],
+                    '',
+                    'id, questionbankentryid'
+                );
+                foreach ($rows as $row) {
+                    $qbeid = (int) ($row->questionbankentryid ?? 0);
+                    if ($qbeid) {
+                        $qbeids[$qbeid] = true;
+                    }
+                }
+            } else {
+                $sql = "SELECT qr.id, qr.questionbankentryid AS qbeid
+                          FROM {quiz_slots} qs
+                          JOIN {question_references} qr
+                               ON qr.itemid = qs.id
+                               AND qr.component = 'mod_quiz'
+                               AND qr.questionarea = 'slot'
+                         WHERE qs.quizid = :quizid";
+                foreach ($DB->get_records_sql($sql, ['quizid' => $quizinstanceid]) as $row) {
+                    $qbeid = (int) $row->qbeid;
+                    if ($qbeid) {
+                        $qbeids[$qbeid] = true;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // A quiz whose slots cannot be read scopes to nothing, never to everything.
+            self::dbg('load_quiz_qbeids: ' . $e->getMessage());
+            return [];
+        }
+
+        return $qbeids;
+    }
+
+    /**
      * Load STACK questions via the quiz_slots.questionbankentryid column.
      *
      * Used on Moodle 4.x where the column is present.

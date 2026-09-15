@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091323 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091500 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1123,3 +1123,66 @@ that is not there is a group switched off, a function not named, or a package no
 
 Physical constants, hyperbolic functions, calculus operators and statistics stay commented out
 as agreed - their mappings are unchecked, and #34 is clear about what that means.
+
+
+## 29. Iteration 25 (2026091324): the README says what it should
+
+The requirements section still read "mod_adaptivequiz is supported if it is installed, but not
+required" - true since 1.0 and misleading since #50. No activity module is required at all; the
+editor attaches itself wherever the question engine renders an editable STACK input, and the
+sentence now points at the table that lists where that is.
+
+The 1.3 feature list is rewritten the way Ralf asked: geometry, vectors, matrices, spaces,
+the on/off switch, then the contexts. Vectors and matrices are separate entries now rather than
+one bullet about choosers - a student looking for the norm is looking under vectors, not under
+"structured input". Determinant, identity and transpose moved to the matrix entry, the norm to
+the vector entry, and the CAS detail left the list: what a bullet has to say is what the button
+does, not how it travels to Maxima.
+
+Two entries are gone entirely. Identifier integrity (#58, #59, #61) is not a feature, it is the
+absence of a bug. Implicit multiplication is not one either: #65 removed a setting, and what
+remains is STACK doing what it always did.
+
+Privacy keeps its own section, which now says what the API support actually does, instead of
+claiming a place in a list of things a teacher can use.
+
+
+## 30. Iteration 26 (2026091500): #67 - the external service authorises again
+
+#67 is a regression of #14, and the invariant it states is the whole finding: a valid Moodle
+context is not an authorisation, and a valid question id does not prove the question belongs to
+the quiz that was asked about.
+
+`classes/external/get_config.php` did `context_module::instance($cmid)` followed by
+`validate_context()`, and then resolved every question id the caller sent through
+`config_manager::resolve_qbeid()` - globally, against the whole question bank. Three things were
+missing, and all three are now in the runtime path, in the order the review checklist demands:
+
+1. `get_coursemodule_from_id('quiz', $cmid, 0, false, MUST_EXIST)` - a context id says nothing
+   about what the module is.
+2. `require_capability('mod/quiz:view', $context)` after `validate_context()` - the line #14
+   settled on, back where it belongs.
+3. The question ids are scoped against the quiz: `quiz_helper::load_quiz_qbeids()` returns the
+   bank entries the quiz actually uses, and anything else is dropped from the answer. Fail
+   closed, not resolved globally.
+
+`load_quiz_qbeids()` is new and deliberately does not filter by question type, unlike
+`load_quiz_stack_questions()`: the question here is "does this quiz use it", not "is it a STACK
+question". A quiz whose slots cannot be read scopes to nothing, never to everything.
+
+### Tests
+
+`tests/unit/external_get_config_test.php` covers what the issue lists: an unknown question id is
+dropped, a question from another quiz is not answered for while the same question through its own
+quiz is, a user whose `mod/quiz:view` is prohibited gets nothing, a forum course module is
+refused, a course module id that does not exist is refused, and an empty quiz scopes to nothing.
+
+The one test that needs a question in a quiz skips itself where `quiz_add_quiz_question()` is not
+available, so a future Moodle that moves that API does not turn a red test into a false finding.
+
+### Not done in this iteration
+
+Issues #68, #70 and #71 could not be read: GitHub's API refused with a rate limit, and only #67
+and #69 came through. #69 (`MATURITY_STABLE` evidence: browser, accessibility, performance,
+dependency and final artefact) is a release-process issue rather than a code change, and it needs
+the four verification runs that cannot happen here.

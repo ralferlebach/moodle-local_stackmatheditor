@@ -19,7 +19,8 @@ It also requires **qtype_stack** (STACK 4.13 or later) together with the plugins
 qbehaviour_adaptivemultipart, qbehaviour_dfexplicitvaildate, qbehaviour_dfcbmexplicitvaildate and
 qbank_importasversion. STACK needs a working Maxima installation (Maxima 5.46 or later).
 
-mod_adaptivequiz is supported if it is installed, but not required.
+No activity module is required. The editor attaches itself wherever Moodle's question engine
+renders an editable STACK input - see *Where the editor runs* below.
 
 
 Motivation for this plugin
@@ -40,34 +41,19 @@ Features
 
 ### Version 1.3 (in development)
 
-* Matrices and vectors: two choosers in the toolbar - a grid for the number of rows and columns,
-  and dimension plus orientation for a vector. The structure is built through MathQuill's own
-  API, never by writing a LaTeX string, and a vector keeps its own type on the way to Maxima.
-* Elementary geometry in school notation: `P(2|3)`, `d(A,B)`, `∠ABC` and the length of a segment,
-  mapped to STACK's `geometry.mac` (`[2,3]`, `Distance`, `Angle`). The coordinate separator is a
-  setting; it changes the notation, never the meaning.
-* Determinant, identity matrix and transpose as function templates; the norm becomes the Maxima
-  function the site names, instead of `abs()`.
-* Vector differential operators (grad, div, rot, Δ): each button appears only when an
-  administrator has named the Maxima function for it, and only when the question loads the
-  package it needs.
-* A typed space reaches STACK as a space: with STACK's space-sensitive "insert stars" variants,
-  `a b` and `ab` are different answers, and the editor can now produce that difference. Space no
-  longer jumps out of a fraction - that is Tab, Shift-Tab or the arrow keys.
-* Students can switch the editor off and back on. Off hands the answer to the original STACK
-  input in Maxima syntax and puts that input back in its place; on takes whatever is there now
-  back into the editor. Works for the multi-line editor too, where the lines are handed over as
-  one `nounand` answer.
-* Implicit multiplication is no longer an editor setting: STACK's "Insert stars" per input is the
-  only source, and the configuration page shows it read-only with a link into the question.
-* Identifiers survive intact: `Umax` is one variable rather than `U max`, and `U_max` keeps its
-  whole subscript in both directions.
+* Elementary geometry in school notation: `P(2|3)`, `d(A,B)`, `∠ABC` and the length of a segment.
+  The coordinate separator is a setting and changes the notation, not the meaning.
+* Vector calculus: a chooser for dimension and orientation, plus arrow, dot product and norm.
+* Matrix calculus: a grid chooser for rows and columns, plus determinant, identity and transpose.
+* Vector differential operators (grad, div, rot, Δ). Each button appears only where an
+  administrator has named the Maxima function for it and the question loads the package it needs.
+* A typed space reaches STACK as a space - `a b` and `ab` are different answers to a
+  space-sensitive input. Space no longer jumps out of a fraction; that is Tab or the arrow keys.
+* Students can switch the editor off and back on. The answer travels with it, in either
+  direction, including in the multi-line editor.
 * The editor attaches to any editable STACK input the question engine renders - quiz, adaptive
   quiz, question preview, CAPQuiz, StudentQuiz, embedded questions - and to questions that arrive
   after page load. Read-only inputs keep their plain rendering.
-* Privacy: full Moodle privacy API support - a data request reports, exports and anonymises the
-  "last modified by" reference of toolbar configurations (the configurations themselves are
-  course data and are kept).
 
 ### Version 1.2
 
@@ -399,6 +385,10 @@ Privacy
 The plugin stores toolbar configurations per quiz and question, together with the user who last
 modified them (see the privacy metadata). It stores no data about students or their answers –
 answers remain in STACK.
+
+The Moodle privacy API is fully supported: a data request reports and exports that "last modified
+by" reference and anonymises it on deletion. The configurations themselves are course data and
+are kept.
 
 
 Third-party libraries
