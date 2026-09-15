@@ -155,8 +155,10 @@ There, you find these settings:
 * **Use percent-pi notation for π** – send π as `%pi` instead of `pi`.
 * **Vectors in Maxima** – whether a one-row or one-column matrix is written as `matrix([a,b,c])`
   or as the list `[a,b,c]`. Choose what your STACK questions compare against.
-* **Maxima function for a norm** – the function `‖v‖` is written to. Question authors define it in
-  the question variables.
+* **Maxima function for a norm** – the function `‖v‖` is written to. The default follows the
+  vector format: `Length` where vectors are lists (STACK's own function, any dimension), `norm`
+  where they are matrices - there the question has to define it, conventionally
+  `norm(v) := sqrt(v . v)`.
 * **Maxima function for the gradient / divergence / curl / Laplace operator** – one name each.
   Empty means the button is not offered on this site.
 * **Coordinate separator** – how the coordinates of a point are separated on screen. Notation

@@ -31,8 +31,19 @@ define([
     'local_stackmatheditor/operator_map',
     'local_stackmatheditor/stack_bridge',
     'local_stackmatheditor/local_validation',
-    'local_stackmatheditor/a11y'
-], function($, tex2max, max2tex, toolbar, OperatorMap, Bridge, LocalValidation, A11y) {
+    'local_stackmatheditor/a11y',
+    'local_stackmatheditor/editor_toggle'
+], function(
+    $,
+    tex2max,
+    max2tex,
+    toolbar,
+    OperatorMap,
+    Bridge,
+    LocalValidation,
+    A11y,
+    Toggle
+) {
     'use strict';
 
     var TYPES = ['equiv', 'textarea'];
@@ -559,14 +570,10 @@ define([
         }
 
         this.$ta.before(this.$wrap);
-        this.$ta.css({
-            'position': 'absolute',
-            'left': '-9999px',
-            'width': '1px',
-            'height': '1px',
-            'overflow': 'hidden'
-        });
+        Toggle.hideOriginal(this.$ta[0]);
         this.$ta.attr('data-sme-init', '1');
+
+        this.buildToggle();
 
         toolbar.typeset(this.$tb);
         if (this.rows.length > 0) {
@@ -575,6 +582,80 @@ define([
 
         dbg('created: ' + this.rows.length + ' steps, id=' + this.$ta.attr('id'));
         this.syncNow();
+    };
+
+    /**
+     * Put the on/off switch above the editor (#13).
+     *
+     * The way back is simpler here than in the system editor: the lines of a textarea answer are
+     * separated by newlines, so reading them back is splitting a string, not parsing one.
+     *
+     * @returns {void}
+     */
+    EquivEditor.prototype.buildToggle = function() {
+        var self = this;
+        var handedover = null;
+        var slot = String(this.ctx.extractSlot(this.$ta.attr('name') || '') || '');
+        var maytoggle = true;
+        var perslot = this.ctx.slotStudentToggle || {};
+
+        if (this.ctx.allowStudentToggle === false) {
+            maytoggle = false;
+        } else if (Object.prototype.hasOwnProperty.call(perslot, slot)) {
+            maytoggle = !!perslot[slot];
+        }
+
+        this.toggle = Toggle.create({
+            input: this.$ta[0],
+            editor: [this.$tb[0], this.$rows[0], this.$addBtn ? this.$addBtn[0] : null],
+            strings: (this.ctx.defs && this.ctx.defs.strings) || {},
+            toInput: function() {
+                self.syncNow({silent: true});
+                handedover = self.$ta.val();
+            },
+            toEditor: function() {
+                var current = self.$ta.val();
+                if (current !== handedover) {
+                    self.rebuildFrom(current);
+                }
+                self.$ta.val(current);
+            }
+        });
+
+        if (maytoggle) {
+            this.$wrap.prepend(this.toggle.element);
+        }
+
+        setTimeout(function() {
+            self.toggle.apply(maytoggle ? !Toggle.startsOff() : true, true);
+        }, 0);
+    };
+
+    /**
+     * Rebuild the steps from the plain text of the textarea (#13).
+     *
+     * Used when the editor comes back after the student has typed into the textarea: the rows on
+     * screen are stale then, and what counts is what the textarea holds.
+     *
+     * @param {string} value Current textarea value.
+     * @returns {void}
+     */
+    EquivEditor.prototype.rebuildFrom = function(value) {
+        var steps = parseInitialSteps(value, this.inputType);
+        var i;
+
+        this.rows = [];
+        this.$rows.empty();
+        this.activeStepIdx = 0;
+        this.activeFieldIdx = 0;
+
+        for (i = 0; i < steps.length; i++) {
+            this.addStep(steps[i]);
+        }
+
+        if (this.rows.length) {
+            this.focusStep(0, 0);
+        }
     };
 
     /**

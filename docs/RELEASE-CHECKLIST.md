@@ -20,7 +20,10 @@ the full matrix (`moodle-plugin-ci-main.yml`):
 
 ## 2. Release evidence for the exact artefact
 
-`release-evidence.yml`, started by hand with the commit to certify. It records what is being
+`release-evidence.yml`, started by hand with the commit to certify. A manually started workflow
+only appears in the Actions list once its file is on the default branch - so this one shows up
+after `main` has it, and the branch to certify is then chosen in the dialog under "Use workflow
+from". It records what is being
 certified (commit, version, vendored MathQuill with checksums), runs a dependency audit, builds
 the release archive and writes the checklist of what a human still has to confirm.
 
@@ -30,7 +33,17 @@ Start these on the same commit and note their run links in the evidence artefact
 * the accessibility run
 * `load-k6.yml` or `load-jmeter.yml` - performance smoke
 
-## 3. What no workflow can do for you
+## 3. Branch protection: deliberately not used
+
+`main` is not branch-protected, and that is a decision: a failing check stops the work and gets
+fixed, or knowingly does not, but it does not block the merge mechanically. `ci-complete` stays
+the honest signal, not a gate with a key.
+
+What that means in practice: nothing prevents a release from being tagged on a red run, so the
+evidence below is the only thing that shows a stable release was actually green. Do not skip it
+on the grounds that CI "usually passes".
+
+## 4. What no workflow can do for you
 
 * A manual accessibility sample: NVDA with Firefox or Chrome, visible focus through the core
   flow, 200% zoom without loss of function, one narrow viewport. Record date, browser and
@@ -38,7 +51,7 @@ Start these on the same commit and note their run links in the evidence artefact
 * The decision on every open P0 and P1: closed, or accepted as a residual risk with a reason.
   An open, unexplained P1 must not sit quietly next to a stable release.
 
-## 4. Only then: flip the release metadata
+## 5. Only then: flip the release metadata
 
 Atomically, in one commit:
 
@@ -50,7 +63,7 @@ Atomically, in one commit:
 Never a mixed state - `MATURITY_STABLE` next to "in development", or the other way round. The
 maturity change is the last step, not the start of the stable test.
 
-## 5. Dependency revisions: a deliberate non-pin
+## 6. Dependency revisions: a deliberate non-pin
 
 The release lane installs STACK and its dependencies from their moving branches, not from tags.
 That is a decision, not an oversight: pinning would freeze the test bed against a STACK that
@@ -62,7 +75,7 @@ it cannot be repeated exactly.
 The residual risk is stated plainly: the same plugin commit can be green today and red next week
 for reasons outside this repository. The evidence file names the SHAs that were green.
 
-## 6. Provenance
+## 7. Provenance
 
 The vendored MathQuill build is identified by its fork commit, not by a branch name, and
 `thirdparty/readme_moodle.txt` carries the commit, the toolchain and the checksums of the three

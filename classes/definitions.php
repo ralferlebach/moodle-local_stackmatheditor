@@ -415,6 +415,25 @@ class definitions {
             // @codingStandardsIgnoreEnd
 
             // 15. Vectors.
+            // 15b. Vector products (#34): their own group, because the cross product needs
+            // Maxima's vect package and the arrow, the dot and the norm do not. With #66 the
+            // group is simply not rendered where the question does not load it.
+            'vector_products' => [
+                'label'           => get_string('group_vector_products', $p),
+                'default_enabled' => false,
+                'requires'        => [
+                    ['type' => 'maxima_share', 'package' => 'vect'],
+                ],
+                'elements'        => [
+                    [
+                        'display'  => '×',
+                        'semantic' => 'crossproduct',
+                        'cmd'      => '\\times',
+                        'tooltip'  => get_string('btn_cross', $p),
+                    ],
+                ],
+            ],
+
             'vector_operators' => [
                 'label'           => get_string('group_vector_operators', $p),
                 'default_enabled' => false,
@@ -1047,7 +1066,12 @@ class definitions {
         $value = trim((string)get_config('local_stackmatheditor', 'normfunction'));
 
         if ($value === '' || !preg_match('/^[a-z_][a-z0-9_]*$/i', $value)) {
-            return 'norm';
+            // The default follows the vector format, because the two have to fit: STACK's own
+            // Length() takes a list and refuses a matrix, so it is only the right answer where
+            // vectors are written as lists. With matrix vectors there is no function in STACK
+            // that does this, and the question has to define one - "norm" is the conventional
+            // name for it.
+            return self::get_vector_format() === 'list' ? 'Length' : 'norm';
         }
 
         return $value;

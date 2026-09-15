@@ -244,6 +244,7 @@ $string['group_statistical_operators']  = 'Statistics';
 $string['group_trigonometry']           = 'Trigonometry';
 $string['group_vector_differential']    = 'Vector differential';
 $string['group_vector_operators']       = 'Vectors';
+$string['group_vector_products'] = 'Vector products';
 $string['implicitmode_explicit_multi'] = 'insert explicit multiplication, assume multi-character variables (2ab → 2*ab)';
 $string['implicitmode_explicit_single'] = 'insert explicit multiplication, assume single-character variables (2ab → 2*a*b)';
 $string['implicitmode_space_multi'] = 'separate by spaces, assume multi-character variables (2ab → 2 ab)';
@@ -294,7 +295,7 @@ $string['setting_enabled_desc'] = 'Controls how the visual math editor is enable
 $string['setting_extrapagetypes'] = 'Additional page types';
 $string['setting_extrapagetypes_desc'] = 'Page types of further activities that render STACK questions through the Moodle question engine, one per line (for example mod-myactivity-attempt). The editor already runs on quiz, adaptive quiz, question preview, CAPQuiz, StudentQuiz and embedded questions. On a page without a STACK input nothing happens.';
 $string['setting_normfunction'] = 'Maxima function for a norm';
-$string['setting_normfunction_desc'] = 'Maxima has no norm function that covers both vectors and matrices. The editor writes ‖…‖ as a call to this function; question authors define it in the question variables, for example <code>norm(v) := sqrt(v . v)</code>.';
+$string['setting_normfunction_desc'] = 'Maxima function the double bar is written to. The default follows the vector format: with vectors as lists it is STACK\'s own Length(), which takes a list of any dimension; with vectors as matrices there is no such function in STACK and the question has to define one, conventionally norm(v) := sqrt(v . v).';
 $string['setting_pointnotation'] = 'Draw lists as points';
 $string['setting_pointnotation_desc'] = 'When a stored answer contains a list such as [2,3], show it as a point P(2|3). Off by default, because a list is not always a point: with the vector format set to list it is a vector, and elsewhere it may be an ordinary list.';
 $string['setting_usepercentpi']      = 'Use percent-pi notation for π';

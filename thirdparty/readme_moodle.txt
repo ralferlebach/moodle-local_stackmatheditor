@@ -15,7 +15,7 @@ MathQuill is included here as a build of a fork, not as an upstream release.
           (the build banner still reads "v0.10.1"; upstream has not tagged a
           release since 2017, so the banner is not a usable version marker.)
   Fork:   ralferlebach/mathquill
-  Fork commit: 5364d108d1e62973e737630ba52ddf5db27b4a6b
+  Fork commit: c1aa2e8b1ec0b0edafb965a12dd0a3be80a473bd
           (branch feature/matrix-environments - informative only; the commit is
            what identifies this build, a branch moves)
   Change: editable LaTeX matrix environments (matrix, pmatrix, bmatrix,
@@ -49,11 +49,12 @@ Build provenance of 0.10.1-sme.4
   Upstream repository: https://github.com/mathquill/mathquill
   Upstream base:       bb9974ab
   Fork repository:     https://github.com/ralferlebach/mathquill
-  Fork commit:         5364d108d1e62973e737630ba52ddf5db27b4a6b
+  Fork commit:         c1aa2e8b1ec0b0edafb965a12dd0a3be80a473bd
   Branch:              feature/matrix-environments (informative only)
   Built with:          Node 22.22.2, npm 10.9.7
   Build command:       npm ci && make
   Imported:            2026-09-15
+  Verified:            rebuilt from this commit; the three files below match byte for byte
   License:             MPL-2.0
 
   SHA-256 of the imported runtime files:
@@ -64,7 +65,7 @@ Build provenance of 0.10.1-sme.4
   Reproduce with:
     git clone https://github.com/ralferlebach/mathquill
     cd mathquill
-    git checkout 5364d108d1e62973e737630ba52ddf5db27b4a6b
+    git checkout c1aa2e8b1ec0b0edafb965a12dd0a3be80a473bd
     npm ci
     make
 

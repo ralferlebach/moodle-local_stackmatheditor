@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091507 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091510 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1491,3 +1491,109 @@ a separate feature with its own migration story, not a test fix.
 No tags: the release lane keeps installing STACK from its moving branches, deliberately, and the
 run writes down the revisions it tested against. `docs/RELEASE-CHECKLIST.md` now states that as
 an accepted residual risk rather than leaving it looking like an oversight.
+
+
+## 38. Iteration 34 (2026091508): #68 closed by measurement, #69 answered by decision
+
+### #68
+
+Ralf ran the two queries on his instance. No duplicates, and the second query failed with
+"Unknown column 'questionid'" - his installation was created after that column was dropped, so
+the legacy layer could never have fired there at all.
+
+That is the answer, but only for one installation. `cli/diagnose_legacy_config.php` asks the
+same questions anywhere: duplicates per (cmid, questionbankentryid), records of the old
+questionid kind where that column still exists, and question bank entries configured in more
+than one quiz - which is legitimate and was exactly the situation in which the removed layer
+leaked one quiz's configuration into another. Read-only, and it says what it found rather than
+what someone should do about it.
+
+With that, #68's "historische Records migriert oder bewusst diagnostiziert" is answerable for
+any installation, and answered for this one: nothing to migrate.
+
+### #69
+
+Two of the three things I asked for came back as decisions rather than tasks, which is fine -
+they just have to be written down instead of left looking undone.
+
+Branch protection: not wanted. A failing check stops the work and gets fixed, or knowingly does
+not, but it should not block the merge mechanically. `docs/RELEASE-CHECKLIST.md` records that,
+including what it costs: nothing prevents a tag on a red run, so the evidence run is the only
+thing that shows a stable release was green.
+
+The missing workflow: `release-evidence.yml` is not in the Actions list because a manually
+started workflow only appears once its file is on the default branch. It was added on
+`development` in 2026091502 and `main` still carries 1.2.2. It will appear after the next merge;
+the checklist now says so, rather than leaving it looking broken.
+
+
+## 39. Iteration 35 (2026091509): the vendored library is reproducible again
+
+`ralferlebach/mathquill` main is now at `c1aa2e8b1ec0b0edafb965a12dd0a3be80a473bd`
+("android-fix"), and it carries the keyboard shim and the six unit tests unchanged from what was
+verified here.
+
+Rebuilt from that commit with Node 22.22.2 and npm 10.9.7:
+
+    mathquill.js      a8f0b253bf380ee2f625e71f9826fa585eece1087fa60b06bfe42a9747e3b0d5
+    mathquill.min.js  19be0bd1d948c1692db5bc905a0bb18955ef51a9a486542eb60b3dfcbb07cfce
+    mathquill.css     25af0d2b872ae38cb2024599787d4617dbecfb3a0228301a8b296ed60c59cb78
+
+All three match the files this plugin ships, byte for byte. `readme_moodle.txt` now names that
+commit instead of `5364d108`, which only ever existed on the machine that produced the bundle.
+
+That was the last open point of #70 that could be closed from here: the modified runtime library
+can be rebuilt from a commit that exists in the fork, and the checksums prove the rebuild lands
+on the same bytes. The dependency pinning of the CI lane stays deliberately unpinned, as
+recorded in the release checklist.
+
+
+## 40. Iteration 36 (2026091510): cross product, the norm default, the textarea switch
+
+### The cross product, with as few prerequisites as possible
+
+Neither Maxima nor STACK has a cross product function. The operator is `~` from the vect
+package, and it only produces a result inside `express()`. So the button writes exactly that:
+
+    a x b                    ->  express(a ~ b)
+    (a x b) x c              ->  express((express(a ~ b)) ~ c)
+    column vectors           ->  express(matrix([1],[2],[3]) ~ matrix([4],[5],[6]))
+
+One line in the question variables is the whole prerequisite, `load("vect");`, and nothing has
+to be defined. The resolution runs on the finished Maxima string, where an operand is an
+identifier, a number, a bracketed group or a function call, innermost first.
+
+The button lives in a group of its own, "Vector products", which declares the vect package
+through #66: where the question does not load it, the group is not rendered, and the arrow, the
+dot and the norm in the neighbouring group are unaffected.
+
+Two guards, because the times sign can also arrive from imported content: between two numbers it
+stays multiplication, and a sign without an operand on one side is not turned into a call.
+
+Worth recording, because I argued the opposite two messages earlier: STACK's `multsgn = "cross"`
+option does *not* interfere. It only changes how STACK renders its own interpretation of the
+answer, and the editor never reads that - a pre-fill reads the stored Maxima string. What remains
+is imported LaTeX containing a times sign, which is what the two guards are for.
+
+### The norm default follows the vector format
+
+`stack/maxima/geometry.mac` has `Length(v)`, and it is the Euclidean norm in any dimension - but
+it takes a **list** and refuses a matrix. The plugin writes vectors as matrices by default, so a
+single default was wrong in one of the two cases either way. It now follows the format: `Length`
+for list vectors, `norm` for matrix vectors, where the question defines it. The setting
+description says so.
+
+### The textarea editor gets the switch
+
+The reason it was left out does not apply there: the lines of a textarea answer are separated by
+newlines, so reading them back is splitting a string, not parsing one. `rebuildFrom()` does that,
+and the permission from #73 is honoured per slot exactly as in the other two editors.
+
+### Not in this iteration
+
+Changing the size of an existing matrix through the chooser (#62 §3). The editor would have to
+read the matrix under the cursor and resize it, and the fork's public API has `insertMatrix` but
+nothing to inspect or resize an existing one. That is a fork change first, plugin second, and it
+deserves its own iteration rather than the tail of this one.
+
+Jest: 1097.

@@ -480,6 +480,14 @@
         "left": 0
     },
     {
+        "group": "vector_products",
+        "display": "×",
+        "kind": "cmd",
+        "template": "\\times",
+        "semantic": "crossproduct",
+        "left": 0
+    },
+    {
         "group": "vector_operators",
         "display": "v⃗",
         "kind": "write",

@@ -162,3 +162,43 @@ describe('the other rubrics stay separate', () => {
         expect(tex2max.convert('\\sin\\left(x\\right)')).toBe('sin(x)');
     });
 });
+
+describe('cross product (#34)', () => {
+    // There is no cross product in Maxima or STACK: the operator is ~ from the vect package and
+    // it only produces a result inside express(). The question needs one line, load("vect"), and
+    // #66 hides the button where that line is missing.
+    test.each([
+        ['a\\times b', 'express(a ~ b)'],
+        ['\\vec{a}\\times\\vec{b}', 'express(a ~ b)'],
+        ['\\sin\\left(x\\right)\\times b', 'express(sin(x) ~ b)']
+    ])('%s becomes %s', (latex, maxima) => {
+        expect(tex2max.convert(latex)).toBe(maxima);
+    });
+
+    test('a nested product nests the calls', () => {
+        expect(tex2max.convert('\\left(a\\times b\\right)\\times c'))
+            .toBe('express((express(a ~ b)) ~ c)');
+    });
+
+    test('column vectors are operands like any other', () => {
+        expect(tex2max.convert(
+            '\\begin{pmatrix}1\\\\2\\\\3\\end{pmatrix}\\times\\begin{pmatrix}4\\\\5\\\\6\\end{pmatrix}'
+        )).toBe('express(matrix([1],[2],[3]) ~ matrix([4],[5],[6]))');
+    });
+
+    test('two numbers are a multiplication, whatever the sign looked like', () => {
+        // The times sign can only reach the converter from imported content here - the button is
+        // for vectors - and between two numbers it meant multiplication.
+        expect(tex2max.convert('2\\times 3')).toBe('2* 3');
+    });
+
+    test('a sign without operands is not turned into a call', () => {
+        expect(tex2max.convert('a\\times')).toBe('a*');
+        expect(tex2max.convert('\\times b')).toBe('* b');
+    });
+
+    test('the rest of the expression is untouched', () => {
+        expect(tex2max.convert('a\\times b+c')).toBe('express(a ~ b)+c');
+        expect(tex2max.convert('a\\cdot b')).toBe('a* b');
+    });
+});

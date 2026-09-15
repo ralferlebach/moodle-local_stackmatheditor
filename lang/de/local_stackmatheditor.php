@@ -244,6 +244,7 @@ $string['group_statistical_operators']  = 'Stochastik';
 $string['group_trigonometry']           = 'Trigonometrie';
 $string['group_vector_differential']    = 'Vektordifferential';
 $string['group_vector_operators']       = 'Vektoren';
+$string['group_vector_products'] = 'Vektorprodukte';
 $string['implicitmode_explicit_multi'] = 'explizit ausführen, von Mehrzeichen-Variablen ausgehen (2ab → 2*ab)';
 $string['implicitmode_explicit_single'] = 'explizit ausführen, von Einzelzeichen-Variablen ausgehen (2ab → 2*a*b)';
 $string['implicitmode_space_multi'] = 'Leerzeichentrennung, von Mehrzeichen-Variablen ausgehen (2ab → 2 ab)';
@@ -294,7 +295,7 @@ $string['setting_enabled_desc'] = 'Legt fest, ob und wie der visuelle Mathe-Edit
 $string['setting_extrapagetypes'] = 'Zusätzliche Seitentypen';
 $string['setting_extrapagetypes_desc'] = 'Seitentypen weiterer Aktivitäten, die STACK-Fragen über die Moodle-Question-Engine rendern, einer pro Zeile (zum Beispiel mod-meineaktivitaet-attempt). Auf Quiz, Adaptive Quiz, Fragenvorschau, CAPQuiz, StudentQuiz und eingebetteten Fragen läuft der Editor bereits. Auf einer Seite ohne STACK-Eingabe passiert nichts.';
 $string['setting_normfunction'] = 'Maxima-Funktion für die Norm';
-$string['setting_normfunction_desc'] = 'Maxima kennt keine Normfunktion, die Vektoren und Matrizen gleichermaßen abdeckt. Der Editor schreibt ‖…‖ als Aufruf dieser Funktion; in den Fragevariablen wird sie definiert, zum Beispiel <code>norm(v) := sqrt(v . v)</code>.';
+$string['setting_normfunction_desc'] = 'Maxima-Funktion, in die der Doppelstrich geschrieben wird. Die Vorgabe richtet sich nach dem Vektorformat: Bei Vektoren als Listen ist es STACKs eigenes Length(), das Listen beliebiger Dimension nimmt; bei Vektoren als Matrizen gibt es in STACK keine solche Funktion, und die Frage muss eine definieren, üblicherweise norm(v) := sqrt(v . v).';
 $string['setting_pointnotation'] = 'Listen als Punkte darstellen';
 $string['setting_pointnotation_desc'] = 'Eine gespeicherte Antwort mit einer Liste wie [2,3] als Punkt P(2|3) anzeigen. Standardmäßig aus, denn eine Liste ist nicht immer ein Punkt: Beim Vektorformat „Liste“ ist sie ein Vektor, anderswo eine gewöhnliche Liste.';
 $string['setting_usepercentpi']      = 'Prozent-Pi-Notation für π verwenden';

@@ -605,6 +605,165 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Marker for the cross product between the LaTeX pass and the Maxima pass (#34).
+     *
+     * @type {string}
+     */
+    var CROSS_MARKER = '\uE004';
+
+    /**
+     * Turn the cross product into what Maxima can evaluate (#34).
+     *
+     * There is no cross product function in Maxima or in STACK. The operator is `~` from the
+     * vect package, and it only produces a result inside express(), so `a x b` becomes
+     * `express(a ~ b)`. Nothing else has to be defined in the question - `load("vect");` is the
+     * whole prerequisite, and #66 hides the button where that line is missing.
+     *
+     * Runs on the finished Maxima string, where the operands are plain: an identifier, a number,
+     * a bracketed group or a function call. Innermost first, so a nested product becomes
+     * express(express(a ~ b) ~ c).
+     *
+     * @param {string} s Maxima expression with the cross marker.
+     * @returns {string} Expression with express(... ~ ...) calls.
+     */
+    function resolveCrossProducts(s) {
+        var guard = 0;
+
+        while (s.indexOf(CROSS_MARKER) !== -1 && guard < 50) {
+            guard++;
+            s = replaceOneCrossProduct(s);
+        }
+
+        return s.split(CROSS_MARKER).join('*');
+    }
+
+    /**
+     * Replace the first cross marker with an express() call.
+     *
+     * @param {string} s Maxima expression.
+     * @returns {string} Expression with one marker resolved.
+     */
+    function replaceOneCrossProduct(s) {
+        var at = s.indexOf(CROSS_MARKER);
+        var leftend = at;
+        var rightstart = at + CROSS_MARKER.length;
+
+        // Whitespace around the sign belongs to neither operand.
+        while (leftend > 0 && /\s/.test(s.charAt(leftend - 1))) {
+            leftend--;
+        }
+        while (rightstart < s.length && /\s/.test(s.charAt(rightstart))) {
+            rightstart++;
+        }
+
+        var left = readOperandBefore(s, leftend);
+        var right = readOperandAfter(s, rightstart);
+
+        if (left !== null && right !== null
+                && /^[0-9.]+$/.test(left.text) && /^[0-9.]+$/.test(right.text)) {
+            // Two numbers: this is the multiplication sign after all, whatever it looked like.
+            // Imported content is the only place it can come from - the button is for vectors.
+            return s.replace(CROSS_MARKER, '*');
+        }
+
+        if (left === null || right === null) {
+            // No operand on one side: not a product, and nothing this can do with it.
+            return s.replace(CROSS_MARKER, '*');
+        }
+
+        return s.substring(0, left.start)
+            + 'express(' + left.text + ' ~ ' + right.text + ')'
+            + s.substring(right.end);
+    }
+
+    /**
+     * Read the factor that ends at the given position.
+     *
+     * A factor is an identifier or a number, optionally followed by a bracketed group - so
+     * `b`, `2`, `(a+b)` and `matrix([1],[2])` are each one factor.
+     *
+     * @param {string} s Maxima expression.
+     * @param {number} end Index just past the operand.
+     * @returns {?Object} {start, text} or null.
+     */
+    function readOperandBefore(s, end) {
+        var i = end - 1;
+        var depth;
+        var ch;
+
+        if (s.charAt(i) === ')' || s.charAt(i) === ']') {
+            depth = 0;
+            while (i >= 0) {
+                ch = s.charAt(i);
+                if (ch === ')' || ch === ']') {
+                    depth++;
+                } else if (ch === '(' || ch === '[') {
+                    depth--;
+                    if (depth === 0) {
+                        i--;
+                        break;
+                    }
+                }
+                i--;
+            }
+            if (depth !== 0) {
+                return null;
+            }
+        }
+
+        // Whatever stands in front of the group is its name, if anything.
+        while (i >= 0 && /[A-Za-z0-9_%.]/.test(s.charAt(i))) {
+            i--;
+        }
+
+        var start = i + 1;
+        var text = s.substring(start, end).trim();
+
+        return text === '' ? null : {start: start, text: text};
+    }
+
+    /**
+     * Read the factor that starts at the given position.
+     *
+     * @param {string} s Maxima expression.
+     * @param {number} start Index of the first character of the operand.
+     * @returns {?Object} {end, text} or null.
+     */
+    function readOperandAfter(s, start) {
+        var i = start;
+        var depth;
+        var ch;
+
+        while (i < s.length && /[A-Za-z0-9_%.]/.test(s.charAt(i))) {
+            i++;
+        }
+
+        if (s.charAt(i) === '(' || s.charAt(i) === '[') {
+            depth = 0;
+            while (i < s.length) {
+                ch = s.charAt(i);
+                if (ch === '(' || ch === '[') {
+                    depth++;
+                } else if (ch === ')' || ch === ']') {
+                    depth--;
+                    if (depth === 0) {
+                        i++;
+                        break;
+                    }
+                }
+                i++;
+            }
+            if (depth !== 0) {
+                return null;
+            }
+        }
+
+        var text = s.substring(start, i).trim();
+
+        return text === '' ? null : {end: i, text: text};
+    }
+
+    /**
      * Convert the elementary geometry notation to STACK's geometry functions (#63).
      *
      * Only the three constructs that have a documented counterpart in STACK's geometry.mac are
@@ -1840,6 +1999,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // "det(A)" is what the button writes and what a student types; Maxima calls it
         // determinant() (#45). A variable named det is left alone: only a call counts.
         s = s.replace(/(^|[^A-Za-z0-9_%])det(\s*(?:\\left)?\()/g, '$1determinant$2');
+        // The times sign is the cross product here, not multiplication: there is no times
+        // button for multiplication (that is \cdot), so it can only come from the cross
+        // product button or from imported content that meant a cross product.
+        s = s.replace(/\\times/g, CROSS_MARKER);
         s = convertGeometry(s, defs);
         // The double bar is a norm, not an absolute value: abs() of a vector is not what the
         // button promises (#34). Only with a configured norm function - otherwise the old
@@ -2033,6 +2196,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         });
 
         s = resolveBoundaries(s);
+        s = resolveCrossProducts(s);
         // The typed space becomes an ordinary space here, after every pass that could have
         // dropped it (#64). What it means is STACK's decision, not the editor's.
         s = s.replace(new RegExp(EXPLICIT_SPACE, 'g'), ' ');
