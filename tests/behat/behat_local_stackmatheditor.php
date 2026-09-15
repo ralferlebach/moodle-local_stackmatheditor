@@ -490,6 +490,52 @@ JS;
     }
 
     /**
+     * Type on the keyboard into a MathQuill field (#58).
+     *
+     * The other typing step uses MathQuill's write() API, which does not go through the typing
+     * path - and that path is where "Umax" became "U max" in the first place. This one clicks
+     * the field and sends real key events, so the operator-name detection runs exactly as it
+     * does for a student.
+     *
+     * @When I press the keys :text into the MathQuill field for :inputname
+     * @param string $text Characters to type.
+     * @param string $inputname Name attribute of the corresponding hidden input.
+     */
+    public function i_press_keys_into_mathquill_field(
+        string $text,
+        string $inputname
+    ): void {
+        $safeinput = json_encode($inputname);
+        $js = <<<JS
+            (function() {
+                var n     = {$safeinput};
+                var input = document.querySelector('input[name="' + n + '"]')
+                         || document.querySelector('input[name\$="_' + n + '"]');
+                if (!input) { return 'no-input'; }
+                var wrap = input.previousElementSibling;
+                if (!wrap) { return 'no-wrap'; }
+                var field = wrap.querySelector('.mq-editable-field');
+                if (!field) { return 'no-field'; }
+                Array.from(document.querySelectorAll('.sme-behat-target')).forEach(
+                    function(el) { el.classList.remove('sme-behat-target'); }
+                );
+                field.classList.add('sme-behat-target');
+                return 'ok';
+            })()
+JS;
+        $result = $this->getSession()->evaluateScript($js);
+        if ($result !== 'ok') {
+            throw new ExpectationException(
+                "Could not find the MathQuill field '$inputname' (result: $result).",
+                $this->getSession()
+            );
+        }
+
+        $this->execute('behat_general::i_click_on', ['.sme-behat-target', 'css_element']);
+        $this->execute('behat_general::i_type', [$text]);
+    }
+
+    /**
      * Simulate keyboard input into a MathQuill field by focusing its internal textarea.
      *
      * @When I type :text into the MathQuill field for :inputname

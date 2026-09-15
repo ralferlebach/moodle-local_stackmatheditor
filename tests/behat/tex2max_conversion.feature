@@ -203,3 +203,37 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
       | U_{m}ax   | explicit_single | U_m*a*x  |
       | U_{m}ax   | explicit_multi  | U_m*ax   |
       | U_{e}ff   | stack           | U_e ff   |
+
+  # ── Typed on the keyboard, not written through the API (#58) ─────────────────
+  # The other scenarios drive MathQuill's write() API. These go through the typing
+  # path, which is where an operator name inside a word was pulled out of it.
+
+  @javascript
+  Scenario Outline: An identifier typed on the keyboard stays one identifier
+    When I press the keys "<typed>" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "<expected>"
+    And the MathQuill field for "ans1" should contain LaTeX containing "<latex>"
+
+    Examples:
+      | typed    | expected | latex    |
+      | Umax     | Umax     | Umax     |
+      | Umin     | Umin     | Umin     |
+      | argmax   | argmax   | argmax   |
+      | maximum  | maximum  | maximum  |
+      | sinvalue | sinvalue | sinvalue |
+
+  @javascript
+  Scenario: A function typed on the keyboard is still a function
+    When I press the keys "max(x,y)" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "max(x,y)"
+
+  @javascript
+  Scenario: A multi-character subscript typed on the keyboard stays one identifier
+    When I press the keys "U_max" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "U_max"
+    And the MathQuill field for "ans1" should contain LaTeX containing "U_{max}"
+
+  @javascript
+  Scenario: The subscript survives being written back into the editor
+    When I enter latex "U_{max}" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "U_max"

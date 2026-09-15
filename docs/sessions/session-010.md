@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091500 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091501 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1186,3 +1186,64 @@ Issues #68, #70 and #71 could not be read: GitHub's API refused with a rate limi
 and #69 came through. #69 (`MATURITY_STABLE` evidence: browser, accessibility, performance,
 dependency and final artefact) is a release-process issue rather than a code change, and it needs
 the four verification runs that cannot happen here.
+
+
+## 31. Iteration 27 (2026091501): documentation and runtime describe the same contract
+
+The documentation issue (P1, stable gate) lists four findings. Three are addressed here; the
+fourth is a release step and cannot be done from a development branch.
+
+### A and B: the README contradicted itself
+
+Under "Usage & Settings" it still listed four settings, among them "Handling of implicit
+multiplication", and said teachers could override "the variable mode". Two sections further down
+it said, correctly, that STACK decides this and the editor has no setting for it. #65 removed
+that setting in iteration 11; the README kept describing it.
+
+The settings section now lists what `settings.php` actually registers - activation, default
+groups, percent-pi, vector format, norm function, the four operator mappings, coordinate
+separator, point notation and additional page types - and states plainly that implicit
+multiplication is not among them.
+
+### The guard, so it does not drift again
+
+`tests/unit/documentation_test.php` reads `settings.php`, takes the setting names out of it and
+asserts:
+
+* every setting has a title and a description string;
+* every title appears in the README;
+* the README does not describe the removed setting, in any of its three old spellings;
+* the strings of the removed setting are gone as well;
+* the English and German packs have the same keys.
+
+It is a cheap test and it would have caught this drift the day it appeared.
+
+### #58: a browser regression on the real typing path
+
+The issue is right that a converter test is not enough for this defect: it was born in MathQuill's
+typing path. The existing Behat step types through `write()`, which is a different path.
+
+A new step, `I press the keys "Umax" into the MathQuill field for "ans1"`, clicks the field and
+sends real key events through Moodle's own `behat_general::i_type`. Five scenarios use it -
+`Umax`, `Umin`, `argmax`, `maximum`, `sinvalue` - plus `max(x,y)` staying a function and `U_max`
+keeping its subscript, in both directions. They assert the hidden STACK input and the LaTeX in
+the field, which is the chain the issue describes.
+
+### Release notes
+
+The README has a "Release notes 1.3" section covering what the issue asks for: the new features,
+the two fixes, the behaviour changes (the removed setting, the space key), what question authors
+have to load or configure, and the support matrix.
+
+### Not done here
+
+The release step itself - `MATURITY_STABLE`, the version string, the tag and the plugin directory
+metadata changed atomically - belongs to the release, not to a development iteration. So does the
+formal decision on #34, #58 and #66: I can report what is implemented, but closing an issue or
+accepting a residual risk is the maintainer's call.
+
+What I can say about the three: #66's DoD is implemented and covered by tests, except the
+dynamic browser check (add the line, reload, group appears). #58 now has the browser regression
+the issue asks for, but it has not run yet. #34 is not finished - there is no catalogue that
+assigns every visible button its verified mapping, and no CI check that fails when one is
+missing. The buttons activated in iteration 23 were checked by hand, one at a time.
