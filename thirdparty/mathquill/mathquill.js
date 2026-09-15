@@ -1485,6 +1485,30 @@ var saneKeyboardEvents = (function() {
     }
     target.bind('keydown keypress input keyup focusout paste', function(e) { checkTextarea(e); });
 
+    // local_stackmatheditor #72: Blink on Android delivers soft-keyboard text as input events
+    // without a keypress, so nothing has registered typedText with the poller and the first
+    // characters were dropped until some other key - Enter, typically - registered it. The input
+    // event is therefore its own entry point. Registering typedText rather than calling it keeps
+    // this safe where the classic path also runs: typedText() empties the textarea when it
+    // inserts, so a second run finds nothing to insert.
+    target.bind('input', function(e) {
+      var ev = e.originalEvent || e;
+      if (ev.isComposing) return;
+      if (typeof ev.inputType === 'string' && ev.inputType.indexOf('insert') !== 0) return;
+      checkTextareaFor(typedText);
+    });
+
+    // An IME commits a whole word at once, which typedText() does not handle: it only inserts a
+    // single character. Commit the characters one by one and leave the textarea empty.
+    target.bind('compositionend', function() {
+      var text = textarea.val();
+      if (!text) return;
+      textarea.val('');
+      for (var i = 0; i < text.length; i += 1) {
+        handlers.typedText(text.charAt(i));
+      }
+    });
+
 
     // -*- public methods -*- //
     function select(text) {

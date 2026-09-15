@@ -40,6 +40,12 @@ Features
 
 ### Version 1.2
 
+* Android Chrome and Opera: the first characters typed on the soft keyboard no longer disappear
+  until Enter has been pressed once (1.2.2).
+* Identifiers that contain the name of a function keep their meaning: `Umax` is one variable, not
+  `U max`, and `U_max` keeps its whole subscript in both directions (1.2.1).
+* `max(x,y)` and `min(x,y)` are recognised as function calls in every implicit-multiplication
+  mode (1.2.1).
 * Set theory: element, union, intersection, difference, (proper) subset and superset, entered
   visually and handed to STACK in its own set functions.
 * Integral calculus: definite and indefinite integrals as a structured template (limits,
