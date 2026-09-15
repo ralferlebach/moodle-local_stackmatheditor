@@ -19,7 +19,7 @@ namespace local_stackmatheditor;
 /**
  * Documentation must describe the product that exists.
  *
- * The README once documented a setting for implicit multiplication that #65 had removed, and
+ * #71. The README once documented a setting for implicit multiplication that #65 had removed, and
  * described the correct behaviour a few sections further down - the same document contradicting
  * itself. This test is the cheap guard against that: every setting the plugin defines has a
  * title, every title appears in the README, and settings that were removed are not described as

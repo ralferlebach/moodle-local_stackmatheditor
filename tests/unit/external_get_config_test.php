@@ -120,6 +120,10 @@ final class external_get_config_test extends \advanced_testcase {
     /**
      * Without the capability there is no answer at all.
      *
+     * Moodle can refuse in two ways here, and both are correct: prohibiting mod/quiz:view also
+     * makes the activity inaccessible, so require_login() may object before require_capability()
+     * is reached. The test asserts what matters - no data comes back - and accepts either.
+     *
      * @return void
      */
     public function test_without_the_capability(): void {
@@ -127,20 +131,52 @@ final class external_get_config_test extends \advanced_testcase {
         [, $cm, $user] = $this->make_quiz();
 
         $context = \context_module::instance($cm->id);
-        $studentrole = $this->getDataGenerator()->create_role();
-        role_assign($studentrole, $user->id, $context->id);
-        assign_capability(
-            'mod/quiz:view',
-            CAP_PROHIBIT,
-            $studentrole,
-            $context->id,
-            true
-        );
+        $role = $this->getDataGenerator()->create_role();
+        role_assign($role, $user->id, $context->id);
+        assign_capability('mod/quiz:view', CAP_PROHIBIT, $role, $context->id, true);
 
         $this->setUser($user);
 
-        $this->expectException(\required_capability_exception::class);
-        get_config::execute((int) $cm->id, []);
+        try {
+            get_config::execute((int) $cm->id, []);
+            $this->fail('the service answered a user who may not view the quiz');
+        } catch (\moodle_exception $e) {
+            $this->assertTrue(
+                $e instanceof \required_capability_exception
+                    || str_contains(get_class($e), 'require_login'),
+                'expected an access error, got ' . get_class($e) . ': ' . $e->getMessage()
+            );
+        }
+    }
+
+    /**
+     * The capability check is in the executable path (#67, regression of #14).
+     *
+     * #14 was closed after require_capability() had been added, and it disappeared again. A
+     * behavioural test cannot see that on its own: prohibiting the capability also blocks the
+     * login check, so the service would look correct even without the line. This asserts the
+     * line is there, and that it comes after validate_context().
+     *
+     * @return void
+     */
+    public function test_the_capability_check_is_in_the_code(): void {
+        global $CFG;
+
+        $source = file_get_contents(
+            $CFG->dirroot . '/local/stackmatheditor/classes/external/get_config.php'
+        );
+        $this->assertNotFalse($source);
+
+        $validate = strpos($source, 'self::validate_context(');
+        $capability = strpos($source, "require_capability('mod/quiz:view'");
+
+        $this->assertNotFalse($validate, 'validate_context() is missing');
+        $this->assertNotFalse($capability, 'require_capability() is missing - this is #14 again');
+        $this->assertGreaterThan(
+            $validate,
+            $capability,
+            'require_capability() must come after validate_context()'
+        );
     }
 
     /**

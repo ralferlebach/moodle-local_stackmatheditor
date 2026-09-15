@@ -215,6 +215,10 @@ it needs are available in that particular question.
 | Geometry (points, distance, angle) | `geometry.mac` | STACK core, always there |
 | Vector differential (grad, div, rot, Δ) | Maxima package `vect` | `load("vect");` in the question variables |
 
+Every button in the toolbar is covered by an automated contract test: its template is converted
+and has to produce a CAS-safe expression, and the structural ones are checked against their
+documented mapping. A button whose mapping is not verified is not shipped.
+
 A group whose packages are missing can still be selected and saved on the configuration page -
 it is marked there, with the line to add - but it is not rendered for students. No second
 "available" flag is stored anywhere: the question variables are the only source. Add the line

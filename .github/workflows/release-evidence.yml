@@ -1,4 +1,4 @@
-# Release evidence for one exact commit (#03).
+# Release evidence for one exact commit (#69).
 #
 # The main workflow answers "does the code work". This one answers "is this artefact
 # releasable": it runs the gates that are otherwise manual - browser, accessibility,

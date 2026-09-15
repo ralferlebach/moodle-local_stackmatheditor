@@ -17,7 +17,7 @@
 namespace local_stackmatheditor;
 
 /**
- * Configuration must not travel between quizzes (#02).
+ * Configuration must not travel between quizzes (#68).
  *
  * The same question bank entry can be used in several quizzes. A configuration made in one of
  * them is a statement about that quiz, not about the question everywhere. Only the explicit

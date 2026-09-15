@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091502 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091504 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1188,9 +1188,9 @@ dependency and final artefact) is a release-process issue rather than a code cha
 the four verification runs that cannot happen here.
 
 
-## 31. Iteration 27 (2026091501): documentation and runtime describe the same contract
+## 31. Iteration 27 (2026091501): #71 - documentation and runtime describe the same contract
 
-The documentation issue (P1, stable gate) lists four findings. Three are addressed here; the
+#71 (P1, stable documentation gate) lists four findings. Three are addressed here; the
 fourth is a release step and cannot be done from a development branch.
 
 ### A and B: the README contradicted itself
@@ -1249,9 +1249,9 @@ assigns every visible button its verified mapping, and no CI check that fails wh
 missing. The buttons activated in iteration 23 were checked by hand, one at a time.
 
 
-## 32. Iteration 28 (2026091502): the three remaining review findings
+## 32. Iteration 28 (2026091502): #68, #69 and #70
 
-### #02 - configuration travelled between quizzes
+### #68 - configuration travelled between quizzes
 
 `config_manager` documented five lookup layers, and one of them was "any qbeid match (legacy
 fallback)" - a query on `questionbankentryid` with no `cmid` at all. The same question used in
@@ -1271,7 +1271,7 @@ quiz B, the explicit global default does reach both, an exact configuration wins
 only, batch and single lookup agree, the batch path inherits the global default, and a quiz
 default stays in its quiz.
 
-### #04 - the vendored library is pinned to a commit
+### #70 - the vendored library is pinned to a commit
 
 `thirdparty/readme_moodle.txt` named a branch, which is not a pin: a rebuild of
 `feature/matrix-environments` next month produces something else. It now carries the fork commit
@@ -1285,7 +1285,7 @@ the plugin SHA, the Moodle branch, the HEAD of every STACK dependency it install
 vendored MathQuill provenance. The branch variables stay as they are - testing against STACK
 master is what catches incompatibilities early - but a run now says what it meant.
 
-### #03 - evidence for the exact artefact
+### #69 - evidence for the exact artefact
 
 A new workflow, `release-evidence.yml`, started by hand with the commit to certify. It records
 what is being certified (commit, version, maturity, vendored library with checksums), runs a
@@ -1299,11 +1299,76 @@ and directory metadata, and never a mixed state.
 
 ### What I did not do
 
-Option A of #03 - making Playwright, accessibility and load blocking jobs of the main workflow -
+Option A of #69 - making Playwright, accessibility and load blocking jobs of the main workflow -
 is a decision about how long every push should take, and it is yours. The hybrid gate is built;
 turning it into a required check is a repository setting, as is branch protection for `main`
-(#03 finding C), which I cannot change from here.
+(#69 finding C), which I cannot change from here.
 
 Nor did I close any issue or accept a residual risk. #34 in particular is not done: there is no
 catalogue that maps every visible button to its verified mapping, and no CI check that fails when
 one is missing.
+
+
+## 33. Iteration 29 (2026091503): the issue numbers, correctly attached
+
+The five review findings arrived as files named 01 to 05, and I wrote those numbers into code
+comments and documentation. They are not issue numbers. The mapping, checked against the issue
+titles on GitHub rather than against the file names:
+
+| File | Issue | Subject | Done in |
+| --- | --- | --- | --- |
+| 01 | #67 | External service without capability and object scope (P0) | 2026091500 |
+| 02 | #68 | Unscoped qbeid fallback mixes configuration between quizzes | 2026091502 |
+| 03 | #69 | MATURITY_STABLE needs browser, a11y, performance, dependency and artefact evidence | 2026091502 |
+| 04 | #70 | Stable build not reproducible: fork and CI dependencies not pinned | 2026091502 |
+| 05 | #71 | README, open P1 issues and runtime semantics out of sync | 2026091501 |
+
+Every `(#02)`, `(#03)`, `(#04)` in `config_manager.php`, `config_cross_quiz_test.php`,
+`release-evidence.yml`, `moodle-plugin-ci-main.yml` and this document now reads `(#68)`, `(#69)`,
+`(#70)`. #67 and #71 were already referenced correctly, the first by name from the start, the
+second only in prose - `documentation_test.php` now names it too.
+
+Three of the five mappings are confirmed by the issue title (#67, #68, #69 were readable through
+the API or the page); #70 and #71 were confirmed by reading their page titles after the API rate
+limit refused. No mapping rests on the file order alone.
+
+
+## 34. Iteration 30 (2026091504): the CI run, and #34 gets its gate
+
+### The run
+
+Behat: 69 scenarios, 804 steps, all green - including the seven keyboard scenarios from #58 and
+everything the toggle recursion had broken. The browser regression the documentation issue asked
+for is no longer a plan, it is a result.
+
+PHPUnit: one test red, `test_without_the_capability`. Prohibiting `mod/quiz:view` also makes the
+activity inaccessible, so `require_login()` objects inside `validate_context()` before
+`require_capability()` is ever reached - and the test insisted on the second exception. Both
+mean the same thing, and the test now accepts either.
+
+That exposed something worth saying out loud: a behavioural test cannot prove the capability
+line is there, because the service looks correct without it. So a second test asserts the line
+exists in the source and comes after `validate_context()`. That is exactly the regression #67
+describes - #14 was closed with that line, and the line disappeared.
+
+### #34 - a visible button is a promise, and now it is checked
+
+`definitions::export_button_catalogue()` exports every button with the LaTeX it writes - no
+language strings, because a contract is the template, not the label. `export_buttons.php`
+regenerates the fixture, `button_fixture_test.php` fails when it is stale, and
+`button_contract.test.js` takes all 116 buttons, fills the empty slots of each template with an
+operand and converts it. Three assertions per button: nothing is reported as unconvertible, the
+result is not empty, and no backslash survives (#39). Sixteen structural buttons are additionally
+checked against their exact documented mapping.
+
+It found a bug on the first run. The norm button wrote `\left\\|\right\\|` - a LaTeX line
+break followed by a pipe, not a double bar - and it reached the CAS as `abs(\)`. I introduced
+that in iteration 23 with one backslash too many, checked it by hand, and did not see it.
+`button_fixture_test` now also refuses any template containing a line break.
+
+This is the P1 that stood between the current state and stable. What the gate proves is narrow
+and worth restating: every button produces a CAS-safe string, and the structural ones produce
+the documented one. It does not prove the CAS agrees with the meaning - for the operators and
+the geometry functions that needs a real question with the packages from #66.
+
+Jest is at 1085 tests.

@@ -121,7 +121,7 @@ jobs:
         env:
           DB: ${{ matrix.database }}
           MOODLE_BRANCH: ${{ matrix.moodle }}
-      # A run is only evidence if it says what it ran against (#04). The branch variables
+      # A run is only evidence if it says what it ran against (#70). The branch variables
       # above are moving targets; these are the revisions this run actually used.
       - name: Record dependency revisions
         if: ${{ always() }}

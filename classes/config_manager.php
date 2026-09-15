@@ -267,7 +267,7 @@ class config_manager {
      *   4. questionid field      (very old records, same quiz or global only)
      *   5. instance defaults     (settings.php)
      *
-     * There is no "any qbeid" layer any more (#02): the same question bank entry used in
+     * There is no "any qbeid" layer any more (#68): the same question bank entry used in
      * another quiz is another context, and only the explicit global default crosses quizzes.
      *
      * @param int $cmid       Course module ID (0 for global).
@@ -289,7 +289,7 @@ class config_manager {
 
         // Lowest-priority legacy/global fallbacks first. Both are scoped: the same question bank
         // entry in another quiz is a different context, and a configuration made there must not
-        // leak into this one (#02). Crossing quizzes is what the explicit global default
+        // leak into this one (#68). Crossing quizzes is what the explicit global default
         // (cmid = 0) is for.
         if ($questionid > 0) {
             $columns = $DB->get_columns(self::TABLE);
@@ -441,7 +441,7 @@ class config_manager {
         }
 
         // 2. Global question defaults (cmid=0 + qbeid). The batch path used to read every
-        // record with a matching qbeid here, whatever quiz it belonged to; that is gone (#02),
+        // record with a matching qbeid here, whatever quiz it belonged to; that is gone (#68),
         // so single and batch lookup follow the same hierarchy.
         [$insql, $params] = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
         $params['cmid'] = 0;

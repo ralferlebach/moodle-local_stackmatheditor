@@ -799,7 +799,7 @@ class definitions {
         if (self::get_norm_function() !== '') {
             $elements[] = [
                 'display' => '‖v‖',
-                'write'   => '\\left\\\\|\\right\\\\|',
+                'write'   => '\\left\\|\\right\\|',
                 'left'    => 1,
                 'tooltip' => get_string('btn_norm', $p),
             ];
@@ -950,6 +950,50 @@ class definitions {
         }
 
         return $operators;
+    }
+
+    /**
+     * Every button the toolbar offers, with the LaTeX it writes (#34).
+     *
+     * The catalogue behind the contract test: a visible button has to have a mapping, and the
+     * mapping is the template - not the label, which is why no language strings are in here.
+     *
+     * @return array List of buttons with group, display, kind, template and semantic id.
+     */
+    public static function export_button_catalogue(): array {
+        $catalogue = [];
+
+        foreach (self::get_element_groups() as $key => $group) {
+            foreach ($group['elements'] ?? [] as $element) {
+                if (isset($element['write'])) {
+                    $kind = 'write';
+                    $template = $element['write'];
+                } else if (isset($element['cmd'])) {
+                    $kind = 'cmd';
+                    $template = $element['cmd'];
+                } else if (isset($element['popup'])) {
+                    $kind = 'popup';
+                    $template = $element['popup'];
+                } else if (isset($element['matrix'])) {
+                    $kind = 'matrix';
+                    $template = json_encode($element['matrix']);
+                } else {
+                    $kind = 'unknown';
+                    $template = '';
+                }
+
+                $catalogue[] = [
+                    'group'    => $key,
+                    'display'  => (string) ($element['display'] ?? ''),
+                    'kind'     => $kind,
+                    'template' => (string) $template,
+                    'semantic' => (string) ($element['semantic'] ?? ''),
+                    'left'     => (int) ($element['left'] ?? 0),
+                ];
+            }
+        }
+
+        return $catalogue;
     }
 
     /**
