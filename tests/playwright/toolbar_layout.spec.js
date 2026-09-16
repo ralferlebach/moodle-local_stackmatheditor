@@ -32,6 +32,32 @@ const {env, loginAs} = require('./helpers');
 test.describe.configure({mode: 'serial', timeout: 120000});
 
 /**
+ * Switch the editor on site-wide and offer every group.
+ *
+ * The specs share one Moodle, and the settings suite runs before this one and leaves the plugin
+ * in whatever state its last case needed. A test that measures a toolbar has to make sure there
+ * is one, rather than inherit the mood of its predecessor.
+ *
+ * @param {Browser} browser Playwright browser.
+ * @returns {Promise<void>}
+ */
+async function enableEditorEverywhere(browser) {
+    const admin = await (await browser.newContext()).newPage();
+
+    await loginAs(admin, env('SME_ADMIN_USER', 'admin'), env('SME_ADMIN_PASS'));
+    await admin.goto('/admin/settings.php?section=local_stackmatheditor');
+    await admin.locator('select[name="s_local_stackmatheditor_enabled"]').selectOption('1');
+
+    // Every group, so that the large ones with clusters are on the page as well.
+    const groups = admin.locator('select[name="s_local_stackmatheditor_default_groups[]"]');
+    await groups.selectOption(
+        await groups.locator('option').evaluateAll((options) => options.map((o) => o.value))
+    );
+    await admin.getByRole('button', {name: 'Save changes'}).click();
+    await admin.close();
+}
+
+/**
  * Open an attempt with editors on the page.
  *
  * @param {Page} page Playwright page.
@@ -39,6 +65,7 @@ test.describe.configure({mode: 'serial', timeout: 120000});
  */
 async function openAttempt(page) {
     await loginAs(page, 'sme_student04', env('SME_USER_PASS'));
+    await page.setViewportSize({width: 1280, height: 900});
     await page.goto('/mod/quiz/view.php?id=' + env('SME_LOAD_CMID'));
     await page.getByRole('button',
         {name: /Attempt quiz|Continue your attempt|Continue the last attempt/}).click();
@@ -94,6 +121,10 @@ function measure(page) {
         };
     });
 }
+
+test.beforeAll(async({browser}) => {
+    await enableEditorEverywhere(browser);
+});
 
 test('the toolbar stays inside its container, drawer open and closed', async({page}) => {
     await openAttempt(page);

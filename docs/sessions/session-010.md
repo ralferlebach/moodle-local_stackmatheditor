@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091602 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091603 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1703,3 +1703,39 @@ edge of its toolbar with the drawer closed and open, the width coming back when 
 closes, a container narrowed to 420px while the window stays wide, and the clusters of large
 groups staying on one line each. It has not run - it needs the seeded site - and the drawer
 selector is the part I would expect to need adjusting first.
+
+
+## 44. Iteration 40 (2026091603): what the Playwright run found
+
+The dev CI was green - 126 PHPUnit tests, 69 Behat scenarios, every static gate. The Playwright
+run was not, and it found two real things.
+
+### The label of the student switch failed the contrast check
+
+    color-contrast (serious): label[for="sme-editor-switch-9"], label[for="sme-editor-switch-10"]
+
+`--gray-600` on a light background is between 4.5 and 4.9 depending on what exactly is behind it,
+which is right at the line WCAG AA draws for text of this size - and axe measured it below.
+The label is now `--gray-700`, which is above 7:1 on white and on the toolbar grey alike, so it
+passes whatever the background under those two questions turns out to be. I cannot see from the
+log which background axe measured; the new value removes the question rather than answering it.
+
+Two switches out of many were reported, which is worth noting for later: the editors on that page
+do not all sit on the same background.
+
+### The layout test never saw a toolbar
+
+    TimeoutError: waiting for locator('.sme-toolbar') to be visible
+
+Not a layout problem: the specs share one Moodle, they run in one worker, and `settings.spec.js`
+runs first. It leaves the plugin in whatever state its last case needed - and that case is about
+a different quiz. My spec opened the load quiz and waited for an editor that the settings suite
+had switched off.
+
+`a11y.spec.js` does not have that problem because it sets the admin settings itself before it
+opens anything. The layout spec now does the same in a `beforeAll`: editor on, every group
+offered. A test that measures a toolbar has to make sure there is one rather than inherit the
+state of its predecessor.
+
+The two tests that were skipped after the failure - the narrowed container and the clusters - have
+not run at all yet.

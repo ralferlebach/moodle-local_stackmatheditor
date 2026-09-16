@@ -586,7 +586,11 @@
 }
 
 .sme-toggle .sme-toggle-label {
-    color: var(--gray-600, #6a737b);
+    /*
+     * Not --gray-600: #6a737b on white is 4.46:1, just under the 4.5:1 that WCAG AA asks for
+     * text this size, and axe says so. --gray-700 is 7:1.
+     */
+    color: var(--gray-700, #495057);
     cursor: pointer;
     font-size: 0.85rem;
     margin: 0;
