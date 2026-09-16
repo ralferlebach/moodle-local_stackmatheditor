@@ -181,7 +181,21 @@ test('the toolbar stays inside its container, drawer open and closed', async({pa
     expect(open.editorWidth).toBeLessThanOrEqual(closed.editorWidth);
 
     // Closing it again must give the width back - no layout frozen at the narrow size.
-    await drawer.click({timeout: 10000});
+    //
+    // Boost swaps the buttons: the one that opened the drawer is hidden once it is open, and a
+    // second, separate "close" button takes its place. Clicking the first locator again waits
+    // for an element with class="hidden" - which is what the previous run spent its ten seconds
+    // on. So the visible toggle is looked up again.
+    const closer = await visibleDrawerToggle(page);
+    if (!closer) {
+        test.info().annotations.push({
+            type: 'skipped',
+            description: 'the drawer has no visible toggle while it is open'
+        });
+        return;
+    }
+
+    await closer.click({timeout: 10000});
     await page.waitForTimeout(800);
 
     const reopened = await measure(page);

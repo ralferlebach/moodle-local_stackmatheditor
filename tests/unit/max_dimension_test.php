@@ -123,8 +123,10 @@ final class max_dimension_test extends \advanced_testcase {
      * @return void
      */
     public function test_values_are_clamped(): void {
+        // A positive value below the minimum is an intention: clamp it up. A negative one is
+        // not a dimension at all, so it means "nothing stored here" like an empty field.
         $this->assertSame(2, definitions::clean_max_dimension(1));
-        $this->assertSame(2, definitions::clean_max_dimension(-4));
+        $this->assertNull(definitions::clean_max_dimension(-4));
         $this->assertSame(20, definitions::clean_max_dimension(99));
         $this->assertSame(7, definitions::clean_max_dimension('7'));
         $this->assertSame(7, definitions::clean_max_dimension(7.9));

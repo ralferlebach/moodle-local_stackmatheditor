@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091604 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091605 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1789,3 +1789,38 @@ Suite at 1129.
 The Playwright part of #76 - set 5, 7, 3 on the three levels and count cells in the popup. It
 belongs in the layout spec's neighbourhood, and I would rather see that file run green once
 before adding to it.
+
+
+## 46. Iteration 42 (2026091605): three red tests, three different mistakes
+
+### The setting's strings did not carry its name
+
+`documentation_test` derives the string identifier from the setting name, which is the whole
+point of it: it is the test that keeps the README, the settings and the language packs in step.
+The new setting is `maxstructureddimension`, its strings were `setting_maxdimension`, and the
+test said so on all three matrix jobs.
+
+Renamed rather than excused. The convention the test encodes - a setting's strings are named
+after the setting - is worth more than four characters of brevity, and an exception list in the
+test would have hidden the next case.
+
+I now run that check locally before delivering: a small script that reads `settings.php`, derives
+the identifiers and looks for them in the language pack and the README. It takes a second, and it
+is exactly what the CI does.
+
+### A negative number is not a small dimension
+
+`clean_max_dimension(-4)` returns null - "this level said nothing" - and my test asserted it
+would be clamped to 2. The code is right and the test was wrong: a positive value below the
+minimum is an intention worth clamping, a negative one is garbage, and garbage should inherit
+rather than silently become a valid setting. The test now says that, with the reason next to it.
+
+### Boost swaps the drawer buttons
+
+The retry spent its ten seconds on `class="... hidden"`. Opening the drawer hides the button that
+opened it and reveals a separate close button - so clicking the same locator again waits for an
+element that will never be visible. The spec looks the visible toggle up again before closing.
+
+That is the third selector problem in this one test, and each time the log said exactly what was
+wrong: "element is not visible". The lesson I am taking is not about Boost - it is that a locator
+captured before an interaction is not the same element afterwards.

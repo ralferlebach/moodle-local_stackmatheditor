@@ -246,11 +246,11 @@ class configure_form extends \moodleform {
         $mform->addElement(
             'text',
             'maxdimension',
-            get_string('setting_maxdimension', 'local_stackmatheditor'),
+            get_string('setting_maxstructureddimension', 'local_stackmatheditor'),
             ['size' => 4, 'id' => 'id_sme_maxdimension']
         );
         $mform->setType('maxdimension', PARAM_RAW_TRIMMED);
-        $mform->addHelpButton('maxdimension', 'setting_maxdimension', 'local_stackmatheditor');
+        $mform->addHelpButton('maxdimension', 'setting_maxstructureddimension', 'local_stackmatheditor');
 
         // Groups whose CAS packages this question does not load (#66). The choice can still be
         // made and saved: the author configures the group now and loads the package afterwards.
