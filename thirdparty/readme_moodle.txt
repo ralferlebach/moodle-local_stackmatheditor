@@ -15,10 +15,9 @@ MathQuill is included here as a build of a fork, not as an upstream release.
           (the build banner still reads "v0.10.1"; upstream has not tagged a
           release since 2017, so the banner is not a usable version marker.)
   Fork:   ralferlebach/mathquill
-  Fork commit: PENDING - this build was made from the matrix resize change
-          before it was pushed. Apply the delivered fork source, push, and
-          replace PENDING here with the resulting commit; the checksums below
-          have to match the rebuild.
+  Fork commit: 9a6ebaf4eb522cc49d2886a33531ec4142beca5b
+          (branch main - informative only; the commit is what identifies this
+           build, a branch moves)
   Change: editable LaTeX matrix environments (matrix, pmatrix, bmatrix,
           Bmatrix, vmatrix, Vmatrix), the public API insertMatrix /
           insertColumnVector / insertRowVector, the configuration option
@@ -54,7 +53,7 @@ Build provenance of 0.10.1-sme.5
   Upstream repository: https://github.com/mathquill/mathquill
   Upstream base:       bb9974ab
   Fork repository:     https://github.com/ralferlebach/mathquill
-  Fork commit:         PENDING_FORK_COMMIT
+  Fork commit:         9a6ebaf4eb522cc49d2886a33531ec4142beca5b
   Branch:              feature/matrix-environments (informative only)
   Built with:          Node 22.22.2, npm 10.9.7
   Build command:       npm ci && make
@@ -70,7 +69,7 @@ Build provenance of 0.10.1-sme.5
   Reproduce with:
     git clone https://github.com/ralferlebach/mathquill
     cd mathquill
-    git checkout PENDING_FORK_COMMIT
+    git checkout 9a6ebaf4eb522cc49d2886a33531ec4142beca5b
     npm ci
     make
 

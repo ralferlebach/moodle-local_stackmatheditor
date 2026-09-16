@@ -25,8 +25,9 @@
 define([
     'jquery',
     'local_stackmatheditor/structured_input',
-    'local_stackmatheditor/structured_popup'
-], function($, Model, Popup) {
+    'local_stackmatheditor/structured_popup',
+    'local_stackmatheditor/toolbar_layout'
+], function($, Model, Popup, Layout) {
     'use strict';
 
     /**
@@ -341,6 +342,43 @@ define([
     }
 
     /**
+     * Give a group the structure its break rule needs (#74).
+     *
+     * Up to five buttons: nothing to do, the group stays whole. Beyond that, the first three and
+     * the last three move into a cluster each, and the buttons in between stay direct children
+     * of the group so that flexbox can break between them.
+     *
+     * The middle buttons are deliberately not wrapped in an element of their own. The issue
+     * suggests a wrapper with display:contents; a wrapper that has to be made invisible to the
+     * layout is a wrapper that does not need to exist, and display:contents has a history of
+     * dropping elements from the accessibility tree. Direct children wrap natively and no
+     * browser has an opinion about them.
+     *
+     * The order of the buttons is untouched, so the DOM order, the visual order and the tab
+     * order stay the same.
+     *
+     * @param {jQuery} $group Group element with its buttons already appended.
+     */
+    function clusterGroup($group) {
+        var $buttons = $group.children();
+        var layout = Layout.plan($buttons.length);
+
+        if (layout.atomic) {
+            return;
+        }
+
+        var $start = $('<span>').addClass('sme-tb-cluster sme-tb-cluster-start');
+        var $end = $('<span>').addClass('sme-tb-cluster sme-tb-cluster-end');
+
+        $buttons.slice(0, layout.start).appendTo($start);
+        $buttons.slice($buttons.length - layout.end).appendTo($end);
+
+        $group.addClass('sme-tb-group-wrap');
+        $group.prepend($start);
+        $group.append($end);
+    }
+
+    /**
      * Create one toolbar button.
      *
      * @param {Object} el Element definition.
@@ -494,10 +532,7 @@ define([
                 }
 
                 if ($grp.children().length > 0) {
-                    if ($grp.children().length > 3) {
-                        $grp.addClass(
-                            'sme-tb-group-wrap');
-                    }
+                    clusterGroup($grp);
                     $bar.append($grp);
                 }
             }

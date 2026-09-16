@@ -36,14 +36,41 @@
     border: 1px solid #dee2e6;
     border-radius: 4px 4px 0 0;
     border-bottom: none;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
 }
 
+/*
+ * A group never breaks by itself: up to five buttons it is one piece, and beyond that the
+ * clusters below hold the ends together (#74).
+ */
 .sme-tb-group {
     display: inline-flex;
+    flex-wrap: nowrap;
     gap: 2px;
     margin-right: 6px;
     padding-right: 6px;
     border-right: 1px solid #dee2e6;
+    min-width: 0;
+    max-width: 100%;
+}
+
+/* Only a group of more than five buttons may break, and only between its clusters. */
+.sme-tb-group-wrap {
+    flex-wrap: wrap;
+}
+
+.sme-tb-cluster {
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 2px;
+    white-space: nowrap;
+}
+
+.sme-tb-btn {
+    flex: 0 0 auto;
 }
 
 .sme-tb-group:last-child {
@@ -61,10 +88,62 @@
 }
 
 /* ═══════════════════════════════════════════════════
-   STACK MathEditor – Mobile / small-screen toolbar
-   Groups with class .sme-tb-group-wrap (>3 members)
-   become line-breakable on narrow viewports.
+   STACK MathEditor – narrow editors (#74)
+
+   What matters is the width of the editor, not of the
+   browser window: opening Moodle's navigation drawer
+   leaves the viewport alone and halves the space the
+   question has. The wrapper is therefore a query
+   container, and the toolbar asks it rather than the
+   window. The media query below stays as a fallback
+   for browsers without container queries.
    ═══════════════════════════════════════════════════ */
+
+/*
+ * Moodle's stylelint validates against a CSS syntax database that predates container queries,
+ * so it reports them as unknown. They are not: container queries are in every browser Moodle
+ * 4.5 supports. The rule is switched off for this block only.
+ */
+/* stylelint-disable csstree/validator */
+.sme-input-wrap,
+.sme-equiv-wrap {
+    container-type: inline-size;
+    container-name: smeeditor;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.sme-mq-container,
+.sme-equiv-rows {
+    min-width: 0;
+    max-width: 100%;
+}
+
+@container smeeditor (max-width: 900px) {
+    .sme-toolbar {
+        gap: 4px;
+    }
+}
+
+@container smeeditor (max-width: 650px) {
+    .sme-toolbar {
+        padding: 6px;
+    }
+
+    .sme-tb-group {
+        margin-right: 4px;
+        padding-right: 4px;
+    }
+
+    .sme-tb-btn {
+        min-width: 36px;
+        min-height: 36px;
+        padding: 4px 8px;
+        font-size: 0.9em;
+    }
+}
+/* stylelint-enable csstree/validator */
 
 @media (max-width: 767px) {
     .sme-toolbar {

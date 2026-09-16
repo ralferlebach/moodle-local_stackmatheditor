@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091600 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091602 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1638,3 +1638,68 @@ place and adds five empty cells. Jest 1103, ESLint and PHPCS green.
 from the change before it was pushed. The fork source is delivered alongside; after pushing it,
 the commit goes in there and the checksums have to match the rebuild. Same procedure as with the
 Android fix, and for the same reason - a branch name or a local commit is not a release pin.
+
+
+## 42. Iteration 38 (2026091601): sme.5 has its commit
+
+`ralferlebach/mathquill` main is at `9a6ebaf4eb522cc49d2886a33531ec4142beca5b` ("matrix
+resize"). All five changed files are identical to what was verified here, and a rebuild from
+that commit produces the three artefacts the plugin ships, byte for byte:
+
+    mathquill.js      300429ef6c7c1e4ff0ecbaf5b1ab5bfc7781d6bc4a441ccdf42d8f5f8588fa89
+    mathquill.min.js  716c7a040668452d0fc6f7305c498c466c739487706114a53f010d91bd6686b4
+    mathquill.css     25af0d2b872ae38cb2024599787d4617dbecfb3a0228301a8b296ed60c59cb78
+
+`readme_moodle.txt` names it instead of PENDING. The fork's own CI on that commit is green:
+29 browser tests, 58 cross-browser, 11 visual, both Node builds.
+
+Nothing else changed in this iteration.
+
+
+## 43. Iteration 39 (2026091602): #74 - the toolbar measures the editor, not the window
+
+Two problems, and they are independent.
+
+### Container instead of viewport
+
+`@media (max-width: 767px)` asks the browser window. Moodle's navigation drawer does not touch
+the window; it takes a third of the width away from the question. So the toolbar kept its desktop
+layout in a column that was half as wide, and the buttons went off the right edge.
+
+`.sme-input-wrap` and `.sme-equiv-wrap` are now query containers (`container-type: inline-size`,
+named `smeeditor`), and the toolbar's responsive rules are `@container` rules. Opening the drawer
+rewraps it, closing it expands again, and no JavaScript hears about any of it - the width changed,
+that is all the layout needs to know. The media query stays as a fallback.
+
+The wrappers also got `min-width: 0` and `max-width: 100%`, without which a flex item refuses to
+shrink below its content and the editor pushes itself out of its column.
+
+Moodle's stylelint reports container queries as unknown properties - its CSS syntax database
+predates them. The validator is switched off for that block, with the reason in the file.
+
+### Groups that break into fragments
+
+Plain `flex-wrap: wrap` breaks a group of seven into two, three and two, and three fragments do
+not read as one group. The rule from the issue: up to five buttons stay whole; beyond that the
+first three and the last three stay together and only the middle offers break points.
+
+`toolbar_layout.js` does the arithmetic - a module with no dependencies, so the rule is testable
+without a browser - and `toolbar.js` turns it into DOM: a start cluster, the middle buttons as
+direct children, an end cluster.
+
+The middle buttons deliberately have no wrapper. The issue suggests one with `display: contents`;
+a wrapper that has to be made invisible to the layout is a wrapper that does not need to exist,
+and `display: contents` has a history of dropping elements from the accessibility tree. Direct
+children wrap natively, and the DOM order, the visual order and the tab order stay identical.
+
+### Tests
+
+20 Jest cases for the break rule: every size from one to five stays whole, six breaks only as
+3 + 3, seven as 3 + 4 or 4 + 3, eight after 3, 4 or 5, no break ever falls inside a cluster, the
+pieces always add up, and nonsense input does not produce a broken plan. Suite at 1123.
+
+`tests/playwright/toolbar_layout.spec.js` measures the rendered page: no button beyond the right
+edge of its toolbar with the drawer closed and open, the width coming back when the drawer
+closes, a container narrowed to 420px while the window stays wide, and the clusters of large
+groups staying on one line each. It has not run - it needs the seeded site - and the drawer
+selector is the part I would expect to need adjusting first.

@@ -41,6 +41,9 @@ Features
 
 ### Version 1.3 (in development)
 
+* The toolbar follows the width of the editor rather than of the browser window: opening
+  Moodle's navigation drawer rewraps it, closing the drawer expands it again, and a group of up
+  to five buttons is never torn apart.
 * Android Chrome and Opera: the first characters typed on the soft keyboard no longer disappear
   until Enter has been pressed once.
 * Elementary geometry in school notation: `P(2|3)`, `d(A,B)`, `∠ABC` and the length of a segment.
