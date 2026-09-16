@@ -71,6 +71,25 @@ define([], function() {
     }
 
     /**
+     * Clamp a configured maximum into what the editor can actually offer (#76).
+     *
+     * The server resolves the hierarchy and sends a number; this is the last guard, so that a
+     * value that somehow arrives broken cannot produce a chooser with no cells or with hundreds.
+     *
+     * @param {*} value Configured maximum.
+     * @returns {number} A usable grid size.
+     */
+    function clampDimension(value) {
+        var number = Math.floor(Number(value));
+
+        if (!isFinite(number) || number < 2) {
+            return QUICK_PICK_SIZE;
+        }
+
+        return Math.min(MAX_DIMENSION, number);
+    }
+
+    /**
      * Build a matrix model of the given size, with empty cells.
      *
      * @param {number} rows Number of rows.
@@ -322,6 +341,7 @@ define([], function() {
         QUICK_PICK_SIZE: QUICK_PICK_SIZE,
         ENVIRONMENTS: ENVIRONMENTS,
         isValidDimension: isValidDimension,
+        clampDimension: clampDimension,
         createMatrix: createMatrix,
         createVector: createVector,
         dimensions: dimensions,

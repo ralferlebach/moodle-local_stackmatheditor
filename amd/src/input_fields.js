@@ -529,6 +529,23 @@ define([
     }
 
     /**
+     * The chooser limit for a slot (#76).
+     *
+     * @param {Object} ctx Shared context.
+     * @param {string} slot Slot number as a string.
+     * @returns {number} Largest structure the choosers may offer here.
+     */
+    function maxDimensionForSlot(ctx, slot) {
+        var perslot = ctx.slotMaxDimension || {};
+
+        if (slot && Object.prototype.hasOwnProperty.call(perslot, slot)) {
+            return perslot[slot];
+        }
+
+        return ctx.maxDimension || 0;
+    }
+
+    /**
      * May the student switch the editor off in this slot? (#73)
      *
      * A permission, not a preference: what the author switched off higher up cannot be switched
@@ -663,7 +680,7 @@ define([
             function() {
                 return mqField;
             },
-            config, ctx.defs);
+            config, ctx.defs, maxDimensionForSlot(ctx, slot));
         $wrap.append($tb);
 
         // MQ container.

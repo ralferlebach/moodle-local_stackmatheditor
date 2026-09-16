@@ -270,6 +270,7 @@ if (isset($config['_allowStudentToggle'])) {
 }
 
 $formdata = [
+    'maxdimension'       => $config['_maxStructuredDimension'] ?? '',
     'groups'             => $selectedkeys,
     'enabled'            => (int) $currentenabled,
     'allowstudenttoggle' => (int) ((bool) $currentstudenttoggle),
@@ -294,6 +295,19 @@ if ($mform->is_cancelled()) {
 
     // The student switch is stored like the activation itself (#73), and it is only ever stored
     // as true when the editor is on here: a level that has no editor grants no permission.
+    // The chooser limit (#76). An empty field means "inherit", and a level whose structured
+    // groups are off keeps whatever it had: a temporary deactivation is not a reason to forget.
+    if (property_exists($data, 'maxdimension')) {
+        $cleaned = definitions::clean_max_dimension($data->maxdimension);
+        if ($cleaned === null) {
+            unset($elements['_maxStructuredDimension']);
+        } else {
+            $elements['_maxStructuredDimension'] = $cleaned;
+        }
+    } else if (isset($config['_maxStructuredDimension'])) {
+        $elements['_maxStructuredDimension'] = (int) $config['_maxStructuredDimension'];
+    }
+
     $elements['_allowStudentToggle'] = (int) (
         !empty($data->allowstudenttoggle) && !empty($data->enabled)
     );
@@ -320,6 +334,28 @@ if ($mform->is_cancelled()) {
 }
 
 // Output.
+// The dimension field follows the group selection while the form is open (#76): a dependency
+// that only becomes visible after saving is not a visible dependency.
+$PAGE->requires->js_amd_inline(<<<'JS'
+require([], function() {
+    var groups = document.querySelector('select[name="groups[]"]');
+    var field  = document.getElementById('id_sme_maxdimension');
+    if (!groups || !field) {
+        return;
+    }
+    var structured = ['matrix_operators', 'vector_operators'];
+    var update = function() {
+        var on = Array.prototype.some.call(groups.selectedOptions, function(option) {
+            return structured.indexOf(option.value) !== -1;
+        });
+        field.disabled = !on;
+        field.setAttribute('aria-disabled', on ? 'false' : 'true');
+    };
+    groups.addEventListener('change', update);
+    update();
+});
+JS);
+
 echo $OUTPUT->header();
 
 if ($quizmode) {

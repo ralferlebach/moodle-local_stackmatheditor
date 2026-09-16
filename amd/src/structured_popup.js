@@ -143,10 +143,11 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
      * @param {HTMLElement} owner Button that opens the popup.
      * @param {Function} onChoose Called with the structured model.
      * @param {?Object} current Size of the structure being changed, or null for a new one.
+     * @param {number} max Largest size the site, quiz or question allows (#76).
      * @returns {HTMLElement} The popup element.
      */
-    function openMatrixGrid(owner, onChoose, current) {
-        var size = Model.QUICK_PICK_SIZE;
+    function openMatrixGrid(owner, onChoose, current, max) {
+        var size = Model.clampDimension(max);
         var element = document.createElement('div');
         var grid = document.createElement('div');
         var label = document.createElement('div');
@@ -295,15 +296,17 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
      * @param {HTMLElement} owner Button that opens the popup.
      * @param {Function} onChoose Called with the structured model.
      * @param {?Object} current Size of the structure being changed, or null for a new one.
+     * @param {number} max Largest dimension the site, quiz or question allows (#76).
      * @returns {HTMLElement} The popup element.
      */
-    function openVectorChooser(owner, onChoose, current) {
+    function openVectorChooser(owner, onChoose, current, max) {
         var element = document.createElement('div');
         var dimensionRow = document.createElement('div');
         var orientationRow = document.createElement('div');
         var label = document.createElement('div');
+        var limit = Model.clampDimension(max);
         var state = {
-            dimension: (current && current.dimension) || 3,
+            dimension: Math.min(limit, (current && current.dimension) || 3),
             orientation: (current && current.orientation) || 'column'
         };
         var dimensionButtons = [];
@@ -358,7 +361,7 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
             onChoose(model);
         }
 
-        for (d = 2; d <= Model.QUICK_PICK_SIZE; d++) {
+        for (d = 2; d <= limit; d++) {
             dimensionButton = document.createElement('button');
             dimensionButton.type = 'button';
             dimensionButton.className = 'sme-vector-dimension';

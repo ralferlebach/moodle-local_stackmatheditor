@@ -1017,6 +1017,74 @@ class definitions {
     }
 
     /**
+     * Smallest and largest value the dimension setting accepts (#76).
+     */
+    public const MIN_STRUCTURED_DIMENSION = 2;
+
+    /**
+     * Largest value the dimension setting accepts.
+     */
+    public const MAX_STRUCTURED_DIMENSION = 20;
+
+    /**
+     * Default when nothing is configured anywhere.
+     *
+     * The value the plugin has always used, so an upgrade changes nothing.
+     */
+    public const DEFAULT_STRUCTURED_DIMENSION = 5;
+
+    /**
+     * Read a stored dimension, or null when there is none (#76).
+     *
+     * 0, null and '' are not dimensions - they mean the level said nothing, and the question has
+     * to be passed up. Anything outside the range is clamped rather than discarded: a value that
+     * once was valid should not silently disable a chooser.
+     *
+     * @param mixed $value Stored value.
+     * @return int|null Usable dimension, or null.
+     */
+    public static function clean_max_dimension($value): ?int {
+        if ($value === null || $value === '' || $value === false) {
+            return null;
+        }
+
+        $number = (int) $value;
+        if ($number <= 0) {
+            return null;
+        }
+
+        return max(
+            self::MIN_STRUCTURED_DIMENSION,
+            min(self::MAX_STRUCTURED_DIMENSION, $number)
+        );
+    }
+
+    /**
+     * The site-wide maximum (#76).
+     *
+     * @return int Dimension between MIN_STRUCTURED_DIMENSION and MAX_STRUCTURED_DIMENSION.
+     */
+    public static function get_instance_max_dimension(): int {
+        $value = self::clean_max_dimension(
+            get_config('local_stackmatheditor', 'maxstructureddimension')
+        );
+
+        return $value ?? self::DEFAULT_STRUCTURED_DIMENSION;
+    }
+
+    /**
+     * Do the structured choosers exist in this configuration at all? (#76)
+     *
+     * The dimension setting has no meaning without them, which is why the form disables it.
+     *
+     * @param array $config Group key => enabled.
+     * @return bool True when the matrix or the vector group is on.
+     */
+    public static function has_structured_groups(array $config): bool {
+        return !empty($config['matrix_operators']) || !empty($config['vector_operators']);
+    }
+
+    /**
      * Labels for the matrix and vector popups (#62).
      *
      * The popup runs in JavaScript and cannot call get_string(), so the strings travel with the

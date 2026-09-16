@@ -537,7 +537,7 @@ define([
         this.$wrap = $('<div>').addClass('sme-equiv-wrap');
         this.$tb = toolbar.build(function() {
             return self.activeField();
-        }, this.config, this.ctx.defs);
+        }, this.config, this.ctx.defs, this.ctx.maxDimension || 0);
         this.$wrap.append(this.$tb);
 
         this.$rows = $('<div>').addClass('sme-equiv-rows');

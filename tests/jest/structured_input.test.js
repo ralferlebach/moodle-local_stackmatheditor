@@ -381,3 +381,71 @@ describe('changing the size of an existing structure (#62)', () => {
         expect(Model.dimensions(model)).toEqual({rows: 3, columns: 3});
     });
 });
+
+describe('the configured maximum (#76)', () => {
+    let Popup;
+    let owner;
+
+    beforeEach(() => {
+        jest.resetModules();
+        Popup = loadAmd('structured_popup');
+        document.body.innerHTML = '';
+        owner = document.createElement('button');
+        document.body.appendChild(owner);
+    });
+
+    test('a value out of range never produces an unusable chooser', () => {
+        expect(Model.clampDimension(7)).toBe(7);
+        expect(Model.clampDimension('7')).toBe(7);
+        expect(Model.clampDimension(1)).toBe(Model.QUICK_PICK_SIZE);
+        expect(Model.clampDimension(0)).toBe(Model.QUICK_PICK_SIZE);
+        expect(Model.clampDimension(null)).toBe(Model.QUICK_PICK_SIZE);
+        expect(Model.clampDimension('nonsense')).toBe(Model.QUICK_PICK_SIZE);
+        expect(Model.clampDimension(999)).toBe(Model.MAX_DIMENSION);
+    });
+
+    test('the grid offers exactly the configured number of rows and columns', () => {
+        Popup.openMatrixGrid(owner, () => {}, null, 3);
+
+        expect(document.querySelectorAll('.sme-matrix-grid-cell').length).toBe(9);
+        expect(document.querySelectorAll('.sme-matrix-grid-row').length).toBe(3);
+    });
+
+    test('the keyboard cannot select beyond the maximum', () => {
+        const chosen = [];
+        Popup.openMatrixGrid(owner, (model) => chosen.push(model), null, 3);
+        const grid = document.querySelector('.sme-matrix-grid');
+
+        for (let i = 0; i < 6; i += 1) {
+            grid.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'ArrowDown', bubbles: true}));
+            grid.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'ArrowRight', bubbles: true}));
+        }
+        grid.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
+
+        expect(Model.dimensions(chosen[0])).toEqual({rows: 3, columns: 3});
+    });
+
+    test('the vector chooser stops at the maximum too', () => {
+        Popup.openVectorChooser(owner, () => {}, null, 4);
+
+        const dimensions = Array.from(document.querySelectorAll('.sme-vector-dimension'))
+            .map((button) => Number(button.dataset.dimension));
+
+        expect(dimensions).toEqual([2, 3, 4]);
+    });
+
+    test('an existing structure larger than the maximum is not enlarged further', () => {
+        // The limit was lowered after the matrix was made; the chooser opens at the limit.
+        Popup.openMatrixGrid(owner, () => {}, {rows: 8, columns: 8}, 4);
+
+        const selected = document.querySelectorAll('.sme-matrix-grid-cell.sme-selected');
+        expect(selected.length).toBe(16);
+    });
+
+    test('without a value the chooser keeps its default size', () => {
+        Popup.openMatrixGrid(owner, () => {}, null, undefined);
+
+        expect(document.querySelectorAll('.sme-matrix-grid-cell').length)
+            .toBe(Model.QUICK_PICK_SIZE * Model.QUICK_PICK_SIZE);
+    });
+});

@@ -240,6 +240,18 @@ class configure_form extends \moodleform {
             'local_stackmatheditor'
         );
 
+        // The chooser limit (#76). It only means something with a structured group, so the field
+        // is disabled without one - visible, so that the dependency is visible too. An empty
+        // value inherits from the level above.
+        $mform->addElement(
+            'text',
+            'maxdimension',
+            get_string('setting_maxdimension', 'local_stackmatheditor'),
+            ['size' => 4, 'id' => 'id_sme_maxdimension']
+        );
+        $mform->setType('maxdimension', PARAM_RAW_TRIMMED);
+        $mform->addHelpButton('maxdimension', 'setting_maxdimension', 'local_stackmatheditor');
+
         // Groups whose CAS packages this question does not load (#66). The choice can still be
         // made and saved: the author configures the group now and loads the package afterwards.
         // Until then the group stays hidden from learners, and here is what to add.

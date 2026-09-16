@@ -166,6 +166,9 @@ There, you find these settings:
   Empty means the button is not offered on this site.
 * **Coordinate separator** – how the coordinates of a point are separated on screen. Notation
   only; STACK always receives a list.
+* **Maximum matrix / vector dimension** – the largest size the choosers offer. Default 5, and a
+  quiz or a question can set its own; an empty field there inherits. Without the matrix or the
+  vector group the setting has no effect.
 * **Allow students to switch the editor on and off** – the site-wide permission for the student
   switch. A quiz or a question can take it away as well; none of them can give it back.
 * **Draw lists as points** – whether a stored list such as `[2,3]` is shown as `P(2|3)` again.

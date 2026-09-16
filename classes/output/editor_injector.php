@@ -68,6 +68,8 @@ class editor_injector {
         $slotenabled = self::build_slot_enabled($slotconfigs);
         // And, for every slot that has an editor, whether students may switch it off (#73).
         $slottoggle = self::build_slot_student_toggle($slotconfigs, $slotenabled);
+        // Largest structure the choosers offer in each slot (#76).
+        $slotmax = self::build_slot_max_dimension($slotconfigs);
 
         $instancevarmode = config_manager::get_instance_variable_mode();
 
@@ -95,6 +97,8 @@ class editor_injector {
             'slotEnabled'      => !empty($slotenabled) ? $slotenabled : new \stdClass(),
             'slotStudentToggle' => !empty($slottoggle) ? $slottoggle : new \stdClass(),
             'allowStudentToggle' => config_manager::get_instance_student_toggle(),
+            'slotMaxDimension' => !empty($slotmax) ? $slotmax : new \stdClass(),
+            'maxDimension'     => definitions::get_instance_max_dimension(),
             'instanceDefaults' => $instancedefaults,
         ]);
     }
@@ -324,5 +328,26 @@ class editor_injector {
         }
 
         return $toggle;
+    }
+
+    /**
+     * Per-slot chooser limit (#76).
+     *
+     * The client is handed the resolved number, never the levels it came from: resolving a
+     * hierarchy is a server's job, and a browser that knows only the answer cannot get it wrong.
+     *
+     * @param array $slotconfigs Slot => merged config array.
+     * @return array Slot => int.
+     */
+    private static function build_slot_max_dimension(array $slotconfigs): array {
+        $site = definitions::get_instance_max_dimension();
+        $max = [];
+
+        foreach ($slotconfigs as $slot => $cfg) {
+            $value = definitions::clean_max_dimension($cfg['_maxStructuredDimension'] ?? null);
+            $max[$slot] = $value ?? $site;
+        }
+
+        return $max;
     }
 }

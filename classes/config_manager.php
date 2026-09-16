@@ -700,4 +700,35 @@ class config_manager {
 
         return $value === false ? true : (bool) (int) $value;
     }
+
+    /**
+     * Largest structure the choosers offer here (#76).
+     *
+     * Ordinary inheritance, unlike the student switch: the most specific value wins, and a level
+     * that says nothing passes the question up. 0, null and an empty string are not dimensions -
+     * they mean "nothing stored here".
+     *
+     * @param int $cmid Course module ID (0 = ignore quiz/question level).
+     * @param int $qbeid Question bank entry ID (0 = ignore question level).
+     * @return int Effective maximum, always within the allowed range.
+     */
+    public static function get_effective_max_dimension(int $cmid = 0, int $qbeid = 0): int {
+        if ($cmid > 0 && $qbeid > 0) {
+            $question = self::get_config($cmid, $qbeid);
+            $value = definitions::clean_max_dimension($question['_maxStructuredDimension'] ?? null);
+            if ($value !== null) {
+                return $value;
+            }
+        }
+
+        if ($cmid > 0) {
+            $quiz = self::get_quiz_default($cmid) ?? [];
+            $value = definitions::clean_max_dimension($quiz['_maxStructuredDimension'] ?? null);
+            if ($value !== null) {
+                return $value;
+            }
+        }
+
+        return definitions::get_instance_max_dimension();
+    }
 }

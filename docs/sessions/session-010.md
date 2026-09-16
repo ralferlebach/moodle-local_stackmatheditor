@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091603 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091604 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1739,3 +1739,53 @@ state of its predecessor.
 
 The two tests that were skipped after the failure - the narrowed container and the clusters - have
 not run at all yet.
+
+
+## 45. Iteration 41 (2026091604): the drawer toggle, and #76
+
+### Why the layout test hung for two minutes
+
+The selector matched Boost's mobile navbar toggler - `d-block d-md-none`, hidden at 1280px - and
+Playwright waited for a hidden element to become clickable until the test timed out. The log
+says so plainly: "element is not visible", 236 times.
+
+`visibleDrawerToggle()` now walks the candidates and takes the first one that is actually
+visible; without one it records a skip annotation and returns, and the clicks carry a ten second
+timeout so a wrong guess costs ten seconds instead of two minutes. The other two tests in the
+file - the narrowed container and the clusters - have still never run, because they were skipped
+after this failure both times.
+
+### #76: one limit, resolved once
+
+`maxstructureddimension` on the site, `_maxStructuredDimension` per quiz and per question,
+resolved as ordinary inheritance: question, then quiz, then site, then 5. `0`, `null` and `''`
+are not dimensions - they mean the level said nothing - which is the trap the issue warns about
+and the reason `clean_max_dimension()` exists rather than a cast.
+
+One setting for both choosers, as the issue asks. The client is handed the resolved number per
+slot and never the levels it came from: resolving a hierarchy is a server's job, and a browser
+that only knows the answer cannot get it wrong.
+
+The form field is disabled while neither structured group is selected, and a small inline script
+keeps that in step with the group selection while the form is open - a dependency that only
+appears after saving is not a visible dependency. A stored value survives the groups being
+switched off; a temporary deactivation is not a reason to forget a number.
+
+Range 2 to 20, clamped rather than rejected on both sides: a value that was once valid should not
+silently leave a chooser with no cells.
+
+### Tests
+
+PHPUnit: the cross-level matrix from the issue, the upgrade default, empty values meaning
+inherit, clamping in both directions, an invalid site value falling back to 5 rather than
+disabling anything, the group dependency, and a stored value surviving deactivation.
+
+Jest: the grid offers exactly N x N, the keyboard cannot go past it, the vector chooser stops at
+N, a structure larger than a lowered limit opens at the limit, and no value keeps the default.
+Suite at 1129.
+
+### Not done
+
+The Playwright part of #76 - set 5, 7, 3 on the three levels and count cells in the popup. It
+belongs in the layout spec's neighbourhood, and I would rather see that file run green once
+before adding to it.

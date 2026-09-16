@@ -77,6 +77,32 @@ async function openAttempt(page) {
 }
 
 /**
+ * The drawer toggle a user could actually click.
+ *
+ * Boost ships several of them and hides all but one: at 1280px the first match in the DOM is the
+ * mobile navbar toggler, which is display:none. Clicking it waits forever, which is exactly what
+ * the first run of this test did.
+ *
+ * @param {Page} page Playwright page.
+ * @returns {Promise<?Locator>} The visible toggle, or null when the theme has none.
+ */
+async function visibleDrawerToggle(page) {
+    const candidates = page.locator(
+        'button[data-toggler="drawers"], button[data-action="toggle-drawer"], .drawertoggle'
+    );
+    const count = await candidates.count();
+
+    for (let i = 0; i < count; i += 1) {
+        const candidate = candidates.nth(i);
+        if (await candidate.isVisible()) {
+            return candidate;
+        }
+    }
+
+    return null;
+}
+
+/**
  * Measure every toolbar against its own container.
  *
  * @param {Page} page Playwright page.
@@ -134,23 +160,33 @@ test('the toolbar stays inside its container, drawer open and closed', async({pa
     expect(closed.overflowing, JSON.stringify(closed.overflowing)).toEqual([]);
     expect(closed.brokenGroups, JSON.stringify(closed.brokenGroups)).toEqual([]);
 
-    // Moodle's own drawer button: the viewport does not change, the question gets narrower.
-    const drawer = page.locator('[data-toggler="drawers"], .drawertoggle, button[data-action="toggle-drawer"]').first();
-    if (await drawer.count()) {
-        await drawer.click();
-        await page.waitForTimeout(600);
-
-        const open = await measure(page);
-        expect(open.overflowing, JSON.stringify(open.overflowing)).toEqual([]);
-        expect(open.brokenGroups, JSON.stringify(open.brokenGroups)).toEqual([]);
-
-        // Closing it again must give the width back - no layout frozen at the narrow size.
-        await drawer.click();
-        await page.waitForTimeout(600);
-        const reopened = await measure(page);
-        expect(reopened.editorWidth).toBeGreaterThanOrEqual(open.editorWidth);
-        expect(reopened.overflowing).toEqual([]);
+    // Moodle's own drawer: the viewport does not change, the question gets narrower.
+    const drawer = await visibleDrawerToggle(page);
+    if (!drawer) {
+        test.info().annotations.push({
+            type: 'skipped',
+            description: 'this theme has no visible drawer toggle; the container test covers the rest'
+        });
+        return;
     }
+
+    await drawer.click({timeout: 10000});
+    await page.waitForTimeout(800);
+
+    const open = await measure(page);
+    expect(open.overflowing, JSON.stringify(open.overflowing)).toEqual([]);
+    expect(open.brokenGroups, JSON.stringify(open.brokenGroups)).toEqual([]);
+    // A drawer that does not take width away proves nothing, but it must not break anything
+    // either - so this is an observation, not an assertion about Moodle's layout.
+    expect(open.editorWidth).toBeLessThanOrEqual(closed.editorWidth);
+
+    // Closing it again must give the width back - no layout frozen at the narrow size.
+    await drawer.click({timeout: 10000});
+    await page.waitForTimeout(800);
+
+    const reopened = await measure(page);
+    expect(reopened.editorWidth).toBeGreaterThanOrEqual(open.editorWidth);
+    expect(reopened.overflowing, JSON.stringify(reopened.overflowing)).toEqual([]);
 });
 
 test('a narrow container wraps the toolbar without a narrow window', async({page}) => {

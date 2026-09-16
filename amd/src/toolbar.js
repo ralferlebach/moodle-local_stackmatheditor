@@ -325,6 +325,8 @@ define([
             current = null;
         }
 
+        var max = maxDimensionFor(defs);
+
         open(button, function(model) {
             var f = resolve(target);
             if (!f) {
@@ -338,7 +340,19 @@ define([
             } catch (ex) {
                 dbg('Error: ' + ex.message);
             }
-        }, current);
+        }, current, max);
+    }
+
+    /**
+     * The chooser limit for this editor (#76).
+     *
+     * Already resolved on the server; the client only has to find the number for its slot.
+     *
+     * @param {Object} defs Runtime definitions, with the slot's limit attached by the caller.
+     * @returns {number} Largest structure the choosers may offer.
+     */
+    function maxDimensionFor(defs) {
+        return (defs && defs._maxDimension) || Model.QUICK_PICK_SIZE;
     }
 
     /**
@@ -484,10 +498,17 @@ define([
          * @param {Object|Function} target MQ field or getter.
          * @param {Object} config Enabled group flags.
          * @param {Object} defs Definitions.
+         * @param {number} maxdimension Chooser limit for this slot, resolved on the server (#76).
          * @returns {jQuery} Toolbar element.
          */
-        build: function(target, config, defs) {
+        build: function(target, config, defs, maxdimension) {
             var $bar = $('<div>').addClass('sme-toolbar');
+
+            // The chooser limit is resolved per slot on the server (#76); the caller knows the
+            // slot, the toolbar only the number.
+            if (defs && maxdimension) {
+                defs._maxDimension = maxdimension;
+            }
 
             // The popup labels come from the language pack via the definitions export.
             if (defs && defs.popupStrings) {

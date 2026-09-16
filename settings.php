@@ -76,6 +76,16 @@ if ($hassiteconfig) {
         PARAM_ALPHANUMEXT
     ));
 
+    // Largest structure the matrix and vector choosers offer (#76). Only has an effect where
+    // one of those groups is active; the value is kept either way.
+    $settings->add(new admin_setting_configtext(
+        'local_stackmatheditor/maxstructureddimension',
+        get_string('setting_maxdimension', 'local_stackmatheditor'),
+        get_string('setting_maxdimension_desc', 'local_stackmatheditor'),
+        \local_stackmatheditor\definitions::DEFAULT_STRUCTURED_DIMENSION,
+        PARAM_INT
+    ));
+
     // May students switch the editor off while answering? (#73) Subordinate to the activation
     // above: with no editor there is no switch, whatever this says.
     $settings->add(new admin_setting_configcheckbox(
