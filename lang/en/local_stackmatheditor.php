@@ -274,6 +274,7 @@ $string['privacy:metadata:timecreated'] = 'When the configuration was created.';
 $string['privacy:metadata:timemodified'] = 'When the configuration was last changed.';
 $string['privacy:metadata:usermodified'] = 'The person who last modified the configuration.';
 $string['questionpreview'] = 'Question preview';
+$string['resize_confirm'] = 'This removes {a} filled cells. Continue?';
 $string['save'] = 'Save configuration';
 $string['setting_allowstudenttoggle'] = 'Allow students to switch the editor on and off';
 $string['setting_allowstudenttoggle_desc'] = 'While answering, students see a switch that puts the editor away and brings the plain STACK input back, with their answer. Switch this off to take the choice away everywhere; a quiz or a question can take it away as well, but none of them can give it back.';

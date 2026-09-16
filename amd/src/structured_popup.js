@@ -142,9 +142,10 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
      *
      * @param {HTMLElement} owner Button that opens the popup.
      * @param {Function} onChoose Called with the structured model.
+     * @param {?Object} current Size of the structure being changed, or null for a new one.
      * @returns {HTMLElement} The popup element.
      */
-    function openMatrixGrid(owner, onChoose) {
+    function openMatrixGrid(owner, onChoose, current) {
         var size = Model.QUICK_PICK_SIZE;
         var element = document.createElement('div');
         var grid = document.createElement('div');
@@ -271,8 +272,19 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
         document.body.appendChild(element);
         position(element, owner);
         register(element, owner);
-        highlight(1, 1);
-        cells[0].focus();
+
+        // An existing matrix opens on its own size, so the grid shows what is there and the
+        // student changes it rather than starting over (#62).
+        var startrows = current && current.rows ? Math.min(size, current.rows) : 1;
+        var startcolumns = current && current.columns ? Math.min(size, current.columns) : 1;
+        highlight(startrows, startcolumns);
+
+        cells.forEach(function(cell) {
+            if (Number(cell.dataset.row) === startrows
+                    && Number(cell.dataset.column) === startcolumns) {
+                cell.focus();
+            }
+        });
 
         return element;
     }
@@ -282,14 +294,18 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
      *
      * @param {HTMLElement} owner Button that opens the popup.
      * @param {Function} onChoose Called with the structured model.
+     * @param {?Object} current Size of the structure being changed, or null for a new one.
      * @returns {HTMLElement} The popup element.
      */
-    function openVectorChooser(owner, onChoose) {
+    function openVectorChooser(owner, onChoose, current) {
         var element = document.createElement('div');
         var dimensionRow = document.createElement('div');
         var orientationRow = document.createElement('div');
         var label = document.createElement('div');
-        var state = {dimension: 3, orientation: 'column'};
+        var state = {
+            dimension: (current && current.dimension) || 3,
+            orientation: (current && current.orientation) || 'column'
+        };
         var dimensionButtons = [];
         var orientationButtons = [];
         var dimensionButton;

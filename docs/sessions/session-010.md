@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091510 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091600 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1597,3 +1597,44 @@ nothing to inspect or resize an existing one. That is a fork change first, plugi
 deserves its own iteration rather than the tail of this one.
 
 Jest: 1097.
+
+
+## 41. Iteration 37 (2026091600 / fork sme.5): resizing a matrix
+
+Two changes, one in each repository, because the editor could not do this alone: the fork's
+public API could make a matrix but not look at one.
+
+### Fork
+
+`matrixAtCursor()` returns the size, the environment and the cell contents of the matrix the
+cursor is in, or null. `resizeMatrix({rows, columns, dryRun})` grows or shrinks it in place:
+rows and columns are added at the end and start empty, everything beyond the new size is
+removed, and the cells that stay keep their content and their position - which is the difference
+between resizing and re-inserting. `dryRun` reports how many filled cells a shrink would discard
+without changing anything.
+
+Nine unit tests in `test/unit/matrixResize.test.js`; the Mocha suite is at 831.
+
+### Plugin
+
+The two choosers now take a starting size. With the cursor inside a matrix, the matrix chooser
+opens on that size and changes it; the vector chooser does the same for a single row or column.
+Each only offers to change what it could have made - the matrix chooser leaves a vector alone and
+inserts a new matrix instead, and the other way round.
+
+Before anything filled is discarded, the editor asks. Growing is free and happens without a
+question; shrinking is not, and losing an entry to a menu choice would be the kind of thing a
+student notices one question too late.
+
+### Verified
+
+The resize path was driven through the vendored bundle in a browser: a 2x2 matrix reports itself
+correctly, a dry run to 1x1 reports three filled cells lost, growing to 3x3 keeps 1, 2, 3, 4 in
+place and adds five empty cells. Jest 1103, ESLint and PHPCS green.
+
+### One thing to do before this ships
+
+`thirdparty/readme_moodle.txt` says PENDING where the fork commit belongs: this build was made
+from the change before it was pushed. The fork source is delivered alongside; after pushing it,
+the commit goes in there and the checksums have to match the rebuild. Same procedure as with the
+Android fix, and for the same reason - a branch name or a local commit is not a release pin.

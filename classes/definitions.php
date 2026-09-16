@@ -779,6 +779,7 @@ class definitions {
             'aria_formula_input',
             'aria_remove_row',
             'aria_remove_step',
+            'resize_confirm',
             'toggle_editor',
             'toggle_editor_off',
             'toggle_editor_on',

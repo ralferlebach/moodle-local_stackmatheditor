@@ -238,14 +238,91 @@ define([
     }
 
     /**
-     * Open the chooser for a structure and insert what the user picked.
+     * Describe the structure the cursor is in, in the terms the choosers use (#62).
+     *
+     * A 1 x n or n x 1 matrix is a vector to this editor, which is how it was inserted, so the
+     * vector chooser recognises it as one and the matrix chooser as a matrix.
+     *
+     * @param {Object} field MathQuill field.
+     * @returns {?Object} {rows, columns, dimension, orientation, isVector} or null.
+     */
+    function structureAtCursor(field) {
+        var described = typeof field.matrixAtCursor === 'function'
+            ? field.matrixAtCursor()
+            : null;
+
+        if (!described) {
+            return null;
+        }
+
+        var isvector = described.rows === 1 || described.columns === 1;
+
+        return {
+            rows: described.rows,
+            columns: described.columns,
+            isVector: isvector,
+            orientation: described.rows === 1 ? 'row' : 'column',
+            dimension: described.rows === 1 ? described.columns : described.rows
+        };
+    }
+
+    /**
+     * Change the size of the structure the cursor is in (#62).
+     *
+     * Asks first when filled cells would be discarded: growing is free, shrinking is not, and a
+     * student should not lose an entry to a menu choice.
+     *
+     * @param {Object} field MathQuill field.
+     * @param {Object} model Structured model with the requested size.
+     * @param {Object} strings Language strings.
+     * @returns {boolean} True when the structure was resized.
+     */
+    function resizeStructure(field, model, strings) {
+        var size = Model.dimensions(model);
+        var preview = field.resizeMatrix({
+            rows: size.rows,
+            columns: size.columns,
+            dryRun: true
+        });
+
+        if (!preview.from) {
+            return false;
+        }
+
+        if (preview.cellsLost > 0) {
+            var question = (strings.resize_confirm
+                || 'This removes {a} filled cells. Continue?').replace('{a}', preview.cellsLost);
+            // eslint-disable-next-line no-alert
+            if (!window.confirm(question)) {
+                return true;
+            }
+        }
+
+        field.resizeMatrix({rows: size.rows, columns: size.columns});
+        field.focus();
+
+        return true;
+    }
+
+    /**
+     * Open the chooser for a structure, then resize what is there or insert something new.
      *
      * @param {string} kind Either "matrix" or "vector".
      * @param {HTMLElement} button Button that was activated.
      * @param {Object|Function} target MQ field or getter.
+     * @param {Object} defs Runtime definitions, for the language strings.
      */
-    function insertFromPopup(kind, button, target) {
+    function insertFromPopup(kind, button, target, defs) {
         var open = kind === 'vector' ? Popup.openVectorChooser : Popup.openMatrixGrid;
+        var field = resolve(target);
+        var current = field ? structureAtCursor(field) : null;
+        var strings = (defs && defs.strings) || {};
+
+        // The chooser only offers to change what it could have made: the vector chooser for a
+        // single row or column, the matrix chooser for everything else.
+        if (current && current.isVector !== (kind === 'vector')) {
+            current = null;
+        }
 
         open(button, function(model) {
             var f = resolve(target);
@@ -253,11 +330,14 @@ define([
                 return;
             }
             try {
+                if (current && resizeStructure(f, model, strings)) {
+                    return;
+                }
                 insertModel(f, model);
             } catch (ex) {
                 dbg('Error: ' + ex.message);
             }
-        });
+        }, current);
     }
 
     /**
@@ -265,9 +345,10 @@ define([
      *
      * @param {Object} el Element definition.
      * @param {Object|Function} target MQ field or getter.
+     * @param {Object} defs Runtime definitions, for the language strings.
      * @returns {jQuery|null} Button or null.
      */
-    function makeButton(el, target) {
+    function makeButton(el, target, defs) {
         if (!el || typeof el !== 'object') {
             return null;
         }
@@ -320,7 +401,7 @@ define([
             e.stopPropagation();
 
             if (action === 'popup') {
-                insertFromPopup(command, this, target);
+                insertFromPopup(command, this, target, defs);
                 return;
             }
 
@@ -405,7 +486,7 @@ define([
 
                 for (i = 0; i < elements.length; i++) {
                     $btn = makeButton(
-                        elements[i], target);
+                        elements[i], target, defs);
                     if ($btn) {
                         $grp.append($btn);
                         buttonCount++;

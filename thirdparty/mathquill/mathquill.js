@@ -2553,6 +2553,41 @@ var __assign = (this && this.__assign) || function () {
                     cursor.hide().parent.blur(cursor);
                 return this;
             };
+            EditableField.prototype.matrixAtCursor = function () {
+                var matrix = matrixAtCursor(this.__controller.cursor);
+                return matrix ? describeMatrix(matrix) : null;
+            };
+            EditableField.prototype.resizeMatrix = function (options) {
+                var ctrlr = this.__controller;
+                var cursor = ctrlr.cursor;
+                var matrix = matrixAtCursor(cursor);
+                validateMatrixDimension('rows', options.rows);
+                validateMatrixDimension('columns', options.columns);
+                if (!matrix) {
+                    return {
+                        resized: false,
+                        from: null,
+                        to: { rows: options.rows, columns: options.columns },
+                        cellsLost: 0
+                    };
+                }
+                var from = { rows: matrix.rowCount, columns: matrix.columnCount };
+                var lost = cellsLostByResize(matrix, options.rows, options.columns);
+                if (options.dryRun) {
+                    return { resized: false, from: from, to: from, cellsLost: lost };
+                }
+                ctrlr.notify(undefined);
+                applyMatrixResize(matrix, options.rows, options.columns, cursor.show());
+                ctrlr.scrollHoriz();
+                if (ctrlr.blurred)
+                    cursor.hide().parent.blur(cursor);
+                return {
+                    resized: true,
+                    from: from,
+                    to: { rows: matrix.rowCount, columns: matrix.columnCount },
+                    cellsLost: lost
+                };
+            };
             EditableField.prototype.insertColumnVector = function (rows, environment) {
                 return this.insertMatrix(rows, 1, environment || 'pmatrix');
             };
@@ -10719,6 +10754,87 @@ var __assign = (this && this.__assign) || function () {
         };
         return class_15;
     }(MathCommand));
+    /**
+     * Find the matrix the cursor is inside, if any.
+     *
+     * A cell knows its matrix, so walking up from the cursor's block finds the innermost one - which
+     * is the matrix a user would say they are in.
+     */
+    function matrixAtCursor(cursor) {
+        var node = cursor.parent;
+        while (node) {
+            if (node instanceof MatrixCell) {
+                var parent = node.parent;
+                if (parent instanceof Matrix)
+                    return parent;
+            }
+            node = node.parent;
+        }
+        return null;
+    }
+    /** Describe a matrix for the host application: size, environment and cell contents. */
+    function describeMatrix(matrix) {
+        var cells = [];
+        for (var r = 0; r < matrix.rowCount; r += 1) {
+            var row = [];
+            for (var c = 0; c < matrix.columnCount; c += 1) {
+                row.push(matrix.cells[r][c].latex());
+            }
+            cells.push(row);
+        }
+        return {
+            rows: matrix.rowCount,
+            columns: matrix.columnCount,
+            environment: matrix.environment,
+            cells: cells
+        };
+    }
+    /**
+     * How many filled cells a resize to the given size would discard.
+     *
+     * The host application asks this before it changes anything, so that a student can be warned
+     * rather than surprised.
+     */
+    function cellsLostByResize(matrix, rows, columns) {
+        var lost = 0;
+        for (var r = 0; r < matrix.rowCount; r += 1) {
+            for (var c = 0; c < matrix.columnCount; c += 1) {
+                if (r < rows && c < columns)
+                    continue;
+                if (matrix.cells[r][c].latex().trim() !== '')
+                    lost += 1;
+            }
+        }
+        return lost;
+    }
+    /**
+     * Grow or shrink a matrix in place.
+     *
+     * Rows and columns are added at the end and start empty; rows and columns beyond the new size
+     * are removed with whatever they contained. The cells that stay keep their content and their
+     * position, which is the whole point of resizing rather than re-inserting.
+     */
+    function applyMatrixResize(matrix, rows, columns, cursor) {
+        while (matrix.columnCount > columns) {
+            matrix.deleteColumn(matrix.columnCount - 1);
+        }
+        while (matrix.rowCount > rows) {
+            matrix.deleteRow(matrix.rowCount - 1);
+        }
+        while (matrix.columnCount < columns) {
+            matrix.insertColumnAfter(matrix.cells[0][matrix.columnCount - 1], undefined);
+        }
+        while (matrix.rowCount < rows) {
+            matrix.insertRowAfter(matrix.cells[matrix.rowCount - 1][0], undefined);
+        }
+        // The cursor may have been in a cell that is gone now.
+        var target = matrix.cells[0][0];
+        cursor.insAtRightEnd(target);
+        matrix.bubble(function (node) {
+            node.reflow();
+            return undefined;
+        });
+    }
     /**
      * Normalise and validate the arguments of the public matrix API.
      * Accepts both `insertMatrix(3, 2, 'bmatrix')` and the preferred

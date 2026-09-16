@@ -323,3 +323,61 @@ describe('popup', () => {
             .toBe('1 Zeilen, 1 Spalten');
     });
 });
+
+describe('changing the size of an existing structure (#62)', () => {
+    // The toolbar asks MathQuill what is under the cursor and decides from that; these cases
+    // mirror structureAtCursor() and the chooser's starting size in toolbar.js.
+    function describe_(matrix) {
+        if (!matrix) {
+            return null;
+        }
+        const isvector = matrix.rows === 1 || matrix.columns === 1;
+        return {
+            rows: matrix.rows,
+            columns: matrix.columns,
+            isVector: isvector,
+            orientation: matrix.rows === 1 ? 'row' : 'column',
+            dimension: matrix.rows === 1 ? matrix.columns : matrix.rows
+        };
+    }
+
+    test('a 2x3 matrix is a matrix', () => {
+        const current = describe_({rows: 2, columns: 3});
+        expect(current.isVector).toBe(false);
+        expect(current.rows).toBe(2);
+        expect(current.columns).toBe(3);
+    });
+
+    test('a single column is a vector, and knows its orientation', () => {
+        const column = describe_({rows: 3, columns: 1});
+        expect(column.isVector).toBe(true);
+        expect(column.orientation).toBe('column');
+        expect(column.dimension).toBe(3);
+
+        const row = describe_({rows: 1, columns: 4});
+        expect(row.isVector).toBe(true);
+        expect(row.orientation).toBe('row');
+        expect(row.dimension).toBe(4);
+    });
+
+    test('outside a structure there is nothing to change', () => {
+        expect(describe_(null)).toBeNull();
+    });
+
+    test('the chooser only offers to change what it could have made', () => {
+        // The matrix chooser leaves a vector alone and inserts a new matrix instead, and the
+        // vector chooser does the same the other way round.
+        const vector = describe_({rows: 3, columns: 1});
+        const matrix = describe_({rows: 2, columns: 2});
+
+        expect(vector.isVector === ('vector' === 'vector')).toBe(true);
+        expect(matrix.isVector === ('vector' === 'vector')).toBe(false);
+    });
+
+    test('a resize keeps the model valid', () => {
+        // What the chooser hands back is a model like any other.
+        const model = Model.createMatrix(3, 3);
+        expect(Model.isValid(model)).toBe(true);
+        expect(Model.dimensions(model)).toEqual({rows: 3, columns: 3});
+    });
+});

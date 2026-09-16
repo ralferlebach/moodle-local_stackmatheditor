@@ -274,6 +274,7 @@ $string['privacy:metadata:timecreated'] = 'Zeitpunkt, zu dem die Konfiguration a
 $string['privacy:metadata:timemodified'] = 'Zeitpunkt der letzten Änderung der Konfiguration.';
 $string['privacy:metadata:usermodified'] = 'Die Person, die die Konfiguration zuletzt geändert hat.';
 $string['questionpreview'] = 'Fragenvorschau';
+$string['resize_confirm'] = 'Dabei werden {a} ausgefüllte Zellen entfernt. Fortfahren?';
 $string['save'] = 'Konfiguration speichern';
 $string['setting_allowstudenttoggle'] = 'Studierenden erlauben, den Editor an- und auszuschalten';
 $string['setting_allowstudenttoggle_desc'] = 'Während der Bearbeitung sehen Studierende einen Schalter, der den Editor wegklappt und das einfache STACK-Eingabefeld mitsamt Antwort zurückbringt. Hier abschalten nimmt die Wahl überall weg; ein Test oder eine Frage kann sie ebenfalls entziehen, aber keine Ebene kann sie zurückgeben.';
