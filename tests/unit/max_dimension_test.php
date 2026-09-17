@@ -151,6 +151,60 @@ final class max_dimension_test extends \advanced_testcase {
     }
 
     /**
+     * What a teacher types is checked, not quietly corrected (#76).
+     *
+     * @return void
+     */
+    public function test_form_input_is_validated(): void {
+        // Acceptable.
+        $this->assertNull(definitions::validate_max_dimension_input(''));
+        $this->assertNull(definitions::validate_max_dimension_input('  '));
+        $this->assertNull(definitions::validate_max_dimension_input('2'));
+        $this->assertNull(definitions::validate_max_dimension_input('20'));
+        $this->assertNull(definitions::validate_max_dimension_input('7'));
+
+        // Not a number.
+        $this->assertSame(
+            'error_maxdimension_number',
+            definitions::validate_max_dimension_input('seven')
+        );
+        $this->assertSame(
+            'error_maxdimension_number',
+            definitions::validate_max_dimension_input('3.5')
+        );
+        $this->assertSame(
+            'error_maxdimension_number',
+            definitions::validate_max_dimension_input('-3')
+        );
+
+        // A number, but not one the plugin can honour. Clamping it silently would tell the
+        // author their input was taken as given.
+        $this->assertSame(
+            'error_maxdimension_range',
+            definitions::validate_max_dimension_input('1')
+        );
+        $this->assertSame(
+            'error_maxdimension_range',
+            definitions::validate_max_dimension_input('40')
+        );
+    }
+
+    /**
+     * Reading a stored value stays generous, and that is not a contradiction.
+     *
+     * @return void
+     */
+    public function test_reading_is_generous_where_writing_is_strict(): void {
+        // Typing 40 is refused; finding 40 in the database is honoured as far as possible,
+        // because something once meant it and the chooser has to show something.
+        $this->assertSame(
+            'error_maxdimension_range',
+            definitions::validate_max_dimension_input('40')
+        );
+        $this->assertSame(20, definitions::clean_max_dimension(40));
+    }
+
+    /**
      * The setting only means something with a structured group.
      *
      * @return void

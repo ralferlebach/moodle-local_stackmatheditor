@@ -153,6 +153,7 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
         var label = document.createElement('div');
         var cells = [];
         var selected = {rows: 1, columns: 1};
+        var dragging = false;
         var rowElement;
         var cell;
         var r;
@@ -191,6 +192,15 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
         }
 
         /**
+         * Highlight on hover, unless a drag is in charge of the selection.
+         */
+        function hoverHandler() {
+            if (!dragging) {
+                highlight(Number(this.dataset.row), Number(this.dataset.column));
+            }
+        }
+
+        /**
          * Confirm the current selection.
          */
         function confirm() {
@@ -212,16 +222,9 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
                 cell.dataset.column = c;
                 cell.tabIndex = -1;
                 cell.setAttribute('aria-label', format(strings.size, r, c));
-                cell.addEventListener('mouseenter', function() {
-                    highlight(Number(this.dataset.row), Number(this.dataset.column));
-                });
+                cell.addEventListener('mouseenter', hoverHandler);
                 cell.addEventListener('focus', function() {
                     highlight(Number(this.dataset.row), Number(this.dataset.column));
-                });
-                cell.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    highlight(Number(this.dataset.row), Number(this.dataset.column));
-                    confirm();
                 });
                 cells.push(cell);
                 rowElement.appendChild(cell);
@@ -266,6 +269,81 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
                     cell.focus();
                 }
             });
+        });
+
+        /**
+         * The cell under a pointer, wherever the pointer currently is (#75).
+         *
+         * Drag selection cannot rely on the event target: once the pointer is captured, every
+         * move is reported on the element the gesture started on.
+         *
+         * @param {Event} e Pointer event.
+         * @returns {?HTMLElement} The cell, or null outside the grid.
+         */
+        function cellUnder(e) {
+            var found = document.elementFromPoint
+                ? document.elementFromPoint(e.clientX, e.clientY)
+                : e.target;
+
+            while (found && found !== grid) {
+                if (found.classList && found.classList.contains('sme-matrix-grid-cell')) {
+                    return found;
+                }
+                found = found.parentNode;
+            }
+
+            return null;
+        }
+
+        grid.addEventListener('pointerdown', function(e) {
+            var cellat = cellUnder(e);
+            if (!cellat) {
+                return;
+            }
+
+            // The page must not scroll while a finger is choosing a matrix size. touch-action in
+            // the stylesheet does most of it; this covers the engines that still need the event
+            // cancelled as well.
+            e.preventDefault();
+            dragging = true;
+            if (typeof grid.setPointerCapture === 'function' && e.pointerId !== undefined) {
+                try {
+                    grid.setPointerCapture(e.pointerId);
+                } catch (ignored) {
+                    grid.dataset.capture = 'unavailable';
+                }
+            }
+            highlight(Number(cellat.dataset.row), Number(cellat.dataset.column));
+        });
+
+        grid.addEventListener('pointermove', function(e) {
+            if (!dragging) {
+                return;
+            }
+            var cellat = cellUnder(e);
+            if (cellat) {
+                e.preventDefault();
+                highlight(Number(cellat.dataset.row), Number(cellat.dataset.column));
+            }
+        });
+
+        grid.addEventListener('pointerup', function(e) {
+            if (!dragging) {
+                return;
+            }
+            dragging = false;
+            var cellat = cellUnder(e);
+            if (cellat) {
+                highlight(Number(cellat.dataset.row), Number(cellat.dataset.column));
+            }
+            confirm();
+        });
+
+        grid.addEventListener('pointercancel', function() {
+            // A cancelled gesture chooses nothing and leaves the popup as it was: the system took
+            // the pointer away, the student did not change their mind about the size.
+            dragging = false;
+            highlight(selected.rows, selected.columns);
         });
 
         element.appendChild(grid);
@@ -401,6 +479,112 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
             }
         });
 
+        /**
+         * The gesture pad (#75).
+         *
+         * One drag decides both things a vector needs: the direction says whether it is a row or
+         * a column, the distance says how long it is. The buttons below stay exactly as they
+         * were - a gesture is an addition, never the only way in.
+         */
+        var pad = document.createElement('div');
+        var padcells = [];
+        var origin = null;
+        var i;
+
+        pad.className = 'sme-vector-pad';
+        pad.setAttribute('aria-hidden', 'true');
+
+        for (i = 1; i <= limit; i++) {
+            var padcell = document.createElement('span');
+            padcell.className = 'sme-vector-pad-cell';
+            padcell.dataset.index = i;
+            padcells.push(padcell);
+            pad.appendChild(padcell);
+        }
+
+        /**
+         * Show what the gesture would produce.
+         */
+        function paint() {
+            pad.classList.toggle('sme-vector-pad-row', state.orientation === 'row');
+            pad.classList.toggle('sme-vector-pad-column', state.orientation === 'column');
+            padcells.forEach(function(cellel) {
+                cellel.classList.toggle(
+                    'sme-selected',
+                    Number(cellel.dataset.index) <= state.dimension
+                );
+            });
+        }
+
+        /**
+         * Read a gesture and turn it into a dimension and an orientation.
+         *
+         * @param {Event} e Pointer event.
+         */
+        function applyGesture(e) {
+            var dx = e.clientX - origin.x;
+            var dy = e.clientY - origin.y;
+            var axis = Model.dominantAxis(dx, dy, 8);
+            var step = origin.step;
+
+            if (axis) {
+                state.orientation = axis;
+            }
+
+            state.dimension = Model.dimensionFromDistance(
+                state.orientation === 'row' ? dx : dy,
+                step,
+                limit
+            );
+
+            refresh();
+            paint();
+        }
+
+        pad.addEventListener('pointerdown', function(e) {
+            var box = pad.getBoundingClientRect();
+            e.preventDefault();
+            origin = {
+                x: e.clientX,
+                y: e.clientY,
+                step: Math.max(1, Math.round(box.width / limit))
+            };
+            if (typeof pad.setPointerCapture === 'function' && e.pointerId !== undefined) {
+                try {
+                    pad.setPointerCapture(e.pointerId);
+                } catch (ignored) {
+                    // Capture is a convenience: without it the drag still works, it just stops
+                    // following the pointer outside the pad.
+                    pad.dataset.capture = 'unavailable';
+                }
+            }
+        });
+
+        pad.addEventListener('pointermove', function(e) {
+            if (!origin) {
+                return;
+            }
+            e.preventDefault();
+            applyGesture(e);
+        });
+
+        pad.addEventListener('pointerup', function(e) {
+            if (!origin) {
+                return;
+            }
+            applyGesture(e);
+            origin = null;
+            confirm();
+        });
+
+        pad.addEventListener('pointercancel', function() {
+            // Back to where the gesture started: a cancelled drag is not a choice.
+            origin = null;
+            refresh();
+            paint();
+        });
+
+        element.appendChild(pad);
         element.appendChild(dimensionRow);
         element.appendChild(orientationRow);
         element.appendChild(label);
@@ -408,6 +592,7 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
         position(element, owner);
         register(element, owner);
         refresh();
+        paint();
         dimensionButtons[0].focus();
 
         return element;

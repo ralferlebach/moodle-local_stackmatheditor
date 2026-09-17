@@ -258,12 +258,22 @@ describe('popup', () => {
     });
 
     test('a click picks the cell it is on', () => {
+        // Since #75 the grid listens to pointer events, which is what a mouse click is made of:
+        // pointerdown and pointerup on the same cell. One code path for mouse, touch and pen.
         const chosen = [];
         Popup.openMatrixGrid(owner, (model) => chosen.push(model));
         const cells = document.querySelectorAll('.sme-matrix-grid-cell');
 
         // Row 2, column 4 in a 5x5 grid.
-        cells[8].dispatchEvent(new window.MouseEvent('click', {bubbles: true}));
+        const press = (type) => {
+            const event = new window.MouseEvent(type, {bubbles: true, clientX: 5, clientY: 5});
+            Object.defineProperty(event, 'pointerId', {value: 1});
+            cells[8].dispatchEvent(event);
+        };
+
+        press('pointerdown');
+        press('pointerup');
+
         expect(Model.dimensions(chosen[0])).toEqual({rows: 2, columns: 4});
     });
 
@@ -447,5 +457,142 @@ describe('the configured maximum (#76)', () => {
 
         expect(document.querySelectorAll('.sme-matrix-grid-cell').length)
             .toBe(Model.QUICK_PICK_SIZE * Model.QUICK_PICK_SIZE);
+    });
+});
+
+describe('pointer selection (#75)', () => {
+    let Popup;
+    let owner;
+
+    function pointer(target, type, x, y) {
+        const event = new window.MouseEvent(type, {bubbles: true, clientX: x, clientY: y});
+        Object.defineProperty(event, 'pointerId', {value: 1});
+        target.dispatchEvent(event);
+        return event;
+    }
+
+    beforeEach(() => {
+        jest.resetModules();
+        Popup = loadAmd('structured_popup');
+        document.body.innerHTML = '';
+        owner = document.createElement('button');
+        document.body.appendChild(owner);
+    });
+
+    test('the gesture maths: the longer axis decides', () => {
+        expect(Model.dominantAxis(40, 6)).toBe('row');
+        expect(Model.dominantAxis(6, 40)).toBe('column');
+        expect(Model.dominantAxis(-40, 6)).toBe('row');
+        expect(Model.dominantAxis(3, 3)).toBeNull();
+        // A diagonal drag is not more one than the other; the row wins by convention.
+        expect(Model.dominantAxis(30, 30)).toBe('row');
+    });
+
+    test('the gesture maths: distance becomes a dimension, within the limit', () => {
+        expect(Model.dimensionFromDistance(0, 20, 5)).toBe(1);
+        expect(Model.dimensionFromDistance(25, 20, 5)).toBe(2);
+        expect(Model.dimensionFromDistance(-45, 20, 5)).toBe(3);
+        expect(Model.dimensionFromDistance(9999, 20, 5)).toBe(5);
+        expect(Model.dimensionFromDistance(9999, 20, 8)).toBe(8);
+    });
+
+    test('a drag across the grid selects and confirms on release', () => {
+        const chosen = [];
+        Popup.openMatrixGrid(owner, (model) => chosen.push(model), null, 5);
+        const grid = document.querySelector('.sme-matrix-grid');
+        const cells = document.querySelectorAll('.sme-matrix-grid-cell');
+
+        // jsdom has no layout, so elementFromPoint returns nothing: the event target decides,
+        // which is what a real browser does for the first cell of a drag.
+        pointer(cells[0], 'pointerdown', 10, 10);
+        pointer(cells[7], 'pointermove', 60, 40);
+        pointer(cells[7], 'pointerup', 60, 40);
+
+        expect(chosen).toHaveLength(1);
+        expect(Model.dimensions(chosen[0])).toEqual({rows: 2, columns: 3});
+    });
+
+    test('a cancelled gesture chooses nothing and leaves the popup usable', () => {
+        const chosen = [];
+        Popup.openMatrixGrid(owner, (model) => chosen.push(model), null, 5);
+        const grid = document.querySelector('.sme-matrix-grid');
+        const cells = document.querySelectorAll('.sme-matrix-grid-cell');
+
+        pointer(cells[0], 'pointerdown', 10, 10);
+        pointer(cells[12], 'pointermove', 80, 80);
+        grid.dispatchEvent(new window.Event('pointercancel', {bubbles: true}));
+
+        expect(chosen).toEqual([]);
+        expect(Popup.isOpen()).toBe(true);
+        expect(document.querySelectorAll('.sme-matrix-grid-cell.sme-selected').length)
+            .toBeGreaterThan(0);
+    });
+
+    test('the keyboard still works after a cancelled gesture', () => {
+        const chosen = [];
+        Popup.openMatrixGrid(owner, (model) => chosen.push(model), null, 5);
+        const grid = document.querySelector('.sme-matrix-grid');
+        const cells = document.querySelectorAll('.sme-matrix-grid-cell');
+
+        pointer(cells[0], 'pointerdown', 10, 10);
+        grid.dispatchEvent(new window.Event('pointercancel', {bubbles: true}));
+
+        grid.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'ArrowRight', bubbles: true}));
+        grid.dispatchEvent(new window.KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
+
+        expect(chosen).toHaveLength(1);
+        expect(Model.dimensions(chosen[0]).columns).toBe(2);
+    });
+
+    test('the vector pad reads a horizontal drag as a row vector', () => {
+        const chosen = [];
+        Popup.openVectorChooser(owner, (model) => chosen.push(model), null, 6);
+        const pad = document.querySelector('.sme-vector-pad');
+        Object.defineProperty(pad, 'getBoundingClientRect', {
+            value: () => ({width: 120, height: 20, left: 0, top: 0, right: 120, bottom: 20})
+        });
+
+        pointer(pad, 'pointerdown', 0, 0);
+        pointer(pad, 'pointermove', 62, 4);
+        pointer(pad, 'pointerup', 62, 4);
+
+        expect(chosen).toHaveLength(1);
+        expect(chosen[0].orientation).toBe('row');
+        expect(chosen[0].elements).toHaveLength(4);
+    });
+
+    test('a vertical drag is a column vector', () => {
+        const chosen = [];
+        Popup.openVectorChooser(owner, (model) => chosen.push(model), null, 6);
+        const pad = document.querySelector('.sme-vector-pad');
+        Object.defineProperty(pad, 'getBoundingClientRect', {
+            value: () => ({width: 120, height: 20, left: 0, top: 0, right: 120, bottom: 20})
+        });
+
+        pointer(pad, 'pointerdown', 0, 0);
+        pointer(pad, 'pointermove', 5, 42);
+        pointer(pad, 'pointerup', 5, 42);
+
+        expect(chosen[0].orientation).toBe('column');
+        expect(chosen[0].elements).toHaveLength(3);
+    });
+
+    test('the pad never offers more than the configured maximum', () => {
+        Popup.openVectorChooser(owner, () => {}, null, 3);
+
+        expect(document.querySelectorAll('.sme-vector-pad-cell')).toHaveLength(3);
+    });
+
+    test('the buttons keep working next to the gesture', () => {
+        const chosen = [];
+        Popup.openVectorChooser(owner, (model) => chosen.push(model), null, 5);
+
+        const dimensions = document.querySelectorAll('.sme-vector-dimension');
+        dimensions[2].dispatchEvent(new window.MouseEvent('click', {bubbles: true}));
+        document.querySelector('.sme-vector-popup').dispatchEvent(
+            new window.KeyboardEvent('keydown', {key: 'Enter', bubbles: true})
+        );
+
+        expect(chosen[0].elements).toHaveLength(4);
     });
 });

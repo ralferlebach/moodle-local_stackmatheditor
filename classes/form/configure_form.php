@@ -360,4 +360,33 @@ class configure_form extends \moodleform {
         $mform->addGroup($buttons, 'buttonar', '', ' ', false);
         $mform->closeHeaderBefore('buttonar');
     }
+
+    /**
+     * Refuse a dimension the plugin cannot honour (#76).
+     *
+     * @param array $data Submitted data.
+     * @param array $files Submitted files.
+     * @return array Errors by element name.
+     */
+    public function validation($data, $files) {
+        $errors = parent::validation($data, $files);
+
+        if (isset($data['maxdimension'])) {
+            $error = \local_stackmatheditor\definitions::validate_max_dimension_input(
+                (string) $data['maxdimension']
+            );
+            if ($error !== null) {
+                $errors['maxdimension'] = get_string(
+                    $error,
+                    'local_stackmatheditor',
+                    (object) [
+                        'min' => \local_stackmatheditor\definitions::MIN_STRUCTURED_DIMENSION,
+                        'max' => \local_stackmatheditor\definitions::MAX_STRUCTURED_DIMENSION,
+                    ]
+                );
+            }
+        }
+
+        return $errors;
+    }
 }

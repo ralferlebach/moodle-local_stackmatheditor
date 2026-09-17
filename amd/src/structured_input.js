@@ -90,6 +90,48 @@ define([], function() {
     }
 
     /**
+     * Which way a pointer gesture is going (#75).
+     *
+     * A vector is a row or a column, and the drag decides which: the axis the pointer travelled
+     * furthest along wins. A gesture that has barely moved has no direction yet, and saying so is
+     * better than guessing - the caller keeps the orientation it already had.
+     *
+     * @param {number} dx Horizontal distance in pixels.
+     * @param {number} dy Vertical distance in pixels.
+     * @param {number} threshold Pixels below which nothing counts as movement.
+     * @returns {?string} 'row', 'column', or null while the gesture is still undecided.
+     */
+    function dominantAxis(dx, dy, threshold) {
+        var limit = typeof threshold === 'number' ? threshold : 8;
+        var horizontal = Math.abs(dx);
+        var vertical = Math.abs(dy);
+
+        if (horizontal < limit && vertical < limit) {
+            return null;
+        }
+
+        // A tie goes to the row: a horizontal drag is the more common gesture, and an exact tie
+        // means the pointer moved diagonally, where neither answer is more right than the other.
+        return vertical > horizontal ? 'column' : 'row';
+    }
+
+    /**
+     * How many cells a gesture of this length covers (#75).
+     *
+     * @param {number} distance Distance in pixels along the dominant axis.
+     * @param {number} step Size of one cell in pixels, including its gap.
+     * @param {number} max Largest dimension allowed here.
+     * @returns {number} Dimension between 1 and max.
+     */
+    function dimensionFromDistance(distance, step, max) {
+        var cell = step > 0 ? step : 1;
+        var limit = clampDimension(max);
+        var count = Math.floor(Math.abs(distance) / cell) + 1;
+
+        return Math.max(1, Math.min(limit, count));
+    }
+
+    /**
      * Build a matrix model of the given size, with empty cells.
      *
      * @param {number} rows Number of rows.
@@ -342,6 +384,8 @@ define([], function() {
         ENVIRONMENTS: ENVIRONMENTS,
         isValidDimension: isValidDimension,
         clampDimension: clampDimension,
+        dominantAxis: dominantAxis,
+        dimensionFromDistance: dimensionFromDistance,
         createMatrix: createMatrix,
         createVector: createVector,
         dimensions: dimensions,

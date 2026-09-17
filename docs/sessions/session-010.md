@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091606 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091700 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1857,3 +1857,60 @@ delivering, which does the same thing without Moodle. It found the leftover in a
 
 I have added it next to the README/settings check from iteration 42. Both exist because the same
 class of mistake - a rename that touches some places and not others - has now cost two CI runs.
+
+
+## 48. Iteration 44 (2026091700): #75 implemented, #76 finished
+
+The consolidation issue lists twelve sections. Two of them asked for code that did not exist yet;
+this iteration writes it. The rest are verification runs, and the last section of this entry says
+plainly which ones I cannot do from here.
+
+### #75: pointer selection
+
+The matrix grid listens to `pointerdown`, `pointermove`, `pointerup` and `pointercancel` with
+pointer capture, and the cell under the pointer is found with `elementFromPoint` rather than from
+the event target - once a pointer is captured, every move is reported on the element the gesture
+started on, so the target stops moving while the finger does not.
+
+The `click` handler is gone. It was not needed: a mouse click is a `pointerdown` and a
+`pointerup` on the same cell, so mouse, touch and pen now travel one code path instead of two.
+`touch-action: none` in the stylesheet is what keeps the page from scrolling under the gesture;
+the browser decides that before the first `pointermove` arrives, so cancelling events alone would
+be too late.
+
+The vector chooser gains a gesture pad above its buttons. One drag decides both things a vector
+needs: the dominant axis says row or column, the distance says how long. A drag that has barely
+moved has no direction yet, and the pad says so by keeping the orientation it had rather than
+guessing. The buttons stay exactly as they were - a gesture is an addition, never the only way
+in, and the keyboard path is unchanged.
+
+A cancelled gesture chooses nothing and leaves the popup as it was: the system took the pointer
+away, the student did not change their mind about the size.
+
+The gesture maths - `dominantAxis()` and `dimensionFromDistance()` - lives in the model, without
+dependencies, so it is tested as arithmetic rather than through a browser.
+
+### #76: the last two points
+
+The dimension field is now validated rather than clamped. Reading a stored value stays generous:
+40 in the database becomes 20, because something once meant it and the chooser has to show
+something. Typing 40 is refused with a message, because silently turning it into 20 would tell
+the author their input was accepted as given. Two different jobs, two different functions, and
+the tests say so next to each other.
+
+### What this iteration cannot close
+
+* **#34's CAS contract** needs Behat scenarios that evaluate buttons through a real STACK. That
+  is a sizeable piece of work in its own right, and it belongs in one increment rather than the
+  tail of this one.
+* **#66, #72, #73, #74** need runs and devices: the dependency matrix in Behat, an Android phone,
+  the cross-level matrix in the browser, and the Playwright suite that has still never got past
+  its first test.
+* **#70** asks for pinned release dependencies. That contradicts the decision recorded in
+  `docs/RELEASE-CHECKLIST.md`, where not pinning is deliberate and the residual risk is written
+  down. One of the two has to give, and that is Ralf's call rather than mine.
+* **#69** wants the evidence workflow to check Playwright, a11y and load results for the same SHA
+  automatically. Buildable - it means querying the GitHub API for runs on that commit - but it
+  needs the workflows to have run on a common SHA at least once, which has not happened yet.
+
+Jest 1138, PHPCS green, ESLint and stylelint green, both documentation pre-checks green.

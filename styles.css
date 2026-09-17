@@ -651,3 +651,37 @@
     position: absolute;
     width: 1px;
 }
+
+/*
+ * Pointer selection in the choosers (#75).
+ *
+ * touch-action: none is what stops the page from scrolling while a finger draws a matrix size;
+ * without it the browser claims the gesture as a scroll before the first pointermove arrives.
+ */
+.sme-matrix-grid,
+.sme-vector-pad {
+    touch-action: none;
+}
+
+.sme-vector-pad {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 0.4rem;
+}
+
+.sme-vector-pad-cell {
+    background: var(--gray-200, #e9ecef);
+    border: 1px solid var(--gray-400, #ced4da);
+    border-radius: 0.15rem;
+    height: 1.4rem;
+    width: 1.4rem;
+}
+
+.sme-vector-pad-cell.sme-selected {
+    background: var(--primary, #0f6cbf);
+    border-color: var(--primary, #0f6cbf);
+}
+
+.sme-vector-pad-column {
+    flex-direction: column;
+}

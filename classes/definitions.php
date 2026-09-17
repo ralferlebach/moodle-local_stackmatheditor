@@ -1060,6 +1060,40 @@ class definitions {
     }
 
     /**
+     * Validate what a teacher typed into the dimension field (#76).
+     *
+     * Different from clean_max_dimension(), and deliberately so: a stored value is read as
+     * generously as possible, because it is already there and something once meant it. A value
+     * being typed now is checked strictly - silently turning 40 into 20 would tell the author
+     * their input was accepted as given.
+     *
+     * @param string $raw Raw form input.
+     * @return string|null Error string identifier, or null when the value is acceptable.
+     */
+    public static function validate_max_dimension_input(string $raw): ?string {
+        $value = trim($raw);
+
+        if ($value === '') {
+            // Empty means inherit, which is always allowed.
+            return null;
+        }
+
+        if (!preg_match('/^\d+$/', $value)) {
+            return 'error_maxdimension_number';
+        }
+
+        $number = (int) $value;
+        if (
+            $number < self::MIN_STRUCTURED_DIMENSION
+                || $number > self::MAX_STRUCTURED_DIMENSION
+        ) {
+            return 'error_maxdimension_range';
+        }
+
+        return null;
+    }
+
+    /**
      * The site-wide maximum (#76).
      *
      * @return int Dimension between MIN_STRUCTURED_DIMENSION and MAX_STRUCTURED_DIMENSION.
