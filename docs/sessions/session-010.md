@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091605 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091606 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1824,3 +1824,36 @@ element that will never be visible. The spec looks the visible toggle up again b
 That is the third selector problem in this one test, and each time the log said exactly what was
 wrong: "element is not visible". The lesson I am taking is not about Boost - it is that a locator
 captured before an interaction is not the same element afterwards.
+
+
+## 47. Iteration 43 (2026091606): half a rename took the whole run down
+
+PHPUnit and Behat both failed, on all matrix jobs, and neither ran a single test. The cause is
+one line:
+
+    Invalid get_string() identifier: 'setting_maxdimension_desc'
+    * line 84 of /local/stackmatheditor/settings.php
+    * line 524 of /lib/installlib.php: call to admin_apply_default_settings()
+
+Iteration 42 renamed the setting's strings and updated `get_string('setting_maxdimension', ...)`
+in settings.php - but not `get_string('setting_maxdimension_desc', ...)` two lines below it. My
+rename replaced one string literal and left the other, because they are different literals and I
+replaced the one I was thinking about.
+
+What makes this worse than a failing test: Moodle loads `settings.php` while it applies default
+settings during installation. A missing identifier there is a debugging message, moodle-plugin-ci
+treats that as a failed install, and every job that needs a site dies before it starts. A missing
+string in a form would have cost one test; here it cost the run.
+
+### The guard
+
+`documentation_test` now reads every `get_string('literal', 'local_stackmatheditor')` out of
+settings.php and asserts the identifier exists. Identifiers built in a loop - the four operator
+settings - are skipped, because a static check cannot say anything useful about them.
+
+That test cannot run when the install fails, so it is a guard for the next kind of mistake rather
+than for this one. The one that would have caught this is the local pre-check I now run before
+delivering, which does the same thing without Moodle. It found the leftover in a second.
+
+I have added it next to the README/settings check from iteration 42. Both exist because the same
+class of mistake - a rename that touches some places and not others - has now cost two CI runs.

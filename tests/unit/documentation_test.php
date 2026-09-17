@@ -59,6 +59,40 @@ final class documentation_test extends \advanced_testcase {
     }
 
     /**
+     * Every string settings.php asks for exists.
+     *
+     * A missing identifier there is not a failing test, it is a failing installation: Moodle
+     * loads settings.php while it applies the default settings, `get_string()` raises a
+     * debugging message, and moodle-plugin-ci aborts the install - so PHPUnit and Behat both
+     * fail before a single test runs. That happened, and the cause was a rename that changed the
+     * title but not the description.
+     *
+     * @return void
+     */
+    public function test_every_string_settings_php_asks_for_exists(): void {
+        global $CFG;
+
+        $source = file_get_contents($CFG->dirroot . '/local/stackmatheditor/settings.php');
+        $this->assertNotFalse($source);
+
+        // Only identifiers written out in full: the four operator settings build theirs in a
+        // loop, and a static check cannot say anything useful about those.
+        preg_match_all(
+            "#get_string\(\s*'([a-z0-9_]+)'\s*,\s*'local_stackmatheditor'#i",
+            $source,
+            $matches
+        );
+        $this->assertNotEmpty($matches[1], 'settings.php must ask for some strings');
+
+        foreach (array_unique($matches[1]) as $identifier) {
+            $this->assertTrue(
+                get_string_manager()->string_exists($identifier, 'local_stackmatheditor'),
+                "settings.php asks for '$identifier', which no language pack defines"
+            );
+        }
+    }
+
+    /**
      * Every setting has a title and a description in both language packs.
      *
      * @return void

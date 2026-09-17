@@ -81,7 +81,7 @@ if ($hassiteconfig) {
     $settings->add(new admin_setting_configtext(
         'local_stackmatheditor/maxstructureddimension',
         get_string('setting_maxstructureddimension', 'local_stackmatheditor'),
-        get_string('setting_maxdimension_desc', 'local_stackmatheditor'),
+        get_string('setting_maxstructureddimension_desc', 'local_stackmatheditor'),
         \local_stackmatheditor\definitions::DEFAULT_STRUCTURED_DIMENSION,
         PARAM_INT
     ));
