@@ -84,6 +84,7 @@ define([
      * @param {Object} convOpts Conversion options.
      * @param {Function} dbg Debug logger.
      * @param {boolean} [silent] Write without raising events (right before a submit).
+     * @returns {string} The Maxima string that was written.
      */
     function syncToInput(mqField, $input, convOpts, dbg, silent) {
         var latex = mqField.latex();
@@ -110,6 +111,10 @@ define([
             dbg('Sync: LaTeX="' + latex
                 + '" Maxima="' + maxima + '"');
         }
+
+        // What we last wrote, so that the return channel (#77) can tell its own echo from a
+        // change somebody else made.
+        return maxima;
     }
 
 
@@ -716,6 +721,9 @@ define([
 
         var systemParts = getRelationSystemParts(initialMaxima);
         var prefilling = (initialMaxima && initialMaxima.trim()) ? true : false;
+        // The last value this editor wrote into the input, so the return channel (#77) can tell
+        // its own echo from a change somebody else made.
+        var lastwritten = initialMaxima || '';
         var activeMqField = null;
         var getActiveField = null;
 
@@ -851,7 +859,7 @@ define([
                     if (prefilling) {
                         return;
                     }
-                    syncToInput(
+                    lastwritten = syncToInput(
                         mqField, $input,
                         convOpts, ctx.dbg);
                 },
@@ -863,6 +871,55 @@ define([
         });
         A11y.labelEditor(mqField);
 
+        // The original STACK input is the integration point in both directions (#77). STACK's
+        // JSXGraph bindings, and any other script, write into it and dispatch an event; without
+        // this the visible editor kept showing the old answer while STACK already had the new
+        // one - two different answers on one screen.
+        //
+        // The listeners sit on the element itself rather than on a container: an external
+        // library is under no obligation to let its events bubble, and STACK's do not.
+        /**
+         * Take a value somebody else wrote into the input back into the editor (#77).
+         *
+         * @param {Event} e The input or change event.
+         */
+        function adoptExternalValue(e) {
+            var current = $input.val();
+
+            // Our own write, echoed back by the event we raised for STACK.
+            if (prefilling || current === lastwritten) {
+                return;
+            }
+
+            // With the editor switched off the input is what the student sees and types in;
+            // taking its value into a hidden editor would be busywork, and switching back on
+            // reads it anyway (#13).
+            if ($container.hasClass('sme-hidden')) {
+                lastwritten = current;
+                return;
+            }
+
+            ctx.dbg('External change on ' + ($input.attr('name') || '') + ': "' + current
+                + '" (' + (e && e.type) + ')');
+
+            // The editor is being told, not asked: writing the value back out now would raise a
+            // second validation for a value STACK already has.
+            prefilling = true;
+            if (current && current.trim()) {
+                prefill(mqField, current, ctx.defs, varMode, ctx.dbg);
+            } else {
+                mqField.latex('');
+            }
+            $input.val(current);
+            lastwritten = current;
+            setTimeout(function() {
+                prefilling = false;
+            }, 0);
+        }
+
+        $input[0].addEventListener('input', adoptExternalValue);
+        $input[0].addEventListener('change', adoptExternalValue);
+
         // On/off switch for the editor (#13). Only for the single-line editor: a relation
         // system would have to be rebuilt from the plain text on the way back, and silently
         // dropping what a student typed while the editor was off is not an option.
@@ -873,11 +930,12 @@ define([
             strings: (ctx.defs && ctx.defs.strings) || {},
             toInput: function() {
                 if (!prefilling) {
-                    syncToInput(mqField, $input, convOpts, ctx.dbg, true);
+                    lastwritten = syncToInput(mqField, $input, convOpts, ctx.dbg, true);
                 }
             },
             toEditor: function() {
                 var current = $input.val();
+                lastwritten = current;
                 prefilling = true;
                 if (current && current.trim()) {
                     prefill(mqField, current, ctx.defs, varMode, ctx.dbg);
@@ -937,6 +995,7 @@ define([
                 // which would round-trip through tex2max and might produce a
                 // slightly different Maxima string.
                 $input.val(initialMaxima);
+                lastwritten = initialMaxima;
                 // Release the prefilling guard after one more tick so that any
                 // async MathQuill edit events triggered by the latex() call above
                 // (which MathQuill can fire on a deferred internal setTimeout) are

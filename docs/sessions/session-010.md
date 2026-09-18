@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091700 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091701 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1914,3 +1914,60 @@ the tests say so next to each other.
   needs the workflows to have run on a common SHA at least once, which has not happened yet.
 
 Jest 1138, PHPCS green, ESLint and stylelint green, both documentation pre-checks green.
+
+
+## 49. Iteration 45 (2026091701): #77 - the bridge only carried traffic one way
+
+The editor wrote into the original STACK input and raised the events STACK listens for. What it
+never did was listen itself. So when STACK's JSXGraph binding moved a slider, set the input value
+and dispatched a change event, the input held the new answer and the visible editor still showed
+the old one - two different answers on one screen, and the student had no way to tell which one
+would be marked.
+
+### The listener
+
+Directly on the input element, for `input` and `change`. Not delegated, not on a container: an
+external library is under no obligation to let its events bubble, and STACK's do not. That single
+detail is why a listener further up would have changed nothing.
+
+When one arrives, the value goes back through `prefill()` into MathQuill, and that is the end of
+it - the editor is being told, not asked. Writing the value out again would raise a second
+validation for a value STACK already has.
+
+### Telling an echo from a change
+
+The editor raises `input` and `change` itself whenever it writes, so its own events come straight
+back to the new listener. Two guards, both state rather than timing, as the issue asks:
+
+* `prefilling`, which already existed and marks the moments when the editor is writing into
+  MathQuill;
+* `lastwritten`, the Maxima string this editor last put into the input. `syncToInput()` now
+  returns what it wrote, so every writing path records it.
+
+An event whose value equals `lastwritten` is our own echo and is dropped. Anything else is
+somebody else's change.
+
+### With the switch off
+
+The input is what the student sees and types in then, so the value is remembered but not taken
+into a hidden editor. Switching back on reads the input anyway, which is the behaviour from #13
+and is deliberately unchanged.
+
+### Tests
+
+Nine Jest cases for the decision the listener makes: a non-bubbling `change` is heard, an `input`
+is heard, our own echo is not adopted, nothing is adopted while the editor writes, an adopted
+value is not written back out, ten alternating changes do not drift, a burst in one tick is
+adopted once, the switch-off case, and an empty external value.
+
+They test the rule, not the editor: MathQuill and jQuery are not available in that environment.
+Three Behat scenarios cover the real thing - an external script sets the value and dispatches a
+non-bubbling `change`, the editor picks it up, and an edit afterwards still reaches the input.
+
+The textarea editor got the same channel; its lines are rebuilt from the text, which it could
+already do for the switch.
+
+### Not covered here
+
+The JSXGraph regression from the issue, with the real question and four sliders. That needs the
+question imported into a live site, and it is the test I would run first.

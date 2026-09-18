@@ -54,6 +54,9 @@ Features
   administrator has named the Maxima function for it and the question loads the package it needs.
 * A typed space reaches STACK as a space - `a b` and `ab` are different answers to a
   space-sensitive input. Space no longer jumps out of a fraction; that is Tab or the arrow keys.
+* The original STACK input stays the integration point in both directions: a script that writes
+  into it - STACK's JSXGraph sliders, for example - is picked up by the visible editor at once,
+  and an edit in the editor still reaches that script.
 * Students can switch the editor off and back on. The answer travels with it, in either
   direction, including in the multi-line editor. Whether they may is decided by the site, the
   quiz and the question: any level can take the permission away, none can give it back.

@@ -237,3 +237,27 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
   Scenario: The subscript survives being written back into the editor
     When I enter latex "U_{max}" into the MathQuill field for "ans1"
     Then the underlying STACK input for "ans1" should be "U_max"
+
+  # ── An external script writes into the STACK input (#77) ─────────────────────
+  # STACK's JSXGraph bindings do exactly this: they set the value and dispatch a
+  # change event that does not bubble. The editor has to show the new value.
+
+  @javascript
+  Scenario: A value written from outside appears in the editor
+    When the STACK input for "ans1" is set to "2" by an external script
+    Then the MathQuill field for "ans1" should contain LaTeX containing "2"
+    And the underlying STACK input for "ans1" should be "2"
+
+  @javascript
+  Scenario: The editor still writes back after an external change
+    When the STACK input for "ans1" is set to "2" by an external script
+    And I enter latex "3" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "3"
+
+  @javascript
+  Scenario: Alternating changes do not drift
+    When the STACK input for "ans1" is set to "2" by an external script
+    And I enter latex "3" into the MathQuill field for "ans1"
+    And the STACK input for "ans1" is set to "4" by an external script
+    Then the MathQuill field for "ans1" should contain LaTeX containing "4"
+    And the underlying STACK input for "ans1" should be "4"

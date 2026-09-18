@@ -574,6 +574,7 @@ define([
         this.$ta.attr('data-sme-init', '1');
 
         this.buildToggle();
+        this.watchExternalChanges();
 
         toolbar.typeset(this.$tb);
         if (this.rows.length > 0) {
@@ -582,6 +583,42 @@ define([
 
         dbg('created: ' + this.rows.length + ' steps, id=' + this.$ta.attr('id'));
         this.syncNow();
+    };
+
+    /**
+     * Take a value somebody else wrote into the textarea back into the editor (#77).
+     *
+     * The same contract as for a single-line input: the original field is the integration point
+     * in both directions, and an external script may write into it and dispatch an event that
+     * does not bubble.
+     *
+     * @returns {void}
+     */
+    EquivEditor.prototype.watchExternalChanges = function() {
+        var self = this;
+
+        this.lastwritten = this.$ta.val();
+
+        var adopt = function(e) {
+            var current = self.$ta.val();
+
+            if (current === self.lastwritten) {
+                return;
+            }
+            if (self.$rows && self.$rows.hasClass('sme-hidden')) {
+                // The editor is switched off; the textarea is what the student sees (#13).
+                self.lastwritten = current;
+                return;
+            }
+
+            self.ctx.dbg('External change on the textarea (' + (e && e.type) + ')');
+            self.rebuildFrom(current);
+            self.$ta.val(current);
+            self.lastwritten = current;
+        };
+
+        this.$ta[0].addEventListener('input', adopt);
+        this.$ta[0].addEventListener('change', adopt);
     };
 
     /**
@@ -1104,6 +1141,7 @@ define([
         var oldVal = this.$ta.val();
         LocalValidation.show(this.$rows[0], problems);
         this.$ta.val(value);
+        this.lastwritten = value;
         if (value !== oldVal && !silent) {
             Bridge.triggerValidation(this.$ta[0]);
             dbg('sync: ' + lines.length + ' steps');

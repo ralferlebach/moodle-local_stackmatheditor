@@ -536,6 +536,42 @@ JS;
     }
 
     /**
+     * Write into the original STACK input the way an external script does (#77).
+     *
+     * STACK's JSXGraph bindings set the value and dispatch a change event that does not bubble,
+     * which is the part that used to be missed. This step reproduces that exactly - no jQuery,
+     * no bubbling, no focus change.
+     *
+     * @When the STACK input for :inputname is set to :value by an external script
+     * @param string $inputname Name attribute of the original input.
+     * @param string $value Value to write.
+     */
+    public function external_script_sets_stack_input(string $inputname, string $value): void {
+        $safeinput = json_encode($inputname);
+        $safevalue = json_encode($value);
+        $js = <<<JS
+            (function() {
+                var n     = {$safeinput};
+                var input = document.querySelector('input[name="' + n + '"]')
+                         || document.querySelector('input[name\$="_' + n + '"]');
+                if (!input) { return 'no-input'; }
+                input.value = {$safevalue};
+                input.dispatchEvent(new Event('change'));
+                return 'ok';
+            })()
+JS;
+        $result = $this->getSession()->evaluateScript($js);
+        if ($result !== 'ok') {
+            throw new ExpectationException(
+                "Could not find the STACK input '$inputname' (result: $result).",
+                $this->getSession()
+            );
+        }
+
+        $this->getSession()->wait(1000);
+    }
+
+    /**
      * Simulate keyboard input into a MathQuill field by focusing its internal textarea.
      *
      * @When I type :text into the MathQuill field for :inputname
