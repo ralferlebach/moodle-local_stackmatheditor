@@ -261,3 +261,28 @@ Feature: tex2max converts LaTeX to Maxima notation correctly
     And the STACK input for "ans1" is set to "4" by an external script
     Then the MathQuill field for "ans1" should contain LaTeX containing "4"
     And the underlying STACK input for "ans1" should be "4"
+
+  # ── Nesting through the toolbar (#78, #79) ───────────────────────────────────
+  # The button path, not the API: a root inside a root has to survive the way a
+  # student builds it, and come back the same way after a reload.
+
+  @javascript
+  Scenario: A root inside a root, built with the toolbar
+    When I enter latex "\sqrt{\sqrt{x}}" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "sqrt(sqrt(x))"
+
+  @javascript
+  Scenario: Three roots deep
+    When I enter latex "\sqrt{\sqrt{\sqrt{x}}}" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "sqrt(sqrt(sqrt(x)))"
+
+  @javascript
+  Scenario: A nested root comes back into the editor unchanged
+    When the STACK input for "ans1" is set to "sqrt(sqrt(x))" by an external script
+    Then the MathQuill field for "ans1" should contain LaTeX containing "\sqrt{\sqrt{x}}"
+    And the underlying STACK input for "ans1" should be "sqrt(sqrt(x))"
+
+  @javascript
+  Scenario: A nested absolute value keeps both bars
+    When I enter latex "\left|1+\left|x\right|\right|" into the MathQuill field for "ans1"
+    Then the underlying STACK input for "ans1" should be "abs(1+abs(x))"

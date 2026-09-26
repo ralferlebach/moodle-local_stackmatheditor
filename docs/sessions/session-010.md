@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091800 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091801 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -2054,3 +2054,70 @@ previous tests all passed with the bug in place, because they set `lastwritten` 
 dispatching, which is not what the code did.
 
 Jest 1149, ESLint, PHPCS green.
+
+
+## 52. Iteration 48 (2026091801): #79 - nesting, measured before it was fixed
+
+The issue is an analysis of where recursion could break. Before changing anything I ran every
+case it lists through both converters and wrote down what actually happened. That list is shorter
+than the issue's and worse in one respect: the failures are not refusals, they are corruptions.
+
+### What was really broken
+
+    \sqrt{\sqrt{x}}                     ->  sqrt(sqrtx)        silently different
+    \left|\left|x\right|\right|         ->  abs()x abs()       nonsense
+    \left\|...\right\| nested           ->  norm(abs(v))       wrong function
+    \binom{\binom{n}{k}}{r}            ->  binomial(binomnk,r)
+    \sqrt[3]{\sqrt[5]{x}}              ->  (sqrt[5]x)^(1/(3))
+    \vec{v_{1}}                        ->  vecv_1
+    abs(abs(x))                        ->  \left|\left|\left(x\right)\right|   unbalanced
+
+Everything else the issue lists - fractions, powers, subscripts, coordinates, mixed functions -
+was already correct, because those paths use the bracket-aware helpers. The nth-root and
+coordinate cases in particular were fine, so nothing was "fixed" there.
+
+In `max2tex` the standard functions produced valid but wrong-looking LaTeX: the outer call was
+converted and the inner one was left inside it, so a student saw a root sign around the word
+"sqrt". That is #78 exactly.
+
+### What changed
+
+Three mechanisms, each replacing a family of regexes rather than a single case:
+
+* `replaceBracedCommand(s, command, arity, build)` reads brace arguments with a counter and
+  repeats until nothing changes. `\sqrt`, `\binom`, `\nthroot`, `\vec`, `\overline`,
+  `\mathbb`, `\mathrm`, `\text` and `\operatorname` all go through it now, and
+  `replaceOptionalArgCommand` does the same for `\sqrt[n]{...}`.
+* `replaceInnermostDelimiters(s, open, close, build)` matches delimiter pairs from the inside
+  out, because the first closing delimiter always belongs to the last opening before it. Used for
+  `\left|...\right|` and `\left\|...\right\|`.
+* In `max2tex`, the standard function list and the absolute value repeat until a pass changes
+  nothing, and `binomial` is read with a bracket counter instead of a pattern that forbade
+  brackets in its arguments.
+
+One correction worth recording: the absolute value had two owners. `processAbsFunction()` did it
+properly, and the standard-function list had an `abs` entry that fell through to the generic
+wrapper and emitted `\left|` with no closing bar. The entry is gone.
+
+### Where a limit stays
+
+Bare `|x|` without `\left` keeps the old simple rule. Two identical delimiters cannot be nested
+unambiguously - `||x||` is either a nested value or two empty ones - and guessing would be worse
+than the limitation. Everything the editor itself produces uses the long form and goes through
+the structural pass, which is why the nested case works at all.
+
+### Tests
+
+110 new Jest cases in `nesting.test.js`, built around depth rather than examples: every structure
+at depths 1, 2, 3 and 5, in both directions, plus the four invariants from the issue - no stray
+LaTeX in the CAS string, no raw function call in the LaTeX, roundtrip stability over a corpus of
+21 expressions, and the depth matrix. Four Behat scenarios cover the editor path, including a
+nested root written into the input from outside and read back.
+
+Suite total 1259.
+
+### Not done
+
+The Playwright workflow in section 7 - clicking the root button inside a root - is not written.
+The Behat scenarios cover the same chain through the editor's own API, and the toolbar path
+belongs with the other button tests once that suite runs green.

@@ -1645,6 +1645,161 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Replace the innermost pair of matching delimiters, repeatedly (#79).
+     *
+     * A non-greedy regex ends at the first closing delimiter it can find, not at the one that
+     * belongs to the opening it started from: `\left|\left|x\right|\right|` came apart into
+     * `abs()x abs()`. Working from the inside out gives every pair its own partner, because the
+     * first closing delimiter always belongs to the last opening before it.
+     *
+     * @param {string} s LaTeX.
+     * @param {string} open Opening delimiter, literal.
+     * @param {string} close Closing delimiter, literal.
+     * @param {Function} build Called with the content between them; returns the replacement.
+     * @returns {string} The converted string.
+     */
+    function replaceInnermostDelimiters(s, open, close, build) {
+        var guard = 0;
+
+        while (guard < 200) {
+            guard++;
+
+            var closeat = s.indexOf(close);
+            if (closeat === -1) {
+                return s;
+            }
+
+            var openat = s.lastIndexOf(open, closeat - open.length);
+            if (openat === -1) {
+                // A closing delimiter without an opening one: leave it alone rather than guess.
+                return s;
+            }
+
+            var content = s.substring(openat + open.length, closeat);
+            s = s.substring(0, openat) + build(content) + s.substring(closeat + close.length);
+        }
+
+        return s;
+    }
+
+    /**
+     * Replace every occurrence of a LaTeX command with brace arguments, however deeply nested.
+     *
+     * The regexes this replaces could see one level of braces inside an argument and no more, so
+     * `\sqrt{\sqrt{x}}` lost the inner braces and reached the CAS as `sqrt(sqrtx)` - a different
+     * expression that still looks plausible (#79). Reading the argument with a bracket counter
+     * and repeating until nothing changes is closed under nesting at any depth.
+     *
+     * @param {string} s LaTeX.
+     * @param {string} command Command name without the backslash, e.g. 'sqrt'.
+     * @param {number} arity How many brace groups the command takes.
+     * @param {Function} build Called with the argument texts; returns the replacement.
+     * @returns {string} The converted string.
+     */
+    function replaceBracedCommand(s, command, arity, build) {
+        var needle = '\\' + command;
+        var guard = 0;
+        var changed = true;
+
+        while (changed && guard < 200) {
+            changed = false;
+            guard++;
+
+            var at = s.indexOf(needle);
+            while (at !== -1) {
+                var after = at + needle.length;
+
+                // \sqrtx must not match \sqrt: the command name ends where a letter stops.
+                if (/[a-zA-Z]/.test(s.charAt(after))) {
+                    at = s.indexOf(needle, at + 1);
+                    continue;
+                }
+
+                var pos = after;
+                var args = [];
+                var ok = true;
+                var i;
+
+                for (i = 0; i < arity; i++) {
+                    while (/\s/.test(s.charAt(pos))) {
+                        pos++;
+                    }
+                    if (s.charAt(pos) !== '{') {
+                        ok = false;
+                        break;
+                    }
+                    var arg = readLatexArgument(s, pos);
+                    if (!arg) {
+                        ok = false;
+                        break;
+                    }
+                    args.push(arg.text);
+                    pos = arg.end;
+                }
+
+                if (!ok) {
+                    at = s.indexOf(needle, at + 1);
+                    continue;
+                }
+
+                s = s.substring(0, at) + build.apply(null, args) + s.substring(pos);
+                changed = true;
+                break;
+            }
+        }
+
+        return s;
+    }
+
+    /**
+     * The same for a command whose first argument is in square brackets: \sqrt[n]{x}.
+     *
+     * @param {string} s LaTeX.
+     * @param {string} command Command name without the backslash.
+     * @param {Function} build Called with the optional argument and the brace argument.
+     * @returns {string} The converted string.
+     */
+    function replaceOptionalArgCommand(s, command, build) {
+        var needle = '\\' + command;
+        var guard = 0;
+        var changed = true;
+
+        while (changed && guard < 200) {
+            changed = false;
+            guard++;
+
+            var at = s.indexOf(needle);
+            while (at !== -1) {
+                var pos = at + needle.length;
+
+                if (/[a-zA-Z]/.test(s.charAt(pos)) || s.charAt(pos) !== '[') {
+                    at = s.indexOf(needle, at + 1);
+                    continue;
+                }
+
+                var close = matchingBracket(s, pos);
+                if (close === -1) {
+                    at = s.indexOf(needle, at + 1);
+                    continue;
+                }
+
+                var index = s.substring(pos + 1, close);
+                var arg = readLatexArgument(s, close + 1);
+                if (!arg) {
+                    at = s.indexOf(needle, at + 1);
+                    continue;
+                }
+
+                s = s.substring(0, at) + build(index, arg.text) + s.substring(arg.end);
+                changed = true;
+                break;
+            }
+        }
+
+        return s;
+    }
+
+    /**
      * Match the differential "\mathrm{d}x" / "dx" at pos.
      *
      * @param {string} s LaTeX.
@@ -2008,11 +2163,17 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // button promises (#34). Only with a configured norm function - otherwise the old
         // behaviour stands, and the operator is reported like any other unavailable one.
         if (defs && defs.normFunction) {
-            s = s.replace(
-                /\\left\\\|([\s\S]*?)\\right\\\|/g,
-                defs.normFunction + '($1)'
-            );
+            var normname = defs.normFunction;
+            s = replaceInnermostDelimiters(s, '\\left\\|', '\\right\\|', function(content) {
+                return normname + '(' + content + ')';
+            });
         }
+        // The absolute value, while its delimiters are still distinguishable (#79): after
+        // \left and \right are stripped, |a||b| and ||x|| read the same and no rule can tell
+        // nesting from two separate values. MathQuill always writes the long form.
+        s = replaceInnermostDelimiters(s, '\\left|', '\\right|', function(content) {
+            return 'abs(' + content + ')';
+        });
         s = convertDifferentialOperators(s, local, defs);
         s = convertMatrixEnvironments(s, local, defs);
         s = convertCasesToAndRelations(s);
@@ -2025,18 +2186,18 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = s.replace(/\\left/g, '');
         s = s.replace(/\\right/g, '');
 
-        s = s.replace(
-            /\\sqrt\[([^\]]+)\]\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
-            '($2)^(1/($1))'
-        );
-        s = s.replace(
-            /\\nthroot\{([^{}]*)\}\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
-            '($2)^(1/($1))'
-        );
-        s = s.replace(
-            /\\binom\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
-            'binomial($1,$2)'
-        );
+        // All of these read their arguments with a bracket counter and repeat until nothing
+        // changes (#79): a regex that allows one level of braces inside an argument silently
+        // corrupts the second level instead of failing.
+        s = replaceOptionalArgCommand(s, 'sqrt', function(index, radicand) {
+            return '(' + radicand + ')^(1/(' + index + '))';
+        });
+        s = replaceBracedCommand(s, 'nthroot', 2, function(index, radicand) {
+            return '(' + radicand + ')^(1/(' + index + '))';
+        });
+        s = replaceBracedCommand(s, 'binom', 2, function(top, bottom) {
+            return 'binomial(' + top + ',' + bottom + ')';
+        });
 
         while (s.indexOf('\\frac') !== -1 && maxIter > 0) {
             maxIter--;
@@ -2050,19 +2211,18 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // Prevents N*(p/q) implicit multiplication; supports multi-digit integers.
         s = s.replace(new RegExp('(\\d+)' + BOUNDARY + '?\\((\\d+)\\)\\/\\((\\d+)\\)', 'g'), '($1+$2/$3)');
 
-        s = s.replace(
-            /\\sqrt\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
-            'sqrt($1)'
-        );
+        s = replaceBracedCommand(s, 'sqrt', 1, function(radicand) {
+            return 'sqrt(' + radicand + ')';
+        });
 
-        s = s.replace(/\\vec\{([^{}]*)\}/g, '$1');
-        s = s.replace(/\\overline\{([^{}]*)\}/g, '$1');
-        s = s.replace(/\\mathbb\{([^{}]*)\}/g, '$1');
+        // Decoration: the command disappears and its argument stays, at any depth.
         s = s.replace(/\\mathrm\{e\}/g, '%e');
         s = s.replace(/\\mathrm\{i\}/g, '%i');
-        s = s.replace(/\\mathrm\{([^{}]*)\}/g, '$1');
-        s = s.replace(/\\text\{([^{}]*)\}/g, '$1');
-        s = s.replace(/\\operatorname\{([^{}]*)\}/g, '$1');
+        ['vec', 'overline', 'mathbb', 'mathrm', 'text', 'operatorname'].forEach(function(cmd) {
+            s = replaceBracedCommand(s, cmd, 1, function(content) {
+                return content;
+            });
+        });
         // A superscript keeps its parentheses unless the exponent is a single unambiguous token.
         // MathQuill writes x^{2} where older versions wrote x^2, and x^(2) would otherwise reach
         // the CAS for every squared term. Anything longer than one digit group or one letter stays
@@ -2120,6 +2280,9 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = s.replace(/\\int(?![a-zA-Z])/g, 'int');
         s = s.replace(/\\sum(?![a-zA-Z])/g, 'sum');
         s = s.replace(/\\prod(?![a-zA-Z])/g, 'product');
+        // Bare bars, for input that never had \left|: a pair of identical delimiters cannot be
+        // nested unambiguously, so this stays the simple rule it always was. Anything the editor
+        // produces went through the \left| pass above.
         s = s.replace(/\\\|/g, '|');
         s = s.replace(/\|([^|]+)\|/g, 'abs($1)');
 

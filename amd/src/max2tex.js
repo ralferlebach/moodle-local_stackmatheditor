@@ -1339,12 +1339,77 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Convert binomial(n,k) to \\binom{n}{k}, arguments and nesting included (#79).
+     *
+     * @param {string} s Maxima expression.
+     * @returns {string} String with binomial() replaced.
+     */
+    function processBinomial(s) {
+        var guard = 20;
+        var changed = true;
+
+        while (changed && guard > 0) {
+            changed = false;
+            guard--;
+
+            var at = s.indexOf('binomial(');
+            while (at !== -1) {
+                if (at > 0 && /[a-zA-Z0-9_]/.test(s.charAt(at - 1))) {
+                    at = s.indexOf('binomial(', at + 1);
+                    continue;
+                }
+
+                var open = at + 'binomial'.length;
+                var close = findCloseParen(s, open);
+                if (close === -1) {
+                    break;
+                }
+
+                var args = splitArguments(s.substring(open + 1, close));
+                if (args.length !== 2) {
+                    at = s.indexOf('binomial(', at + 1);
+                    continue;
+                }
+
+                s = s.substring(0, at)
+                    + '\\binom{' + args[0].trim() + '}{' + args[1].trim() + '}'
+                    + s.substring(close + 1);
+                changed = true;
+                break;
+            }
+        }
+
+        return s;
+    }
+
+    /**
      * Replace abs(expr) with \left|expr\right|.
      *
      * @param {string} s Maxima expression.
      * @returns {string} String with abs() replaced.
      */
     function processAbsFunction(s) {
+        var guard = 20;
+        var before;
+
+        // Nested absolute values need more than one pass: a call is replaced and its argument is
+        // left as it was, inner abs( and all (#79).
+        do {
+            before = s;
+            s = processAbsFunctionOnce(s);
+            guard--;
+        } while (s !== before && guard > 0);
+
+        return s;
+    }
+
+    /**
+     * One pass of abs(expr) -> \\left|expr \\right|.
+     *
+     * @param {string} s Maxima expression.
+     * @returns {string} String with the outermost abs() calls replaced.
+     */
+    function processAbsFunctionOnce(s) {
         var absSearch = 'abs(';
         var absResult = '';
         var absI = 0;
@@ -1397,15 +1462,28 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
             ['cosh', '\\cosh', 'paren'],
             ['tanh', '\\tanh', 'paren'],
             ['exp', '\\exp', 'paren'],
-            ['log', '\\ln', 'paren'],
-            ['abs', '\\left|', 'abs']
+            ['log', '\\ln', 'paren']
+            // Deliberately without abs: processAbsFunction() owns it, and the generic wrapper
+            // here would open a bar it never closes (#79).
         ];
-        for (fi = 0; fi < stdFuncs.length; fi++) {
-            sf = stdFuncs[fi];
-            if (s.indexOf(sf[0] + '(') >= 0) {
-                s = processFunc(s, sf[0], sf[1], sf[2]);
+        // Repeat the whole list until nothing changes (#79). processFunc() replaces a call and
+        // leaves its argument as it was, so an inner sqrt( sat untouched inside the LaTeX the
+        // outer one had just produced - the student then saw a root sign wrapped around the word
+        // "sqrt". One more pass finds it, and the loop ends when a pass changes nothing.
+        var guard = 20;
+        var before;
+
+        do {
+            before = s;
+            for (fi = 0; fi < stdFuncs.length; fi++) {
+                sf = stdFuncs[fi];
+                if (s.indexOf(sf[0] + '(') >= 0) {
+                    s = processFunc(s, sf[0], sf[1], sf[2]);
+                }
             }
-        }
+            guard--;
+        } while (s !== before && guard > 0);
+
         return s;
     }
 
@@ -1560,11 +1638,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // Functions -> LaTeX.
         s = processFunctionDefsList(s, defs.functions || []);
 
-        // Binomial: binomial(n,k) -> \binom{n}{k}.
-        s = s.replace(
-            /\bbinomial\(([^,()]+),([^,()]+)\)/g,
-            '\\binom{$1}{$2}'
-        );
+        // Binomial: binomial(n,k) -> \\binom{n}{k}. The arguments are read with a bracket
+        // counter and the pass repeats, so binomial(f(x),k) and a binomial inside another one
+        // both survive (#79) - the previous pattern forbade brackets in either argument.
+        s = processBinomial(s);
 
         // Upper Greek fallback (if not handled by defs).
         s = processUpperGreekList(s);
