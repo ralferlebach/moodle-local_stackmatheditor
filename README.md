@@ -48,8 +48,13 @@ Features
   until Enter has been pressed once.
 * Elementary geometry in school notation: `P(2|3)`, `d(A,B)`, `∠ABC` and the length of a segment.
   The coordinate separator is a setting and changes the notation, not the meaning.
-* Vector calculus: a chooser for dimension and orientation, plus arrow, dot product and norm.
-* Matrix calculus: a grid chooser for rows and columns, plus determinant, identity and transpose.
+* Vector calculus: a chooser for dimension and orientation - one drag decides both, sideways for
+  a row and downwards for a column, and the buttons remain for keyboard use - plus arrow, dot
+  product and norm.
+* Matrix calculus: a grid chooser for rows and columns - drag with mouse, finger or pen, or use
+  the arrow keys, and the page does not scroll under an active selection - plus determinant,
+  identity and transpose. With the cursor in a matrix the chooser opens on its current size and
+  changes it. The largest size on offer is configurable per site, quiz and question.
 * Vector differential operators (grad, div, rot, Δ). Each button appears only where an
   administrator has named the Maxima function for it and the question loads the package it needs.
 * A typed space reaches STACK as a space - `a b` and `ab` are different answers to a
@@ -107,6 +112,12 @@ Release notes 1.3
 * The editor attaches to any editable STACK input the question engine renders.
 
 **Fixed**
+
+* Nested structures survive the conversion in both directions: a root inside a root, a function
+  inside itself, absolute values and binomial coefficients within one another, at any depth. What
+  cannot be converted is reported instead of being passed on as a plausible-looking but different
+  expression.
+* Coordinates may be expressions: `P(f(x)|g(x))` reaches STACK as a list, as `P(2|3)` always did.
 
 * On Android Chrome and Opera, a freshly focused field accepts the first soft-keyboard character
   immediately. It used to drop everything until Enter had been pressed once.

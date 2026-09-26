@@ -1497,14 +1497,25 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
      */
     function processFunctionDefsList(s, funcDefs) {
         var k, def, wrapType;
-        for (k = 0; k < funcDefs.length; k++) {
-            def = funcDefs[k];
-            if (!def || typeof def !== 'object' || !def.maxima_name || !def.latex_cmd) {
-                continue;
+        var guard = 20;
+        var before;
+
+        // Repeated until nothing changes, exactly as for the standard functions (#79): a
+        // configured function nested in itself is the same problem, and whether a function is
+        // hardcoded or configured must not decide whether recursion works.
+        do {
+            before = s;
+            for (k = 0; k < funcDefs.length; k++) {
+                def = funcDefs[k];
+                if (!def || typeof def !== 'object' || !def.maxima_name || !def.latex_cmd) {
+                    continue;
+                }
+                wrapType = def.type === 'brace' ? 'brace' : 'paren';
+                s = processFunc(s, def.maxima_name, def.latex_cmd, wrapType);
             }
-            wrapType = def.type === 'brace' ? 'brace' : 'paren';
-            s = processFunc(s, def.maxima_name, def.latex_cmd, wrapType);
-        }
+            guard--;
+        } while (s !== before && guard > 0);
+
         return s;
     }
 

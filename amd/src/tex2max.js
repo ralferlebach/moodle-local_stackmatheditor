@@ -804,31 +804,12 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
 
         // A point: coordinates in brackets, separated by the configured separator. The name in
         // front is a label and does not travel to the CAS.
-        s = s.replace(
-            /(^|[^A-Za-z0-9_%])([A-Z][A-Za-z0-9_]*)?\s*(?:\\left)?\(([^()]*)(?:\\right)?\)/g,
-            function(match, before, name, body) {
-                var parts;
-
-                if (body.indexOf(separator) === -1) {
-                    return match;
-                }
-
-                parts = body.split(separator).map(function(part) {
-                    return part.trim();
-                });
-
-                if (parts.length < 2) {
-                    return match;
-                }
-                if (parts.some(function(part) {
-                    return part === '';
-                })) {
-                    return match;
-                }
-
-                return before + '[' + parts.join(',') + ']';
-            }
-        );
+        //
+        // The brackets are matched structurally (#79): coordinates are ordinary expressions and
+        // may contain function calls of their own, and a pattern that forbids inner brackets
+        // does not reject P(f(x)|g(x)) - it leaves it alone, so a point reaches the CAS as a
+        // function call with a logical or inside it.
+        s = convertPointNotation(s, separator);
 
         return s;
     }
@@ -1645,6 +1626,103 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Turn point notation into a Maxima list, with bracket-aware coordinates (#79).
+     *
+     * @param {string} s LaTeX with \left/\right still in place.
+     * @param {string} separator The configured coordinate separator.
+     * @returns {string} String with points replaced by lists.
+     */
+    function convertPointNotation(s, separator) {
+        var out = '';
+        var i = 0;
+
+        while (i < s.length) {
+            var open = s.indexOf('(', i);
+            if (open === -1) {
+                out += s.substring(i);
+                break;
+            }
+
+            var close = matchingBracket(s, open);
+            if (close === -1) {
+                out += s.substring(i);
+                break;
+            }
+
+            var body = s.substring(open + 1, close);
+
+            // A bar can be a coordinate separator or an absolute value; inside \left| ... the
+            // bars belong to the value, and splitting there would turn |x| into a coordinate.
+            // Whoever wrote the bars as delimiters meant a value, so the bracket is left alone.
+            if (separator === '|'
+                    && (body.indexOf('\\left|') !== -1 || body.indexOf('\\right|') !== -1)) {
+                out += s.substring(i, close + 1);
+                i = close + 1;
+                continue;
+            }
+
+            var parts = splitOutsideBrackets(body, separator);
+            var label = out.match(/([A-Z][A-Za-z0-9_]*)\s*(\\left)?$/);
+
+            if (parts.length >= 2 && parts.every(function(part) {
+                return part.trim() !== '';
+            })) {
+                // The label in front of the bracket is a name for the reader, not for the CAS.
+                if (label) {
+                    out = out.substring(0, out.length - label[0].length);
+                } else if (/\\left$/.test(out)) {
+                    out = out.substring(0, out.length - 5);
+                }
+                out += '[' + parts.map(function(part) {
+                    return part.trim();
+                }).join(',') + ']';
+                i = close + 1;
+                if (s.substring(i, i + 6) === '\\right') {
+                    i += 6;
+                }
+                continue;
+            }
+
+            out += s.substring(i, close + 1);
+            i = close + 1;
+        }
+
+        return out;
+    }
+
+    /**
+     * Split on a separator that is not inside brackets.
+     *
+     * @param {string} body Text between the brackets.
+     * @param {string} separator Separator character.
+     * @returns {Array} The parts; a single element means there was nothing to split.
+     */
+    function splitOutsideBrackets(body, separator) {
+        var parts = [];
+        var depth = 0;
+        var current = '';
+        var i;
+
+        for (i = 0; i < body.length; i++) {
+            var ch = body.charAt(i);
+            if ('([{'.indexOf(ch) !== -1) {
+                depth++;
+            } else if (')]}'.indexOf(ch) !== -1) {
+                depth--;
+            }
+            if (ch === separator && depth === 0) {
+                parts.push(current);
+                current = '';
+                continue;
+            }
+            current += ch;
+        }
+        parts.push(current);
+
+        return parts;
+    }
+
+    /**
      * Replace the innermost pair of matching delimiters, repeatedly (#79).
      *
      * A non-greedy regex ends at the first closing delimiter it can find, not at the one that
@@ -2342,6 +2420,17 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = s.replace(/\\ /g, EXPLICIT_SPACE);
         // Spacing commands carry no mathematical meaning.
         s = s.replace(/\\[,;:!]/g, '');
+        // A structure this converter knows but could not finish reading must not be handed to
+        // the fallback below (#79): stripping the backslash off \frac turns it into the word
+        // "frac" and produces a plausible expression that means something else. That only
+        // happens when a safety limit was reached, which is a failure, not a conversion.
+        var unfinished = s.match(
+            /\\(frac|sqrt|binom|nthroot|vec|overline|mathrm|mathbb|text|operatorname)(?![a-zA-Z])/
+        );
+        if (unfinished && local && local.problems) {
+            local.problems.push('nested_structure_unparsed');
+        }
+
         // Any control word still left is unknown to this converter. Keep its
         // name as a plain word so STACK reports an unknown identifier instead
         // of rejecting the backslash (#39).

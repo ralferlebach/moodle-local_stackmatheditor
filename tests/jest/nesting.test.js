@@ -239,3 +239,105 @@ describe('invariants', () => {
         });
     });
 });
+
+describe('the rest of the #79 matrix', () => {
+    const WITHFUNCS = {
+        defs: {
+            normFunction: 'norm',
+            functions: [{maxima_name: 'myfun', latex_cmd: '\\myfun', type: 'paren'}]
+        }
+    };
+
+    test('a configured function nests like a built-in one', () => {
+        // Whether a function is hardcoded or comes from the definitions must not decide whether
+        // recursion works.
+        expect(max2tex.convert('myfun(myfun(x))', WITHFUNCS))
+            .toBe('\\myfun\\left(\\myfun\\left(x\\right)\\right)');
+        expect(max2tex.convert('myfun(myfun(myfun(x)))', WITHFUNCS))
+            .toBe('\\myfun\\left(\\myfun\\left(\\myfun\\left(x\\right)\\right)\\right)');
+    });
+
+    test('a configured function mixed with a built-in one', () => {
+        expect(max2tex.convert('myfun(sqrt(myfun(x)))', WITHFUNCS))
+            .toBe('\\myfun\\left(\\sqrt{\\myfun\\left(x\\right)}\\right)');
+    });
+
+    test.each([
+        ['P\\left(2|3\\right)', '[2,3]'],
+        ['P\\left(f(x)|g(x)\\right)', '[f(x),g(x)]'],
+        ['P\\left(\\sin(t)|\\cos(t)\\right)', '[sin(t),cos(t)]'],
+        ['P\\left((a+b)|c\\right)', '[(a+b),c]'],
+        ['P\\left(f(x)|g(y)|h(z)\\right)', '[f(x),g(y),h(z)]']
+    ])('coordinates may be expressions: %s', (latex, maxima) => {
+        expect(tex2max.convert(latex, DEFS)).toBe(maxima);
+    });
+
+    test('an ordinary bracket is not a point', () => {
+        expect(tex2max.convert('f\\left(x\\right)', DEFS)).toBe('f(x)');
+        expect(tex2max.convert('\\left(a+b\\right)', DEFS)).toBe('(a+b)');
+    });
+
+    test('bars inside a bracket stay an absolute value', () => {
+        // The separator and the absolute value share a character; whoever wrote \left| meant a
+        // value, so the bracket is left alone.
+        expect(tex2max.convert('\\left|\\sin\\left(\\left|x\\right|\\right)\\right|', DEFS))
+            .toBe('abs(sin(abs(x)))');
+    });
+
+    test.each([
+        ['(sqrt(x))^(1/(3))', '\\sqrt[3]{\\sqrt{x}}'],
+        ['((x)^(1/(5)))^(1/(3))', '\\sqrt[3]{\\sqrt[5]{x}}'],
+        ['(x+1)^(1/(3))', '\\sqrt[3]{x+1}']
+    ])('nth roots come back with nested bases: %s', (maxima, latex) => {
+        expect(max2tex.convert(maxima, DEFS)).toBe(latex);
+    });
+
+    test.each([
+        ['x_{a_{1}}', 'x_a_1'],
+        ['x_{a_1}', 'x_a_1'],
+        ['x_{f(i)}', 'x_f(i)'],
+        ['U_{\\max}', 'U_max']
+    ])('nested subscripts: %s becomes %s', (latex, maxima) => {
+        // Documented rather than clever: a subscript is a label, and the nesting collapses into
+        // one identifier. STACK reads x_a_1 as a variable name, which is what a student means.
+        expect(tex2max.convert(latex, DEFS)).toBe(maxima);
+    });
+
+    test('a structure beyond the safety limit is reported, not silently mangled', () => {
+        // Forty nested fractions exhaust the iteration limit. Before, the generic fallback
+        // stripped the backslashes and produced "frac1 frac1 frac1 ..." - a plausible-looking
+        // expression that means nothing like the input.
+        let deep = 'x';
+        for (let i = 0; i < 40; i += 1) {
+            deep = '\\frac{1}{' + deep + '}';
+        }
+
+        const result = tex2max.analyse(deep, DEFS);
+
+        expect(result.problems).toContain('nested_structure_unparsed');
+    });
+
+    test('a structure within the limit is converted without a complaint', () => {
+        let deep = 'x';
+        for (let i = 0; i < 10; i += 1) {
+            deep = '\\frac{1}{' + deep + '}';
+        }
+
+        const result = tex2max.analyse(deep, DEFS);
+
+        expect(result.problems).toEqual([]);
+        expect(result.maxima).not.toMatch(/frac/);
+    });
+
+    test('sixty nested roots are still converted', () => {
+        let deep = 'x';
+        for (let i = 0; i < 60; i += 1) {
+            deep = '\\sqrt{' + deep + '}';
+        }
+
+        const result = tex2max.analyse(deep, DEFS);
+
+        expect(result.problems).toEqual([]);
+        expect(result.maxima).not.toMatch(/\\/);
+    });
+});

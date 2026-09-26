@@ -258,6 +258,7 @@ $string['integral_limit_missing'] = 'Unvollständiges Integral: Bitte beide Gren
 $string['integral_variable_composite'] = 'Integration nach einer zusammengesetzten Größe (d f(x)) wird nicht unterstützt. Bitte eine einzelne Variable wie dx oder dt verwenden.';
 $string['integral_variable_missing'] = 'Unvollständiges Integral: Die Integrationsvariable (dx) fehlt.';
 $string['matrix_cell_empty'] = 'Unvollständige Matrix: Jede Zelle braucht einen Wert, bevor die Antwort verwendet werden kann.';
+$string['nested_structure_unparsed'] = 'Dieser Ausdruck ist zu tief verschachtelt, um umgewandelt zu werden. Bitte vereinfachen.';
 $string['notstackquestion'] = 'Diese Frage ist keine STACK-Frage.';
 $string['pluginname'] = 'STACK MathQuill Editor';
 $string['popup_column_vector'] = 'Spaltenvektor';

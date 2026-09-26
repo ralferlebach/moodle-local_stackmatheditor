@@ -258,6 +258,7 @@ $string['integral_limit_missing'] = 'Incomplete integral: enter both limits or n
 $string['integral_variable_composite'] = 'Integration with respect to a composite quantity (d f(x)) is not supported. Use a single variable such as dx or dt.';
 $string['integral_variable_missing'] = 'Incomplete integral: the integration variable (dx) is missing.';
 $string['matrix_cell_empty'] = 'Incomplete matrix: every cell needs a value before the answer can be used.';
+$string['nested_structure_unparsed'] = 'This expression is nested too deeply to be converted. Please simplify it.';
 $string['notstackquestion'] = 'This question is not a STACK question.';
 $string['pluginname'] = 'STACK MathQuill Editor';
 $string['popup_column_vector'] = 'Column vector';

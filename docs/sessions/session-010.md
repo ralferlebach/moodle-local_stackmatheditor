@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091801 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026092600 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -2121,3 +2121,63 @@ Suite total 1259.
 The Playwright workflow in section 7 - clicking the root button inside a root - is not written.
 The Behat scenarios cover the same chain through the editor's own API, and the toolbar path
 belongs with the other button tests once that suite runs green.
+
+
+## 53. Iteration 49 (2026092600): the rest of the #79 matrix
+
+Four of the remaining items were real, and one of them was the worst kind of bug in this issue.
+
+### Configured functions did not recurse
+
+`processFunctionDefsList()` ran its list once, so `myfun(myfun(x))` left the inner call raw
+inside the LaTeX - the same defect the standard functions had, in the code path nobody had looked
+at because it is driven by configuration rather than by a list in the source. It repeats until
+nothing changes now, as the standard list does.
+
+### Coordinates were left alone rather than converted
+
+`P(f(x)|g(x))` was not a failure and not a conversion: the pattern forbade inner brackets, did
+not match, and the expression travelled on to STACK as a function call with a logical or inside
+it. `convertPointNotation()` matches the brackets structurally and splits on separators outside
+them, so coordinates may be expressions.
+
+One ambiguity had to be decided: the separator and the absolute value share the bar character.
+Inside `\left| ... \right|` the bars belong to the value, so a bracket containing them is left
+alone. Whoever wrote the long form meant a value.
+
+### A safety limit produced a plausible wrong answer
+
+Forty nested fractions exhaust the fraction loop's twenty iterations. What came out was
+`frac1 frac1 frac1 ...`: the generic `\command -> command` fallback had stripped the backslashes
+off a structure the converter knows perfectly well, and nothing was reported. Now a known
+structure that survives to the fallback raises `nested_structure_unparsed`, and the student is
+asked to simplify rather than handed something that means nothing like what they typed.
+
+Sixty nested roots still convert cleanly - the structural readers have their own generous guard -
+so the limit is the fraction loop's, not a new restriction.
+
+### Nth roots and subscripts were already correct
+
+Measured, not assumed: `(sqrt(x))^(1/(3))` and `((x)^(1/(5)))^(1/(3))` come back as nested
+radicals, and `x_{a_{1}}` collapses to `x_a_1`, which is the identifier a student means. Both are
+covered by tests that say so, which is what the issue asked for where a case is supported rather
+than fixed.
+
+Jest 1278.
+
+### What the meta issue still lists, and who can do it
+
+Verification runs: the dev CI and Playwright on the current SHA, the Behat scenarios for #58,
+#66, #67, #68 and #78, and a real Android device for #72. None of those can happen here.
+
+Browser evidence that needs writing: the student-toggle matrix for #73 and the dimension
+inheritance for #76, both as Playwright specs in the suite that has still never run green.
+
+Process: #69's same-SHA gating and #70's pinning. #70 contradicts the decision recorded in the
+release checklist, where not pinning is deliberate; that contradiction is Ralf's to resolve
+before I change the workflow.
+
+One discrepancy worth flagging: the review lists #75 as substantially open, but the pointer
+lifecycle, the dead zone, the dominant axis, `touch-action: none` and `pointercancel` were
+implemented in 2026091700 and are covered by Jest. Either the review read an earlier tree, or
+those changes are not on the branch it looked at.
