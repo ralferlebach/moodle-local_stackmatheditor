@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091702 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091800 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -2009,3 +2009,48 @@ It has not run. The fixture has never been imported, the drag coordinates have n
 and JSXGraph's slider geometry is the kind of thing that works in the second attempt. What the
 spec is good for today is that the next Playwright run will say something specific about #77
 rather than nothing.
+
+
+## 51. Iteration 47 (2026091800): the return channel adopted its own keystrokes
+
+Eight Behat scenarios failed, and the symptom said exactly what had happened:
+
+    STACK input 'ans1' value 'U' does not equal 'Umax'
+
+Only the first character of every typed word arrived. All five keyboard scenarios from #58, the
+function-call one, the subscript one, and the write-back scenario from #77 itself.
+
+### The window I left open
+
+`syncToInput()` dispatches the `input` and `change` events STACK listens for - from inside
+itself, before it returns. The edit handler wrote
+
+    lastwritten = syncToInput(...);
+
+so at the moment the event reached the new listener, `lastwritten` still held the *previous*
+value. The listener compared the input's new content against it, decided somebody else had
+written it, and adopted the editor's own keystroke: `prefilling` went up, MathQuill was refilled
+from "U", and the next keystroke landed in a field that was being rewritten. Every character
+after the first was swallowed.
+
+The guard was correct and the ordering was not, which is the kind of mistake a value comparison
+cannot catch on its own.
+
+### The fix
+
+`syncingToInput`, exactly the state flag #77 asks for, set around every call that writes into the
+input - the edit handler, the toggle, and the submit bridge - and checked first in the listener.
+`dispatchEvent` is synchronous, so a plain boolean covers the whole window without a timer.
+
+The submit bridge now records what it wrote as well; it did not before, which would have left the
+same trap for a check-button press.
+
+### Tests
+
+Two Jest cases that reproduce the hazard rather than the symptom: one writes three times the way
+`syncToInput()` does - events first, `lastwritten` afterwards - and asserts nothing is adopted;
+the other asserts that a genuine external change immediately after our own write still is. The
+previous tests all passed with the bug in place, because they set `lastwritten` before
+dispatching, which is not what the code did.
+
+Jest 1149, ESLint, PHPCS green.

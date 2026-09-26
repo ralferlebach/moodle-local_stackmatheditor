@@ -724,6 +724,10 @@ define([
         // The last value this editor wrote into the input, so the return channel (#77) can tell
         // its own echo from a change somebody else made.
         var lastwritten = initialMaxima || '';
+        // True while this editor is writing into the input. syncToInput() dispatches the events
+        // STACK listens for from inside itself, so they arrive before it has returned and before
+        // lastwritten can be updated - the flag is what covers that window.
+        var syncingToInput = false;
         var activeMqField = null;
         var getActiveField = null;
 
@@ -859,9 +863,14 @@ define([
                     if (prefilling) {
                         return;
                     }
-                    lastwritten = syncToInput(
-                        mqField, $input,
-                        convOpts, ctx.dbg);
+                    syncingToInput = true;
+                    try {
+                        lastwritten = syncToInput(
+                            mqField, $input,
+                            convOpts, ctx.dbg);
+                    } finally {
+                        syncingToInput = false;
+                    }
                 },
                 enter: function() {
                     // No editor action on Enter; the signal stays observable (#43).
@@ -887,7 +896,7 @@ define([
             var current = $input.val();
 
             // Our own write, echoed back by the event we raised for STACK.
-            if (prefilling || current === lastwritten) {
+            if (syncingToInput || prefilling || current === lastwritten) {
                 return;
             }
 
@@ -930,7 +939,12 @@ define([
             strings: (ctx.defs && ctx.defs.strings) || {},
             toInput: function() {
                 if (!prefilling) {
-                    lastwritten = syncToInput(mqField, $input, convOpts, ctx.dbg, true);
+                    syncingToInput = true;
+                    try {
+                        lastwritten = syncToInput(mqField, $input, convOpts, ctx.dbg, true);
+                    } finally {
+                        syncingToInput = false;
+                    }
                 }
             },
             toEditor: function() {
@@ -955,7 +969,12 @@ define([
         // Check / Submit always send the visible state (#48).
         Bridge.register(function() {
             if (!prefilling) {
-                syncToInput(mqField, $input, convOpts, ctx.dbg, true);
+                syncingToInput = true;
+                try {
+                    lastwritten = syncToInput(mqField, $input, convOpts, ctx.dbg, true);
+                } finally {
+                    syncingToInput = false;
+                }
             }
         });
         Bridge.guardStaleValidation($input[0]);

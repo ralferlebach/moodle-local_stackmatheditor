@@ -47,7 +47,7 @@ describe('adopting an external change (#77)', () => {
         return function(e) {
             const current = input.value;
 
-            if (state.prefilling || current === state.lastwritten) {
+            if (state.syncingToInput || state.prefilling || current === state.lastwritten) {
                 return;
             }
             if (editor.classList.contains('sme-hidden')) {
@@ -74,7 +74,7 @@ describe('adopting an external change (#77)', () => {
         editor = document.createElement('div');
         document.body.append(editor, input);
 
-        state = {prefilling: false, lastwritten: '1', writes: []};
+        state = {prefilling: false, syncingToInput: false, lastwritten: '1', writes: []};
         adopted = [];
 
         const listener = makeListener();
@@ -158,6 +158,46 @@ describe('adopting an external change (#77)', () => {
         input.value = '4';
         input.dispatchEvent(new window.Event('change'));
         expect(adopted[1].value).toBe('4');
+    });
+
+
+    test('the editor writing does not come back through the listener', () => {
+        // The hazard that broke eight Behat scenarios: syncToInput() dispatches the events STACK
+        // listens for from inside itself, so they arrive before it has returned and before
+        // lastwritten can be updated. Without the flag the editor adopts its own keystroke,
+        // re-fills MathQuill from it and swallows every character after the first.
+        const writeLikeTheEditor = (value) => {
+            state.syncingToInput = true;
+            try {
+                input.value = value;
+                input.dispatchEvent(new window.Event('input'));
+                input.dispatchEvent(new window.Event('change'));
+                // Only now, as in syncToInput(), is the write recorded.
+                state.lastwritten = value;
+            } finally {
+                state.syncingToInput = false;
+            }
+        };
+
+        writeLikeTheEditor('U');
+        writeLikeTheEditor('Um');
+        writeLikeTheEditor('Umax');
+
+        expect(adopted).toEqual([]);
+        expect(input.value).toBe('Umax');
+    });
+
+    test('an external change right after our own write is still adopted', () => {
+        state.syncingToInput = true;
+        input.value = 'U';
+        input.dispatchEvent(new window.Event('change'));
+        state.lastwritten = 'U';
+        state.syncingToInput = false;
+
+        input.value = '2';
+        input.dispatchEvent(new window.Event('change'));
+
+        expect(adopted).toEqual([{value: '2', type: 'change'}]);
     });
 
     test('with the editor switched off the input keeps the value', () => {
