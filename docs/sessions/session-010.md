@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026091701 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026091702 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -1971,3 +1971,41 @@ already do for the switch.
 
 The JSXGraph regression from the issue, with the real question and four sliders. That needs the
 question imported into a live site, and it is the test I would run first.
+
+
+## 50. Iteration 46 (2026091702): the JSXGraph question becomes a fixture
+
+The question from #77 is now `tests/fixtures/stack_jsxgraph.xml`: four algebraic inputs bound to
+four sliders through `stack_jxg.bind_slider()`. Kept as close to the reported original as
+possible - only the question name is changed to something stable - because a simplified version
+would not prove the same thing. A slider that snaps to 0.5, a board that redraws on every drag
+step and a binding that dispatches non-bubbling events are exactly the conditions the bug lived
+in.
+
+`seed.php` gives it a quiz of its own and exports `SME_JSXGRAPH_CMID`. Its own quiz because a
+slider question is slow to instantiate and none of the other suites needs it; the export reaches
+the tests through `$GITHUB_ENV` like the others, so the workflow needs no change.
+
+### What the spec does
+
+`tests/playwright/jsxgraph.spec.js` drags the real slider. It finds the handle by asking the
+board where it is - `board.objectsList`, `elType === 'slider'`, `coords.scrCoords` plus the
+container's offset - and then moves the mouse across it. No JSXGraph knowledge beyond that, and
+none of it in the editor.
+
+Four tests:
+
+* moving a slider changes the original input **and** the visible editor, and the editor shows the
+  value the slider now reads;
+* typing in the editor moves the slider;
+* five rounds of drag-then-type, checking after every single one that editor and input still
+  agree - drift would show up as a growing difference rather than a single wrong value;
+* the event count while dragging, because an adopted external value must not answer with a write
+  of its own.
+
+### Honest about what this is
+
+It has not run. The fixture has never been imported, the drag coordinates have never been tried,
+and JSXGraph's slider geometry is the kind of thing that works in the second attempt. What the
+spec is good for today is that the next Playwright run will say something specific about #77
+rather than nothing.

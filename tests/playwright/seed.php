@@ -183,6 +183,17 @@ $loadcm = local_stackmatheditor_seed_quiz(
     array_merge(array_fill(0, 8, 'stack_algebraic.xml'), array_fill(0, 2, 'stack_textarea.xml'))
 );
 
+// The question the bidirectional sync was reported with (#77): four algebraic inputs bound to
+// four JSXGraph sliders. Its own quiz, because a slider question is slow to instantiate and the
+// other suites have no use for it.
+$jsxgraphcm = local_stackmatheditor_seed_quiz(
+    $gen,
+    $course,
+    $category,
+    'SME JSXGraph Quiz',
+    ['stack_jsxgraph.xml']
+);
+
 // Warm STACK's CAS result cache: instantiate every question once now. Otherwise the first
 // attempts of all simulated students start at the same moment, each instantiating ten STACK
 // questions with a fresh Maxima process, and the herd runs into the CAS timeout on a small CI
@@ -236,6 +247,7 @@ $exports = [
     'SME_COURSE_ID' => $course->id,
     'SME_SETTINGS_CMID' => $settingscm,
     'SME_LOAD_CMID' => $loadcm,
+    'SME_JSXGRAPH_CMID' => $jsxgraphcm,
     'SME_USER_PASS' => $password,
     'SME_STUDENTS' => $students,
 ];
