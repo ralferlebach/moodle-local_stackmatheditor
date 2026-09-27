@@ -536,6 +536,69 @@ JS;
     }
 
     /**
+     * Let STACK validate what is currently in an input, and report what it said (#34).
+     *
+     * The button contract test in Jest proves a button produces a CAS-safe string. It cannot
+     * prove the CAS agrees, because it has no CAS. This step presses STACK's own validation and
+     * checks that the answer came back interpreted rather than rejected - which is the only
+     * evidence that a visible button means what it promises.
+     *
+     * @Then STACK should accept the answer in :inputname
+     * @param string $inputname Name attribute of the original input.
+     */
+    public function stack_should_accept_the_answer(string $inputname): void {
+        $session = $this->getSession();
+
+        // STACK validates on blur and on the check button; blurring is enough and does not
+        // submit the attempt.
+        $safe = json_encode($inputname);
+        $session->executeScript(<<<JS
+            (function() {
+                var n     = {$safe};
+                var input = document.querySelector('input[name="' + n + '"]')
+                         || document.querySelector('input[name\$="_' + n + '"]');
+                if (input) {
+                    input.dispatchEvent(new Event('change', {bubbles: true}));
+                    input.blur();
+                }
+            })()
+JS);
+        $session->wait(4000);
+
+        $validation = $session->evaluateScript(<<<JS
+            (function() {
+                var boxes = document.querySelectorAll('.stackinputfeedback, .stackinputerror');
+                var text  = '';
+                boxes.forEach(function(box) {
+                    text += ' ' + (box.textContent || '');
+                });
+                return text.trim();
+            })()
+JS);
+
+        // What STACK says when it cannot read an answer. Anything else - including silence, which
+        // means the answer needed no comment - counts as accepted.
+        $rejections = [
+            'Your answer is not',
+            'not a valid',
+            'Illegal',
+            'unknown function',
+            'missing',
+            'CAS failed',
+            'Unable to',
+        ];
+
+        foreach ($rejections as $rejection) {
+            if (stripos($validation, $rejection) !== false) {
+                throw new ExpectationException(
+                    "STACK refused the answer in '$inputname': $validation",
+                    $session
+                );
+            }
+        }
+    }
+
+    /**
      * Write into the original STACK input the way an external script does (#77).
      *
      * STACK's JSXGraph bindings set the value and dispatch a change event that does not bubble,

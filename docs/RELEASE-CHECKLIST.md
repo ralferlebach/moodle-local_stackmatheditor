@@ -27,11 +27,14 @@ from". It records what is being
 certified (commit, version, vendored MathQuill with checksums), runs a dependency audit, builds
 the release archive and writes the checklist of what a human still has to confirm.
 
-Start these on the same commit and note their run links in the evidence artefact:
+Start these on the same commit **first**; the evidence workflow now checks them and fails when
+one is missing or not green, so it is run last rather than first:
 
-* `playwright.yml` - browser path
-* the accessibility run
-* `load-k6.yml` or `load-jmeter.yml` - performance smoke
+* `playwright.yml` - browser path, accessibility included
+* `load-k6.yml` and `load-jmeter.yml` - performance smoke
+
+It also stops on a high or critical dependency finding. The audit itself still runs to
+completion, so the evidence records what was found either way.
 
 ## 3. Branch protection: deliberately not used
 

@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   evidence:
@@ -79,6 +80,46 @@ jobs:
             -o evidence/stackmatheditor.zip
           unzip -l evidence/stackmatheditor.zip | tee evidence/artefact-contents.txt
           sha256sum evidence/stackmatheditor.zip | tee -a evidence/artefact.txt
+
+      # The gate #69 asks for: the other workflows have to have run on this very commit, and
+      # green. A release that cites a Playwright run from three commits ago cites nothing.
+      - name: Require the browser, accessibility and load runs on this SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          missing=0
+          {
+            echo "required runs for $sha"
+            for wf in playwright.yml load-k6.yml load-jmeter.yml; do
+              status=$(gh run list --workflow "$wf" --commit "$sha" \
+                --json conclusion --jq '.[0].conclusion' 2>/dev/null || true)
+              link=$(gh run list --workflow "$wf" --commit "$sha" \
+                --json url --jq '.[0].url' 2>/dev/null || true)
+              case "$status" in
+                success) echo "  $wf: success  $link" ;;
+                "")      echo "  $wf: NEVER RAN on this commit"; missing=1 ;;
+                *)       echo "  $wf: $status  $link"; missing=1 ;;
+              esac
+            done
+          } | tee evidence/required-runs.txt
+
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::A required run is missing or not green for $sha."
+            echo "Start the missing workflows on this commit and run this again." \
+              | tee -a evidence/required-runs.txt
+            exit 1
+          fi
+
+      - name: Dependency findings are not advisory here
+        run: |
+          # The audit above runs with continue-on-error so that the evidence is collected even
+          # when it fails. For a release, a high or critical finding is a stop (#69).
+          if grep -qiE '"severity": *"(high|critical)"' evidence/dependency-audit.txt 2>/dev/null \
+             || grep -qiE '[0-9]+ (high|critical)' evidence/dependency-audit.txt 2>/dev/null; then
+            echo "::error::High or critical dependency findings; assess them before releasing."
+            exit 1
+          fi
 
       - name: What still needs a human
         run: |

@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026092600 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026092601 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -2181,3 +2181,60 @@ One discrepancy worth flagging: the review lists #75 as substantially open, but 
 lifecycle, the dead zone, the dominant axis, `touch-action: none` and `pointercancel` were
 implemented in 2026091700 and are covered by Jest. Either the review read an earlier tree, or
 those changes are not on the branch it looked at.
+
+
+## 54. Iteration 50 (2026092601): the evidence the issues are waiting for
+
+Three pieces of work, chosen because they are the ones that can be written rather than run.
+
+### #73 and #76: browser evidence
+
+`tests/playwright/permissions.spec.js` drives both hierarchies through the student's own view.
+
+For the switch: with the permission it is there, the answer travels with it in both directions,
+and the editor comes back holding what was typed. Without it the switch is absent and the editor
+stays - including in a browser whose localStorage says the student had switched it off. That is
+the assertion the issue is really about: a preference is not a permission, and a stored one must
+not get around an author's decision.
+
+For the limit: the site value reaches both choosers, a quiz override wins over it, the keyboard
+cannot walk past the limit, and the configuration field goes dead when no structured group is
+selected while keeping the number it holds.
+
+The chooser buttons now carry `data-command`, so a test finds them without depending on a
+translated label.
+
+### #34: the contract asks a CAS
+
+The Jest catalogue proves a button produces a CAS-safe string. It has no CAS, so it cannot prove
+the CAS agrees - and that gap is what #34 is about.
+
+`tests/behat/cas_contract.feature` puts one expression per group in front of a real STACK and a
+new step, "STACK should accept the answer in", blurs the input and reads STACK's own validation
+feedback. A rejection is a failure; silence and an interpretation are both acceptance.
+
+`cas_contract_test.php` is the gate that keeps it honest: every group that ships visible buttons
+must be named by a scenario, every scenario claimed must exist, every scenario must actually ask
+the CAS, and the two groups without a contract of their own - brackets and the upper-case Greek
+letters, which share the lower-case rule - are listed explicitly with their reason. Add a group
+without a scenario and CI says so.
+
+One scenario per group rather than per button: a group shares one mapping, and a broken mapping
+shows up on the first expression that uses it. 116 scenarios would be slower and prove the same
+thing.
+
+### #69: the gate stops being advisory
+
+`release-evidence.yml` now asks the GitHub API which runs exist for the commit being certified.
+Playwright, k6 and JMeter have to have run on that exact SHA and be green, or the job fails and
+says which one is missing. High and critical dependency findings stop it too; the audit still
+runs to completion so the evidence records what was found either way.
+
+The consequence is an order: the manual workflows run first, the evidence workflow last. The
+release checklist says so now.
+
+### What is still not mine to do
+
+The runs themselves, the Android device for #72, and the decision on #70 - the meta issue asks
+for pinned dependencies, the release checklist records not pinning as deliberate, and those two
+cannot both stand.

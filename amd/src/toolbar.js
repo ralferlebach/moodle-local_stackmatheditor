@@ -446,6 +446,9 @@ define([
 
         if (action === 'popup') {
             $btn.attr('aria-haspopup', 'dialog').attr('aria-expanded', 'false');
+            // Which chooser this button opens, so a browser test can find it without relying on
+            // a translated label.
+            $btn.attr('data-command', command);
         }
 
         $btn.on('click', function(e) {
