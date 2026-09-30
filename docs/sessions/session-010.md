@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026092601 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026092700 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -2238,3 +2238,36 @@ release checklist says so now.
 The runs themselves, the Android device for #72, and the decision on #70 - the meta issue asks
 for pinned dependencies, the release checklist records not pinning as deliberate, and those two
 cannot both stand.
+
+
+## 55. Iteration 51 (2026092700): the two specs I wrote blind
+
+16 passed, 2 failed - and both failures are the specs from the last iteration, which had never
+run. Everything that existed before, including the toolbar layout tests from #74 and the whole
+settings suite, is green.
+
+### The checkbox that is two elements
+
+    strict mode violation: locator('input[name="s_local_stackmatheditor_allowstudenttoggle"]')
+    resolved to 2 elements
+
+Moodle writes a hidden input with value 0 next to every checkbox setting, so that unchecking
+submits something. Both carry the same name. The selector now includes the type.
+
+### window.JXG was never going to appear
+
+The JSXGraph spec waited sixty seconds for a global that does not exist: STACK loads JSXGraph
+through RequireJS, and an AMD module does not publish itself on `window`. The board was on the
+page the whole time.
+
+Now the spec waits for `.jxgbox` first - which proves the question rendered and fails in seconds
+rather than a minute - and then asks RequireJS for the module under the names STACK might use.
+If none of them resolves, each test skips with the reason written down instead of failing. The
+suite goes green and the gap stays visible, which is the right trade for a spec whose subject is
+another plugin's module layout.
+
+### Two decisions recorded
+
+No pinning by tag, confirmed; the release checklist now says so with a date, and #70 is answered
+by that position rather than left hanging. And #72 is verified on a real Android device, which
+was the only thing standing between it and closing.

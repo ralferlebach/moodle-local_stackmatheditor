@@ -50,7 +50,11 @@ async function siteSettings(browser, settings) {
     await page.locator('select[name="s_local_stackmatheditor_enabled"]')
         .selectOption(String(settings.enabled));
 
-    const toggle = page.locator('input[name="s_local_stackmatheditor_allowstudenttoggle"]');
+    // Moodle writes a hidden input with the same name next to the checkbox, so the type has to
+    // be part of the selector - otherwise the locator matches two elements and refuses.
+    const toggle = page.locator(
+        'input[type="checkbox"][name="s_local_stackmatheditor_allowstudenttoggle"]'
+    );
     if (await toggle.count()) {
         if (settings.studentToggle) {
             await toggle.check();
@@ -89,7 +93,7 @@ async function quizSettings(browser, values) {
     await page.goto('/local/stackmatheditor/configure.php?cmid=' + env('SME_LOAD_CMID'));
 
     if (values.studentToggle !== undefined) {
-        const toggle = page.locator('input[name="allowstudenttoggle"][type="checkbox"]');
+        const toggle = page.locator('input[type="checkbox"][name="allowstudenttoggle"]');
         if (await toggle.count()) {
             if (values.studentToggle) {
                 await toggle.check();

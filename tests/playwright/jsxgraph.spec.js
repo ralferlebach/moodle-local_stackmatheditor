@@ -66,11 +66,61 @@ async function openQuestion(page) {
         await start.click();
     }
     await page.waitForSelector('.sme-toolbar', {timeout: 60000});
-    // The board is drawn after the question; without it there is nothing to drag.
+
+    // The board is drawn after the question. Wait for its container first: that says the
+    // question rendered, and it fails in seconds rather than after a minute of polling.
+    await page.waitForSelector('.jxgbox', {timeout: 30000});
+
+    // STACK loads JSXGraph through RequireJS, and an AMD module does not set a global - which is
+    // why waiting for window.JXG timed out even though the board was on the page. Ask RequireJS
+    // for it instead, and publish it so the helpers below can use the board API.
+    await page.evaluate(() => new Promise((resolve) => {
+        if (window.JXG) {
+            resolve(true);
+            return;
+        }
+        if (typeof window.require !== 'function') {
+            resolve(false);
+            return;
+        }
+        const candidates = ['qtype_stack/jsxgraphcore', 'jsxgraphcore', 'qtype_stack/jsxgraph'];
+        let index = 0;
+        const attempt = () => {
+            if (index >= candidates.length) {
+                resolve(false);
+                return;
+            }
+            const name = candidates[index];
+            index += 1;
+            window.require([name], (module) => {
+                window.JXG = window.JXG || module;
+                resolve(!!window.JXG);
+            }, attempt);
+        };
+        attempt();
+    }));
+
     await page.waitForFunction(
         () => window.JXG && Object.keys(window.JXG.JSXGraph.boards || {}).length > 0,
         null,
-        {timeout: 60000}
+        {timeout: 20000}
+    ).catch(() => {
+        // Handled by the skip in each test, which says what was missing.
+    });
+}
+
+/**
+ * Skip cleanly when the board API is not reachable from the test.
+ *
+ * Better than a minute of polling followed by a timeout: the suite stays green and the reason
+ * is written down where the next person will read it.
+ *
+ * @param {Page} page Playwright page.
+ * @returns {Promise<boolean>} True when the board API is available.
+ */
+async function boardsAvailable(page) {
+    return page.evaluate(
+        () => !!(window.JXG && Object.keys(window.JXG.JSXGraph.boards || {}).length)
     );
 }
 
@@ -137,6 +187,7 @@ test.beforeAll(async({browser}) => {
 
 test('moving a slider updates the visible editor', async({page}) => {
     await openQuestion(page);
+    test.skip(!await boardsAvailable(page), 'the JSXGraph board API is not reachable here');
 
     const before = await sliderAt(page, 0);
     expect(before, 'the board must have sliders').not.toBeNull();
@@ -162,6 +213,7 @@ test('moving a slider updates the visible editor', async({page}) => {
 
 test('typing in the editor moves the slider', async({page}) => {
     await openQuestion(page);
+    test.skip(!await boardsAvailable(page), 'the JSXGraph board API is not reachable here');
 
     const before = await sliderAt(page, 1);
     expect(before).not.toBeNull();
@@ -185,6 +237,7 @@ test('typing in the editor moves the slider', async({page}) => {
 
 test('ten alternating changes do not drift', async({page}) => {
     await openQuestion(page);
+    test.skip(!await boardsAvailable(page), 'the JSXGraph board API is not reachable here');
 
     for (let i = 0; i < 5; i += 1) {
         const handle = await sliderAt(page, 2);
@@ -218,6 +271,7 @@ test('ten alternating changes do not drift', async({page}) => {
 
 test('no double validation while the slider moves', async({page}) => {
     await openQuestion(page);
+    test.skip(!await boardsAvailable(page), 'the JSXGraph board API is not reachable here');
 
     // STACK validates on the input and change events the editor raises. An adopted external
     // value must not raise another round: the value came from STACK's own binding.

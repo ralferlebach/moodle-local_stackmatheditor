@@ -68,6 +68,9 @@ maturity change is the last step, not the start of the stable test.
 
 ## 6. Dependency revisions: a deliberate non-pin
 
+Confirmed again on 27 September 2026: no pinning by tag. The section below stands as the
+project's position, and #70 is answered by it rather than left open.
+
 The release lane installs STACK and its dependencies from their moving branches, not from tags.
 That is a decision, not an oversight: pinning would freeze the test bed against a STACK that
 keeps moving, and the value of this matrix is that it notices when STACK changes. What the run
