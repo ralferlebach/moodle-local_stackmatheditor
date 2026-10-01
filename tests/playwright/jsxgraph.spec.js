@@ -77,7 +77,7 @@ async function openQuestion(page) {
         // should not need another guess.
         const seen = await page.evaluate(() => ({
             questions: document.querySelectorAll('.que.stack').length,
-            editors: document.querySelectorAll('.sme-mq-field').length,
+            editors: document.querySelectorAll('.sme-mq-container').length,
             divIds: Array.from(document.querySelectorAll('div[id]'))
                 .map((d) => d.id)
                 .filter((id) => /jxg|stack|board/i.test(id))
@@ -127,6 +127,20 @@ async function openQuestion(page) {
     ).catch(() => {
         // Handled by the skip in each test, which says what was missing.
     });
+
+    // Printed either way, and to the console rather than an annotation: a skipped test writes
+    // nothing into the job log, and the last run left us guessing what the page had on it.
+    const context = await page.evaluate(() => ({
+        boards: window.JXG ? Object.keys(window.JXG.JSXGraph.boards || {}).length : 'no JXG',
+        jxgElements: document.querySelectorAll('[class*="jxg"], [id*="jxg"]').length,
+        boardIds: Array.from(document.querySelectorAll('div[id]'))
+            .map((d) => d.id)
+            .filter((id) => /jxg|board|stack/i.test(id))
+            .slice(0, 10),
+        questions: document.querySelectorAll('.que.stack').length,
+        editors: document.querySelectorAll('.sme-mq-container').length
+    }));
+    console.log('jsxgraph page context: ' + JSON.stringify(context));
 }
 
 /**
@@ -190,7 +204,7 @@ function answerState(page, name) {
         if (!input) {
             return {input: null, latex: null};
         }
-        const wrap = input.previousElementSibling;
+        const wrap = input.closest('.sme-input-wrap') || input.previousElementSibling;
         const field = wrap ? wrap.querySelector('.mq-editable-field') : null;
         const MQ = window.MathQuill
             ? window.MathQuill.getInterface(window.MathQuill.getInterface.MAX || 2)
@@ -241,7 +255,8 @@ test('typing in the editor moves the slider', async({page}) => {
     // Type into the second field the way a student does.
     await page.evaluate(() => {
         const input = document.querySelector('input[name$="_ans2"]');
-        const field = input.previousElementSibling.querySelector('.mq-editable-field');
+        const wrap = input.closest('.sme-input-wrap') || input.previousElementSibling;
+        const field = wrap.querySelector('.mq-editable-field');
         field.classList.add('sme-target');
     });
     await page.locator('.sme-target').click();
@@ -276,7 +291,8 @@ test('ten alternating changes do not drift', async({page}) => {
 
         await page.evaluate(() => {
             const input = document.querySelector('input[name$="_ans3"]');
-            const field = input.previousElementSibling.querySelector('.mq-editable-field');
+            const wrap = input.closest('.sme-input-wrap') || input.previousElementSibling;
+            const field = wrap.querySelector('.mq-editable-field');
             field.classList.add('sme-target3');
         });
         await page.locator('.sme-target3').click();

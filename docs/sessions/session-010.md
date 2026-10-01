@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026100100 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026100101 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -2327,3 +2327,39 @@ The permissions spec found no switch, and the cause is my own rule from #73: the
 stored as allowed where the editor is enabled at that level, and the test ticked the permission
 without ticking the activation. It now ticks both, and if the switch is still missing it reports
 the page's state instead of only the missing element.
+
+
+## 57. Iteration 53 (2026100101): my diagnostic caused the failure it was meant to explain
+
+16 passed, 4 skipped, 1 failed - and the one failure was the guard I added last time:
+
+    Error: no switch rendered; page shows {"editors":0,"wraps":10,"toggles":0}
+
+Two things in one line, and both were mine.
+
+### The count raced the editor
+
+`expect(toggle).toHaveCount(1)` waits. My guard counted `.sme-toggle` straight away and threw
+before the assertion could wait - and the switch is attached a tick after the toolbar, which is
+what the test waits for. The screenshot proves it: question 2 on that very page has its switch.
+So the guard turned a passing test into a failing one.
+
+Wait first, report second. The diagnostic now lives in the catch block.
+
+### `.sme-mq-field` never existed
+
+`wraps: 10, editors: 0` was not a product fault either: the editor's container is
+`.sme-mq-container`, and `.sme-mq-field` is a class I invented when writing the spec blind. It
+appeared seven times in permissions.spec.js and once in jsxgraph.spec.js, including in the line
+the test waits on - which passed only because the selector had `.sme-toolbar` as an alternative.
+
+Both specs use the real class now, and the MathQuill field is found through
+`.mq-editable-field` inside the wrap rather than by assuming it is the input's previous sibling.
+
+### The four skips said nothing
+
+The JSXGraph tests skipped as designed, and the annotation explaining why went into the HTML
+report, which nobody reads when the job is green-ish. `openQuestion()` now prints a one-line
+page inventory to the console: how many boards, how many jxg-ish elements, which div ids look
+like boards, how many STACK questions and editors. The next run says what STACK actually puts on
+the page instead of leaving it to the imagination.

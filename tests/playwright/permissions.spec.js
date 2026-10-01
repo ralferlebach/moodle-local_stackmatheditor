@@ -136,7 +136,7 @@ async function attempt(page, who) {
     if (await start.count()) {
         await start.click();
     }
-    await page.waitForSelector('.sme-mq-field, .sme-toolbar', {timeout: 60000});
+    await page.waitForSelector('.sme-mq-container, .sme-toolbar', {timeout: 60000});
 }
 
 test.describe('#73: the student switch is a permission', () => {
@@ -148,19 +148,23 @@ test.describe('#73: the student switch is a permission', () => {
         await attempt(page, 'sme_student07');
 
         const toggle = page.locator('.sme-toggle input[type="checkbox"]').first();
-        if (await page.locator('.sme-toggle').count() === 0) {
-            // Report the resolved state rather than only the missing element.
+
+        // Wait first, report second. The switch is attached a tick after the toolbar, so a
+        // count taken straight away races the editor's own setup - which is what the previous
+        // run tripped over, with a diagnostic that fired before the assertion could wait.
+        try {
+            await expect(toggle).toHaveCount(1, {timeout: 20000});
+        } catch (ignored) {
             const seen = await page.evaluate(() => ({
-                editors: document.querySelectorAll('.sme-mq-field').length,
+                editors: document.querySelectorAll('.sme-mq-container').length,
                 wraps: document.querySelectorAll('.sme-input-wrap, .sme-equiv-wrap').length,
                 toggles: document.querySelectorAll('.sme-toggle').length
             }));
             throw new Error('no switch rendered; page shows ' + JSON.stringify(seen));
         }
-        await expect(toggle).toHaveCount(1);
 
         // Type something, then switch the editor off: the answer has to come with it.
-        await page.locator('.sme-mq-field').first().click();
+        await page.locator('.sme-mq-container').first().click();
         await page.keyboard.type('2+3');
         await page.waitForTimeout(500);
 
@@ -175,7 +179,7 @@ test.describe('#73: the student switch is a permission', () => {
         await toggle.click();
         await page.waitForTimeout(500);
         const latex = await page.evaluate(() => {
-            const field = document.querySelector('.sme-mq-field');
+            const field = document.querySelector('.mq-editable-field');
             const MQ = window.MathQuill.getInterface(window.MathQuill.getInterface.MAX || 2);
             return MQ(field).latex();
         });
@@ -203,10 +207,10 @@ test.describe('#73: the student switch is a permission', () => {
                 }
             });
             await page.reload();
-            await page.waitForSelector('.sme-mq-field', {timeout: 60000});
+            await page.waitForSelector('.sme-mq-container', {timeout: 60000});
 
             await expect(page.locator('.sme-toggle input[type="checkbox"]')).toHaveCount(0);
-            await expect(page.locator('.sme-mq-field').first()).toBeVisible();
+            await expect(page.locator('.sme-mq-container').first()).toBeVisible();
 
             await page.close();
         });
@@ -219,7 +223,7 @@ test.describe('#73: the student switch is a permission', () => {
         await attempt(page, 'sme_student08');
 
         await expect(page.locator('.sme-toggle input[type="checkbox"]')).toHaveCount(0);
-        await expect(page.locator('.sme-mq-field').first()).toBeVisible();
+        await expect(page.locator('.sme-mq-container').first()).toBeVisible();
 
         await page.close();
     });
@@ -303,7 +307,7 @@ test.describe('#76: the chooser limit is inherited', () => {
         await page.waitForTimeout(500);
 
         const latex = await page.evaluate(() => {
-            const field = document.querySelector('.sme-mq-field');
+            const field = document.querySelector('.mq-editable-field');
             const MQ = window.MathQuill.getInterface(window.MathQuill.getInterface.MAX || 2);
             return MQ(field).latex();
         });
