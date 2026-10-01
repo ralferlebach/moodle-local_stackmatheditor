@@ -438,7 +438,10 @@ jobs:
   behat:
     name: "Behat / MOODLE_405_STABLE / PHP 8.2 / Chrome"
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
+    # 30 was enough for 69 scenarios; the CAS contract from #34 adds sixteen more that each
+    # wait for a real Maxima answer, and the run was being killed mid-suite - which looks
+    # exactly like "Behat never started" in the UI, because a cancelled job shows no result.
     needs: [lint-php, javascript]
     services:
       mariadb:
@@ -507,12 +510,24 @@ jobs:
         id: behat
         run: |
           moodle-plugin-ci behat --profile chrome --auto-rerun 0 \
-            --tags "@local_stackmatheditor&&~@broken&&~@wip&&~@stack_init" --dump 2>&1 | tee ci-logs/behat.log
+            --tags "@local_stackmatheditor&&~@broken&&~@wip&&~@stack_init&&~@local_stackmatheditor_cas" \
+            --dump 2>&1 | tee ci-logs/behat.log
+      # The CAS contract (#34) is its own step: every scenario waits for a real Maxima answer, so
+      # it is the slow part, and a failure there means "the CAS disagrees with a button" rather
+      # than "the editor is broken". Keeping the two apart keeps that distinction readable.
+      - name: Behat - CAS contract (@local_stackmatheditor_cas)
+        id: behat-cas
+        run: |
+          moodle-plugin-ci behat --profile chrome --auto-rerun 0 \
+            --tags "@local_stackmatheditor_cas&&~@broken&&~@wip" --dump 2>&1 \
+            | tee ci-logs/behat-cas.log
+
       - name: Show relevant Behat failures
         if: ${{ failure() }}
         run: |
           grep -h -n -E 'Scenario:|Exception|Error|Failed|Coding error|stack_cas_connection|Fatal error|not found|does not equal' \
-            ci-logs/behat-stack-init.log ci-logs/behat.log 2>/dev/null | head -200 || true
+            ci-logs/behat-stack-init.log ci-logs/behat.log ci-logs/behat-cas.log \
+            2>/dev/null | head -200 || true
       - name: Collect error summary and Behat dumps
         if: ${{ always() }}
         run: |

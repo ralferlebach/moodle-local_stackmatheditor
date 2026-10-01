@@ -92,6 +92,15 @@ async function quizSettings(browser, values) {
     await loginAs(page, admin.user, admin.pass);
     await page.goto('/local/stackmatheditor/configure.php?cmid=' + env('SME_LOAD_CMID'));
 
+    // The switch is only stored as allowed where the editor is on at this level (#73), so a
+    // test that wants the switch has to enable the editor here as well.
+    if (values.studentToggle) {
+        const enabled = page.locator('input[type="checkbox"][name="enabled"]');
+        if (await enabled.count()) {
+            await enabled.check();
+        }
+    }
+
     if (values.studentToggle !== undefined) {
         const toggle = page.locator('input[type="checkbox"][name="allowstudenttoggle"]');
         if (await toggle.count()) {
@@ -139,6 +148,15 @@ test.describe('#73: the student switch is a permission', () => {
         await attempt(page, 'sme_student07');
 
         const toggle = page.locator('.sme-toggle input[type="checkbox"]').first();
+        if (await page.locator('.sme-toggle').count() === 0) {
+            // Report the resolved state rather than only the missing element.
+            const seen = await page.evaluate(() => ({
+                editors: document.querySelectorAll('.sme-mq-field').length,
+                wraps: document.querySelectorAll('.sme-input-wrap, .sme-equiv-wrap').length,
+                toggles: document.querySelectorAll('.sme-toggle').length
+            }));
+            throw new Error('no switch rendered; page shows ' + JSON.stringify(seen));
+        }
         await expect(toggle).toHaveCount(1);
 
         // Type something, then switch the editor off: the answer has to come with it.

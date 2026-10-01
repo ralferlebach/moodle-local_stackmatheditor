@@ -201,8 +201,11 @@ class hook_callbacks {
 
         // Editor injection (mod_quiz and mod_adaptivequiz).
         if ($iseditor) {
-            if (!config_manager::get_effective_enabled($cmid)) {
-                quiz_helper::dbg('editor: disabled for cmid=' . $cmid . ', skipping');
+            // Only what holds for the whole page is decided here (#80, #81): a question may
+            // switch the editor on where its quiz leaves it off, and it can only do that if the
+            // runtime is on the page to ask.
+            if (!config_manager::page_may_need_editor()) {
+                quiz_helper::dbg('editor: disabled instance-wide, skipping');
             } else {
                 try {
                     mathjax_injector::inject();

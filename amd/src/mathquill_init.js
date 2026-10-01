@@ -260,6 +260,7 @@ define([
             slotConfigs: slotConfigs,
             slotVarModes: slotVarModes,
             slotEnabled: slotEnabled,
+            defaultEnabled: runtime.defaultEnabled !== false,
             slotStudentToggle: runtime.slotStudentToggle || {},
             slotMaxDimension: runtime.slotMaxDimension || {},
             maxDimension: runtime.maxDimension || 0,

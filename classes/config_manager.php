@@ -647,6 +647,23 @@ class config_manager {
     }
 
     /**
+     * May any question on this page need the editor? (#80, #81)
+     *
+     * The page-level gate used to ask get_effective_enabled($cmid), which answers for the quiz
+     * and knows nothing about the questions in it. With "off by default, can be enabled per quiz
+     * or question", a quiz that stays off then stopped the runtime from loading at all - and a
+     * question that had been switched on explicitly never got the chance to say so.
+     *
+     * So this gate only decides what is true for the whole page. Mode 0 is off everywhere and
+     * nothing below can change it; everything else loads the runtime and lets each slot decide.
+     *
+     * @return bool True when the runtime has to be loaded.
+     */
+    public static function page_may_need_editor(): bool {
+        return self::get_instance_enabled_mode() !== 0;
+    }
+
+    /**
      * May students switch the editor off and on here? (#73)
      *
      * A subordinate permission: it is only ever asked when the editor is enabled at all, and any

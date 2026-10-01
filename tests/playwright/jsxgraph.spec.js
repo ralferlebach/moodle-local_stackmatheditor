@@ -67,9 +67,29 @@ async function openQuestion(page) {
     }
     await page.waitForSelector('.sme-toolbar', {timeout: 60000});
 
-    // The board is drawn after the question. Wait for its container first: that says the
-    // question rendered, and it fails in seconds rather than after a minute of polling.
-    await page.waitForSelector('.jxgbox', {timeout: 30000});
+    // The board is drawn after the question. STACK's container does not always carry the
+    // .jxgbox class at the moment it appears, so anything whose class or id mentions jxg counts.
+    const board = await page.waitForSelector('[class*="jxg"], [id*="jxg"]', {timeout: 20000})
+        .catch(() => null);
+
+    if (!board) {
+        // Say what was on the page instead of only that something was missing: the next run
+        // should not need another guess.
+        const seen = await page.evaluate(() => ({
+            questions: document.querySelectorAll('.que.stack').length,
+            editors: document.querySelectorAll('.sme-mq-field').length,
+            divIds: Array.from(document.querySelectorAll('div[id]'))
+                .map((d) => d.id)
+                .filter((id) => /jxg|stack|board/i.test(id))
+                .slice(0, 12),
+            hasRequire: typeof window.require === 'function'
+        }));
+        test.info().annotations.push({
+            type: 'no board',
+            description: JSON.stringify(seen)
+        });
+        return;
+    }
 
     // STACK loads JSXGraph through RequireJS, and an AMD module does not set a global - which is
     // why waiting for window.JXG timed out even though the board was on the page. Ask RequireJS

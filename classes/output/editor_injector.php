@@ -95,6 +95,10 @@ class editor_injector {
             'slotConfigs'      => !empty($slotconfigs) ? $slotconfigs : new \stdClass(),
             'slotVarModes'     => !empty($slotvarmodes) ? $slotvarmodes : new \stdClass(),
             'slotEnabled'      => !empty($slotenabled) ? $slotenabled : new \stdClass(),
+            // What applies to a field the slot map says nothing about - an adaptive quiz has no
+            // per-question configuration, so without this the runtime would enable everything
+            // the moment the page gate stopped deciding (#81).
+            'defaultEnabled'   => config_manager::get_effective_enabled($cmid),
             'slotStudentToggle' => !empty($slottoggle) ? $slottoggle : new \stdClass(),
             'allowStudentToggle' => config_manager::get_instance_student_toggle(),
             'slotMaxDimension' => !empty($slotmax) ? $slotmax : new \stdClass(),

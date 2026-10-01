@@ -534,6 +534,26 @@ define([
     }
 
     /**
+     * Is the editor enabled for this slot? (#81)
+     *
+     * The slot map is the per-question answer; where it says nothing - an adaptive quiz has no
+     * per-question configuration - the page default applies. The page gate no longer decides
+     * this, so a missing entry must not be read as "on".
+     *
+     * @param {Object} ctx Shared context.
+     * @param {string} slot Slot number as a string.
+     * @returns {boolean} True when this field gets an editor.
+     */
+    function slotIsEnabled(ctx, slot) {
+        if (ctx.slotEnabled
+                && Object.prototype.hasOwnProperty.call(ctx.slotEnabled, slot)) {
+            return !!ctx.slotEnabled[slot];
+        }
+
+        return ctx.defaultEnabled !== false;
+    }
+
+    /**
      * The chooser limit for a slot (#76).
      *
      * @param {Object} ctx Shared context.
@@ -644,14 +664,8 @@ define([
         var slot = ctx.extractSlot(name);
 
         // Check per-slot enabled map.
-        // If slotEnabled is present and the slot is explicitly disabled,
-        // skip activation for this input entirely.
-        if (ctx.slotEnabled
-                && ctx.slotEnabled.hasOwnProperty(slot)
-                && !ctx.slotEnabled[slot]) {
-            ctx.dbg('Input ' + name
-                + ' -> slot ' + slot
-                + ' disabled, skipping');
+        if (!slotIsEnabled(ctx, slot)) {
+            ctx.dbg('Input ' + name + ' -> slot ' + slot + ' not enabled, skipping');
             return;
         }
 

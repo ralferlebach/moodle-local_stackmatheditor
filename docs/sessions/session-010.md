@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026092700 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026100100 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -2271,3 +2271,59 @@ another plugin's module layout.
 No pinning by tag, confirmed; the release checklist now says so with a date, and #70 is answered
 by that position rather than left hanging. And #72 is verified on a real Android device, which
 was the only thing standing between it and closing.
+
+
+## 56. Iteration 52 (2026100100): #80 was a real bug, and Behat was not failing
+
+### #80 / #81: the coarse gate blocked the fine one
+
+With "off by default, can be enabled per quiz or question", a question could not be switched on
+while its quiz stayed off. The resolution in `config_manager::get_effective_enabled()` was
+already correct for every cell of the matrix - the issue's own analysis says so. The fault was
+one line in front of it:
+
+    if (!config_manager::get_effective_enabled($cmid)) { skip }
+
+That asks about the quiz and knows nothing about the questions in it. A quiz that stayed off
+stopped the runtime from loading at all, so the question override was never evaluated. Two
+activation decisions existed, one coarse and one fine, and the coarse one could silence the
+other.
+
+`page_may_need_editor()` now decides only what holds for the whole page: mode 0 is off
+everywhere and nothing below can change it; everything else loads the runtime and lets each slot
+decide.
+
+That moves a decision from the server to the client, and with it a trap the issue is right to
+warn about: an adaptive quiz has no per-question configuration, so its slots are not in the map
+at all, and "not in the map" used to mean "enabled". The runtime now carries
+`defaultEnabled` - the quiz-level answer - and a field the slot map says nothing about follows
+it. Both editors do this, single-line and textarea.
+
+Tests: the full matrix as two data providers, nine cases each for modes 2 and 3, including
+`quiz off / question on -> editor` in both; modes 0 and 1 against all nine combinations each;
+the page gate itself; and the runtime default for pages without question-level overrides.
+
+### Behat was running, and being killed
+
+"Behat läuft nicht an" is what a cancelled job looks like in the UI: no result, no failure, no
+log. The job ran for exactly thirty minutes and hit `timeout-minutes: 30`, which GitHub reports
+as *cancelled*. The CAS contract from #34 added sixteen scenarios that each wait for a real
+Maxima answer, and 69 scenarios in nineteen minutes became more than thirty.
+
+Timeout raised to sixty, and the CAS contract moved into a step of its own. A failure there
+means "the CAS disagrees with a button", not "the editor is broken", and keeping them apart
+keeps that readable.
+
+### Playwright: two failures, two different kinds
+
+The JSXGraph spec waited for `.jxgbox` on a page where the question had clearly rendered - the
+screenshot shows the editors, the toolbar and the switch. Rather than guess again at STACK's
+container markup, the spec now accepts anything whose class or id mentions jxg, and when it finds
+nothing it records what the page actually contained: how many STACK questions, how many editors,
+which div ids look board-like, whether RequireJS is there. The next run answers the question
+instead of repeating it.
+
+The permissions spec found no switch, and the cause is my own rule from #73: the switch is only
+stored as allowed where the editor is enabled at that level, and the test ticked the permission
+without ticking the activation. It now ticks both, and if the switch is still missing it reports
+the page's state instead of only the missing element.

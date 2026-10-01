@@ -1164,8 +1164,12 @@ define([
                 }
                 var aname = $(this).attr('name') || '';
                 var aslot = ctx.extractSlot(aname);
-                if (ctx.slotEnabled && ctx.slotEnabled.hasOwnProperty(aslot) && !ctx.slotEnabled[aslot]) {
-                    ctx.dbg('Textarea ' + aname + ' -> slot ' + aslot + ' disabled, skipping');
+                // Same rule as for single-line inputs (#81): the slot map answers per question,
+                // and where it says nothing the page default decides.
+                var aknown = ctx.slotEnabled
+                    && Object.prototype.hasOwnProperty.call(ctx.slotEnabled, aslot);
+                if (aknown ? !ctx.slotEnabled[aslot] : ctx.defaultEnabled === false) {
+                    ctx.dbg('Textarea ' + aname + ' -> slot ' + aslot + ' not enabled, skipping');
                     return;
                 }
                 new EquivEditor(this, ctx);
