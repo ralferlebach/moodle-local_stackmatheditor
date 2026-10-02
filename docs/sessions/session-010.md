@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026100101 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026100102 (release 1.3.0-dev, MATURITY_ALPHA)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -2363,3 +2363,41 @@ report, which nobody reads when the job is green-ish. `openQuestion()` now print
 page inventory to the console: how many boards, how many jxg-ish elements, which div ids look
 like boards, how many STACK questions and editors. The next run says what STACK actually puts on
 the page instead of leaving it to the imagination.
+
+
+## 58. Iteration 54 (2026100102): a real screen reader in the pipeline
+
+`tests/a11y-nvda/` drives NVDA through Guidepup. Its own package, because it needs Windows, a
+headed browser and a site that is already running - none of which the Linux suites want.
+
+### What it asserts, and why only this much
+
+Four things, all of them cases where silence is a defect rather than a matter of taste: the
+editor announces itself as an editable field *with a name*; the switch says it is a switch and
+says its state when it flips; a toolbar button is read as a word rather than a symbol; the matrix
+chooser announces itself and gives the focus back on Escape.
+
+Everything else NVDA says is written to `transcripts/`, with the commit, the site and the time at
+the top, and not asserted. Whether an announcement is understandable, whether the order matches
+the task, whether something is read twice - those are judgements, and a test that pretended to
+make them would be worse than no test. The workflow prints them as questions at the end.
+
+### The half that needs no judgement
+
+`zoom.spec.js` runs in the same job without NVDA: 200 per cent zoom without horizontal
+scrolling, a 380 pixel viewport with no button outside its toolbar and none below 24 by 24 CSS
+pixels, the keyboard reaching editor, toolbar and switch, and a visible focus wherever it lands.
+Four of the six lines on the manual checklist are measurements, and measurements belong in CI.
+
+### Why it points at a site instead of building one
+
+NVDA exists only on Windows; the test site needs Maxima and is built on Linux. Putting both in
+one job would mean a Windows Moodle with a Windows Maxima, which is a project of its own. So the
+workflow takes a URL - staging, or a tunnel to the local instance - and the site it tests is a
+real one rather than a fixture.
+
+### What this does to #69
+
+The release checklist's manual sample becomes: start the workflow, read five transcripts, answer
+four questions, record the date and the NVDA version. The evidence is archived with the commit
+instead of living in somebody's memory.

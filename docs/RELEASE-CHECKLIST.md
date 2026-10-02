@@ -46,15 +46,28 @@ What that means in practice: nothing prevents a release from being tagged on a r
 evidence below is the only thing that shows a stable release was actually green. Do not skip it
 on the grounds that CI "usually passes".
 
-## 4. What no workflow can do for you
+## 4. Screen reader evidence
 
-* A manual accessibility sample: NVDA with Firefox or Chrome, visible focus through the core
-  flow, 200% zoom without loss of function, one narrow viewport. Record date, browser and
-  screen reader.
+`accessibility (NVDA)`, started by hand with a URL the runner can reach and a quiz's course
+module id. A Windows runner cannot host Moodle with Maxima, so it points at a site that is
+already up - staging, or a tunnel to a local instance - and records what NVDA actually says
+about the editor, the switch, the toolbar and the matrix chooser. The transcripts come back as
+an artefact, each headed with the commit and the date.
+
+It fails when something a student depends on is silent. It cannot tell you whether what NVDA
+says is understandable, in what order it comes, or whether something is read twice - those
+questions are printed at the end of the run for the person signing off.
+
+## 5. What no workflow can do for you
+
+* The judgement half of the accessibility sample: read the transcripts from section 4 and say
+  whether they describe something a person can work with. Record date, browser and NVDA version.
+  Zoom, viewport width, keyboard reach and focus visibility are measured by that same run and do
+  not need repeating by hand.
 * The decision on every open P0 and P1: closed, or accepted as a residual risk with a reason.
   An open, unexplained P1 must not sit quietly next to a stable release.
 
-## 5. Only then: flip the release metadata
+## 6. Only then: flip the release metadata
 
 Atomically, in one commit:
 
@@ -66,7 +79,7 @@ Atomically, in one commit:
 Never a mixed state - `MATURITY_STABLE` next to "in development", or the other way round. The
 maturity change is the last step, not the start of the stable test.
 
-## 6. Dependency revisions: a deliberate non-pin
+## 7. Dependency revisions: a deliberate non-pin
 
 Confirmed again on 27 September 2026: no pinning by tag. The section below stands as the
 project's position, and #70 is answered by it rather than left open.
@@ -81,7 +94,7 @@ it cannot be repeated exactly.
 The residual risk is stated plainly: the same plugin commit can be green today and red next week
 for reasons outside this repository. The evidence file names the SHAs that were green.
 
-## 7. Provenance
+## 8. Provenance
 
 The vendored MathQuill build is identified by its fork commit, not by a branch name, and
 `thirdparty/readme_moodle.txt` carries the commit, the toolchain and the checksums of the three
