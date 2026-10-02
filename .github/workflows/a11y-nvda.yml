@@ -1,0 +1,99 @@
+# Screen reader evidence with a real NVDA (#69).
+#
+# NVDA runs on Windows, the test site runs on Linux, and the two do not fit in one job. So this
+# workflow does not build a site: it points a Windows runner at one that is already there - a
+# staging instance, a tunnel to a local Moodle, or any URL the runner can reach - and records
+# what NVDA says about the editor on it.
+#
+# Manual only, like the other evidence workflows. The result is a transcript per flow, archived
+# with the commit and the date, which is what the release checklist asks someone to produce by
+# hand.
+
+name: accessibility (NVDA)
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Moodle site to test, reachable from the runner'
+        required: true
+        type: string
+      cmid:
+        description: 'Course module id of a quiz with STACK questions'
+        required: true
+        type: string
+      username:
+        description: 'Student account to log in as'
+        required: false
+        default: 'sme_student01'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  nvda:
+    # NVDA only exists on Windows, and it reads the foreground window - so one job, one worker,
+    # no parallelism, and a visible browser.
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      # Installs a portable NVDA and relaxes the foreground-window lock that otherwise makes a
+      # screen reader miss everything a new browser window says.
+      - name: Set up NVDA
+        uses: guidepup/setup-action@v1
+
+      - name: Install the suite
+        working-directory: tests/a11y-nvda
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Record what NVDA says
+        working-directory: tests/a11y-nvda
+        env:
+          SME_BASE_URL: ${{ inputs.base_url }}
+          SME_CMID: ${{ inputs.cmid }}
+          SME_USER: ${{ inputs.username }}
+          SME_USER_PASS: ${{ secrets.SME_USER_PASS }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: npx playwright test
+
+      - name: Collect the evidence
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: a11y-nvda-${{ github.run_id }}
+          path: |
+            tests/a11y-nvda/transcripts
+            tests/a11y-nvda/playwright-report
+            tests/a11y-nvda/nvda-results.json
+            tests/a11y-nvda/test-results
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: What a person still has to say
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          {
+            echo "NVDA transcripts were recorded for ${{ inputs.base_url }}"
+            echo "commit: ${{ github.sha }}"
+            echo ""
+            echo "What this run cannot decide, and a person signing off still has to:"
+            echo "  [ ] is what NVDA says understandable, not merely present?"
+            echo "  [ ] does the order of announcements match the order of the task?"
+            echo "  [ ] is anything read out twice, or read when it should be silent?"
+            echo "  [ ] with a second screen reader or browser, is it the same story?"
+            echo ""
+            echo "Read transcripts/*.txt in the artefact, then record your answer with the"
+            echo "date, the browser and the NVDA version in the release evidence."
+          } | tee manual-sign-off.txt

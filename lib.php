@@ -70,8 +70,10 @@ function local_stackmatheditor_extend_settings_navigation(
         return;
     }
 
-    // Only for the supported activity modules.
-    if (!in_array($cm->modname, ['quiz', 'adaptivequiz'])) {
+    // Settings navigation is module specific and stays that way (#50): the runtime editor works
+    // wherever a STACK question is rendered, but a configuration link needs a module whose
+    // question-bank context, capability and return URL the plugin can actually resolve.
+    if (!\local_stackmatheditor\context_resolver::has_configuration_ui($cm->modname)) {
         return;
     }
 

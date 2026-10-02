@@ -61,7 +61,18 @@ if (!$isquiz && !$isadaptivequiz) {
 
 $course = get_course($cm->course);
 
-// Load the activity record.
+// Authentication and authorisation FIRST: nothing question-specific happens before the login and
+// capability gates, so an anonymous request cannot tell existing from missing or STACK from
+// non-STACK questions, and runs no question-bank queries (#54).
+$context = \context_module::instance($cmid);
+require_login($course, false, $cm);
+
+// Mod_adaptivequiz does not define a :manage capability; :viewreport is
+// granted to editingteacher and manager and is the closest equivalent.
+$capname = $isadaptivequiz ? 'mod/adaptivequiz:viewreport' : 'mod/quiz:manage';
+require_capability($capname, $context);
+
+// Load the activity record (not needed for the login gate).
 $activity = $DB->get_record($modname, ['id' => $cm->instance], '*', MUST_EXIST);
 
 // Determine operating mode.
@@ -95,15 +106,6 @@ if (!$quizmode) {
     }
     $questionid = (int) $questionrecord->id;
 }
-
-// Context and permissions.
-$context = \context_module::instance($cmid);
-require_login($course, false, $cm);
-
-// Mod_adaptivequiz does not define a :manage capability; :viewreport is
-// granted to editingteacher and manager and is the closest equivalent.
-$capname = $isadaptivequiz ? 'mod/adaptivequiz:viewreport' : 'mod/quiz:manage';
-require_capability($capname, $context);
 
 // Return URL: the calling page passed by every configuration link; only a direct call without
 // (or with an unusable) returnurl falls back to the activity's view page (#47).
@@ -211,9 +213,6 @@ foreach (array_keys($groups) as $key) {
     }
 }
 
-$currentvarmode = $config['_variableMode']
-    ?? config_manager::get_instance_variable_mode();
-
 // Determine initial enabled state.
 if ($instancemode === 0) {
     $currentenabled = false;
@@ -247,13 +246,34 @@ $mform = new configure_form($pageurl->out(false), [
     'previewhtml'    => $questionpreviewhtml,
     'returnurl'      => $returnurl,
     'instancemode'   => $instancemode,
+    'dependencies'   => \local_stackmatheditor\dependency_resolver::get_group_status($questionid),
+    'stacksemantics' => \local_stackmatheditor\stack_inputs::get_semantics_summary(
+        $questionid,
+        (int) $course->id,
+        $PAGE->url->out(false)
+    ),
 ]);
 
-// Set current values.
+// Set current values. Implicit multiplication is no longer an editor setting (#65): STACK owns
+// that semantics, the editor only shows it.
+// The student switch (#73): the stored value of this level, else what the level above allows.
+if (isset($config['_allowStudentToggle'])) {
+    $currentstudenttoggle = (bool) $config['_allowStudentToggle'];
+} else {
+    $currentstudenttoggle = config_manager::get_instance_student_toggle();
+    if (!$quizmode) {
+        $parentconfig = config_manager::get_quiz_default($cmid);
+        if ($parentconfig !== null && isset($parentconfig['_allowStudentToggle'])) {
+            $currentstudenttoggle = (bool) $parentconfig['_allowStudentToggle'];
+        }
+    }
+}
+
 $formdata = [
-    'groups'       => $selectedkeys,
-    'variablemode' => $currentvarmode,
-    'enabled'      => (int) $currentenabled,
+    'maxdimension'       => $config['_maxStructuredDimension'] ?? '',
+    'groups'             => $selectedkeys,
+    'enabled'            => (int) $currentenabled,
+    'allowstudenttoggle' => (int) ((bool) $currentstudenttoggle),
 ];
 $mform->set_data($formdata);
 
@@ -269,9 +289,28 @@ if ($mform->is_cancelled()) {
         $elements[$key] = in_array($key, $selectedgroups);
     }
 
-    $varmode = $data->variablemode ?? definitions::IMPLICIT_STACK;
-    $varmode = definitions::normalise_implicit_mode((string) $varmode);
-    $elements['_variableMode'] = $varmode;
+    // The editor hands STACK what was typed and lets STACK's own "insert stars" setting decide
+    // (#65). Nothing about implicit multiplication is stored here any more.
+    $elements['_variableMode'] = definitions::IMPLICIT_STACK;
+
+    // The student switch is stored like the activation itself (#73), and it is only ever stored
+    // as true when the editor is on here: a level that has no editor grants no permission.
+    // The chooser limit (#76). An empty field means "inherit", and a level whose structured
+    // groups are off keeps whatever it had: a temporary deactivation is not a reason to forget.
+    if (property_exists($data, 'maxdimension')) {
+        $cleaned = definitions::clean_max_dimension($data->maxdimension);
+        if ($cleaned === null) {
+            unset($elements['_maxStructuredDimension']);
+        } else {
+            $elements['_maxStructuredDimension'] = $cleaned;
+        }
+    } else if (isset($config['_maxStructuredDimension'])) {
+        $elements['_maxStructuredDimension'] = (int) $config['_maxStructuredDimension'];
+    }
+
+    $elements['_allowStudentToggle'] = (int) (
+        !empty($data->allowstudenttoggle) && !empty($data->enabled)
+    );
 
     // Store enabled flag when instance mode allows overrides.
     if ($instancemode === 2 || $instancemode === 3) {
@@ -295,6 +334,28 @@ if ($mform->is_cancelled()) {
 }
 
 // Output.
+// The dimension field follows the group selection while the form is open (#76): a dependency
+// that only becomes visible after saving is not a visible dependency.
+$PAGE->requires->js_amd_inline(<<<'JS'
+require([], function() {
+    var groups = document.querySelector('select[name="groups[]"]');
+    var field  = document.getElementById('id_sme_maxdimension');
+    if (!groups || !field) {
+        return;
+    }
+    var structured = ['matrix_operators', 'vector_operators'];
+    var update = function() {
+        var on = Array.prototype.some.call(groups.selectedOptions, function(option) {
+            return structured.indexOf(option.value) !== -1;
+        });
+        field.disabled = !on;
+        field.setAttribute('aria-disabled', on ? 'false' : 'true');
+    };
+    groups.addEventListener('change', update);
+    update();
+});
+JS);
+
 echo $OUTPUT->header();
 
 if ($quizmode) {

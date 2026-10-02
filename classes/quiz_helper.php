@@ -31,24 +31,18 @@ class quiz_helper {
     private static array $quizcache = [];
 
     /**
-     * Write a developer-level debug message to the PHP error log.
+     * Write a developer trace message to the PHP error log.
      *
-     * Only emitted when Moodle developer debug mode is active
-     * ($CFG->debug >= DEBUG_DEVELOPER). Silent on production sites.
-     *
-     * @param string $msg Message to log.
-     * @return void
-     */
-    /**
-     * Write a silent developer trace message to the PHP error log.
-     *
-     * Uses error_log() so output never appears in the browser or disrupts
-     * normal page rendering. Only visible in the server error log.
+     * Emitted only when Moodle runs with DEBUG_DEVELOPER; silent on production sites (#53).
+     * error_log() keeps the message out of the browser and away from page rendering.
      *
      * @param string $msg Message to log.
      * @return void
      */
     public static function dbg(string $msg): void {
+        if (!debugging('', DEBUG_DEVELOPER)) {
+            return;
+        }
         // phpcs:ignore moodle.PHP.ForbiddenFunctions.FoundWithAlternative
         error_log('[SME-HOOK] ' . $msg);
     }
@@ -138,6 +132,59 @@ class quiz_helper {
         self::dbg('load_quiz_stack_questions: ' . count($data) . ' STACK questions');
         self::$quizcache[$quizinstanceid] = $data;
         return $data;
+    }
+
+    /**
+     * Every question bank entry used by a quiz, regardless of question type (#67).
+     *
+     * The external service needs to know which questions belong to a quiz before it answers
+     * anything about them. Unlike load_quiz_stack_questions() this does not filter by question
+     * type: the question is "does this quiz use it", not "is it a STACK question".
+     *
+     * @param int $quizinstanceid Quiz instance id.
+     * @return array Question bank entry ids, as a set (qbeid => true).
+     */
+    public static function load_quiz_qbeids(int $quizinstanceid): array {
+        global $DB;
+
+        $qbeids = [];
+
+        try {
+            if (self::slots_have_qbeid()) {
+                $rows = $DB->get_records(
+                    'quiz_slots',
+                    ['quizid' => $quizinstanceid],
+                    '',
+                    'id, questionbankentryid'
+                );
+                foreach ($rows as $row) {
+                    $qbeid = (int) ($row->questionbankentryid ?? 0);
+                    if ($qbeid) {
+                        $qbeids[$qbeid] = true;
+                    }
+                }
+            } else {
+                $sql = "SELECT qr.id, qr.questionbankentryid AS qbeid
+                          FROM {quiz_slots} qs
+                          JOIN {question_references} qr
+                               ON qr.itemid = qs.id
+                               AND qr.component = 'mod_quiz'
+                               AND qr.questionarea = 'slot'
+                         WHERE qs.quizid = :quizid";
+                foreach ($DB->get_records_sql($sql, ['quizid' => $quizinstanceid]) as $row) {
+                    $qbeid = (int) $row->qbeid;
+                    if ($qbeid) {
+                        $qbeids[$qbeid] = true;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // A quiz whose slots cannot be read scopes to nothing, never to everything.
+            self::dbg('load_quiz_qbeids: ' . $e->getMessage());
+            return [];
+        }
+
+        return $qbeids;
     }
 
     /**

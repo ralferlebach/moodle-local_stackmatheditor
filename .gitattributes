@@ -68,6 +68,7 @@ makefile   text eol=lf
 # packages: fine as developer/CI tools, out of place on a production Moodle server.
 /tests/load             export-ignore
 /tests/playwright       export-ignore
+/tests/a11y-nvda        export-ignore
 /tests/jest             export-ignore
 
 # Only relevant when a repository is updated in place.

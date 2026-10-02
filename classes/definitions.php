@@ -343,25 +343,27 @@ class definitions {
                         'tooltip' => get_string('btn_permeability', $p)],
                 ],
             ],
+            */
+            // @codingStandardsIgnoreEnd
 
             // 11. Geometry.
             'geometry' => [
                 'label'           => get_string('group_geometry', $p),
                 'default_enabled' => false,
-                'elements'        => [
+                // Distance, Angle and Length come from STACK's own geometry.mac (#66): core,
+                // so the group is available wherever STACK is.
+                'requires'        => [
+                    ['type' => 'stack_core', 'package' => 'geometry.mac'],
+                ],
+                'elements'        => array_merge(self::get_geometry_elements($p), [
                     ['label'   => '\\overline{AB}', 'write' => '\\overline{}',
                         'display' => 'AB̅',
                         'tooltip' => get_string('btn_overline', $p)],
-                    ['display' => '°', 'cmd'   => '\\circ',
-                        'tooltip' => get_string('btn_degree', $p)],
-                    ['display' => '∠', 'cmd'   => '\\angle',
-                        'tooltip' => get_string('btn_angle', $p)],
-                    ['display' => '⊥', 'cmd'   => '\\perp',
-                        'tooltip' => get_string('btn_perp', $p)],
-                ],
+                    // The degree sign, the bare angle symbol and the perpendicular sign have no
+                    // Maxima counterpart - "90circ", "angle" and "a perp b" are not expressions
+                    // (#34). The angle itself is among the structured entries above.
+                ]),
             ],
-            */
-            // @codingStandardsIgnoreEnd
 
             // 12. Trigonometry.
             'trigonometry' => [
@@ -409,39 +411,46 @@ class definitions {
                         'tooltip' => get_string('btn_prod', $p)],
                 ],
             ],
+            */
+            // @codingStandardsIgnoreEnd
 
             // 15. Vectors.
-            'vector_operators' => [
-                'label'           => get_string('group_vector_operators', $p),
+            // 15b. Vector products (#34): their own group, because the cross product needs
+            // Maxima's vect package and the arrow, the dot and the norm do not. With #66 the
+            // group is simply not rendered where the question does not load it.
+            'vector_products' => [
+                'label'           => get_string('group_vector_products', $p),
                 'default_enabled' => false,
+                'requires'        => [
+                    ['type' => 'maxima_share', 'package' => 'vect'],
+                ],
                 'elements'        => [
-                    ['label'   => '\\vec{v}', 'write' => '\\vec{}',
-                        'display' => 'v⃗',
-                        'tooltip' => get_string('btn_vec', $p)],
-                    ['display' => '‖v‖', 'write' => '\\left\\|\\right\\|',
-                        'tooltip' => get_string('btn_norm', $p)],
-                    ['display' => '·', 'cmd'   => '\\cdot',
-                        'tooltip' => get_string('btn_cdot', $p)],
-                    ['display' => '×', 'cmd'   => '\\times',
-                        'tooltip' => get_string('btn_cross', $p)],
+                    [
+                        'display'  => '×',
+                        'semantic' => 'crossproduct',
+                        'cmd'      => '\\times',
+                        'tooltip'  => get_string('btn_cross', $p),
+                    ],
                 ],
             ],
 
-            // 16. Differential calculus.
+            'vector_operators' => [
+                'label'           => get_string('group_vector_operators', $p),
+                'default_enabled' => false,
+                // The cross product is not here: LaTeX's times sign is multiplication, and
+                // Maxima needs express(a ~ b) from the vect package for a cross product (#34).
+                'elements'        => self::get_vector_elements($p),
             ],
 
             // 17. Vector differential.
             'vector_differential' => [
                 'label'           => get_string('group_vector_differential', $p),
                 'default_enabled' => false,
-                'elements'        => [
-                    ['display' => 'grad', 'write' => '\\mathrm{grad}\\,',
-                        'tooltip' => get_string('btn_grad', $p)],
-                    ['display' => 'div', 'write' => '\\mathrm{div}\\,',
-                        'tooltip' => get_string('btn_div_op', $p)],
-                    ['display' => 'rot', 'write' => '\\mathrm{rot}\\,',
-                        'tooltip' => get_string('btn_rot', $p)],
+                // The vect package provides grad, div and curl, and they need express() (#66).
+                'requires'        => [
+                    ['type' => 'maxima_share', 'package' => 'vect'],
                 ],
+                'elements'        => self::get_differential_operator_elements($p),
             ],
 
             // 18. Matrices.
@@ -449,17 +458,41 @@ class definitions {
                 'label'           => get_string('group_matrix_operators', $p),
                 'default_enabled' => false,
                 'elements'        => [
-                    ['display' => '𝟙', 'write' => '\\mathbb{1}',
-                        'tooltip' => get_string('btn_unity_matrix', $p)],
-                    ['display' => 'Aᵀ', 'write' => '^{\\intercal}',
-                        'tooltip' => get_string('btn_transpose', $p)],
-                    ['display' => 'A*', 'write' => '^{*}',
-                        'tooltip' => get_string('btn_conjugate', $p)],
-                    ['display' => 'A†', 'write' => '^{\\dagger}',
-                        'tooltip' => get_string('btn_adjoint', $p)],
+                    [
+                        'display' => '[⋮] ▾',
+                        'popup'   => 'matrix',
+                        'tooltip' => get_string('btn_matrix_popup', $p),
+                    ],
+                    [
+                        'display' => '(a⋮b) ▾',
+                        'popup'   => 'vector',
+                        'tooltip' => get_string('btn_vector_popup', $p),
+                    ],
+                    [
+                        'display' => 'det',
+                        'write'   => '\\det\\left(\\right)',
+                        'left'    => 1,
+                        'tooltip' => get_string('btn_determinant', $p),
+                    ],
+                    [
+                        'display' => 'ident',
+                        'write'   => '\\operatorname{ident}\\left(\\right)',
+                        'left'    => 1,
+                        'tooltip' => get_string('btn_unity_matrix', $p),
+                    ],
+                    [
+                        'display' => 'Aᵀ',
+                        'write'   => '\\operatorname{transpose}\\left(\\right)',
+                        'left'    => 1,
+                        'tooltip' => get_string('btn_transpose', $p),
+                    ],
+                    // A* and A-dagger are not here: "A^(*)" is not an expression Maxima
+                    // accepts, and there is no verified mapping for them (#34).
                 ],
             ],
 
+            // @codingStandardsIgnoreStart
+            /*
             // 19. Integral calculus.
             ],
 
@@ -703,6 +736,9 @@ class definitions {
             // Complete-token functions (#61): max(x,y) and min(x,y) are function calls,
             // while max inside Umax or argmax is just part of the identifier.
             'max', 'min',
+            // Structural operators: without them, "det" and "norm" are split into single
+            // variables by implicit multiplication ("d*e*t").
+            'det', 'determinant', 'norm', 'transpose',
         ];
     }
 
@@ -737,12 +773,411 @@ class definitions {
      * @return array Map string key => text in the current language.
      */
     public static function get_js_strings(): array {
-        $keys = ['aria_add_line', 'aria_add_row', 'aria_formula_input', 'aria_remove_row', 'aria_remove_step'];
+        $keys = [
+            'aria_add_line',
+            'aria_add_row',
+            'aria_formula_input',
+            'aria_remove_row',
+            'aria_remove_step',
+            'resize_confirm',
+            'toggle_editor',
+            'toggle_editor_off',
+            'toggle_editor_on',
+        ];
         $strings = [];
         foreach ($keys as $key) {
             $strings[$key] = get_string($key, 'local_stackmatheditor');
         }
         return $strings;
+    }
+
+    /**
+     * Toolbar entries for vector operations (#34).
+     *
+     * Only what the converter can map: the arrow is decoration and disappears, the dot is
+     * multiplication. The norm needs a Maxima function, so its button appears only once the site
+     * has named one - without that, the double bar would become abs(), a different function.
+     *
+     * @param string $p Plugin component name for get_string().
+     * @return array Toolbar elements.
+     */
+    private static function get_vector_elements(string $p): array {
+        $elements = [
+            [
+                'label'   => '\\vec{v}',
+                'write'   => '\\vec{}',
+                'display' => 'v⃗',
+                'tooltip' => get_string('btn_vec', $p),
+            ],
+            [
+                'display' => '·',
+                'cmd'     => '\\cdot',
+                'tooltip' => get_string('btn_cdot', $p),
+            ],
+        ];
+
+        if (self::get_norm_function() !== '') {
+            $elements[] = [
+                'display' => '‖v‖',
+                'write'   => '\\left\\|\\right\\|',
+                'left'    => 1,
+                'tooltip' => get_string('btn_norm', $p),
+            ];
+        }
+
+        return $elements;
+    }
+
+    /**
+     * Toolbar entries for elementary geometry (#63).
+     *
+     * School notation on the surface, STACK's geometry.mac underneath. Only the constructs with
+     * a documented STACK counterpart are offered: a point is a list of coordinates, a distance
+     * is Distance(A,B), an angle is Angle(A,B,C). A segment, ray, line, circle or sphere has no
+     * STACK type, and this plugin does not invent one.
+     *
+     * @param string $p Plugin component name for get_string().
+     * @return array Toolbar elements.
+     */
+    private static function get_geometry_elements(string $p): array {
+        $separator = self::get_coordinate_separator();
+
+        return [
+            [
+                'display' => 'P(x' . $separator . 'y)',
+                'semantic' => 'point2d',
+                'write'   => '\\left(' . $separator . '\\right)',
+                'left'    => 3,
+                'tooltip' => get_string('btn_point_2d', $p),
+            ],
+            [
+                'display' => 'P(x' . $separator . 'y' . $separator . 'z)',
+                'semantic' => 'point3d',
+                'write'   => '\\left(' . $separator . $separator . '\\right)',
+                'left'    => 5,
+                'tooltip' => get_string('btn_point_3d', $p),
+            ],
+            [
+                'display' => 'd(A,B)',
+                'semantic' => 'distance',
+                'write'   => 'd\\left(,\\right)',
+                'left'    => 3,
+                'tooltip' => get_string('btn_distance', $p),
+            ],
+            [
+                'display' => '\u{2220}ABC',
+                'semantic' => 'angle',
+                'write'   => '\\angle ',
+                'tooltip' => get_string('btn_angle_object', $p),
+            ],
+            [
+                'display' => '|AB|',
+                'semantic' => 'segmentlength',
+                'write'   => '\\left|\\overline{}\\right|',
+                'left'    => 1,
+                'tooltip' => get_string('btn_segment_length', $p),
+            ],
+        ];
+    }
+
+    /**
+     * Separator between the coordinates of a point (#63).
+     *
+     * Display only: it changes what a student sees and types, never the meaning. STACK receives
+     * a list either way.
+     *
+     * @return string One of "|", ";" or ",".
+     */
+    public static function get_coordinate_separator(): string {
+        $value = (string) get_config('local_stackmatheditor', 'coordinateseparator');
+
+        return in_array($value, ['|', ';', ','], true) ? $value : '|';
+    }
+
+    /**
+     * Toolbar entries for the vector differential operators (#45).
+     *
+     * A LaTeX symbol is not a CAS operation. Maxima has no gradient, divergence or curl that
+     * works everywhere: those functions live in the vect package, need express() and depend on
+     * the coordinate system, and whether a given STACK installation provides them - or a question
+     * defines its own - cannot be decided here. The CAS name therefore comes from a setting, and
+     * an operator without one is not offered at all, rather than producing an expression the CAS
+     * will reject.
+     *
+     * "rot" is the German label for what Maxima calls curl; the UI name never becomes the CAS
+     * name.
+     *
+     * @param string $p Plugin component name for get_string().
+     * @return array Toolbar elements, possibly empty.
+     */
+    private static function get_differential_operator_elements(string $p): array {
+        $operators = [
+            'gradient' => [
+                'display' => 'grad',
+                'latex'   => '\\operatorname{grad}',
+                'tooltip' => get_string('btn_grad', $p),
+            ],
+            'divergence' => [
+                'display' => 'div',
+                'latex'   => '\\operatorname{div}',
+                'tooltip' => get_string('btn_div_op', $p),
+            ],
+            'curl' => [
+                'display' => 'rot',
+                'latex'   => '\\operatorname{rot}',
+                'tooltip' => get_string('btn_rot', $p),
+            ],
+            'laplacian' => [
+                'display' => 'Δ',
+                'latex'   => '\\Delta',
+                'tooltip' => get_string('btn_laplacian', $p),
+            ],
+        ];
+
+        $configured = self::get_differential_operators();
+        $elements   = [];
+
+        foreach ($operators as $semantic => $operator) {
+            if (($configured[$semantic] ?? '') === '') {
+                continue;
+            }
+            $elements[] = [
+                'display'  => $operator['display'],
+                'semantic' => $semantic,
+                // The operand belongs to the template: the cursor lands inside the brackets.
+                'write'    => $operator['latex'] . '\\left(\\right)',
+                'left'     => 1,
+                'tooltip'  => $operator['tooltip'],
+            ];
+        }
+
+        return $elements;
+    }
+
+    /**
+     * CAS function names for the differential operators, from the site settings (#45).
+     *
+     * An empty value means the operator is not available on this site.
+     *
+     * @return array Semantic id => Maxima function name.
+     */
+    public static function get_differential_operators(): array {
+        $operators = [];
+
+        foreach (['gradient', 'divergence', 'curl', 'laplacian'] as $semantic) {
+            $value = trim((string) get_config('local_stackmatheditor', 'diffop' . $semantic));
+            $operators[$semantic] = preg_match('/^[a-z_][a-z0-9_]*$/i', $value) ? $value : '';
+        }
+
+        return $operators;
+    }
+
+    /**
+     * Every button the toolbar offers, with the LaTeX it writes (#34).
+     *
+     * The catalogue behind the contract test: a visible button has to have a mapping, and the
+     * mapping is the template - not the label, which is why no language strings are in here.
+     *
+     * @return array List of buttons with group, display, kind, template and semantic id.
+     */
+    public static function export_button_catalogue(): array {
+        $catalogue = [];
+
+        foreach (self::get_element_groups() as $key => $group) {
+            foreach ($group['elements'] ?? [] as $element) {
+                if (isset($element['write'])) {
+                    $kind = 'write';
+                    $template = $element['write'];
+                } else if (isset($element['cmd'])) {
+                    $kind = 'cmd';
+                    $template = $element['cmd'];
+                } else if (isset($element['popup'])) {
+                    $kind = 'popup';
+                    $template = $element['popup'];
+                } else if (isset($element['matrix'])) {
+                    $kind = 'matrix';
+                    $template = json_encode($element['matrix']);
+                } else {
+                    $kind = 'unknown';
+                    $template = '';
+                }
+
+                $catalogue[] = [
+                    'group'    => $key,
+                    'display'  => (string) ($element['display'] ?? ''),
+                    'kind'     => $kind,
+                    'template' => (string) $template,
+                    'semantic' => (string) ($element['semantic'] ?? ''),
+                    'left'     => (int) ($element['left'] ?? 0),
+                ];
+            }
+        }
+
+        return $catalogue;
+    }
+
+    /**
+     * Smallest and largest value the dimension setting accepts (#76).
+     */
+    public const MIN_STRUCTURED_DIMENSION = 2;
+
+    /**
+     * Largest value the dimension setting accepts.
+     */
+    public const MAX_STRUCTURED_DIMENSION = 20;
+
+    /**
+     * Default when nothing is configured anywhere.
+     *
+     * The value the plugin has always used, so an upgrade changes nothing.
+     */
+    public const DEFAULT_STRUCTURED_DIMENSION = 5;
+
+    /**
+     * Read a stored dimension, or null when there is none (#76).
+     *
+     * 0, null and '' are not dimensions - they mean the level said nothing, and the question has
+     * to be passed up. Anything outside the range is clamped rather than discarded: a value that
+     * once was valid should not silently disable a chooser.
+     *
+     * @param mixed $value Stored value.
+     * @return int|null Usable dimension, or null.
+     */
+    public static function clean_max_dimension($value): ?int {
+        if ($value === null || $value === '' || $value === false) {
+            return null;
+        }
+
+        $number = (int) $value;
+        if ($number <= 0) {
+            return null;
+        }
+
+        return max(
+            self::MIN_STRUCTURED_DIMENSION,
+            min(self::MAX_STRUCTURED_DIMENSION, $number)
+        );
+    }
+
+    /**
+     * Validate what a teacher typed into the dimension field (#76).
+     *
+     * Different from clean_max_dimension(), and deliberately so: a stored value is read as
+     * generously as possible, because it is already there and something once meant it. A value
+     * being typed now is checked strictly - silently turning 40 into 20 would tell the author
+     * their input was accepted as given.
+     *
+     * @param string $raw Raw form input.
+     * @return string|null Error string identifier, or null when the value is acceptable.
+     */
+    public static function validate_max_dimension_input(string $raw): ?string {
+        $value = trim($raw);
+
+        if ($value === '') {
+            // Empty means inherit, which is always allowed.
+            return null;
+        }
+
+        if (!preg_match('/^\d+$/', $value)) {
+            return 'error_maxdimension_number';
+        }
+
+        $number = (int) $value;
+        if (
+            $number < self::MIN_STRUCTURED_DIMENSION
+                || $number > self::MAX_STRUCTURED_DIMENSION
+        ) {
+            return 'error_maxdimension_range';
+        }
+
+        return null;
+    }
+
+    /**
+     * The site-wide maximum (#76).
+     *
+     * @return int Dimension between MIN_STRUCTURED_DIMENSION and MAX_STRUCTURED_DIMENSION.
+     */
+    public static function get_instance_max_dimension(): int {
+        $value = self::clean_max_dimension(
+            get_config('local_stackmatheditor', 'maxstructureddimension')
+        );
+
+        return $value ?? self::DEFAULT_STRUCTURED_DIMENSION;
+    }
+
+    /**
+     * Do the structured choosers exist in this configuration at all? (#76)
+     *
+     * The dimension setting has no meaning without them, which is why the form disables it.
+     *
+     * @param array $config Group key => enabled.
+     * @return bool True when the matrix or the vector group is on.
+     */
+    public static function has_structured_groups(array $config): bool {
+        return !empty($config['matrix_operators']) || !empty($config['vector_operators']);
+    }
+
+    /**
+     * Labels for the matrix and vector popups (#62).
+     *
+     * The popup runs in JavaScript and cannot call get_string(), so the strings travel with the
+     * definitions export.
+     *
+     * @return array Map of label keys to translated strings.
+     */
+    public static function get_popup_strings(): array {
+        $p = 'local_stackmatheditor';
+
+        return [
+            'matrixTitle'    => get_string('popup_matrix_title', $p),
+            'vectorTitle'    => get_string('popup_vector_title', $p),
+            'size'           => get_string('popup_matrix_size', $p),
+            'dimension'      => get_string('popup_dimension', $p),
+            'orientation'    => get_string('popup_orientation', $p),
+            'rowVector'      => get_string('popup_row_vector', $p),
+            'columnVector'   => get_string('popup_column_vector', $p),
+            'vectorSize'     => get_string('popup_vector_size', $p),
+        ];
+    }
+
+    /**
+     * How a one-row or one-column matrix is written to Maxima.
+     *
+     * 'matrix' keeps matrix([a,b,c]); 'list' writes [a,b,c], which is what STACK questions whose
+     * model answer is a list expect. The orientation of a vector is not part of a list, so the
+     * setting also decides how a list is drawn again on pre-fill.
+     *
+     * @return string Either 'matrix' or 'list'.
+     */
+    public static function get_vector_format(): string {
+        $value = get_config('local_stackmatheditor', 'vectorformat');
+
+        return $value === 'list' ? 'list' : 'matrix';
+    }
+
+    /**
+     * Name of the Maxima function a norm is written to.
+     *
+     * Maxima has no norm function that covers both vectors and matrices, so the name is a
+     * setting: question authors define it in the question variables (e.g. norm(v) :=
+     * sqrt(v . v)) and enter the same name here.
+     *
+     * @return string Maxima function name.
+     */
+    public static function get_norm_function(): string {
+        $value = trim((string)get_config('local_stackmatheditor', 'normfunction'));
+
+        if ($value === '' || !preg_match('/^[a-z_][a-z0-9_]*$/i', $value)) {
+            // The default follows the vector format, because the two have to fit: STACK's own
+            // Length() takes a list and refuses a matrix, so it is only the right answer where
+            // vectors are written as lists. With matrix vectors there is no function in STACK
+            // that does this, and the question has to define one - "norm" is the conventional
+            // name for it.
+            return self::get_vector_format() === 'list' ? 'Length' : 'norm';
+        }
+
+        return $value;
     }
 
     /**
@@ -766,6 +1201,15 @@ class definitions {
             'reservedWords'    => self::get_reserved_words(),
             'percentConstants' => self::get_percent_constants(),
             'usePercentPi'     => (bool)(int)get_config('local_stackmatheditor', 'usepercentpi'),
+            'vectorFormat'     => self::get_vector_format(),
+            'popupStrings'     => self::get_popup_strings(),
+            'diffOps'          => self::get_differential_operators(),
+            'coordinateSeparator' => self::get_coordinate_separator(),
+            'pointNotation'    => (bool)(int)get_config(
+                'local_stackmatheditor',
+                'pointnotation'
+            ),
+            'normFunction'     => self::get_norm_function(),
             // Accessible names of the editor's own controls, needed synchronously on page load.
             'strings'          => self::get_js_strings(),
         ];

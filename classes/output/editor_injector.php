@@ -17,6 +17,7 @@
 namespace local_stackmatheditor\output;
 
 use local_stackmatheditor\config_manager;
+use local_stackmatheditor\dependency_resolver;
 use local_stackmatheditor\definitions;
 use local_stackmatheditor\quiz_helper;
 use local_stackmatheditor\output\page_helper;
@@ -65,6 +66,10 @@ class editor_injector {
 
         // Build per-slot enabled map.
         $slotenabled = self::build_slot_enabled($slotconfigs);
+        // And, for every slot that has an editor, whether students may switch it off (#73).
+        $slottoggle = self::build_slot_student_toggle($slotconfigs, $slotenabled);
+        // Largest structure the choosers offer in each slot (#76).
+        $slotmax = self::build_slot_max_dimension($slotconfigs);
 
         $instancevarmode = config_manager::get_instance_variable_mode();
 
@@ -90,6 +95,14 @@ class editor_injector {
             'slotConfigs'      => !empty($slotconfigs) ? $slotconfigs : new \stdClass(),
             'slotVarModes'     => !empty($slotvarmodes) ? $slotvarmodes : new \stdClass(),
             'slotEnabled'      => !empty($slotenabled) ? $slotenabled : new \stdClass(),
+            // What applies to a field the slot map says nothing about - an adaptive quiz has no
+            // per-question configuration, so without this the runtime would enable everything
+            // the moment the page gate stopped deciding (#81).
+            'defaultEnabled'   => config_manager::get_effective_enabled($cmid),
+            'slotStudentToggle' => !empty($slottoggle) ? $slottoggle : new \stdClass(),
+            'allowStudentToggle' => config_manager::get_instance_student_toggle(),
+            'slotMaxDimension' => !empty($slotmax) ? $slotmax : new \stdClass(),
+            'maxDimension'     => definitions::get_instance_max_dimension(),
             'instanceDefaults' => $instancedefaults,
         ]);
     }
@@ -178,6 +191,12 @@ class editor_injector {
             }
         }
 
+        foreach ($stackdata['slotmap'] as $slot => $qid) {
+            if (isset($slotconfigs[$slot])) {
+                $slotconfigs[$slot] = self::drop_unavailable_groups($slotconfigs[$slot], $qid);
+            }
+        }
+
         return $slotconfigs;
     }
 
@@ -196,7 +215,34 @@ class editor_injector {
         if (!$qbeid) {
             return [];
         }
-        return [1 => config_manager::get_config($cmid, $qbeid)];
+        return [
+            1 => self::drop_unavailable_groups(
+                config_manager::get_config($cmid, $qbeid),
+                $questionid
+            ),
+        ];
+    }
+
+    /**
+     * Remove groups whose CAS packages are not available in this question (#66).
+     *
+     * A group that is configured but unavailable is switched off for the learner, who never
+     * learns why: a button that the question cannot execute is worse than no button, and the
+     * reason is an author's concern. The configuration itself is untouched - the author keeps
+     * their choice, and it takes effect as soon as the question loads the package.
+     *
+     * @param array $config Group key => enabled.
+     * @param int $questionid Question the editor is rendered for.
+     * @return array Config with unavailable groups switched off.
+     */
+    private static function drop_unavailable_groups(array $config, int $questionid): array {
+        foreach (dependency_resolver::get_unavailable_groups($questionid) as $group) {
+            if (array_key_exists($group, $config)) {
+                $config[$group] = 0;
+            }
+        }
+
+        return $config;
     }
 
     /**
@@ -256,5 +302,56 @@ class editor_injector {
         }
 
         return $enabled;
+    }
+
+    /**
+     * Per-slot permission for the student switch (#73).
+     *
+     * A subordinate permission: no editor, no switch, and any level that says no is final. The
+     * merged slot config carries the quiz and question values, so the AND is over the site
+     * setting and whatever the config holds.
+     *
+     * @param array $slotconfigs Slot => merged config array.
+     * @param array $slotenabled Slot => whether the editor is active there.
+     * @return array Slot => bool.
+     */
+    private static function build_slot_student_toggle(
+        array $slotconfigs,
+        array $slotenabled
+    ): array {
+        $site = config_manager::get_instance_student_toggle();
+        $toggle = [];
+
+        foreach ($slotconfigs as $slot => $cfg) {
+            if (empty($slotenabled[$slot]) || !$site) {
+                $toggle[$slot] = false;
+                continue;
+            }
+            $toggle[$slot] = !array_key_exists('_allowStudentToggle', $cfg)
+                || (bool) $cfg['_allowStudentToggle'];
+        }
+
+        return $toggle;
+    }
+
+    /**
+     * Per-slot chooser limit (#76).
+     *
+     * The client is handed the resolved number, never the levels it came from: resolving a
+     * hierarchy is a server's job, and a browser that knows only the answer cannot get it wrong.
+     *
+     * @param array $slotconfigs Slot => merged config array.
+     * @return array Slot => int.
+     */
+    private static function build_slot_max_dimension(array $slotconfigs): array {
+        $site = definitions::get_instance_max_dimension();
+        $max = [];
+
+        foreach ($slotconfigs as $slot => $cfg) {
+            $value = definitions::clean_max_dimension($cfg['_maxStructuredDimension'] ?? null);
+            $max[$slot] = $value ?? $site;
+        }
+
+        return $max;
     }
 }

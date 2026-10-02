@@ -172,6 +172,10 @@ jobs:
         run: tail -100 /tmp/moodle-server.log || true
       - name: Upload results and HTML dashboard
         if: ${{ always() }}
+        # A failed artifact upload must not fail a job whose checks passed: the finalize call
+        # has answered 403 on an otherwise green run (2026-09-14). The logs are a convenience,
+        # not a gate.
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: jmeter-results

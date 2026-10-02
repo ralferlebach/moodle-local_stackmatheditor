@@ -36,14 +36,41 @@
     border: 1px solid #dee2e6;
     border-radius: 4px 4px 0 0;
     border-bottom: none;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
 }
 
+/*
+ * A group never breaks by itself: up to five buttons it is one piece, and beyond that the
+ * clusters below hold the ends together (#74).
+ */
 .sme-tb-group {
     display: inline-flex;
+    flex-wrap: nowrap;
     gap: 2px;
     margin-right: 6px;
     padding-right: 6px;
     border-right: 1px solid #dee2e6;
+    min-width: 0;
+    max-width: 100%;
+}
+
+/* Only a group of more than five buttons may break, and only between its clusters. */
+.sme-tb-group-wrap {
+    flex-wrap: wrap;
+}
+
+.sme-tb-cluster {
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 2px;
+    white-space: nowrap;
+}
+
+.sme-tb-btn {
+    flex: 0 0 auto;
 }
 
 .sme-tb-group:last-child {
@@ -61,10 +88,62 @@
 }
 
 /* ═══════════════════════════════════════════════════
-   STACK MathEditor – Mobile / small-screen toolbar
-   Groups with class .sme-tb-group-wrap (>3 members)
-   become line-breakable on narrow viewports.
+   STACK MathEditor – narrow editors (#74)
+
+   What matters is the width of the editor, not of the
+   browser window: opening Moodle's navigation drawer
+   leaves the viewport alone and halves the space the
+   question has. The wrapper is therefore a query
+   container, and the toolbar asks it rather than the
+   window. The media query below stays as a fallback
+   for browsers without container queries.
    ═══════════════════════════════════════════════════ */
+
+/*
+ * Moodle's stylelint validates against a CSS syntax database that predates container queries,
+ * so it reports them as unknown. They are not: container queries are in every browser Moodle
+ * 4.5 supports. The rule is switched off for this block only.
+ */
+/* stylelint-disable csstree/validator */
+.sme-input-wrap,
+.sme-equiv-wrap {
+    container-type: inline-size;
+    container-name: smeeditor;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.sme-mq-container,
+.sme-equiv-rows {
+    min-width: 0;
+    max-width: 100%;
+}
+
+@container smeeditor (max-width: 900px) {
+    .sme-toolbar {
+        gap: 4px;
+    }
+}
+
+@container smeeditor (max-width: 650px) {
+    .sme-toolbar {
+        padding: 6px;
+    }
+
+    .sme-tb-group {
+        margin-right: 4px;
+        padding-right: 4px;
+    }
+
+    .sme-tb-btn {
+        min-width: 36px;
+        min-height: 36px;
+        padding: 4px 8px;
+        font-size: 0.9em;
+    }
+}
+/* stylelint-enable csstree/validator */
 
 @media (max-width: 767px) {
     .sme-toolbar {
@@ -422,4 +501,187 @@
 .sme-tb-lbl-html sub {
     font-size: 0.7em;
     line-height: 1;
+}
+
+/* Matrix and vector popups (#62). */
+.sme-structured-popup {
+    background: var(--white, #fff);
+    border: 1px solid var(--gray-400, #ced4da);
+    border-radius: 0.25rem;
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.2);
+    padding: 0.5rem;
+}
+
+.sme-matrix-grid-row {
+    display: flex;
+}
+
+.sme-matrix-grid-cell {
+    background: var(--white, #fff);
+    border: 1px solid var(--gray-400, #ced4da);
+    height: 1.4rem;
+    margin: 1px;
+    padding: 0;
+    width: 1.4rem;
+}
+
+.sme-matrix-grid-cell.sme-selected {
+    background: var(--primary, #0f6cbf);
+    border-color: var(--primary, #0f6cbf);
+}
+
+.sme-matrix-grid-cell:focus {
+    outline: 2px solid var(--warning, #f0ad4e);
+    outline-offset: 1px;
+}
+
+.sme-vector-row {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 0.25rem;
+}
+
+.sme-vector-dimension,
+.sme-vector-orientation {
+    background: var(--white, #fff);
+    border: 1px solid var(--gray-400, #ced4da);
+    border-radius: 0.2rem;
+    padding: 0.1rem 0.4rem;
+}
+
+.sme-vector-dimension.sme-selected,
+.sme-vector-orientation.sme-selected {
+    background: var(--primary, #0f6cbf);
+    border-color: var(--primary, #0f6cbf);
+    color: var(--white, #fff);
+}
+
+.sme-structured-popup-label {
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+    white-space: nowrap;
+}
+
+/*
+ * A typed space is a multiplication boundary for STACK's space-sensitive "insert stars"
+ * variants (#64): "a b" must be distinguishable from "ab" on screen. No symbol is drawn -
+ * a dot would mean explicit multiplication - only a little more room than a bare nbsp.
+ */
+.sme-mq-field .mq-space,
+.sme-mq-wrap .mq-space {
+    display: inline-block;
+    min-width: 0.35em;
+}
+
+/*
+ * On/off switch for the editor (#13). Students switch it off to see more of the question on a
+ * small screen, or to type plain STACK syntax; the original input comes back in its place.
+ */
+.sme-toggle {
+    align-items: center;
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 0.25rem;
+    min-height: 1.5rem;
+}
+
+.sme-toggle .sme-toggle-label {
+    /*
+     * Not --gray-600: #6a737b on white is 4.46:1, just under the 4.5:1 that WCAG AA asks for
+     * text this size, and axe says so. --gray-700 is 7:1.
+     */
+    color: var(--gray-700, #495057);
+    cursor: pointer;
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+/* Fallback for themes without the Bootstrap switch: a small sliding switch of our own. */
+.sme-toggle .sme-toggle-input {
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--gray-400, #ced4da);
+    border: 0;
+    border-radius: 0.65rem;
+    cursor: pointer;
+    height: 1.1rem;
+    margin: 0;
+    position: relative;
+    transition: background-color 0.15s ease-in-out;
+    width: 2rem;
+}
+
+.sme-toggle .sme-toggle-input::after {
+    background: var(--white, #fff);
+    border-radius: 50%;
+    content: "";
+    height: 0.9rem;
+    left: 0.1rem;
+    position: absolute;
+    top: 0.1rem;
+    transition: left 0.15s ease-in-out;
+    width: 0.9rem;
+}
+
+.sme-toggle .sme-toggle-input:checked {
+    background: var(--primary, #0f6cbf);
+}
+
+.sme-toggle .sme-toggle-input:checked::after {
+    left: 1rem;
+}
+
+.sme-toggle .sme-toggle-input:focus-visible {
+    outline: 2px solid var(--warning, #f0ad4e);
+    outline-offset: 2px;
+}
+
+.sme-hidden {
+    display: none;
+}
+
+/*
+ * The original STACK input while the editor is on: off screen, never display:none, so it keeps
+ * its place in the accessibility tree and STACK's validation feedback stays where it belongs.
+ */
+.sme-original-hidden {
+    height: 1px;
+    left: -9999px;
+    overflow: hidden;
+    position: absolute;
+    width: 1px;
+}
+
+/*
+ * Pointer selection in the choosers (#75).
+ *
+ * touch-action: none is what stops the page from scrolling while a finger draws a matrix size;
+ * without it the browser claims the gesture as a scroll before the first pointermove arrives.
+ */
+.sme-matrix-grid,
+.sme-vector-pad {
+    touch-action: none;
+}
+
+.sme-vector-pad {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 0.4rem;
+}
+
+.sme-vector-pad-cell {
+    background: var(--gray-200, #e9ecef);
+    border: 1px solid var(--gray-400, #ced4da);
+    border-radius: 0.15rem;
+    height: 1.4rem;
+    width: 1.4rem;
+}
+
+.sme-vector-pad-cell.sme-selected {
+    background: var(--primary, #0f6cbf);
+    border-color: var(--primary, #0f6cbf);
+}
+
+.sme-vector-pad-column {
+    flex-direction: column;
 }

@@ -32,8 +32,19 @@ define([
     'local_stackmatheditor/operator_map',
     'local_stackmatheditor/stack_bridge',
     'local_stackmatheditor/local_validation',
-    'local_stackmatheditor/a11y'
-], function($, tex2max, max2tex, toolbar, OperatorMap, Bridge, LocalValidation, A11y) {
+    'local_stackmatheditor/a11y',
+    'local_stackmatheditor/editor_toggle'
+], function(
+    $,
+    tex2max,
+    max2tex,
+    toolbar,
+    OperatorMap,
+    Bridge,
+    LocalValidation,
+    A11y,
+    Toggle
+) {
     'use strict';
 
     var TYPES = ['algebraic', 'units'];
@@ -73,6 +84,7 @@ define([
      * @param {Object} convOpts Conversion options.
      * @param {Function} dbg Debug logger.
      * @param {boolean} [silent] Write without raising events (right before a submit).
+     * @returns {string} The Maxima string that was written.
      */
     function syncToInput(mqField, $input, convOpts, dbg, silent) {
         var latex = mqField.latex();
@@ -99,6 +111,10 @@ define([
             dbg('Sync: LaTeX="' + latex
                 + '" Maxima="' + maxima + '"');
         }
+
+        // What we last wrote, so that the return channel (#77) can tell its own echo from a
+        // change somebody else made.
+        return maxima;
     }
 
 
@@ -295,6 +311,83 @@ define([
     }
 
     /**
+     * Rebuild the rows of the system editor from a Maxima string (#13).
+     *
+     * Used when the editor comes back after the student has typed into the plain input: the
+     * rows on screen are stale then, and what counts is what the input holds. A value that is no
+     * longer a system becomes one row rather than nothing.
+     *
+     * @param {Object} spec Same object attachSystemToggle() works with.
+     * @param {string} maxima Current value of the input.
+     */
+    function rebuildSystemRows(spec, maxima) {
+        var parts = getRelationSystemParts(maxima);
+
+        if (!parts || !parts.length) {
+            parts = (maxima && maxima.trim()) ? [maxima.trim()] : [''];
+        }
+
+        spec.rows.length = 0;
+        spec.$rowsWrap.empty();
+        spec.getActiveField(null);
+
+        parts.forEach(function(part) {
+            createSystemRow(
+                spec.$rowsWrap,
+                spec.rows,
+                spec.ctx,
+                spec.$input,
+                spec.convOpts,
+                part,
+                spec.varMode,
+                spec.getActiveField
+            );
+        });
+
+        if (spec.rows.length) {
+            spec.getActiveField(spec.rows[0].mqField);
+            spec.rows[0].$row.addClass('sme-system-row-active');
+        }
+    }
+
+    /**
+     * Put the on/off switch above the system editor (#13).
+     *
+     * Off hands the lines over as one nounand-joined answer and brings the plain input back
+     * into its place; on reads that answer - or whatever was typed in the meantime - back into
+     * the lines.
+     *
+     * @param {Object} spec Everything the switch needs.
+     * @returns {Object} The toggle, as editor_toggle returns it.
+     */
+    function attachSystemToggle(spec) {
+        var handedOver = null;
+        var strings = (spec.ctx.defs && spec.ctx.defs.strings) || {};
+        var toggle = Toggle.create({
+            input: spec.$input[0],
+            editor: [spec.$tb[0], spec.$container[0]],
+            strings: strings,
+            toInput: function() {
+                syncSystemToInput(spec.rows, spec.$input, spec.convOpts, spec.ctx.dbg, true);
+                handedOver = spec.$input.val();
+            },
+            toEditor: function() {
+                var current = spec.$input.val();
+                if (current !== handedOver) {
+                    rebuildSystemRows(spec, current);
+                }
+                spec.$input.val(current);
+            }
+        });
+
+        if (spec.mayToggle) {
+            spec.$wrap.prepend(toggle.element);
+        }
+
+        return toggle;
+    }
+
+    /**
      * Create one graphical system row.
      *
      * @param {jQuery} $rowsWrap Rows wrapper.
@@ -335,10 +428,16 @@ define([
         row.$mqSpan = $mqSpan;
 
         row.mqField = ctx.MQ.MathField($mqSpan[0], {
-            spaceBehavesLikeTab: true,
+            // Space inserts a space, it does not navigate (#64). STACK's space-sensitive
+            // "insert stars" variants read "a b" differently from "ab", so the editor has to be
+            // able to produce that boundary at all. Tab and Shift-Tab still leave the block.
+            spaceBehavesLikeTab: false,
             // Typing "U_max" would otherwise give U_{\max}: a subscript is a label, not a
             // function call (#61). Ignored by MathQuill 0.10.1, which lacks the option.
             disableAutoSubstitutionInSubscripts: true,
+            // "Umax" is one variable, not U times max (#58, #61): an operator name counts only
+            // when it is the whole word. Needs the fork build; MathQuill 0.10.1 ignores it.
+            autoOperatorNamesOnlyWholeWord: true,
             handlers: {
                 edit: function() {
                     if (row.prefilling) {
@@ -435,6 +534,120 @@ define([
     }
 
     /**
+     * Is the editor enabled for this slot? (#81)
+     *
+     * The slot map is the per-question answer; where it says nothing - an adaptive quiz has no
+     * per-question configuration - the page default applies. The page gate no longer decides
+     * this, so a missing entry must not be read as "on".
+     *
+     * @param {Object} ctx Shared context.
+     * @param {string} slot Slot number as a string.
+     * @returns {boolean} True when this field gets an editor.
+     */
+    function slotIsEnabled(ctx, slot) {
+        if (ctx.slotEnabled
+                && Object.prototype.hasOwnProperty.call(ctx.slotEnabled, slot)) {
+            return !!ctx.slotEnabled[slot];
+        }
+
+        return ctx.defaultEnabled !== false;
+    }
+
+    /**
+     * The chooser limit for a slot (#76).
+     *
+     * @param {Object} ctx Shared context.
+     * @param {string} slot Slot number as a string.
+     * @returns {number} Largest structure the choosers may offer here.
+     */
+    function maxDimensionForSlot(ctx, slot) {
+        var perslot = ctx.slotMaxDimension || {};
+
+        if (slot && Object.prototype.hasOwnProperty.call(perslot, slot)) {
+            return perslot[slot];
+        }
+
+        return ctx.maxDimension || 0;
+    }
+
+    /**
+     * May the student switch the editor off in this slot? (#73)
+     *
+     * A permission, not a preference: what the author switched off higher up cannot be switched
+     * on here, and a remembered browser state does not override it either. When this is false
+     * the switch is not rendered at all - a disabled control would suggest there is something to
+     * decide.
+     *
+     * @param {Object} ctx Shared context.
+     * @param {string} slot Slot number as a string.
+     * @returns {boolean} True when the switch may be shown.
+     */
+    function mayToggleEditor(ctx, slot) {
+        if (ctx.allowStudentToggle === false) {
+            return false;
+        }
+
+        var perslot = ctx.slotStudentToggle || {};
+        if (Object.prototype.hasOwnProperty.call(perslot, slot)) {
+            return !!perslot[slot];
+        }
+
+        return true;
+    }
+
+    /**
+     * Decide whether an input is none of the editor's business.
+     *
+     * Split out of initField() so that both stay within the complexity the Moodle ESLint
+     * configuration allows (#50 added the read-only check).
+     *
+     * @param {jQuery} $input Candidate input.
+     * @param {Object} ctx Shared context.
+     * @returns {boolean} True when the input must be left alone.
+     */
+    function skipField($input, ctx) {
+        var name = $input.attr('name') || '';
+        var inputid = $input.attr('id') || '';
+
+        if ($input.attr('data-sme-init') === '1') {
+            return true;
+        }
+
+        // Anything the editor built itself is not an answer field (#13): the on/off switch is an
+        // <input> too, and an id ending in _ans1 made it look like a STACK input - which gave it
+        // an editor, whose switch got another one.
+        if ($input.closest('.sme-input-wrap').length) {
+            return true;
+        }
+
+        // A STACK answer is typed, not ticked.
+        if (['checkbox', 'radio', 'button', 'submit', 'file'].indexOf(
+            ($input.attr('type') || '').toLowerCase()
+        ) !== -1) {
+            return true;
+        }
+
+        // Only an editable input gets an editor (#50): a review page or a teacher-rendered
+        // answer shows the value read-only, and a MathQuill field there would suggest the
+        // answer could still be changed.
+        if ($input.prop('disabled') || $input.prop('readonly')) {
+            ctx.dbg('Skipping read-only input: ' + name);
+            return true;
+        }
+
+        // Skip inputs that matched *_ans patterns but are not STACK inputs.
+        // A genuine STACK algebraic input name ends with _ansN (one or more digits).
+        if (!$input.attr('data-stack-input-type')
+                && !/(^|_)ans\d+$/.test(name)
+                && !/(^|_)ans\d+$/.test(inputid)) {
+            ctx.dbg('Skipping non-STACK input: ' + name);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Initialize one field.
      *
      * @param {HTMLInputElement} input Original input.
@@ -443,34 +656,16 @@ define([
     function initField(input, ctx) {
         var $input = $(input);
 
-        if ($input.attr('data-sme-init') === '1') {
+        if (skipField($input, ctx)) {
             return;
         }
 
         var name = $input.attr('name') || '';
-        var inputid = $input.attr('id') || '';
-        var hasattr = !!$input.attr('data-stack-input-type');
-
-        // Skip inputs that matched *_ans patterns but are not STACK inputs.
-        // A genuine STACK algebraic input name ends with _ansN (one or more digits).
-        if (!hasattr
-                && !/(^|_)ans\d+$/.test(name)
-                && !/(^|_)ans\d+$/.test(inputid)) {
-            ctx.dbg('Skipping non-STACK input: ' + name);
-            return;
-        }
-
         var slot = ctx.extractSlot(name);
 
         // Check per-slot enabled map.
-        // If slotEnabled is present and the slot is explicitly disabled,
-        // skip activation for this input entirely.
-        if (ctx.slotEnabled
-                && ctx.slotEnabled.hasOwnProperty(slot)
-                && !ctx.slotEnabled[slot]) {
-            ctx.dbg('Input ' + name
-                + ' -> slot ' + slot
-                + ' disabled, skipping');
+        if (!slotIsEnabled(ctx, slot)) {
+            ctx.dbg('Input ' + name + ' -> slot ' + slot + ' not enabled, skipping');
             return;
         }
 
@@ -504,7 +699,7 @@ define([
             function() {
                 return mqField;
             },
-            config, ctx.defs);
+            config, ctx.defs, maxDimensionForSlot(ctx, slot));
         $wrap.append($tb);
 
         // MQ container.
@@ -524,13 +719,7 @@ define([
         // its original DOM position so STACK's
         // validation feedback stays correctly placed.
         $input.before($wrap);
-        $input.css({
-            'position': 'absolute',
-            'left': '-9999px',
-            'width': '1px',
-            'height': '1px',
-            'overflow': 'hidden'
-        });
+        Toggle.hideOriginal($input[0]);
         $input.attr('data-sme-init', '1');
 
         // Read the initial Maxima value from the HTML attribute (defaultValue)
@@ -546,6 +735,13 @@ define([
 
         var systemParts = getRelationSystemParts(initialMaxima);
         var prefilling = (initialMaxima && initialMaxima.trim()) ? true : false;
+        // The last value this editor wrote into the input, so the return channel (#77) can tell
+        // its own echo from a change somebody else made.
+        var lastwritten = initialMaxima || '';
+        // True while this editor is writing into the input. syncToInput() dispatches the events
+        // STACK listens for from inside itself, so they arrive before it has returned and before
+        // lastwritten can be updated - the flag is what covers that window.
+        var syncingToInput = false;
         var activeMqField = null;
         var getActiveField = null;
 
@@ -628,11 +824,31 @@ define([
                 Bridge.signalEnter($input[0], {trigger: 'button', inputType: 'system'});
             });
 
+            // On/off switch for the system editor (#13); see attachSystemToggle().
+            var systemToggle = attachSystemToggle({
+                ctx: ctx,
+                $input: $input,
+                $wrap: $wrap,
+                $tb: $tb,
+                $container: $container,
+                $rowsWrap: $rowsWrap,
+                rows: rows,
+                convOpts: convOpts,
+                varMode: varMode,
+                getActiveField: getActiveField,
+                slot: slot,
+                mayToggle: mayToggleEditor(ctx, slot)
+            });
+
             toolbar.typeset($tb);
             setTimeout(function() {
                 $input.val(initialMaxima);
                 setTimeout(function() {
                     syncSystemToInput(rows, $input, convOpts, ctx.dbg);
+                    systemToggle.apply(
+                        mayToggleEditor(ctx, slot) ? !Toggle.startsOff() : true,
+                        true
+                    );
                 }, 0);
             }, 0);
 
@@ -646,18 +862,29 @@ define([
 
         // Create MathQuill.
         mqField = ctx.MQ.MathField($mqSpan[0], {
-            spaceBehavesLikeTab: true,
+            // Space inserts a space, it does not navigate (#64). STACK's space-sensitive
+            // "insert stars" variants read "a b" differently from "ab", so the editor has to be
+            // able to produce that boundary at all. Tab and Shift-Tab still leave the block.
+            spaceBehavesLikeTab: false,
             // Typing "U_max" would otherwise give U_{\max}: a subscript is a label, not a
             // function call (#61). Ignored by MathQuill 0.10.1, which lacks the option.
             disableAutoSubstitutionInSubscripts: true,
+            // "Umax" is one variable, not U times max (#58, #61): an operator name counts only
+            // when it is the whole word. Needs the fork build; MathQuill 0.10.1 ignores it.
+            autoOperatorNamesOnlyWholeWord: true,
             handlers: {
                 edit: function() {
                     if (prefilling) {
                         return;
                     }
-                    syncToInput(
-                        mqField, $input,
-                        convOpts, ctx.dbg);
+                    syncingToInput = true;
+                    try {
+                        lastwritten = syncToInput(
+                            mqField, $input,
+                            convOpts, ctx.dbg);
+                    } finally {
+                        syncingToInput = false;
+                    }
                 },
                 enter: function() {
                     // No editor action on Enter; the signal stays observable (#43).
@@ -667,16 +894,115 @@ define([
         });
         A11y.labelEditor(mqField);
 
+        // The original STACK input is the integration point in both directions (#77). STACK's
+        // JSXGraph bindings, and any other script, write into it and dispatch an event; without
+        // this the visible editor kept showing the old answer while STACK already had the new
+        // one - two different answers on one screen.
+        //
+        // The listeners sit on the element itself rather than on a container: an external
+        // library is under no obligation to let its events bubble, and STACK's do not.
+        /**
+         * Take a value somebody else wrote into the input back into the editor (#77).
+         *
+         * @param {Event} e The input or change event.
+         */
+        function adoptExternalValue(e) {
+            var current = $input.val();
+
+            // Our own write, echoed back by the event we raised for STACK.
+            if (syncingToInput || prefilling || current === lastwritten) {
+                return;
+            }
+
+            // With the editor switched off the input is what the student sees and types in;
+            // taking its value into a hidden editor would be busywork, and switching back on
+            // reads it anyway (#13).
+            if ($container.hasClass('sme-hidden')) {
+                lastwritten = current;
+                return;
+            }
+
+            ctx.dbg('External change on ' + ($input.attr('name') || '') + ': "' + current
+                + '" (' + (e && e.type) + ')');
+
+            // The editor is being told, not asked: writing the value back out now would raise a
+            // second validation for a value STACK already has.
+            prefilling = true;
+            if (current && current.trim()) {
+                prefill(mqField, current, ctx.defs, varMode, ctx.dbg);
+            } else {
+                mqField.latex('');
+            }
+            $input.val(current);
+            lastwritten = current;
+            setTimeout(function() {
+                prefilling = false;
+            }, 0);
+        }
+
+        $input[0].addEventListener('input', adoptExternalValue);
+        $input[0].addEventListener('change', adoptExternalValue);
+
+        // On/off switch for the editor (#13). Only for the single-line editor: a relation
+        // system would have to be rebuilt from the plain text on the way back, and silently
+        // dropping what a student typed while the editor was off is not an option.
+        var mayToggle = mayToggleEditor(ctx, slot);
+        var toggle = Toggle.create({
+            input: $input[0],
+            editor: [$tb[0], $container[0]],
+            strings: (ctx.defs && ctx.defs.strings) || {},
+            toInput: function() {
+                if (!prefilling) {
+                    syncingToInput = true;
+                    try {
+                        lastwritten = syncToInput(mqField, $input, convOpts, ctx.dbg, true);
+                    } finally {
+                        syncingToInput = false;
+                    }
+                }
+            },
+            toEditor: function() {
+                var current = $input.val();
+                lastwritten = current;
+                prefilling = true;
+                if (current && current.trim()) {
+                    prefill(mqField, current, ctx.defs, varMode, ctx.dbg);
+                } else {
+                    mqField.latex('');
+                }
+                $input.val(current);
+                setTimeout(function() {
+                    prefilling = false;
+                }, 0);
+            }
+        });
+        if (mayToggle) {
+            $wrap.prepend(toggle.element);
+        }
+
         // Check / Submit always send the visible state (#48).
         Bridge.register(function() {
             if (!prefilling) {
-                syncToInput(mqField, $input, convOpts, ctx.dbg, true);
+                syncingToInput = true;
+                try {
+                    lastwritten = syncToInput(mqField, $input, convOpts, ctx.dbg, true);
+                } finally {
+                    syncingToInput = false;
+                }
             }
         });
         Bridge.guardStaleValidation($input[0]);
 
         // Typeset toolbar (delayed for MathJax).
         toolbar.typeset($tb);
+
+        // Apply the remembered choice after the pre-fill has settled, so that switching off
+        // right away still hands the answer over correctly (#13).
+        setTimeout(function() {
+            // Without the permission the editor stays as the author configured it, whatever
+            // the browser remembers (#73).
+            toggle.apply(mayToggle ? !Toggle.startsOff() : true, true);
+        }, 0);
 
         // Pre-fill: two nested setTimeout(0) calls are used intentionally.
         //
@@ -702,6 +1028,7 @@ define([
                 // which would round-trip through tex2max and might produce a
                 // slightly different Maxima string.
                 $input.val(initialMaxima);
+                lastwritten = initialMaxima;
                 // Release the prefilling guard after one more tick so that any
                 // async MathQuill edit events triggered by the latex() call above
                 // (which MathQuill can fire on a deferred internal setTimeout) are
@@ -725,6 +1052,39 @@ define([
         }
     }
 
+    /**
+     * Watch for questions rendered after page load (#50).
+     *
+     * CAPQuiz, StudentQuiz and embedded questions replace the question in place over AJAX. The
+     * observer is throttled through a timeout so that a burst of mutations leads to one pass,
+     * and the pass itself is idempotent.
+     *
+     * @param {Object} ctx Shared context.
+     * @param {Function} attach Called when new nodes may carry a STACK input.
+     */
+    function observe(ctx, attach) {
+        var pending = null;
+
+        if (typeof window.MutationObserver !== 'function' || !document.body) {
+            return;
+        }
+
+        new window.MutationObserver(function(mutations) {
+            var relevant = mutations.some(function(mutation) {
+                return mutation.addedNodes && mutation.addedNodes.length;
+            });
+
+            if (!relevant || pending) {
+                return;
+            }
+
+            pending = window.setTimeout(function() {
+                pending = null;
+                attach(ctx);
+            }, 50);
+        }).observe(document.body, {childList: true, subtree: true});
+    }
+
     return /** @alias module:local_stackmatheditor/input_fields */ {
 
         /**
@@ -734,14 +1094,25 @@ define([
          */
         init: function(ctx) {
             A11y.useStrings(ctx.defs && ctx.defs.strings);
+            this.attach(ctx);
+            observe(ctx, this.attach.bind(this));
+        },
+
+        /**
+         * Attach an editor to every STACK input that does not have one yet.
+         *
+         * Idempotent: initField() leaves a marker on the input, so calling this again after a
+         * question has been replaced touches only the new one (#50).
+         *
+         * @param {Object} ctx Shared context.
+         */
+        attach: function(ctx) {
             var $inputs = $(selector());
             if (!$inputs.length) {
-                ctx.dbg(
-                    'No supported input fields found');
+                ctx.dbg('No supported input fields found');
                 return;
             }
-            ctx.dbg('Found ' + $inputs.length
-                + ' input fields');
+            ctx.dbg('Found ' + $inputs.length + ' input fields');
             $inputs.each(function() {
                 initField(this, ctx);
             });

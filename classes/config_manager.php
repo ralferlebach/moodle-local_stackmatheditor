@@ -23,7 +23,7 @@ namespace local_stackmatheditor;
  *   1. Exact:      cmid + qbeid          (question-level)
  *   2. Quiz-def.:  cmid + qbeid IS NULL  (quiz-level default)  ← NEW
  *   3. Global:     cmid=0 + qbeid        (cross-quiz question default)
- *   4. Any qbeid   match                 (legacy fallback)
+ *   4. questionid field, same quiz or global (very old records)
  *   5. Legacy:     questionid field      (very old records)
  *   6. Instance defaults                 (settings.php)
  *
@@ -99,8 +99,12 @@ class config_manager {
      * @return string Normalised implicit multiplication mode.
      */
     public static function get_instance_variable_mode(): string {
-        $mode = get_config('local_stackmatheditor', 'variablemode');
-        return definitions::normalise_implicit_mode((string) $mode);
+        // Since #65 the editor no longer has a setting of its own for implicit multiplication.
+        // STACK stores "insert stars" per input and is the only source of truth; the converter
+        // therefore always hands STACK what was typed. Values stored by earlier versions are
+        // ignored rather than migrated, so that turning the decision back over to STACK does not
+        // depend on an upgrade step having run.
+        return definitions::IMPLICIT_STACK;
     }
 
     /**
@@ -260,9 +264,11 @@ class config_manager {
      *   1. cmid + qbeid          (question-level)
      *   2. cmid + NULL           (quiz-level default)
      *   3. cmid=0 + qbeid        (global question default)
-     *   4. any qbeid match       (legacy)
-     *   5. questionid field      (very old records)
-     *   6. instance defaults     (settings.php)
+     *   4. questionid field      (very old records, same quiz or global only)
+     *   5. instance defaults     (settings.php)
+     *
+     * There is no "any qbeid" layer any more (#68): the same question bank entry used in
+     * another quiz is another context, and only the explicit global default crosses quizzes.
      *
      * @param int $cmid       Course module ID (0 for global).
      * @param int $qbeid      Question bank entry ID (0 to auto-resolve).
@@ -281,13 +287,16 @@ class config_manager {
 
         $qbeid = self::ensure_qbeid($qbeid, $questionid) ?? 0;
 
-        // Lowest-priority legacy/global fallbacks first.
+        // Lowest-priority legacy/global fallbacks first. Both are scoped: the same question bank
+        // entry in another quiz is a different context, and a configuration made there must not
+        // leak into this one (#68). Crossing quizzes is what the explicit global default
+        // (cmid = 0) is for.
         if ($questionid > 0) {
             $columns = $DB->get_columns(self::TABLE);
             if (isset($columns['questionid'])) {
                 $rec = self::get_one(
-                    "questionid = :qid AND questionid > 0",
-                    ['qid' => $questionid]
+                    "questionid = :qid AND questionid > 0 AND (cmid = 0 OR cmid = :cmid)",
+                    ['qid' => $questionid, 'cmid' => $cmid]
                 );
                 if ($rec) {
                     $result = self::merge_config_layer(
@@ -299,17 +308,6 @@ class config_manager {
         }
 
         if ($qbeid > 0) {
-            $rec = self::get_one(
-                "questionbankentryid = :qbeid",
-                ['qbeid' => $qbeid]
-            );
-            if ($rec) {
-                $result = self::merge_config_layer(
-                    $result,
-                    self::decode_raw_config($rec->$col)
-                );
-            }
-
             $rec = self::get_one(
                 "cmid = 0 AND questionbankentryid = :qbeid",
                 ['qbeid' => $qbeid]
@@ -415,9 +413,11 @@ class config_manager {
                     SQL_PARAMS_NAMED,
                     'lqid'
                 );
+                $legacyparams['lcmid'] = $cmid;
                 $legacyrecs = $DB->get_records_select(
                     self::TABLE,
-                    "questionid {$legacyinsql} AND questionid > 0",
+                    "questionid {$legacyinsql} AND questionid > 0"
+                        . " AND (cmid = 0 OR cmid = :lcmid)",
                     $legacyparams
                 );
                 // Index by questionid for O(1) lookup.
@@ -440,24 +440,10 @@ class config_manager {
             }
         }
 
-        // 2. Any qbeid match fallback.
+        // 2. Global question defaults (cmid=0 + qbeid). The batch path used to read every
+        // record with a matching qbeid here, whatever quiz it belonged to; that is gone (#68),
+        // so single and batch lookup follow the same hierarchy.
         [$insql, $params] = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
-        $records = $DB->get_records_select(
-            self::TABLE,
-            "questionbankentryid {$insql}",
-            $params
-        );
-        foreach ($records as $rec) {
-            $qbeid = (int) $rec->questionbankentryid;
-            if (isset($configs[$qbeid])) {
-                $configs[$qbeid] = self::merge_config_layer(
-                    $configs[$qbeid],
-                    self::decode_raw_config($rec->$col)
-                );
-            }
-        }
-
-        // 3. Global question defaults (cmid=0 + qbeid).
         $params['cmid'] = 0;
         $records = $DB->get_records_select(
             self::TABLE,
@@ -474,7 +460,7 @@ class config_manager {
             }
         }
 
-        // 4. Quiz-level default overrides lower layers for all slots.
+        // 3. Quiz-level default overrides lower layers for all slots.
         if ($cmid > 0) {
             $quizrec = self::get_one(
                 "cmid = :cmid AND questionbankentryid IS NULL",
@@ -488,7 +474,7 @@ class config_manager {
             }
         }
 
-        // 5. Exact question-level configs win last.
+        // 4. Exact question-level configs win last.
         if ($cmid > 0) {
             [$insql, $params] = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
             $params['cmid'] = $cmid;
@@ -658,5 +644,108 @@ class config_manager {
         }
 
         return $defaultenabled;
+    }
+
+    /**
+     * May any question on this page need the editor? (#80, #81)
+     *
+     * The page-level gate used to ask get_effective_enabled($cmid), which answers for the quiz
+     * and knows nothing about the questions in it. With "off by default, can be enabled per quiz
+     * or question", a quiz that stays off then stopped the runtime from loading at all - and a
+     * question that had been switched on explicitly never got the chance to say so.
+     *
+     * So this gate only decides what is true for the whole page. Mode 0 is off everywhere and
+     * nothing below can change it; everything else loads the runtime and lets each slot decide.
+     *
+     * @return bool True when the runtime has to be loaded.
+     */
+    public static function page_may_need_editor(): bool {
+        return self::get_instance_enabled_mode() !== 0;
+    }
+
+    /**
+     * May students switch the editor off and on here? (#73)
+     *
+     * A subordinate permission: it is only ever asked when the editor is enabled at all, and any
+     * level that says no is final. Lower levels may take the permission away, never give it back
+     * - which is why this is an AND across the levels and not the usual "most specific wins".
+     *
+     * @param int $cmid Course module ID (0 = ignore quiz/question level).
+     * @param int $qbeid Question bank entry ID (0 = ignore question level).
+     * @return bool True when the switch may be rendered.
+     */
+    public static function get_effective_student_toggle(
+        int $cmid = 0,
+        int $qbeid = 0
+    ): bool {
+        // No editor, no switch. This is the hard upper bound of the whole feature.
+        if (!self::get_effective_enabled($cmid, $qbeid)) {
+            return false;
+        }
+
+        if (!self::get_instance_student_toggle()) {
+            return false;
+        }
+
+        if ($cmid > 0) {
+            $quiz = self::get_quiz_default($cmid) ?? [];
+            if (isset($quiz['_allowStudentToggle']) && !$quiz['_allowStudentToggle']) {
+                return false;
+            }
+        }
+
+        if ($cmid > 0 && $qbeid > 0) {
+            $question = self::get_config($cmid, $qbeid);
+            if (isset($question['_allowStudentToggle']) && !$question['_allowStudentToggle']) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Site-wide permission for the student switch (#73).
+     *
+     * Defaults to true: the switch was available to everyone before this setting existed, and an
+     * upgrade must not quietly take it away.
+     *
+     * @return bool
+     */
+    public static function get_instance_student_toggle(): bool {
+        $value = get_config('local_stackmatheditor', 'allowstudenttoggle');
+
+        return $value === false ? true : (bool) (int) $value;
+    }
+
+    /**
+     * Largest structure the choosers offer here (#76).
+     *
+     * Ordinary inheritance, unlike the student switch: the most specific value wins, and a level
+     * that says nothing passes the question up. 0, null and an empty string are not dimensions -
+     * they mean "nothing stored here".
+     *
+     * @param int $cmid Course module ID (0 = ignore quiz/question level).
+     * @param int $qbeid Question bank entry ID (0 = ignore question level).
+     * @return int Effective maximum, always within the allowed range.
+     */
+    public static function get_effective_max_dimension(int $cmid = 0, int $qbeid = 0): int {
+        if ($cmid > 0 && $qbeid > 0) {
+            $question = self::get_config($cmid, $qbeid);
+            $value = definitions::clean_max_dimension($question['_maxStructuredDimension'] ?? null);
+            if ($value !== null) {
+                return $value;
+            }
+        }
+
+        if ($cmid > 0) {
+            $quiz = self::get_quiz_default($cmid) ?? [];
+            $value = definitions::clean_max_dimension($quiz['_maxStructuredDimension'] ?? null);
+            if ($value !== null) {
+                return $value;
+            }
+        }
+
+        return definitions::get_instance_max_dimension();
     }
 }

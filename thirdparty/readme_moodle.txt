@@ -2,17 +2,83 @@ This plugin includes the following third-party library:
 
 * MathQuill
   - Location: thirdparty/mathquill
-  - Version: 0.10.1 with one local patch (see below)
+  - Version: 0.10.1-sme.5
   - License: MPL-2.0
   - Upstream repository: https://github.com/mathquill/mathquill
+  - Fork used here:      https://github.com/ralferlebach/mathquill
 
 Source
 ------
-MathQuill was obtained from the upstream project repository:
-https://github.com/mathquill/mathquill
+MathQuill is included here as a build of a fork, not as an upstream release.
 
-For the version used in this plugin, see:
-https://github.com/mathquill/mathquill/releases/tag/v0.10.1
+  Base:   mathquill/mathquill, branch main, commit bb9974ab
+          (the build banner still reads "v0.10.1"; upstream has not tagged a
+          release since 2017, so the banner is not a usable version marker.)
+  Fork:   ralferlebach/mathquill
+  Fork commit: 9a6ebaf4eb522cc49d2886a33531ec4142beca5b
+          (branch main - informative only; the commit is what identifies this
+           build, a branch moves)
+  Change: editable LaTeX matrix environments (matrix, pmatrix, bmatrix,
+          Bmatrix, vmatrix, Vmatrix), the public API insertMatrix /
+          insertColumnVector / insertRowVector, the configuration option
+          autoOperatorNamesOnlyWholeWord, and the browser test automation
+          around them.
+
+  sme.5:  adds matrixAtCursor() and resizeMatrix() so that a host application
+          can read the matrix under the cursor and change its size, with a dry
+          run that reports how many filled cells a shrink would discard (#62).
+
+  sme.4:  makes the input event its own text-entry path (#72). Blink on
+          Android delivers soft-keyboard text without a keypress, so the
+          shim had never registered its typedText handler and dropped the
+          first characters until Enter was pressed. An IME commit is handled
+          on compositionend, character by character.
+
+  sme.3:  gives the typed space the class mq-space, so a space the user
+          entered can be made visible (#64). Without a class there is no
+          stable hook: MathQuill renders it as an unclassed span with a
+          non-breaking space.
+
+  sme.2:  adds autoOperatorNamesOnlyWholeWord. With it, MathQuill accepts an
+          operator name only when it covers the whole run of letters, so
+          typing "Umax" stays one identifier instead of becoming U \max
+          (#58, #61). The option defaults to false upstream; this plugin
+          switches it on for every editable field.
+
+The version string 0.10.1-sme.5 identifies this build; -sme.N is incremented
+whenever a new fork build is imported.
+
+Build provenance of 0.10.1-sme.5
+--------------------------------
+  Upstream repository: https://github.com/mathquill/mathquill
+  Upstream base:       bb9974ab
+  Fork repository:     https://github.com/ralferlebach/mathquill
+  Fork commit:         9a6ebaf4eb522cc49d2886a33531ec4142beca5b
+  Branch:              feature/matrix-environments (informative only)
+  Built with:          Node 22.22.2, npm 10.9.7
+  Build command:       npm ci && make
+  Imported:            2026-09-16
+  Verified:            rebuilt from this commit; the three files below match byte for byte
+  License:             MPL-2.0
+
+  SHA-256 of the imported runtime files:
+    mathquill.js      300429ef6c7c1e4ff0ecbaf5b1ab5bfc7781d6bc4a441ccdf42d8f5f8588fa89
+    mathquill.min.js  716c7a040668452d0fc6f7305c498c466c739487706114a53f010d91bd6686b4
+    mathquill.css     25af0d2b872ae38cb2024599787d4617dbecfb3a0228301a8b296ed60c59cb78
+
+  Reproduce with:
+    git clone https://github.com/ralferlebach/mathquill
+    cd mathquill
+    git checkout 9a6ebaf4eb522cc49d2886a33531ec4142beca5b
+    npm ci
+    make
+
+  Not with "git checkout feature/matrix-environments": a branch name is not a
+  release pin, and a later build of it can produce different artefacts.
+
+MPL-2.0 requires modified files to be identifiable as modified. The
+modification is not applied to the distributed build by hand: it lives in the
+fork's source tree, and the fork's history is the record of what was changed.
 
 Local patch (local_stackmatheditor #72)
 ---------------------------------------
@@ -50,24 +116,35 @@ local/stackmatheditor/thirdparty/mathquill
 
 To update this library:
 
-1. Download MathQuill version 0.10.1 from the upstream repository or release page.
-2. Extract the package.
-3. Copy the required distribution files into:
-   local/stackmatheditor/thirdparty/mathquill
-4. Remove any files not required by this plugin, such as development-only files,
-   test assets, CI configuration, and repository metadata.
-5. Verify that the license information for MathQuill remains included and that
-   thirdpartylibs.xml is kept in sync with the imported version.
+1. Check out the fork and build it:
 
-Build instructions
-------------------
-MathQuill is included here as a prebuilt third-party library.
+     git clone https://github.com/ralferlebach/mathquill
+     cd mathquill && npm ci && make
 
-No local build step is required by this Moodle plugin, provided the distributed
-upstream build artifacts are imported into thirdparty/mathquill.
+2. Note the exact commit you built (git rev-parse HEAD) - it belongs in this
+   file. Then copy from the fork's build/ directory into
+   local/stackmatheditor/thirdparty/mathquill:
+
+     mathquill.js
+     mathquill.min.js
+     mathquill.css
+     fonts/Symbola.{eot,svg,ttf,woff,woff2}
+
+   The basic build (mathquill-basic.*) and the Symbola-basic fonts are not
+   used by this plugin and are not imported.
+
+3. Raise the -sme.N suffix here and in thirdpartylibs.xml.
+4. Run the plugin's own test suites: a MathQuill upgrade changes the DOM the
+   Behat and Playwright selectors depend on.
+
+Note on the font directory
+--------------------------
+The fork's build emits fonts/ (plural); releases up to 0.10.1 used font/.
+mathquill.css references fonts/ relatively, so the directory name must not be
+changed on import.
 
 Notes
 -----
-This library is third-party code and is not covered by the plugin copyright.
-Any local modifications, if made in the future, should be documented here.
-At present, the thirdpartylibs.xml declaration marks this library as not customised.
+This library is third-party code and is not covered by the plugin copyright,
+with the exception of the matrix support contributed by the plugin author to
+the fork, which is likewise MPL-2.0.

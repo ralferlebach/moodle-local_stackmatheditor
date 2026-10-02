@@ -19,7 +19,8 @@ It also requires **qtype_stack** (STACK 4.13 or later) together with the plugins
 qbehaviour_adaptivemultipart, qbehaviour_dfexplicitvaildate, qbehaviour_dfcbmexplicitvaildate and
 qbank_importasversion. STACK needs a working Maxima installation (Maxima 5.46 or later).
 
-mod_adaptivequiz is supported if it is installed, but not required.
+No activity module is required. The editor attaches itself wherever Moodle's question engine
+renders an editable STACK input - see *Where the editor runs* below.
 
 
 Motivation for this plugin
@@ -37,6 +38,36 @@ question which toolbar groups are offered.
 
 Features
 --------
+
+### Version 1.3 (in development)
+
+* The toolbar follows the width of the editor rather than of the browser window: opening
+  Moodle's navigation drawer rewraps it, closing the drawer expands it again, and a group of up
+  to five buttons is never torn apart.
+* Android Chrome and Opera: the first characters typed on the soft keyboard no longer disappear
+  until Enter has been pressed once.
+* Elementary geometry in school notation: `P(2|3)`, `d(A,B)`, `∠ABC` and the length of a segment.
+  The coordinate separator is a setting and changes the notation, not the meaning.
+* Vector calculus: a chooser for dimension and orientation - one drag decides both, sideways for
+  a row and downwards for a column, and the buttons remain for keyboard use - plus arrow, dot
+  product and norm.
+* Matrix calculus: a grid chooser for rows and columns - drag with mouse, finger or pen, or use
+  the arrow keys, and the page does not scroll under an active selection - plus determinant,
+  identity and transpose. With the cursor in a matrix the chooser opens on its current size and
+  changes it. The largest size on offer is configurable per site, quiz and question.
+* Vector differential operators (grad, div, rot, Δ). Each button appears only where an
+  administrator has named the Maxima function for it and the question loads the package it needs.
+* A typed space reaches STACK as a space - `a b` and `ab` are different answers to a
+  space-sensitive input. Space no longer jumps out of a fraction; that is Tab or the arrow keys.
+* The original STACK input stays the integration point in both directions: a script that writes
+  into it - STACK's JSXGraph sliders, for example - is picked up by the visible editor at once,
+  and an edit in the editor still reaches that script.
+* Students can switch the editor off and back on. The answer travels with it, in either
+  direction, including in the multi-line editor. Whether they may is decided by the site, the
+  quiz and the question: any level can take the permission away, none can give it back.
+* The editor attaches to any editable STACK input the question engine renders - quiz, adaptive
+  quiz, question preview, CAPQuiz, StudentQuiz, embedded questions - and to questions that arrive
+  after page load. Read-only inputs keep their plain rendering.
 
 ### Version 1.2
 
@@ -64,9 +95,61 @@ Features
 * Configurable toolbar groups: basic arithmetic, powers and roots, exponential/logarithm, comparison
   operators, absolute value, logic, brackets, mathematical constants, trigonometry,
   Greek letters (lowercase and uppercase).
-* Five modes for implicit multiplication (see "How this plugin works").
+* Implicit multiplication is STACK's decision: its "Insert stars" setting per input is the only
+  source, and the configuration page shows it read-only with a link into the question.
 * Configuration per site, per quiz and per question, including an optional question preview.
 * English and German language packs.
+
+
+Release notes 1.3
+-----------------
+
+**New**
+
+* Structured matrices and vectors, entered through choosers rather than by writing LaTeX.
+* Elementary geometry in school notation: points, distance, angle, length of a segment.
+* Determinant, identity matrix, transpose, and a norm that becomes the Maxima function the site
+  names.
+* Vector differential operators, per-site configurable and package-aware.
+* Toolbar groups declare the CAS packages they need. A group whose packages the question does not
+  load is not rendered for students; the configuration page says which line to add.
+* A typed space reaches STACK as a space.
+* Students can switch the editor off and back on; the answer travels with it.
+* The editor attaches to any editable STACK input the question engine renders.
+
+**Fixed**
+
+* Nested structures survive the conversion in both directions: a root inside a root, a function
+  inside itself, absolute values and binomial coefficients within one another, at any depth. What
+  cannot be converted is reported instead of being passed on as a plausible-looking but different
+  expression.
+* Coordinates may be expressions: `P(f(x)|g(x))` reaches STACK as a list, as `P(2|3)` always did.
+
+* On Android Chrome and Opera, a freshly focused field accepts the first soft-keyboard character
+  immediately. It used to drop everything until Enter had been pressed once.
+* `Umax` reaches STACK as `Umax`, not as `U max`, and `U_max` keeps its whole subscript in both
+  directions.
+* The external service authorises: the course module has to be a quiz, the user has to be allowed
+  to view it, and a question id only answers for questions that quiz actually uses.
+
+**Behaviour changes**
+
+* The editor's own setting for implicit multiplication is gone. STACK's "Insert stars" per input
+  is the only source; stored values of the old setting are ignored.
+* Space no longer moves the cursor out of a fraction or a subscript - that is Tab, Shift-Tab or
+  the arrow keys.
+
+**For question authors**
+
+* `Distance`, `Angle` and `Length` come from STACK's `geometry.mac` and are always available.
+* `grad`, `div`, `rot` and Δ need `load("vect");` in the question variables, and an administrator
+  has to name the Maxima function for each of them. Without both, the buttons are not offered.
+* A norm is written to the function named in the settings (`norm` by default); define it in the
+  question variables, for example `norm(v) := sqrt(v . v)`.
+
+**Support matrix**
+
+* Moodle 4.5 to 5.2, PHP 8.2 to 8.4, STACK 4.13 or later, Maxima 5.46 or later.
 
 
 Installation
@@ -87,16 +170,36 @@ the visual editor.
 To configure the plugin and its behaviour, please visit:
 Site administration -> Plugins -> Local plugins -> STACK MathQuill Editor
 
-There, you find four settings:
+There, you find these settings:
 
 * **Plugin activation (instance-wide)** – completely disabled, completely enabled, or off / on by
   default with an override per quiz or question.
-* **Handling of implicit multiplication (default)** – the default variable mode (see below).
-* **Use percent-pi notation for π** – send π as `%pi` instead of `pi`.
 * **Default toolbar groups** – the groups offered unless a quiz or question says otherwise.
+* **Use percent-pi notation for π** – send π as `%pi` instead of `pi`.
+* **Vectors in Maxima** – whether a one-row or one-column matrix is written as `matrix([a,b,c])`
+  or as the list `[a,b,c]`. Choose what your STACK questions compare against.
+* **Maxima function for a norm** – the function `‖v‖` is written to. The default follows the
+  vector format: `Length` where vectors are lists (STACK's own function, any dimension), `norm`
+  where they are matrices - there the question has to define it, conventionally
+  `norm(v) := sqrt(v . v)`.
+* **Maxima function for the gradient / divergence / curl / Laplace operator** – one name each.
+  Empty means the button is not offered on this site.
+* **Coordinate separator** – how the coordinates of a point are separated on screen. Notation
+  only; STACK always receives a list.
+* **Maximum matrix / vector dimension** – the largest size the choosers offer. Default 5, and a
+  quiz or a question can set its own; an empty field there inherits. Without the matrix or the
+  vector group the setting has no effect.
+* **Allow students to switch the editor on and off** – the site-wide permission for the student
+  switch. A quiz or a question can take it away as well; none of them can give it back.
+* **Draw lists as points** – whether a stored list such as `[2,3]` is shown as `P(2|3)` again.
+* **Additional page types** – further activities that render STACK questions through the question
+  engine.
 
-Teachers who may manage a quiz can override the toolbar groups, the variable mode and – depending
-on the activation setting – the activation itself:
+There is no setting for implicit multiplication. STACK decides that per input, and the
+configuration page shows its current value read-only with a link into the question.
+
+Teachers who may manage a quiz can override the toolbar groups and – depending on the activation
+setting – the activation itself:
 
 * for the whole quiz, via the quiz's "More" menu -> "Set up STACK MathQuill Editor";
 * for a single STACK question, via the configuration icon next to the question on the quiz edit
@@ -137,17 +240,60 @@ that input:
     saved answer -> max2tex -> MathQuill
 
 Supported STACK input types: algebraic, units, textarea and equivalence reasoning.
-Supported pages: quiz attempt and review, question preview, and mod_adaptivequiz.
+### Which buttons a question offers
+
+A button is shown when two things hold: its mapping to STACK is verified, and the CAS packages
+it needs are available in that particular question.
+
+| Group | Needs | Where it comes from |
+|---|---|---|
+| Geometry (points, distance, angle) | `geometry.mac` | STACK core, always there |
+| Vector differential (grad, div, rot, Δ) | Maxima package `vect` | `load("vect");` in the question variables |
+
+Every button in the toolbar is covered by an automated contract test: its template is converted
+and has to produce a CAS-safe expression, and the structural ones are checked against their
+documented mapping. A button whose mapping is not verified is not shipped.
+
+A group whose packages are missing can still be selected and saved on the configuration page -
+it is marked there, with the line to add - but it is not rendered for students. No second
+"available" flag is stored anywhere: the question variables are the only source. Add the line
+and the group appears on the next reload; remove it and the group disappears again.
+
+The editor never writes `load(...)` or `stack_include_contrib(...)` into a question. That is the
+author's decision.
+
+### Where the editor runs
+
+The editor extends STACK questions, not a quiz module. Wherever the Moodle question engine
+renders an editable `qtype_stack` input, the editor attaches itself to it.
+
+| Context | Editor | Per-question configuration |
+|---|---|---|
+| Quiz attempt | yes | yes |
+| Quiz review, where the answer is still editable | yes | yes |
+| Question preview | yes | yes |
+| Adaptive Quiz (`mod_adaptivequiz`) | yes | yes |
+| CAPQuiz (`mod_capquiz`) | yes | site defaults |
+| Embedded questions (`filter_embedquestion`), including Page, Book and Lesson content | yes | site defaults |
+| StudentQuiz (`mod_studentquiz`) | yes, where STACK is an allowed question type | site defaults |
+| Another question-engine consumer | add its page type under *Additional page types* | site defaults |
+
+Not supported, and not for want of trying: native Lesson question types and Offline Quiz do not
+use `qtype_stack`, and a mobile app that renders its own question UI has no Moodle question DOM
+to attach to.
+
+A read-only input never gets an editor: on a review page or next to a teacher-rendered answer
+the value stays as it is shown.
+
+Questions that arrive after page load — CAPQuiz and StudentQuiz replace them over AJAX — are
+picked up as well, and never twice: an input that already carries an editor is skipped.
+
 
 ### Implicit multiplication
 
-| Mode | `2ab` becomes |
-|---|---|
-| explicit multiplication, single-character variables | `2*a*b` |
-| explicit multiplication, multi-character variables | `2*ab` |
-| spaces, single-character variables | `2 a b` |
-| spaces, multi-character variables | `2 ab` |
-| leave untouched, let STACK handle it ("star options") | `2ab` |
+STACK decides this, not the editor. Its "Insert stars" setting lives per input in the STACK
+question; the editor hands STACK what was typed and shows the current setting on its
+configuration page, with a link into the question.
 
 Function names (sqrt, sin, log, …), constants and Greek letter names are never split.
 
@@ -168,12 +314,27 @@ Function names (sqrt, sin, log, …), constants and Greek letter names are never
 * **Derivatives** become `diff(expr,x)`, `diff(expr,x,n)` or `diff(expr,x,n,y,m,…)`; the
   expression to differentiate is always written in the template's brackets. `diff` cannot tell
   whether d or ∂ was meant, so saved derivatives are always shown with ∂.
+* **Matrices** become `matrix([a,b],[c,d])`; a vector is a one-row or one-column matrix, or a
+  list when the vector format setting says so. Delimiters are notation: square brackets for a
+  matrix, round ones for a vector, `|A|` for a determinant and `‖A‖` for a norm.
+* **Determinants** become `determinant(...)`, whether written as `det(A)`, `\det` in front of a
+  matrix or with vertical bars around one.
+* **Points** become a list of coordinates: `P(2|3)` → `[2,3]`. The point name is a label and does
+  not reach the CAS. `d(A,B)` and `|AB|` become `Distance(A,B)`, `∠ABC` becomes `Angle(A,B,C)`
+  with B as the vertex.
+* **Differential operators** become the function the site has configured, so `rot` can be `curl`
+  in Maxima while the button still says `rot`. Δ is the Laplace operator only when a bracket
+  follows it; a bare Δ stays the Greek letter.
+* **A typed space** stays a space. `\,` and similar typographic spacing still carry no meaning.
 * **Greek letters** use STACK's own convention, the letter's name (`\alpha` ↔ `alpha`); variant
   glyphs map to their letter; the uppercase buttons that look like Latin letters write the Latin
   letter (STACK does not distinguish them either).
 
 ### Pitfalls
 
+* **A button that is not there** is usually a group that is switched off, a Maxima function that
+  has not been named in the settings, or a package the question does not load. The configuration
+  page says which of the three it is.
 * **Empty lines** can be edited in the multi-line editor, but STACK itself drops them when an
   answer is saved; after a reload they are gone.
 * A plain logical `or` is never turned back into `±` – only STACK's `nounor` is.
@@ -321,11 +482,18 @@ The plugin stores toolbar configurations per quiz and question, together with th
 modified them (see the privacy metadata). It stores no data about students or their answers –
 answers remain in STACK.
 
+The Moodle privacy API is fully supported: a data request reports and exports that "last modified
+by" reference and anonymises it on deletion. The configurations themselves are course data and
+are kept.
+
 
 Third-party libraries
 ---------------------
 
-MathQuill 0.10.1 (https://mathquill.com), Mozilla Public License 2.0 – see `thirdpartylibs.xml`.
+MathQuill 0.10.1-sme.1 (https://mathquill.com), Mozilla Public License 2.0 – see
+`thirdpartylibs.xml`. This is a build of the fork
+https://github.com/ralferlebach/mathquill, which adds editable matrix and vector
+environments; `thirdparty/readme_moodle.txt` records the base commit and the build steps.
 
 
 Maintainers

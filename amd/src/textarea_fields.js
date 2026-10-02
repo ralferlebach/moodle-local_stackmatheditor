@@ -31,8 +31,19 @@ define([
     'local_stackmatheditor/operator_map',
     'local_stackmatheditor/stack_bridge',
     'local_stackmatheditor/local_validation',
-    'local_stackmatheditor/a11y'
-], function($, tex2max, max2tex, toolbar, OperatorMap, Bridge, LocalValidation, A11y) {
+    'local_stackmatheditor/a11y',
+    'local_stackmatheditor/editor_toggle'
+], function(
+    $,
+    tex2max,
+    max2tex,
+    toolbar,
+    OperatorMap,
+    Bridge,
+    LocalValidation,
+    A11y,
+    Toggle
+) {
     'use strict';
 
     var TYPES = ['equiv', 'textarea'];
@@ -526,7 +537,7 @@ define([
         this.$wrap = $('<div>').addClass('sme-equiv-wrap');
         this.$tb = toolbar.build(function() {
             return self.activeField();
-        }, this.config, this.ctx.defs);
+        }, this.config, this.ctx.defs, this.ctx.maxDimension || 0);
         this.$wrap.append(this.$tb);
 
         this.$rows = $('<div>').addClass('sme-equiv-rows');
@@ -559,14 +570,11 @@ define([
         }
 
         this.$ta.before(this.$wrap);
-        this.$ta.css({
-            'position': 'absolute',
-            'left': '-9999px',
-            'width': '1px',
-            'height': '1px',
-            'overflow': 'hidden'
-        });
+        Toggle.hideOriginal(this.$ta[0]);
         this.$ta.attr('data-sme-init', '1');
+
+        this.buildToggle();
+        this.watchExternalChanges();
 
         toolbar.typeset(this.$tb);
         if (this.rows.length > 0) {
@@ -575,6 +583,116 @@ define([
 
         dbg('created: ' + this.rows.length + ' steps, id=' + this.$ta.attr('id'));
         this.syncNow();
+    };
+
+    /**
+     * Take a value somebody else wrote into the textarea back into the editor (#77).
+     *
+     * The same contract as for a single-line input: the original field is the integration point
+     * in both directions, and an external script may write into it and dispatch an event that
+     * does not bubble.
+     *
+     * @returns {void}
+     */
+    EquivEditor.prototype.watchExternalChanges = function() {
+        var self = this;
+
+        this.lastwritten = this.$ta.val();
+
+        var adopt = function(e) {
+            var current = self.$ta.val();
+
+            if (current === self.lastwritten) {
+                return;
+            }
+            if (self.$rows && self.$rows.hasClass('sme-hidden')) {
+                // The editor is switched off; the textarea is what the student sees (#13).
+                self.lastwritten = current;
+                return;
+            }
+
+            self.ctx.dbg('External change on the textarea (' + (e && e.type) + ')');
+            self.rebuildFrom(current);
+            self.$ta.val(current);
+            self.lastwritten = current;
+        };
+
+        this.$ta[0].addEventListener('input', adopt);
+        this.$ta[0].addEventListener('change', adopt);
+    };
+
+    /**
+     * Put the on/off switch above the editor (#13).
+     *
+     * The way back is simpler here than in the system editor: the lines of a textarea answer are
+     * separated by newlines, so reading them back is splitting a string, not parsing one.
+     *
+     * @returns {void}
+     */
+    EquivEditor.prototype.buildToggle = function() {
+        var self = this;
+        var handedover = null;
+        var slot = String(this.ctx.extractSlot(this.$ta.attr('name') || '') || '');
+        var maytoggle = true;
+        var perslot = this.ctx.slotStudentToggle || {};
+
+        if (this.ctx.allowStudentToggle === false) {
+            maytoggle = false;
+        } else if (Object.prototype.hasOwnProperty.call(perslot, slot)) {
+            maytoggle = !!perslot[slot];
+        }
+
+        this.toggle = Toggle.create({
+            input: this.$ta[0],
+            editor: [this.$tb[0], this.$rows[0], this.$addBtn ? this.$addBtn[0] : null],
+            strings: (this.ctx.defs && this.ctx.defs.strings) || {},
+            toInput: function() {
+                self.syncNow({silent: true});
+                handedover = self.$ta.val();
+            },
+            toEditor: function() {
+                var current = self.$ta.val();
+                if (current !== handedover) {
+                    self.rebuildFrom(current);
+                }
+                self.$ta.val(current);
+            }
+        });
+
+        if (maytoggle) {
+            this.$wrap.prepend(this.toggle.element);
+        }
+
+        setTimeout(function() {
+            self.toggle.apply(maytoggle ? !Toggle.startsOff() : true, true);
+        }, 0);
+    };
+
+    /**
+     * Rebuild the steps from the plain text of the textarea (#13).
+     *
+     * Used when the editor comes back after the student has typed into the textarea: the rows on
+     * screen are stale then, and what counts is what the textarea holds.
+     *
+     * @param {string} value Current textarea value.
+     * @returns {void}
+     */
+    EquivEditor.prototype.rebuildFrom = function(value) {
+        var steps = parseInitialSteps(value, this.inputType);
+        var i;
+
+        this.rows = [];
+        this.$rows.empty();
+        this.activeStepIdx = 0;
+        this.activeFieldIdx = 0;
+
+        for (i = 0; i < steps.length; i++) {
+            this.addStep(steps[i]);
+        }
+
+        if (this.rows.length) {
+            this.focusStep(0, 0);
+        }
     };
 
     /**
@@ -703,10 +821,16 @@ define([
         }
 
         mq = self.ctx.MQ.MathField($mqSpan[0], {
-            spaceBehavesLikeTab: true,
+            // Space inserts a space, it does not navigate (#64). STACK's space-sensitive
+            // "insert stars" variants read "a b" differently from "ab", so the editor has to be
+            // able to produce that boundary at all. Tab and Shift-Tab still leave the block.
+            spaceBehavesLikeTab: false,
             // Typing "U_max" would otherwise give U_{\max}: a subscript is a label, not a
             // function call (#61). Ignored by MathQuill 0.10.1, which lacks the option.
             disableAutoSubstitutionInSubscripts: true,
+            // "Umax" is one variable, not U times max (#58, #61): an operator name counts only
+            // when it is the whole word. Needs the fork build; MathQuill 0.10.1 ignores it.
+            autoOperatorNamesOnlyWholeWord: true,
             handlers: {
                 edit: function() {
                     fieldData.maxima = maximaFromLatex(mq.latex(), self.convOpts);
@@ -1017,6 +1141,7 @@ define([
         var oldVal = this.$ta.val();
         LocalValidation.show(this.$rows[0], problems);
         this.$ta.val(value);
+        this.lastwritten = value;
         if (value !== oldVal && !silent) {
             Bridge.triggerValidation(this.$ta[0]);
             dbg('sync: ' + lines.length + ' steps');
@@ -1039,8 +1164,12 @@ define([
                 }
                 var aname = $(this).attr('name') || '';
                 var aslot = ctx.extractSlot(aname);
-                if (ctx.slotEnabled && ctx.slotEnabled.hasOwnProperty(aslot) && !ctx.slotEnabled[aslot]) {
-                    ctx.dbg('Textarea ' + aname + ' -> slot ' + aslot + ' disabled, skipping');
+                // Same rule as for single-line inputs (#81): the slot map answers per question,
+                // and where it says nothing the page default decides.
+                var aknown = ctx.slotEnabled
+                    && Object.prototype.hasOwnProperty.call(ctx.slotEnabled, aslot);
+                if (aknown ? !ctx.slotEnabled[aslot] : ctx.defaultEnabled === false) {
+                    ctx.dbg('Textarea ' + aname + ' -> slot ' + aslot + ' not enabled, skipping');
                     return;
                 }
                 new EquivEditor(this, ctx);

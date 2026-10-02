@@ -38,17 +38,17 @@ let CMID;
 let QBE;
 let USERPASS;
 
-/** Keystrokes typed into every editor, and what each variable mode must make of them. */
+/**
+ * Keystrokes typed into every editor, and what has to arrive in the STACK input.
+ *
+ * Since #65 the editor has no setting for implicit multiplication: it hands STACK what was
+ * typed, and STACK's own "Insert stars" per input decides the rest. There is one expectation
+ * left, and the tests that drove the removed setting are gone with it.
+ */
 const TYPED = 'ab';
-const EXPECTED = {
-    explicit_single: 'a*b',
-    explicit_multi: 'ab',
-    space_single: 'a b',
-    space_multi: 'ab',
-    stack: 'ab',
-};
+const EXPECTED = 'ab';
 
-// Local reference: 9-40 s per test (the five-mode test is the longest).
+// Local reference: 9-40 s per test.
 test.describe.configure({mode: 'serial', timeout: 120000});
 
 /**
@@ -62,19 +62,17 @@ function resetQuizConfig() {
  * Set the admin settings through Site administration.
  *
  * @param {import('@playwright/test').Page} page Admin page.
- * @param {Object} s {enabled: 0-3, groups: string[], mode: string}.
+ * @param {Object} s {enabled: 0-3, groups: string[]}.
  */
 async function adminSettings(page, s) {
     await page.goto('/admin/settings.php?section=local_stackmatheditor');
     await page.locator('select[name="s_local_stackmatheditor_enabled"]').selectOption(String(s.enabled));
-    await page.locator('select[name="s_local_stackmatheditor_variablemode"]').selectOption(s.mode);
     await page.locator('select[name="s_local_stackmatheditor_default_groups[]"]').selectOption(s.groups);
     await page.getByRole('button', {name: 'Save changes'}).click();
     await page.waitForLoadState('domcontentloaded');
     // Read back: the stored values are what the page shows after a reload.
     await page.goto('/admin/settings.php?section=local_stackmatheditor');
     await expect(page.locator('select[name="s_local_stackmatheditor_enabled"]')).toHaveValue(String(s.enabled));
-    await expect(page.locator('select[name="s_local_stackmatheditor_variablemode"]')).toHaveValue(s.mode);
 }
 
 /**
@@ -82,7 +80,7 @@ async function adminSettings(page, s) {
  *
  * @param {import('@playwright/test').Page} page Teacher page.
  * @param {?string} qbeid Question bank entry id, or null for the quiz level.
- * @param {Object} s {enabled?: boolean, groups?: string[], mode?: string}.
+ * @param {Object} s {enabled?: boolean, groups?: string[]}.
  */
 async function configure(page, qbeid, s) {
     await page.goto('/local/stackmatheditor/configure.php?cmid=' + CMID + (qbeid ? '&qbeid=' + qbeid : ''));
@@ -92,9 +90,6 @@ async function configure(page, qbeid, s) {
     }
     if (s.groups) {
         await page.locator('select[name="groups[]"]').selectOption(s.groups);
-    }
-    if (s.mode) {
-        await page.locator('select[name="variablemode"]').selectOption(s.mode);
     }
     await page.getByRole('button', {name: 'Save configuration'}).click();
     await page.waitForLoadState('domcontentloaded');
@@ -174,37 +169,37 @@ test.describe('settings matrix: level x setting -> result', () => {
     });
 
     test('admin: on/off', async({}, info) => {
-        await adminSettings(admin, {enabled: 0, groups: ['basic_operators'], mode: 'stack'});
+        await adminSettings(admin, {enabled: 0, groups: ['basic_operators']});
         let view = await studentView(student, info, 'admin off');
         expect(view.map((q) => q.editor)).toEqual([false, false]);
 
-        await adminSettings(admin, {enabled: 1, groups: ['basic_operators'], mode: 'stack'});
+        await adminSettings(admin, {enabled: 1, groups: ['basic_operators']});
         view = await studentView(student, info, 'admin on');
         expect(view.map((q) => q.editor)).toEqual([true, true]);
     });
 
     test('admin: toolbar groups', async({}, info) => {
-        await adminSettings(admin, {enabled: 1, groups: ['basic_operators', 'greek_lower'], mode: 'stack'});
+        await adminSettings(admin, {enabled: 1, groups: ['basic_operators', 'greek_lower']});
         const view = await studentView(student, info, 'admin groups basic + greek');
         view.forEach((q) => expect(q.groups).toEqual(['basic_operators', 'greek_lower']));
     });
 
-    test('admin: implicit multiplication, every mode', async({}, info) => {
-        for (const mode of Object.keys(EXPECTED)) {
-            await adminSettings(admin, {enabled: 1, groups: ['basic_operators'], mode});
-            const view = await studentView(student, info, 'admin mode ' + mode);
-            view.forEach((q) => expect(q.value, mode).toBe(EXPECTED[mode]));
-        }
+    test('admin: what is typed is what STACK receives', async({}, info) => {
+        // #65: the editor does not interpret implicit multiplication any more, so there is one
+        // expectation rather than one per mode. STACK's "Insert stars" decides from here on.
+        await adminSettings(admin, {enabled: 1, groups: ['basic_operators']});
+        const view = await studentView(student, info, 'admin: typed value reaches STACK');
+        view.forEach((q) => expect(q.value).toBe(EXPECTED));
     });
 
-    test('quiz: overrides the admin groups, mode and activation', async({}, info) => {
-        await adminSettings(admin, {enabled: 3, groups: ['basic_operators'], mode: 'explicit_single'});
-        await configure(teacher, null, {enabled: true, groups: ['trigonometry'], mode: 'space_single'});
+    test('quiz: overrides the admin groups and activation', async({}, info) => {
+        await adminSettings(admin, {enabled: 3, groups: ['basic_operators']});
+        await configure(teacher, null, {enabled: true, groups: ['trigonometry']});
         let view = await studentView(student, info, 'quiz: trigonometry, space_single');
         view.forEach((q) => {
             expect(q.editor).toBe(true);
             expect(q.groups).toEqual(['trigonometry']);
-            expect(q.value).toBe(EXPECTED.space_single);
+            expect(q.value).toBe(EXPECTED);
         });
 
         await configure(teacher, null, {enabled: false});
@@ -213,12 +208,12 @@ test.describe('settings matrix: level x setting -> result', () => {
     });
 
     test('question: overrides the quiz for that question only', async({}, info) => {
-        await adminSettings(admin, {enabled: 3, groups: ['basic_operators'], mode: 'explicit_single'});
-        await configure(teacher, null, {enabled: true, groups: ['trigonometry'], mode: 'space_single'});
-        await configure(teacher, QBE[0], {enabled: true, groups: ['greek_lower'], mode: 'explicit_multi'});
+        await adminSettings(admin, {enabled: 3, groups: ['basic_operators']});
+        await configure(teacher, null, {enabled: true, groups: ['trigonometry']});
+        await configure(teacher, QBE[0], {enabled: true, groups: ['greek_lower']});
         let view = await studentView(student, info, 'question 1 overridden');
-        expect(view[0]).toEqual({editor: true, groups: ['greek_lower'], value: EXPECTED.explicit_multi});
-        expect(view[1]).toEqual({editor: true, groups: ['trigonometry'], value: EXPECTED.space_single});
+        expect(view[0]).toEqual({editor: true, groups: ['greek_lower'], value: EXPECTED});
+        expect(view[1]).toEqual({editor: true, groups: ['trigonometry'], value: EXPECTED});
 
         await configure(teacher, QBE[0], {enabled: false});
         view = await studentView(student, info, 'question 1 off');
@@ -227,24 +222,25 @@ test.describe('settings matrix: level x setting -> result', () => {
 
     test('inheritance chain admin -> quiz -> question', async({}, info) => {
         // Admin: off by default, may be switched on per quiz or question.
-        await adminSettings(admin, {enabled: 2, groups: ['comparators'], mode: 'explicit_single'});
+        await adminSettings(admin, {enabled: 2, groups: ['comparators']});
         let view = await studentView(student, info, 'chain: admin off-by-default');
         expect(view.map((q) => q.editor)).toEqual([false, false]);
 
-        // Quiz switches it on and inherits groups and mode from the admin settings.
+        // Quiz switches it on and inherits the groups from the admin settings.
         await configure(teacher, null, {enabled: true});
         view = await studentView(student, info, 'chain: quiz on, admin values');
         view.forEach((q) => {
             expect(q.editor).toBe(true);
             expect(q.groups).toEqual(['comparators']);
-            expect(q.value).toBe(EXPECTED.explicit_single);
+            expect(q.value).toBe(EXPECTED);
         });
 
-        // Question 2 changes only its mode; question 1 still follows quiz and admin.
-        await configure(teacher, QBE[1], {enabled: true, mode: 'space_single'});
-        view = await studentView(student, info, 'chain: question 2 mode');
-        expect(view[0].value).toBe(EXPECTED.explicit_single);
-        expect(view[1].value).toBe(EXPECTED.space_single);
-        expect(view[1].groups).toEqual(['comparators']);
+        // Question 2 changes only its groups; question 1 still follows quiz and admin.
+        await configure(teacher, QBE[1], {enabled: true, groups: ['greek_lower']});
+        view = await studentView(student, info, 'chain: question 2 groups');
+        expect(view[0].groups).toEqual(['comparators']);
+        expect(view[1].groups).toEqual(['greek_lower']);
+        expect(view[0].value).toBe(EXPECTED);
+        expect(view[1].value).toBe(EXPECTED);
     });
 });

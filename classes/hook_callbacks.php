@@ -38,13 +38,20 @@ class hook_callbacks {
      *
      * @var string[]
      */
-    private const EDITOR_PAGES = [
-        'mod-quiz-attempt',
-        'mod-quiz-review',
-        'question-preview',
-        'question-bank-previewquestion',
-        'mod-adaptivequiz-view',
-    ];
+    /**
+     * Pages where the editor is loaded.
+     *
+     * Kept as a method rather than a constant since #50: the list also comes from
+     * context_resolver, which an administrator can extend for a question-engine consumer this
+     * plugin has never heard of.
+     *
+     * @return bool True when the current page may host an editable STACK input.
+     */
+    private static function page_may_host_stack(): bool {
+        global $PAGE;
+
+        return context_resolver::supports_page((string) $PAGE->pagetype);
+    }
 
     /**
      * Pages where mod_quiz configure links are injected via JavaScript.
@@ -96,14 +103,18 @@ class hook_callbacks {
     /**
      * Return true if the current page is one where the editor should run.
      *
-     * For mod-adaptivequiz-view, only the actual attempt page qualifies;
-     * the plain view page (student overview / teacher report) does not.
+     * The page type only decides whether the bootstrap is loaded (#50). Whether an editable
+     * STACK input is actually there is decided in the browser, against the rendered DOM, so a
+     * page that carries none costs a module load and nothing else.
+     *
+     * For mod-adaptivequiz-view, only the actual attempt page qualifies; the plain view page
+     * (student overview / teacher report) does not.
      *
      * @return bool
      */
     private static function is_editor_page(): bool {
         global $PAGE;
-        if (!in_array($PAGE->pagetype, self::EDITOR_PAGES)) {
+        if (!self::page_may_host_stack()) {
             return false;
         }
         if ($PAGE->pagetype === 'mod-adaptivequiz-view') {
@@ -175,22 +186,26 @@ class hook_callbacks {
         $iseditor    = self::is_editor_page();
         $isconfigure = self::is_configure_page();
 
+        if (!$iseditor && !$isconfigure) {
+            return;
+        }
+
+        // Behind the page gate: no trace for pages this plugin does not touch (#53).
         quiz_helper::dbg(
             'before_footer: page=' . $PAGE->pagetype
             . ' editor=' . ($iseditor ? 'Y' : 'N')
             . ' configure=' . ($isconfigure ? 'Y' : 'N')
         );
 
-        if (!$iseditor && !$isconfigure) {
-            return;
-        }
-
         $cmid = quiz_helper::get_cmid();
 
         // Editor injection (mod_quiz and mod_adaptivequiz).
         if ($iseditor) {
-            if (!config_manager::get_effective_enabled($cmid)) {
-                quiz_helper::dbg('editor: disabled for cmid=' . $cmid . ', skipping');
+            // Only what holds for the whole page is decided here (#80, #81): a question may
+            // switch the editor on where its quiz leaves it off, and it can only do that if the
+            // runtime is on the page to ask.
+            if (!config_manager::page_may_need_editor()) {
+                quiz_helper::dbg('editor: disabled instance-wide, skipping');
             } else {
                 try {
                     mathjax_injector::inject();

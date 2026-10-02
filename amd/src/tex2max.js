@@ -113,6 +113,17 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     var BOUNDARY = '\uE000';
 
     /**
+     * Marker for a space the user typed on purpose (#64).
+     *
+     * Distinct from BOUNDARY: a boundary is the converter's own token separator and may
+     * disappear, while this one is user input and always ends up as a space in the CAS
+     * string. STACK decides what the space means.
+     *
+     * @type {string}
+     */
+    var EXPLICIT_SPACE = '\uE003';
+
+    /**
      * Build a fast-lookup set from an array of strings.
      *
      * @param {Array} list Array of strings.
@@ -286,7 +297,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         while (i < s.length) {
             ch = s.charAt(i);
 
-            if (/\s/.test(ch) || ch === BOUNDARY) {
+            if (/\s/.test(ch) || ch === BOUNDARY || ch === EXPLICIT_SPACE) {
                 i++;
                 continue;
             }
@@ -591,6 +602,393 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         }
 
         return trimmed;
+    }
+
+    /**
+     * Marker for the cross product between the LaTeX pass and the Maxima pass (#34).
+     *
+     * @type {string}
+     */
+    var CROSS_MARKER = '\uE004';
+
+    /**
+     * Turn the cross product into what Maxima can evaluate (#34).
+     *
+     * There is no cross product function in Maxima or in STACK. The operator is `~` from the
+     * vect package, and it only produces a result inside express(), so `a x b` becomes
+     * `express(a ~ b)`. Nothing else has to be defined in the question - `load("vect");` is the
+     * whole prerequisite, and #66 hides the button where that line is missing.
+     *
+     * Runs on the finished Maxima string, where the operands are plain: an identifier, a number,
+     * a bracketed group or a function call. Innermost first, so a nested product becomes
+     * express(express(a ~ b) ~ c).
+     *
+     * @param {string} s Maxima expression with the cross marker.
+     * @returns {string} Expression with express(... ~ ...) calls.
+     */
+    function resolveCrossProducts(s) {
+        var guard = 0;
+
+        while (s.indexOf(CROSS_MARKER) !== -1 && guard < 50) {
+            guard++;
+            s = replaceOneCrossProduct(s);
+        }
+
+        return s.split(CROSS_MARKER).join('*');
+    }
+
+    /**
+     * Replace the first cross marker with an express() call.
+     *
+     * @param {string} s Maxima expression.
+     * @returns {string} Expression with one marker resolved.
+     */
+    function replaceOneCrossProduct(s) {
+        var at = s.indexOf(CROSS_MARKER);
+        var leftend = at;
+        var rightstart = at + CROSS_MARKER.length;
+
+        // Whitespace around the sign belongs to neither operand.
+        while (leftend > 0 && /\s/.test(s.charAt(leftend - 1))) {
+            leftend--;
+        }
+        while (rightstart < s.length && /\s/.test(s.charAt(rightstart))) {
+            rightstart++;
+        }
+
+        var left = readOperandBefore(s, leftend);
+        var right = readOperandAfter(s, rightstart);
+
+        if (left !== null && right !== null
+                && /^[0-9.]+$/.test(left.text) && /^[0-9.]+$/.test(right.text)) {
+            // Two numbers: this is the multiplication sign after all, whatever it looked like.
+            // Imported content is the only place it can come from - the button is for vectors.
+            return s.replace(CROSS_MARKER, '*');
+        }
+
+        if (left === null || right === null) {
+            // No operand on one side: not a product, and nothing this can do with it.
+            return s.replace(CROSS_MARKER, '*');
+        }
+
+        return s.substring(0, left.start)
+            + 'express(' + left.text + ' ~ ' + right.text + ')'
+            + s.substring(right.end);
+    }
+
+    /**
+     * Read the factor that ends at the given position.
+     *
+     * A factor is an identifier or a number, optionally followed by a bracketed group - so
+     * `b`, `2`, `(a+b)` and `matrix([1],[2])` are each one factor.
+     *
+     * @param {string} s Maxima expression.
+     * @param {number} end Index just past the operand.
+     * @returns {?Object} {start, text} or null.
+     */
+    function readOperandBefore(s, end) {
+        var i = end - 1;
+        var depth;
+        var ch;
+
+        if (s.charAt(i) === ')' || s.charAt(i) === ']') {
+            depth = 0;
+            while (i >= 0) {
+                ch = s.charAt(i);
+                if (ch === ')' || ch === ']') {
+                    depth++;
+                } else if (ch === '(' || ch === '[') {
+                    depth--;
+                    if (depth === 0) {
+                        i--;
+                        break;
+                    }
+                }
+                i--;
+            }
+            if (depth !== 0) {
+                return null;
+            }
+        }
+
+        // Whatever stands in front of the group is its name, if anything.
+        while (i >= 0 && /[A-Za-z0-9_%.]/.test(s.charAt(i))) {
+            i--;
+        }
+
+        var start = i + 1;
+        var text = s.substring(start, end).trim();
+
+        return text === '' ? null : {start: start, text: text};
+    }
+
+    /**
+     * Read the factor that starts at the given position.
+     *
+     * @param {string} s Maxima expression.
+     * @param {number} start Index of the first character of the operand.
+     * @returns {?Object} {end, text} or null.
+     */
+    function readOperandAfter(s, start) {
+        var i = start;
+        var depth;
+        var ch;
+
+        while (i < s.length && /[A-Za-z0-9_%.]/.test(s.charAt(i))) {
+            i++;
+        }
+
+        if (s.charAt(i) === '(' || s.charAt(i) === '[') {
+            depth = 0;
+            while (i < s.length) {
+                ch = s.charAt(i);
+                if (ch === '(' || ch === '[') {
+                    depth++;
+                } else if (ch === ')' || ch === ']') {
+                    depth--;
+                    if (depth === 0) {
+                        i++;
+                        break;
+                    }
+                }
+                i++;
+            }
+            if (depth !== 0) {
+                return null;
+            }
+        }
+
+        var text = s.substring(start, i).trim();
+
+        return text === '' ? null : {end: i, text: text};
+    }
+
+    /**
+     * Convert the elementary geometry notation to STACK's geometry functions (#63).
+     *
+     * Only the three constructs that have a documented counterpart in STACK's geometry.mac are
+     * converted:
+     *
+     *     P(2|3)                  ->  [2,3]              a point is a list of coordinates
+     *     d(A,B)                  ->  Distance(A,B)
+     *     |AB| with the overline  ->  Distance(A,B)      the length of a segment is a distance
+     *     \angle ABC              ->  Angle(A,B,C)       B is the vertex, as in school notation
+     *
+     * A segment, ray, line, circle or sphere has no STACK type. Nothing is invented for them.
+     *
+     * @param {string} s Input.
+     * @param {Object} defs Runtime definitions; defs.coordinateSeparator selects the separator.
+     * @returns {string} Converted string.
+     */
+    function convertGeometry(s, defs) {
+        var separator = (defs && defs.coordinateSeparator) || '|';
+
+        // The length of a segment, written with the overline and vertical bars.
+        s = s.replace(
+            /\\left\|\\overline\{([A-Za-z])([A-Za-z])\}\\right\|/g,
+            'Distance($1,$2)'
+        );
+        s = s.replace(/\\overline\{([A-Za-z])([A-Za-z])\}/g, 'Distance($1,$2)');
+
+        // Angle: the school notation names both legs and the vertex in one go.
+        s = s.replace(
+            /\\angle\s*([A-Za-z])\s*([A-Za-z])\s*([A-Za-z])/g,
+            'Angle($1,$2,$3)'
+        );
+
+        // Distance written as d(A,B).
+        s = s.replace(
+            /(^|[^A-Za-z0-9_%])d\s*(?:\\left)?\(\s*([A-Za-z][A-Za-z0-9_]*)\s*,\s*([A-Za-z][A-Za-z0-9_]*)\s*(?:\\right)?\)/g,
+            '$1Distance($2,$3)'
+        );
+
+        // A point: coordinates in brackets, separated by the configured separator. The name in
+        // front is a label and does not travel to the CAS.
+        //
+        // The brackets are matched structurally (#79): coordinates are ordinary expressions and
+        // may contain function calls of their own, and a pattern that forbids inner brackets
+        // does not reject P(f(x)|g(x)) - it leaves it alone, so a point reaches the CAS as a
+        // function call with a logical or inside it.
+        s = convertPointNotation(s, separator);
+
+        return s;
+    }
+
+    /**
+     * UI label of each differential operator, by semantic id (#45).
+     *
+     * The label is what the student sees; the CAS name comes from the site settings. "rot" is
+     * the German name for what Maxima calls curl, and neither becomes the other by accident.
+     *
+     * @type {Object}
+     */
+    var DIFFERENTIAL_OPERATOR_LABELS = {
+        gradient: 'grad',
+        divergence: 'div',
+        curl: 'rot'
+    };
+
+    /**
+     * Convert the differential operators to their configured CAS function (#45).
+     *
+     * An operator that has no configured function is reported through the problem channel
+     * instead of being written out: "rot(F)" would be an identifier the CAS does not know, and a
+     * wrong answer is worse than a message. The Laplace operator is a Delta directly followed by
+     * a bracket; a bare Delta stays the Greek letter.
+     *
+     * @param {string} s Input.
+     * @param {Object} local Conversion state; local.problems collects unavailable operators.
+     * @param {Object} defs Runtime definitions; defs.diffOps holds the configured names.
+     * @returns {string} Converted string.
+     */
+    function convertDifferentialOperators(s, local, defs) {
+        var operators = (defs && defs.diffOps) || {};
+
+        Object.keys(DIFFERENTIAL_OPERATOR_LABELS).forEach(function(semantic) {
+            var label = DIFFERENTIAL_OPERATOR_LABELS[semantic];
+            var name = '(?:\\\\operatorname|\\\\mathrm)\\{' + label + '\\}(?:\\\\,)?';
+            var applied = new RegExp(name + '(\\s*(?:\\\\left)?\\()', 'g');
+            var bare = new RegExp(name, 'g');
+
+            if (!bare.test(s)) {
+                return;
+            }
+            bare.lastIndex = 0;
+
+            if (!operators[semantic]) {
+                // No verified CAS function on this site: the operator is not written out.
+                local.problems.push('diffop_unavailable');
+                s = s.replace(bare, '');
+                return;
+            }
+
+            s = s.replace(applied, operators[semantic] + '$1');
+
+            // What is left has no operand in brackets - an answer written with the older,
+            // display-only buttons. "grad f" is not a CAS call, so it is reported.
+            bare.lastIndex = 0;
+            if (bare.test(s)) {
+                bare.lastIndex = 0;
+                local.problems.push('diffop_operand_missing');
+                s = s.replace(bare, '');
+            }
+        });
+
+        // Laplace operator: a Delta with an operand. Without a bracket it is the Greek letter.
+        if (/\\Delta\s*(?:\\left)?\(/.test(s)) {
+            if (!operators.laplacian) {
+                local.problems.push('diffop_unavailable');
+                s = s.replace(/\\Delta(\s*(?:\\left)?\()/g, '$1');
+            } else {
+                s = s.replace(/\\Delta(\s*(?:\\left)?\()/g, operators.laplacian + '$1');
+            }
+        }
+
+        return s;
+    }
+
+    /**
+     * Convert LaTeX matrix environments to Maxima's matrix() call.
+     *
+     * All six environments (matrix, pmatrix, bmatrix, Bmatrix, vmatrix, Vmatrix) map to the same
+     * Maxima structure; the delimiters are presentation, not semantics. Cell contents stay LaTeX
+     * here and are converted by the remaining pipeline.
+     *
+     * Innermost environments are converted first, so a matrix inside a matrix cell works.
+     * Short rows are padded with empty cells, which Maxima rejects loudly rather than silently
+     * computing with a ragged structure.
+     *
+     * The delimiters are presentation with two exceptions: |...| is a determinant and ‖...‖ is a
+     * norm, both of which become function calls. \\det in front of any matrix environment means
+     * the same as |...|.
+     *
+     * An empty cell is an incomplete editor state, not a value: it is reported through the
+     * problem channel (#44) instead of being padded with a zero, which would silently change the
+     * answer.
+     *
+     * @param {string} s Input.
+     * @param {Object} local Conversion state; local.problems collects incomplete structures.
+     * @param {Object} defs Runtime definitions (normFunction, vectorFormat).
+     * @returns {string} Converted string.
+     */
+    function convertMatrixEnvironments(s, local, defs) {
+        // A body without a nested \\begin: this matches the innermost environment first.
+        var pattern = new RegExp(
+            '(\\\\det\\s*)?' +
+                '\\\\begin\\{(matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix)\\}' +
+                '((?:(?!\\\\begin\\{)[\\s\\S])*?)' +
+                '\\\\end\\{\\2\\}',
+            'g'
+        );
+        var normfunction = (defs && defs.normFunction) || 'norm';
+        var aslist = defs && defs.vectorFormat === 'list';
+        var maxIter = 20;
+        var previous;
+
+        do {
+            previous = s;
+            s = s.replace(pattern, function(match, det, environment, body) {
+                var rows = splitTopLevel(body, '\\\\');
+                var converted = [];
+                var columns = 0;
+                var cells;
+                var structure;
+                var i;
+                var j;
+
+                for (i = 0; i < rows.length; i++) {
+                    cells = splitTopLevel(rows[i], '&');
+                    for (j = 0; j < cells.length; j++) {
+                        cells[j] = stripOuterBraces(cells[j]).replace(/\s+/g, ' ').trim();
+                    }
+                    columns = Math.max(columns, cells.length);
+                    converted.push(cells);
+                }
+
+                for (i = 0; i < converted.length; i++) {
+                    while (converted[i].length < columns) {
+                        converted[i].push('');
+                    }
+                    for (j = 0; j < converted[i].length; j++) {
+                        if (converted[i][j] === '') {
+                            local.problems.push('matrix_cell_empty');
+                        }
+                    }
+                }
+
+                // ‖(x, y)‖ and |A| wrap a single structure: the inner environment has already
+                // been converted, so it is used as it stands instead of being wrapped again.
+                if (
+                    converted.length === 1 &&
+                    converted[0].length === 1 &&
+                    (environment === 'vmatrix' || environment === 'Vmatrix')
+                ) {
+                    structure = converted[0][0];
+                } else if (aslist && converted.length === 1) {
+                    structure = '[' + converted[0].join(',') + ']';
+                } else if (aslist && columns === 1) {
+                    structure = '[' + converted.map(function(row) {
+                        return row[0];
+                    }).join(',') + ']';
+                } else {
+                    structure = 'matrix(' + converted.map(function(row) {
+                        return '[' + row.join(',') + ']';
+                    }).join(',') + ')';
+                }
+
+                if (environment === 'vmatrix' || det) {
+                    return 'determinant(' + structure + ')';
+                }
+                if (environment === 'Vmatrix') {
+                    return normfunction + '(' + structure + ')';
+                }
+
+                return structure;
+            });
+            maxIter--;
+        } while (s !== previous && maxIter > 0);
+
+        return s;
     }
 
     /**
@@ -1228,6 +1626,258 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Turn point notation into a Maxima list, with bracket-aware coordinates (#79).
+     *
+     * @param {string} s LaTeX with \left/\right still in place.
+     * @param {string} separator The configured coordinate separator.
+     * @returns {string} String with points replaced by lists.
+     */
+    function convertPointNotation(s, separator) {
+        var out = '';
+        var i = 0;
+
+        while (i < s.length) {
+            var open = s.indexOf('(', i);
+            if (open === -1) {
+                out += s.substring(i);
+                break;
+            }
+
+            var close = matchingBracket(s, open);
+            if (close === -1) {
+                out += s.substring(i);
+                break;
+            }
+
+            var body = s.substring(open + 1, close);
+
+            // A bar can be a coordinate separator or an absolute value; inside \left| ... the
+            // bars belong to the value, and splitting there would turn |x| into a coordinate.
+            // Whoever wrote the bars as delimiters meant a value, so the bracket is left alone.
+            if (separator === '|'
+                    && (body.indexOf('\\left|') !== -1 || body.indexOf('\\right|') !== -1)) {
+                out += s.substring(i, close + 1);
+                i = close + 1;
+                continue;
+            }
+
+            var parts = splitOutsideBrackets(body, separator);
+            var label = out.match(/([A-Z][A-Za-z0-9_]*)\s*(\\left)?$/);
+
+            if (parts.length >= 2 && parts.every(function(part) {
+                return part.trim() !== '';
+            })) {
+                // The label in front of the bracket is a name for the reader, not for the CAS.
+                if (label) {
+                    out = out.substring(0, out.length - label[0].length);
+                } else if (/\\left$/.test(out)) {
+                    out = out.substring(0, out.length - 5);
+                }
+                out += '[' + parts.map(function(part) {
+                    return part.trim();
+                }).join(',') + ']';
+                i = close + 1;
+                if (s.substring(i, i + 6) === '\\right') {
+                    i += 6;
+                }
+                continue;
+            }
+
+            out += s.substring(i, close + 1);
+            i = close + 1;
+        }
+
+        return out;
+    }
+
+    /**
+     * Split on a separator that is not inside brackets.
+     *
+     * @param {string} body Text between the brackets.
+     * @param {string} separator Separator character.
+     * @returns {Array} The parts; a single element means there was nothing to split.
+     */
+    function splitOutsideBrackets(body, separator) {
+        var parts = [];
+        var depth = 0;
+        var current = '';
+        var i;
+
+        for (i = 0; i < body.length; i++) {
+            var ch = body.charAt(i);
+            if ('([{'.indexOf(ch) !== -1) {
+                depth++;
+            } else if (')]}'.indexOf(ch) !== -1) {
+                depth--;
+            }
+            if (ch === separator && depth === 0) {
+                parts.push(current);
+                current = '';
+                continue;
+            }
+            current += ch;
+        }
+        parts.push(current);
+
+        return parts;
+    }
+
+    /**
+     * Replace the innermost pair of matching delimiters, repeatedly (#79).
+     *
+     * A non-greedy regex ends at the first closing delimiter it can find, not at the one that
+     * belongs to the opening it started from: `\left|\left|x\right|\right|` came apart into
+     * `abs()x abs()`. Working from the inside out gives every pair its own partner, because the
+     * first closing delimiter always belongs to the last opening before it.
+     *
+     * @param {string} s LaTeX.
+     * @param {string} open Opening delimiter, literal.
+     * @param {string} close Closing delimiter, literal.
+     * @param {Function} build Called with the content between them; returns the replacement.
+     * @returns {string} The converted string.
+     */
+    function replaceInnermostDelimiters(s, open, close, build) {
+        var guard = 0;
+
+        while (guard < 200) {
+            guard++;
+
+            var closeat = s.indexOf(close);
+            if (closeat === -1) {
+                return s;
+            }
+
+            var openat = s.lastIndexOf(open, closeat - open.length);
+            if (openat === -1) {
+                // A closing delimiter without an opening one: leave it alone rather than guess.
+                return s;
+            }
+
+            var content = s.substring(openat + open.length, closeat);
+            s = s.substring(0, openat) + build(content) + s.substring(closeat + close.length);
+        }
+
+        return s;
+    }
+
+    /**
+     * Replace every occurrence of a LaTeX command with brace arguments, however deeply nested.
+     *
+     * The regexes this replaces could see one level of braces inside an argument and no more, so
+     * `\sqrt{\sqrt{x}}` lost the inner braces and reached the CAS as `sqrt(sqrtx)` - a different
+     * expression that still looks plausible (#79). Reading the argument with a bracket counter
+     * and repeating until nothing changes is closed under nesting at any depth.
+     *
+     * @param {string} s LaTeX.
+     * @param {string} command Command name without the backslash, e.g. 'sqrt'.
+     * @param {number} arity How many brace groups the command takes.
+     * @param {Function} build Called with the argument texts; returns the replacement.
+     * @returns {string} The converted string.
+     */
+    function replaceBracedCommand(s, command, arity, build) {
+        var needle = '\\' + command;
+        var guard = 0;
+        var changed = true;
+
+        while (changed && guard < 200) {
+            changed = false;
+            guard++;
+
+            var at = s.indexOf(needle);
+            while (at !== -1) {
+                var after = at + needle.length;
+
+                // \sqrtx must not match \sqrt: the command name ends where a letter stops.
+                if (/[a-zA-Z]/.test(s.charAt(after))) {
+                    at = s.indexOf(needle, at + 1);
+                    continue;
+                }
+
+                var pos = after;
+                var args = [];
+                var ok = true;
+                var i;
+
+                for (i = 0; i < arity; i++) {
+                    while (/\s/.test(s.charAt(pos))) {
+                        pos++;
+                    }
+                    if (s.charAt(pos) !== '{') {
+                        ok = false;
+                        break;
+                    }
+                    var arg = readLatexArgument(s, pos);
+                    if (!arg) {
+                        ok = false;
+                        break;
+                    }
+                    args.push(arg.text);
+                    pos = arg.end;
+                }
+
+                if (!ok) {
+                    at = s.indexOf(needle, at + 1);
+                    continue;
+                }
+
+                s = s.substring(0, at) + build.apply(null, args) + s.substring(pos);
+                changed = true;
+                break;
+            }
+        }
+
+        return s;
+    }
+
+    /**
+     * The same for a command whose first argument is in square brackets: \sqrt[n]{x}.
+     *
+     * @param {string} s LaTeX.
+     * @param {string} command Command name without the backslash.
+     * @param {Function} build Called with the optional argument and the brace argument.
+     * @returns {string} The converted string.
+     */
+    function replaceOptionalArgCommand(s, command, build) {
+        var needle = '\\' + command;
+        var guard = 0;
+        var changed = true;
+
+        while (changed && guard < 200) {
+            changed = false;
+            guard++;
+
+            var at = s.indexOf(needle);
+            while (at !== -1) {
+                var pos = at + needle.length;
+
+                if (/[a-zA-Z]/.test(s.charAt(pos)) || s.charAt(pos) !== '[') {
+                    at = s.indexOf(needle, at + 1);
+                    continue;
+                }
+
+                var close = matchingBracket(s, pos);
+                if (close === -1) {
+                    at = s.indexOf(needle, at + 1);
+                    continue;
+                }
+
+                var index = s.substring(pos + 1, close);
+                var arg = readLatexArgument(s, close + 1);
+                if (!arg) {
+                    at = s.indexOf(needle, at + 1);
+                    continue;
+                }
+
+                s = s.substring(0, at) + build(index, arg.text) + s.substring(arg.end);
+                changed = true;
+                break;
+            }
+        }
+
+        return s;
+    }
+
+    /**
      * Match the differential "\mathrm{d}x" / "dx" at pos.
      *
      * @param {string} s LaTeX.
@@ -1579,6 +2229,31 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // of anything but a letter or digit it carries nothing and would otherwise survive in
         // stack mode ("gamma (x)", "epsilon _0").
         s = s.replace(/(\\[a-zA-Z]+)\s+(?=[^A-Za-z0-9\s])/g, '$1');
+        // "det(A)" is what the button writes and what a student types; Maxima calls it
+        // determinant() (#45). A variable named det is left alone: only a call counts.
+        s = s.replace(/(^|[^A-Za-z0-9_%])det(\s*(?:\\left)?\()/g, '$1determinant$2');
+        // The times sign is the cross product here, not multiplication: there is no times
+        // button for multiplication (that is \cdot), so it can only come from the cross
+        // product button or from imported content that meant a cross product.
+        s = s.replace(/\\times/g, CROSS_MARKER);
+        s = convertGeometry(s, defs);
+        // The double bar is a norm, not an absolute value: abs() of a vector is not what the
+        // button promises (#34). Only with a configured norm function - otherwise the old
+        // behaviour stands, and the operator is reported like any other unavailable one.
+        if (defs && defs.normFunction) {
+            var normname = defs.normFunction;
+            s = replaceInnermostDelimiters(s, '\\left\\|', '\\right\\|', function(content) {
+                return normname + '(' + content + ')';
+            });
+        }
+        // The absolute value, while its delimiters are still distinguishable (#79): after
+        // \left and \right are stripped, |a||b| and ||x|| read the same and no rule can tell
+        // nesting from two separate values. MathQuill always writes the long form.
+        s = replaceInnermostDelimiters(s, '\\left|', '\\right|', function(content) {
+            return 'abs(' + content + ')';
+        });
+        s = convertDifferentialOperators(s, local, defs);
+        s = convertMatrixEnvironments(s, local, defs);
         s = convertCasesToAndRelations(s);
         s = mergeGluedOperatorNames(s);
         s = markControlWords(s);
@@ -1589,18 +2264,18 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = s.replace(/\\left/g, '');
         s = s.replace(/\\right/g, '');
 
-        s = s.replace(
-            /\\sqrt\[([^\]]+)\]\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
-            '($2)^(1/($1))'
-        );
-        s = s.replace(
-            /\\nthroot\{([^{}]*)\}\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
-            '($2)^(1/($1))'
-        );
-        s = s.replace(
-            /\\binom\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
-            'binomial($1,$2)'
-        );
+        // All of these read their arguments with a bracket counter and repeat until nothing
+        // changes (#79): a regex that allows one level of braces inside an argument silently
+        // corrupts the second level instead of failing.
+        s = replaceOptionalArgCommand(s, 'sqrt', function(index, radicand) {
+            return '(' + radicand + ')^(1/(' + index + '))';
+        });
+        s = replaceBracedCommand(s, 'nthroot', 2, function(index, radicand) {
+            return '(' + radicand + ')^(1/(' + index + '))';
+        });
+        s = replaceBracedCommand(s, 'binom', 2, function(top, bottom) {
+            return 'binomial(' + top + ',' + bottom + ')';
+        });
 
         while (s.indexOf('\\frac') !== -1 && maxIter > 0) {
             maxIter--;
@@ -1614,20 +2289,32 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // Prevents N*(p/q) implicit multiplication; supports multi-digit integers.
         s = s.replace(new RegExp('(\\d+)' + BOUNDARY + '?\\((\\d+)\\)\\/\\((\\d+)\\)', 'g'), '($1+$2/$3)');
 
-        s = s.replace(
-            /\\sqrt\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
-            'sqrt($1)'
-        );
+        s = replaceBracedCommand(s, 'sqrt', 1, function(radicand) {
+            return 'sqrt(' + radicand + ')';
+        });
 
-        s = s.replace(/\\vec\{([^{}]*)\}/g, '$1');
-        s = s.replace(/\\overline\{([^{}]*)\}/g, '$1');
-        s = s.replace(/\\mathbb\{([^{}]*)\}/g, '$1');
+        // Decoration: the command disappears and its argument stays, at any depth.
         s = s.replace(/\\mathrm\{e\}/g, '%e');
         s = s.replace(/\\mathrm\{i\}/g, '%i');
-        s = s.replace(/\\mathrm\{([^{}]*)\}/g, '$1');
-        s = s.replace(/\\text\{([^{}]*)\}/g, '$1');
-        s = s.replace(/\\operatorname\{([^{}]*)\}/g, '$1');
-        s = s.replace(/\^\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g, '^($1)');
+        ['vec', 'overline', 'mathbb', 'mathrm', 'text', 'operatorname'].forEach(function(cmd) {
+            s = replaceBracedCommand(s, cmd, 1, function(content) {
+                return content;
+            });
+        });
+        // A superscript keeps its parentheses unless the exponent is a single unambiguous token.
+        // MathQuill writes x^{2} where older versions wrote x^2, and x^(2) would otherwise reach
+        // the CAS for every squared term. Anything longer than one digit group or one letter stays
+        // wrapped: x^ab would be split into x^a*b by implicit multiplication.
+        s = s.replace(
+            /\^\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
+            function(match, exponent) {
+                if (/^\d+$/.test(exponent) || /^[A-Za-z]$/.test(exponent)) {
+                    return '^' + exponent;
+                }
+
+                return '^(' + exponent + ')';
+            }
+        );
         // A subscript group that is followed directly by more characters is not part of the
         // subscript (#59): U_{m}ax is U_m followed by ax, and must never collapse into U_max,
         // which is what U_{max} means. The boundary marker keeps the two apart for the
@@ -1671,6 +2358,9 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = s.replace(/\\int(?![a-zA-Z])/g, 'int');
         s = s.replace(/\\sum(?![a-zA-Z])/g, 'sum');
         s = s.replace(/\\prod(?![a-zA-Z])/g, 'product');
+        // Bare bars, for input that never had \left|: a pair of identical delimiters cannot be
+        // nested unambiguously, so this stays the simple rule it always was. Anything the editor
+        // produces went through the \left| pass above.
         s = s.replace(/\\\|/g, '|');
         s = s.replace(/\|([^|]+)\|/g, 'abs($1)');
 
@@ -1724,9 +2414,23 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = s.replace(/\\hbar(?![a-zA-Z])/g, 'hbar');
         s = s.replace(/\\dagger(?![a-zA-Z])/g, 'dagger');
         s = s.replace(/\\intercal(?![a-zA-Z])/g, 'T');
-        s = s.replace(/\\ /g, '');
+        // A typed space is a deliberate boundary, not decoration (#64): STACK's
+        // space-sensitive "insert stars" variants distinguish "a b" from "ab". The marker
+        // survives the passes below and becomes a plain space at the very end.
+        s = s.replace(/\\ /g, EXPLICIT_SPACE);
         // Spacing commands carry no mathematical meaning.
         s = s.replace(/\\[,;:!]/g, '');
+        // A structure this converter knows but could not finish reading must not be handed to
+        // the fallback below (#79): stripping the backslash off \frac turns it into the word
+        // "frac" and produces a plausible expression that means something else. That only
+        // happens when a safety limit was reached, which is a failure, not a conversion.
+        var unfinished = s.match(
+            /\\(frac|sqrt|binom|nthroot|vec|overline|mathrm|mathbb|text|operatorname)(?![a-zA-Z])/
+        );
+        if (unfinished && local && local.problems) {
+            local.problems.push('nested_structure_unparsed');
+        }
+
         // Any control word still left is unknown to this converter. Keep its
         // name as a plain word so STACK reports an unknown identifier instead
         // of rejecting the backslash (#39).
@@ -1744,6 +2448,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         });
 
         s = resolveBoundaries(s);
+        s = resolveCrossProducts(s);
+        // The typed space becomes an ordinary space here, after every pass that could have
+        // dropped it (#64). What it means is STACK's decision, not the editor's.
+        s = s.replace(new RegExp(EXPLICIT_SPACE, 'g'), ' ');
         // "lambda(" is Maxima's anonymous-function constructor. A Greek lambda written in front of
         // a bracket is always a product (#22); in stack mode, where no implicit multiplication is
         // inserted, make that explicit.
