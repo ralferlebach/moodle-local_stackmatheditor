@@ -110,6 +110,32 @@ function local_stackmatheditor_seed_import(string $file, stdClass $category, std
 }
 
 /**
+ * Seed a quiz that only one spec needs, without letting it break the others.
+ *
+ * @param testing_data_generator $gen Data generator.
+ * @param stdClass $course Course.
+ * @param stdClass $category Question category.
+ * @param string $name Quiz name.
+ * @param array $fixtures Question fixtures.
+ * @return int Course module id, or 0 when the quiz could not be built.
+ */
+function local_stackmatheditor_seed_optional_quiz(
+    testing_data_generator $gen,
+    stdClass $course,
+    stdClass $category,
+    string $name,
+    array $fixtures
+): int {
+    try {
+        return local_stackmatheditor_seed_quiz($gen, $course, $category, $name, $fixtures);
+    } catch (Throwable $e) {
+        fwrite(STDERR, "WARNING: could not seed '{$name}' from " . implode(', ', $fixtures)
+            . ': ' . $e->getMessage() . "\n");
+        return 0;
+    }
+}
+
+/**
  * Create a quiz with the given questions on one page, unless it exists already.
  *
  * @param testing_data_generator $gen Generator.
@@ -186,7 +212,10 @@ $loadcm = local_stackmatheditor_seed_quiz(
 // The question the bidirectional sync was reported with (#77): four algebraic inputs bound to
 // four JSXGraph sliders. Its own quiz, because a slider question is slow to instantiate and the
 // other suites have no use for it.
-$jsxgraphcm = local_stackmatheditor_seed_quiz(
+// The quizzes below serve one spec each. If one of them cannot be built - a fixture STACK will not
+// import, say - that spec has nothing to test, but every other workflow still needs its site:
+// the failure is reported on stderr, the id becomes 0, and the spec skips with a reason.
+$jsxgraphcm = local_stackmatheditor_seed_optional_quiz(
     $gen,
     $course,
     $category,
@@ -196,7 +225,7 @@ $jsxgraphcm = local_stackmatheditor_seed_quiz(
 
 // A units input (#77, item 18) next to an algebraic one, so a test can compare the two on one
 // page. Its own quiz: the load quiz has a fixed shape the performance suite depends on.
-$unitscm = local_stackmatheditor_seed_quiz(
+$unitscm = local_stackmatheditor_seed_optional_quiz(
     $gen,
     $course,
     $category,

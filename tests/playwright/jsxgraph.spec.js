@@ -215,6 +215,11 @@ async function typeInto(page, name, text) {
     await page.waitForTimeout(800);
 }
 
+// The seed leaves the id at 0 when the JSXGraph quiz could not be built; say so instead of
+// failing on a page that does not exist.
+test.skip(!Number(process.env.SME_JSXGRAPH_CMID || 0),
+    'the JSXGraph quiz could not be seeded - see the seed step for the reason');
+
 test.beforeAll(async({browser}) => {
     await enableEditor(browser);
 });

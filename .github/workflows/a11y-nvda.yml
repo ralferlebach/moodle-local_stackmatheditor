@@ -77,7 +77,8 @@ jobs:
       - name: Seed course, users and quizzes (same seed as playwright.yml)
         run: |
           web=moodle; [ -d moodle/public ] && web=moodle/public
-          php "$web/local/stackmatheditor/tests/playwright/seed.php" > /tmp/sme-seed.env
+          php "$web/local/stackmatheditor/tests/playwright/seed.php" > /tmp/sme-seed.env \
+            || { echo "Seed failed. Its output:"; cat /tmp/sme-seed.env; exit 1; }
           cat /tmp/sme-seed.env
 
       - name: Open a tunnel and point Moodle at it
@@ -190,7 +191,7 @@ jobs:
 
       # A portable NVDA, plus the foreground-window lock relaxed so it hears new windows.
       - name: Set up NVDA
-        uses: guidepup/setup-action@v1
+        uses: guidepup/setup-action@0.21.0
 
       - name: Install the browser suite
         working-directory: tests/playwright

@@ -67,6 +67,8 @@ function firstQuestion(page) {
 }
 
 test('#77/18: a units input takes typed values and adopts external ones', async({page}) => {
+    test.skip(!Number(process.env.SME_UNITS_CMID || 0),
+        'the units quiz could not be seeded - see the seed step for the reason');
     await attempt(page, 'sme_student15', env('SME_UNITS_CMID'));
 
     // Typing: the editor writes a quantity STACK can read as a value with units.

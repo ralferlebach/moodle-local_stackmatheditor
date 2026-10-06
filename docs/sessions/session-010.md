@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026100605 (release 1.3.0, MATURITY_STABLE)
+**Plugin version:** 2026100606 (release 1.3.0, MATURITY_STABLE)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -2593,3 +2593,35 @@ edits one with the Blink soft-keyboard sequence from #72.
 
 Recorded as a decision in the release checklist: stable was set before the evidence, and the risk
 was accepted explicitly.
+
+
+## 66. Iteration 62 (2026100606): four red workflows, two causes
+
+Dev CI was green. Playwright, NVDA, k6 and JMeter all failed - and all four at the same step:
+"Seed test data", exit code 1, with nothing printed.
+
+### One wrong word in a fixture took down every browser and load workflow
+
+`stack_units.xml` used `<answertest>Units</answertest>`. STACK has no test called plain "Units" -
+there are UnitsSigFigs, UnitsAbsolute and their strict variants - so the import threw, and
+`seed.php` with it. Every workflow that builds a test site runs the same seed, so one fixture for
+one test stopped four workflows.
+
+Three changes, because each of them would have limited the damage on its own:
+
+* the fixture uses AlgEquiv; what is under test is the units *input*, not the grading;
+* the quizzes that serve a single spec - JSXGraph and units - are seeded through a wrapper that
+  catches the failure, reports it on stderr, exports the id as 0 and lets the rest of the seed
+  finish; both specs skip with the reason when their id is 0;
+* the seed step prints its own output when it fails. Its stdout goes into the env file, so an
+  exception message used to vanish, and "exit code 1" was all the log ever said. That is why this
+  took a log download to understand rather than a glance.
+
+### The NVDA job never started
+
+`guidepup/setup-action@v1` does not exist; the action is tagged `0.21.0`, `0.20.0` and so on, with
+no major-version alias. GitHub refuses to start a job whose actions it cannot resolve, so the
+Windows job failed at "Set up job" before any of its own code ran. Pinned to `0.21.0`.
+
+Neither was caught locally: a fixture is only checked by importing it into STACK, and an action
+reference only by GitHub resolving it.

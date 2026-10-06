@@ -85,7 +85,8 @@ jobs:
       - name: Preflight and seed - plugin installed, course, users, quizzes
         run: |
           web=moodle; [ -d moodle/public ] && web=moodle/public
-          php "$web/local/stackmatheditor/tests/playwright/seed.php" > /tmp/sme-seed.env
+          php "$web/local/stackmatheditor/tests/playwright/seed.php" > /tmp/sme-seed.env \
+            || { echo "Seed failed. Its output:"; cat /tmp/sme-seed.env; exit 1; }
           sed -n "s/^export \([A-Z_][A-Z0-9_]*\)='\(.*\)'$/\1=\2/p" /tmp/sme-seed.env >> "$GITHUB_ENV"
           cat /tmp/sme-seed.env
       - name: Install Playwright and Chromium

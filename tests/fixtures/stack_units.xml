@@ -5,6 +5,10 @@
   The algebraic fixture with a STACK units input instead: the return channel from the original
   input to the editor must work for units inputs as it does for algebraic ones, and the editor
   must still write a value STACK accepts as a quantity with units.
+
+  The answer test is AlgEquiv on purpose. STACK has no test called plain "Units" - the first
+  version of this file used it, the import failed, and with it the seed of every browser and load
+  workflow. What is under test is the input type, not the grading.
 -->
 <quiz>
   <question type="stack">
@@ -88,7 +92,7 @@
       <node>
         <name>0</name>
         <description></description>
-        <answertest>Units</answertest>
+        <answertest>AlgEquiv</answertest>
         <sans>ans1</sans>
         <tans>ta</tans>
         <testoptions></testoptions>
