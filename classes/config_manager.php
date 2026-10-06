@@ -647,6 +647,69 @@ class config_manager {
     }
 
     /**
+     * What to store for the activation of one level when its form is saved (#81).
+     *
+     * A form always submits a value, because the checkbox is pre-filled with what the level
+     * inherits. Storing that value unconditionally would turn every save - even one that only
+     * changed the toolbar groups - into an explicit override, and the level would silently stop
+     * following the one above it. So the value is stored only when it says something: when it
+     * differs from what is inherited, or when the level already had an explicit value of its own.
+     *
+     * @param int $mode Instance activation mode.
+     * @param bool|null $existing The level's stored value, null when it has none.
+     * @param bool $inherited What the level gets without a value of its own.
+     * @param bool|null $submitted What the form sent, null when the field was absent.
+     * @return bool|null Value to store, or null to keep inheriting.
+     */
+    public static function activation_to_store(
+        int $mode,
+        ?bool $existing,
+        bool $inherited,
+        ?bool $submitted
+    ): ?bool {
+        // Modes 0 and 1 have no overrides at all; nothing below them is stored.
+        if ($mode !== 2 && $mode !== 3) {
+            return null;
+        }
+
+        if ($submitted === null) {
+            return $existing;
+        }
+
+        if ($existing === null && $submitted === $inherited) {
+            return null;
+        }
+
+        return $submitted;
+    }
+
+    /**
+     * What to store for the student switch of one level when its form is saved (#73).
+     *
+     * While the editor is off at a level the checkbox is disabled, and a disabled field is not
+     * submitted. Reading that absence as "not allowed" used to overwrite the author's choice
+     * with 0, so switching the editor back on did not bring the switch back. The stored choice
+     * is kept instead; get_effective_student_toggle() already refuses the switch wherever the
+     * editor is off, so keeping it changes nothing until the editor returns.
+     *
+     * @param bool|null $existing The level's stored value, null when it has none.
+     * @param bool $editorenabled Whether the editor is on at this level after the save.
+     * @param bool|null $submitted What the form sent, null when the field was absent.
+     * @return bool|null Value to store, or null to keep inheriting.
+     */
+    public static function student_toggle_to_store(
+        ?bool $existing,
+        bool $editorenabled,
+        ?bool $submitted
+    ): ?bool {
+        if (!$editorenabled || $submitted === null) {
+            return $existing;
+        }
+
+        return $submitted;
+    }
+
+    /**
      * May any question on this page need the editor? (#80, #81)
      *
      * The page-level gate used to ask get_effective_enabled($cmid), which answers for the quiz

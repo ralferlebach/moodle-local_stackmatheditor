@@ -243,4 +243,54 @@ test.describe('settings matrix: level x setting -> result', () => {
         expect(view[0].value).toBe(EXPECTED);
         expect(view[1].value).toBe(EXPECTED);
     });
+
+    // ── #80 / #81: the activation matrix with two questions ─────────────────────────────────
+    // Two questions on one page, because the defect was a page-level gate: one question must be
+    // able to have the editor while its neighbour, in the same quiz, does not.
+
+    test('mode 2: quiz off, one question on - only that question has the editor', async({}, info) => {
+        await adminSettings(admin, {enabled: 2, groups: ['basic_operators']});
+        await configure(teacher, null, {enabled: false});
+        await configure(teacher, QBE[0], {enabled: true});
+
+        const view = await studentView(student, info, 'mode 2, quiz off, question 1 on');
+        expect(view.map((q) => q.editor)).toEqual([true, false]);
+    });
+
+    test('mode 2: nothing configured - no editor anywhere', async({}, info) => {
+        await adminSettings(admin, {enabled: 2, groups: ['basic_operators']});
+
+        const view = await studentView(student, info, 'mode 2, nothing set');
+        expect(view.map((q) => q.editor)).toEqual([false, false]);
+    });
+
+    test('mode 3: quiz on, one question off - only the other keeps the editor', async({}, info) => {
+        await adminSettings(admin, {enabled: 3, groups: ['basic_operators']});
+        await configure(teacher, null, {enabled: true});
+        await configure(teacher, QBE[0], {enabled: false});
+
+        const view = await studentView(student, info, 'mode 3, quiz on, question 1 off');
+        expect(view.map((q) => q.editor)).toEqual([false, true]);
+    });
+
+    test('mode 3: quiz off, one question on - that question gets it back', async({}, info) => {
+        await adminSettings(admin, {enabled: 3, groups: ['basic_operators']});
+        await configure(teacher, null, {enabled: false});
+        await configure(teacher, QBE[1], {enabled: true});
+
+        const view = await studentView(student, info, 'mode 3, quiz off, question 2 on');
+        expect(view.map((q) => q.editor)).toEqual([false, true]);
+    });
+
+    test('saving only the groups keeps a question following its quiz', async({}, info) => {
+        // The form pre-fills "on" from the quiz; saving it with other changes must not freeze
+        // that into an override, or switching the quiz off afterwards would not reach it.
+        await adminSettings(admin, {enabled: 2, groups: ['basic_operators']});
+        await configure(teacher, null, {enabled: true});
+        await configure(teacher, QBE[0], {groups: ['greek_lower']});
+        await configure(teacher, null, {enabled: false});
+
+        const view = await studentView(student, info, 'groups saved, then quiz off');
+        expect(view.map((q) => q.editor)).toEqual([false, false]);
+    });
 });

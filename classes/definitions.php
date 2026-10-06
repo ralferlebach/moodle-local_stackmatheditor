@@ -210,21 +210,6 @@ class definitions {
                         'tooltip' => get_string('btn_subset', $p)],
                     ['display' => '⊃', 'cmd'   => '\\supset',
                         'tooltip' => get_string('btn_supset', $p)],
-                    // @codingStandardsIgnoreStart
-                    /*
-                    // Number sets: deferred until MathQuill write support is verified.
-                    ['display' => 'ℕ', 'write' => '\\mathbb{N}',
-                        'tooltip' => get_string('btn_naturals', $p)],
-                    ['display' => 'ℤ', 'write' => '\\mathbb{Z}',
-                        'tooltip' => get_string('btn_integers', $p)],
-                    ['display' => 'ℚ', 'write' => '\\mathbb{Q}',
-                        'tooltip' => get_string('btn_rationals', $p)],
-                    ['display' => 'ℝ', 'write' => '\\mathbb{R}',
-                        'tooltip' => get_string('btn_reals', $p)],
-                    ['display' => 'ℂ', 'write' => '\\mathbb{C}',
-                        'tooltip' => get_string('btn_complex', $p)],
-                    */
-                    // @codingStandardsIgnoreEnd
                 ],
             ],
 
@@ -233,18 +218,6 @@ class definitions {
                 'label'           => get_string('group_logic', $p),
                 'default_enabled' => false,
                 'elements'        => [
-                    // @codingStandardsIgnoreStart
-                    /*
-                    // Quantifiers: deferred - STACK 4.13 knows neither forall, exists nor
-                    // nexists, so every answer written with these buttons would be invalid.
-                    ['display' => '∀', 'cmd' => '\\forall',
-                        'tooltip' => get_string('btn_forall', $p)],
-                    ['display' => '∃', 'cmd' => '\\exists',
-                        'tooltip' => get_string('btn_exists', $p)],
-                    ['display' => '∄', 'cmd' => '\\nexists',
-                        'tooltip' => get_string('btn_nexists', $p)],
-                    */
-                    // @codingStandardsIgnoreEnd
                     ['display' => '¬', 'cmd' => '\\neg',
                         'tooltip' => get_string('btn_neg', $p)],
                     ['display' => '∧', 'cmd' => '\\land',
@@ -320,32 +293,6 @@ class definitions {
                 ],
             ],
 
-            // @codingStandardsIgnoreStart
-            /*
-            // 10. Physical constants.
-            'constants_nature' => [
-                'label'           => get_string('group_constants_nature', $p),
-                'default_enabled' => false,
-                'elements'        => [
-                    ['display' => 'c₀', 'write' => 'c_0',
-                        'tooltip' => get_string('btn_speed_of_light', $p)],
-                    ['display' => 'ℏ', 'cmd'   => '\\hbar',
-                        'tooltip' => get_string('btn_hbar', $p)],
-                    ['display' => 'G', 'cmd'   => '\\mathrm{G}',
-                        'tooltip' => get_string('btn_gravitational', $p)],
-                    ['display' => 'e⁻', 'write' => '\\mathrm{e^{-}}',
-                        'tooltip' => get_string('btn_electron_charge', $p)],
-                    ['display' => 'k', 'write' => '\\mathrm{k_B}',
-                        'tooltip' => get_string('btn_boltzmann', $p)],
-                    ['display' => 'ε₀', 'write' => '\\varepsilon_0',
-                        'tooltip' => get_string('btn_permittivity', $p)],
-                    ['display' => 'μ₀', 'write' => '\\mu_0',
-                        'tooltip' => get_string('btn_permeability', $p)],
-                ],
-            ],
-            */
-            // @codingStandardsIgnoreEnd
-
             // 11. Geometry.
             'geometry' => [
                 'label'           => get_string('group_geometry', $p),
@@ -384,35 +331,6 @@ class definitions {
                         'tooltip' => get_string('btn_arctan', $p)],
                 ],
             ],
-
-            // @codingStandardsIgnoreStart
-            /*
-            // 13. Hyperbolic functions.
-            'hyperbolic' => [
-                'label'           => get_string('group_hyperbolic', $p),
-                'default_enabled' => false,
-                'elements'        => [
-                    ['display' => 'sinh', 'write' => '\\sinh\\left(\\right)'],
-                    ['display' => 'cosh', 'write' => '\\cosh\\left(\\right)'],
-                    ['display' => 'tanh', 'write' => '\\tanh\\left(\\right)'],
-                ],
-            ],
-
-            // 14. Calculus operators.
-            'analysis_operators' => [
-                'label'           => get_string('group_analysis_operators', $p),
-                'default_enabled' => false,
-                'elements'        => [
-                    ['display' => '|x|', 'write' => '\\left|\\right|',
-                        'tooltip' => get_string('btn_abs', $p)],
-                    ['display' => '∑', 'write' => '\\sum_{}^{}',
-                        'tooltip' => get_string('btn_sum', $p)],
-                    ['display' => '∏', 'write' => '\\prod_{}^{}',
-                        'tooltip' => get_string('btn_prod', $p)],
-                ],
-            ],
-            */
-            // @codingStandardsIgnoreEnd
 
             // 15. Vectors.
             // 15b. Vector products (#34): their own group, because the cross product needs
@@ -490,36 +408,6 @@ class definitions {
                     // accepts, and there is no verified mapping for them (#34).
                 ],
             ],
-
-            // @codingStandardsIgnoreStart
-            /*
-            // 19. Integral calculus.
-            ],
-
-            // 20. Statistics.
-            'statistical_operators' => [
-                'label'           => get_string('group_statistical_operators', $p),
-                'default_enabled' => false,
-                'elements'        => [
-                    ['display' => 'n!', 'write' => '!',
-                        'tooltip' => get_string('btn_factorial', $p)],
-                    ['label'   => '\\binom{n}{k}', 'write' => '\\binom{}{}',
-                        'display' => 'C(n,k)',
-                        'tooltip' => get_string('btn_binomial', $p)],
-                    ['display' => 'E[X]', 'write' => 'E\\left[\\right]',
-                        'tooltip' => get_string('btn_expected_value', $p)],
-                    ['display' => 'σ', 'cmd'   => '\\sigma',
-                        'tooltip' => get_string('btn_std_dev', $p)],
-                    ['display' => '∧', 'cmd'   => '\\land',
-                        'tooltip' => get_string('btn_logical_and', $p)],
-                    ['display' => '∨', 'cmd'   => '\\lor',
-                        'tooltip' => get_string('btn_logical_or', $p)],
-                    ['display' => 'Γ', 'cmd'   => '\\Gamma',
-                        'tooltip' => get_string('btn_gamma_func', $p)],
-                ],
-            ],
-            */
-            // @codingStandardsIgnoreEnd
 
             // 21. Greek letters (lowercase).
             'greek_lower' => [

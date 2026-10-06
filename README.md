@@ -13,7 +13,7 @@ answers reappear as formulas.
 Requirements
 ------------
 
-This plugin requires Moodle 4.5+ and PHP 8.2+. The CI covers Moodle 4.5 to 5.2 with PHP 8.2 to 8.4.
+This plugin requires Moodle 4.5+ and PHP 8.2+. The CI covers Moodle 4.5 to 5.3 with PHP 8.2 to 8.4.
 
 It also requires **qtype_stack** (STACK 4.13 or later) together with the plugins STACK depends on:
 qbehaviour_adaptivemultipart, qbehaviour_dfexplicitvaildate, qbehaviour_dfcbmexplicitvaildate and
@@ -39,7 +39,7 @@ question which toolbar groups are offered.
 Features
 --------
 
-### Version 1.3 (in development)
+### Version 1.3
 
 * The toolbar follows the width of the editor rather than of the browser window: opening
   Moodle's navigation drawer rewraps it, closing the drawer expands it again, and a group of up
@@ -71,12 +71,6 @@ Features
 
 ### Version 1.2
 
-* Android Chrome and Opera: the first characters typed on the soft keyboard no longer disappear
-  until Enter has been pressed once (1.2.2).
-* Identifiers that contain the name of a function keep their meaning: `Umax` is one variable, not
-  `U max`, and `U_max` keeps its whole subscript in both directions (1.2.1).
-* `max(x,y)` and `min(x,y)` are recognised as function calls in every implicit-multiplication
-  mode (1.2.1).
 * Set theory: element, union, intersection, difference, (proper) subset and superset, entered
   visually and handed to STACK in its own set functions.
 * Integral calculus: definite and indefinite integrals as a structured template (limits,
@@ -114,8 +108,16 @@ Release notes 1.3
 * Toolbar groups declare the CAS packages they need. A group whose packages the question does not
   load is not rendered for students; the configuration page says which line to add.
 * A typed space reaches STACK as a space.
-* Students can switch the editor off and back on; the answer travels with it.
+* Students can switch the editor off and back on; the answer travels with it. Site, quiz and
+  question decide whether they may: any level can take the permission away, none can give it back.
 * The editor attaches to any editable STACK input the question engine renders.
+* A cross product button writes `express(a ~ b)`; the question only has to load `vect`.
+* Matrix and vector choosers work with mouse, finger and pen, and with the cursor in an existing
+  matrix they change its size. The largest size is configurable per site, quiz and question.
+* The toolbar follows the width of the editor rather than the window, and a group of up to five
+  buttons is never torn apart.
+* A script that writes into the STACK input - a JSXGraph slider, for example - is picked up by the
+  editor at once.
 
 **Fixed**
 
@@ -124,7 +126,10 @@ Release notes 1.3
   cannot be converted is reported instead of being passed on as a plausible-looking but different
   expression.
 * Coordinates may be expressions: `P(f(x)|g(x))` reaches STACK as a list, as `P(2|3)` always did.
-
+* With "off by default, can be enabled per quiz or question", a question switched on in a quiz that
+  stays off gets its editor. The page used to decide for the whole quiz before the question could.
+* A question configuration made in one quiz no longer appears in another quiz using the same
+  question; only the explicit global default crosses quizzes.
 * On Android Chrome and Opera, a freshly focused field accepts the first soft-keyboard character
   immediately. It used to drop everything until Enter had been pressed once.
 * `Umax` reaches STACK as `Umax`, not as `U max`, and `U_max` keeps its whole subscript in both
@@ -144,12 +149,15 @@ Release notes 1.3
 * `Distance`, `Angle` and `Length` come from STACK's `geometry.mac` and are always available.
 * `grad`, `div`, `rot` and Δ need `load("vect");` in the question variables, and an administrator
   has to name the Maxima function for each of them. Without both, the buttons are not offered.
-* A norm is written to the function named in the settings (`norm` by default); define it in the
+* A norm is written to the function named in the settings. The default follows the vector
+  format: STACK's own `Length` for list vectors, `norm` for matrix vectors - define that one in the
   question variables, for example `norm(v) := sqrt(v . v)`.
+* The cross product needs `load("vect");` and nothing else.
 
 **Support matrix**
 
-* Moodle 4.5 to 5.2, PHP 8.2 to 8.4, STACK 4.13 or later, Maxima 5.46 or later.
+* Moodle 4.5 to 5.3, PHP 8.2 to 8.4, STACK 4.13 or later, Maxima 5.46 or later. Moodle 5.3
+  itself needs PHP 8.3, PostgreSQL 17 or MariaDB 11.4.
 
 
 Installation
@@ -174,6 +182,11 @@ There, you find these settings:
 
 * **Plugin activation (instance-wide)** – completely disabled, completely enabled, or off / on by
   default with an override per quiz or question.
+  With the two override modes, the most specific statement wins: a question can have the editor
+  in a quiz that does not, and the other way round. A level that was never configured follows the
+  one above it, and saving its form for another reason - the toolbar groups, say - does not turn
+  the inherited value into an override of its own. A question preview has no quiz, so it follows
+  the instance mode alone: shown in modes 1 and 3, not in 0 and 2.
 * **Default toolbar groups** – the groups offered unless a quiz or question says otherwise.
 * **Use percent-pi notation for π** – send π as `%pi` instead of `pi`.
 * **Vectors in Maxima** – whether a one-row or one-column matrix is written as `matrix([a,b,c])`

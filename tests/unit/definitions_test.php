@@ -159,13 +159,12 @@ final class definitions_test extends advanced_testcase {
             'comparators', 'absolute', 'brackets',
             'constants_math', 'trigonometry', 'greek_lower', 'greek_upper',
         ];
-        // Optional groups that may be disabled/commented out in some builds.
-        // Tested only when present.
+        // Optional groups: shipped, but off by default. Deferred operations no longer live in
+        // definitions.php at all - see docs/toolbar-backlog.md (#34).
         $optional = [
-            'set_theory', 'logic', 'constants_nature', 'geometry', 'hyperbolic',
-            'analysis_operators', 'vector_operators', 'differential_operators',
-            'vector_differential', 'matrix_operators', 'integral_operators',
-            'statistical_operators',
+            'set_theory', 'logic', 'geometry', 'vector_operators', 'vector_products',
+            'differential_operators', 'vector_differential', 'matrix_operators',
+            'integral_operators',
         ];
         foreach ($required as $key) {
             $this->assertArrayHasKey(

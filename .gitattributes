@@ -48,6 +48,7 @@ makefile   text eol=lf
 /.github                export-ignore
 /.idea                  export-ignore
 /.gitattributes         export-ignore
+/.editorconfig          export-ignore
 /.gitignore             export-ignore
 /.moodle-plugin-ci.yml  export-ignore
 /.eslintrc              export-ignore

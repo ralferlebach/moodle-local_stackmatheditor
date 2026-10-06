@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026100102 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026100602 (release 1.3.0, MATURITY_STABLE)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -2401,3 +2401,121 @@ real one rather than a fixture.
 The release checklist's manual sample becomes: start the workflow, read five transcripts, answer
 four questions, record the date and the NVDA version. The evidence is archived with the commit
 instead of living in somebody's memory.
+
+
+## 59. Iteration 55 (2026100200): the NVDA suite, built on what was already there
+
+The first attempt asked for a URL a GitHub runner could reach and a course module id typed by
+hand. Nobody has a public staging Moodle lying around, and the question "what do I enter here"
+was the right one: I had built a second world next to the one that already works.
+
+The browser suite has all of it - `seed.php` prints the ids, `helpers.js` logs in, the accounts
+exist, `SME_BASE_URL` points at the site. The screen reader needs none of that to be different.
+It needs Windows and a visible browser, and that is all.
+
+So `a11y-nvda.spec.js` now lives in `tests/playwright/`, uses `env()`, `loginAs()` and `open()`
+from the same helpers, logs in as a seeded student and opens the same quiz as the other specs.
+It is kept out of the default run by `testIgnore` and gets its own project when `SME_NVDA` is
+set - a visible browser, one worker, a longer timeout. Three commands on the Windows side, and
+the site is the one already running in WSL.
+
+What came out of the first attempt and stays: the four assertions where silence is a defect, the
+transcripts with commit and date, and the honest limit that a judgement is not a test.
+`a11y-zoom.spec.js` keeps the measurable half - zoom, viewport, target size, keyboard reach,
+focus visibility - in the run that happens anyway.
+
+What was deleted: the separate package, the static harness, the AMD shim, the generated fixture
+exports and the Windows workflow. The harness worked - the editor booted in Chromium without
+Moodle, which was interesting - but "interesting" is not a reason to maintain a second way of
+loading this plugin. One site, one seed, one set of helpers.
+
+
+## 60. Iteration 56 (2026100600): 1.3.0, stable
+
+### The red CI was four newlines
+
+Both pipelines failed on the same thing: "File is stale and needs to be rebuilt" for the maps of
+tex2max, max2tex, input_fields and textarea_fields. The sources were identical to mine, and so
+were the minified files. The committed maps each ended with a newline that grunt does not write;
+the ZIPs I delivered did not have it. Something on the way into the repository - an editor
+saving the file, most likely - added it to exactly the four maps that had been opened.
+
+`.editorconfig` now tells editors to leave `amd/build/` alone, and every build file in this
+delivery was regenerated in a fresh 4.5 tree and copied over together, not module by module.
+
+### NVDA inside GitHub, without anything to type
+
+The second attempt still asked for a URL, because NVDA needs Windows and the site needs Linux.
+The answer is two jobs that meet: the Linux job builds and seeds the site exactly as the
+Playwright workflow does, opens a temporary Cloudflare tunnel in front of it, points Moodle's
+wwwroot at the tunnel and hands the URL plus the seed values to the Windows job as an artefact.
+The Windows job waits for that artefact, runs `a11y-nvda.spec.js` with NVDA listening, and
+uploads a "done" artefact the Linux job is waiting for before it shuts the site down.
+
+The server and the tunnel are started with `setsid nohup` so they outlive the step that starts
+them - the reason serve-test-site.sh is normally sourced in the same step as the tests.
+
+Found on the way: `tests/playwright/package.json` had gained the Guidepup dependencies in the
+last delivery without a matching `package-lock.json`, so `npm ci` - in every Playwright run, not
+only this one - would have refused. The lock file is regenerated.
+
+### Moodle 5.3
+
+`MOODLE_503_STABLE` exists and is marked stable (build 20261005). Its environment file asks for
+PHP 8.3, PostgreSQL 17 and MariaDB 11.4, so the release matrix gains two 5.3 rows with those
+database versions; the service images take their version from the matrix. MariaDB 11 dropped
+the `mysqladmin` name, so the health check uses `mariadb-admin`, which 10.11 has too.
+`$plugin->supported` is `[405, 503]`.
+
+### Release metadata, atomically
+
+`version.php`: 2026100600, `1.3.0`, `MATURITY_STABLE`. README: the heading says 1.3 without "in
+development", the support matrix says 5.3, and the release notes list what was added and fixed
+since they were last written - the switch permission, the cross product, the pointer choosers,
+the container-responsive toolbar, the external sync, the activation fix and the cross-quiz fix.
+
+
+## 61. Iteration 57 (2026100601): the toolbar backlog leaves the code
+
+The five commented-out groups in `definitions.php` - number sets, quantifiers, physical
+constants, hyperbolic and further calculus operators, statistics - move to
+`docs/toolbar-backlog.md`, each with the reason it is not shipped and the three steps that bring
+one back. `definitions.php` no longer carries operations nobody can see; #34's last point.
+The button catalogue is unchanged at 117, so nothing a student sees moves.
+
+
+## 62. Iteration 58 (2026100602): the two gaps from the issue audit
+
+### #73 item 17: switching the editor back on lost the switch
+
+The save stored `_allowStudentToggle = allowed AND editor enabled`. While the editor is off the
+checkbox is disabled, a disabled field is not submitted, and the stored "allowed" became 0 - so
+turning the editor back on did not bring the switch back. `student_toggle_to_store()` now keeps
+the stored choice whenever the editor is off or the field is absent; the effective resolution
+already refuses the switch wherever the editor is off, so keeping the choice changes nothing
+until the editor returns.
+
+### #81: what was already there, and what was missing
+
+The locked-off and locked-on hints for modes 0 and 1 already existed in the form, as did the
+defaults for new configurations. What was missing was persistence: the form always submits the
+activation, pre-filled with what the level inherits, and the save stored it unconditionally. Any
+save - even one that only changed the toolbar groups - turned an inherited value into an override,
+and the question stopped following its quiz. `activation_to_store()` stores a value only when it
+differs from what is inherited or the level already had one of its own.
+
+Both rules are pure functions in `config_manager` now, so they are tested as rules rather than
+through a form: `form_persistence_test.php` with twelve activation cases, the switch cases, the
+"saved the groups, then the quiz went off" scenario and re-enabling the editor.
+
+Preview is defined and tested: a question preview has no course module, so it follows the
+instance mode alone - shown in modes 1 and 3, not in 0 and 2.
+
+`settings.spec.js` gains five browser cases on the two-question settings quiz: mode 2 with one
+question on in a quiz that is off, mode 2 with nothing set, mode 3 with one question off, mode 3
+with one question on in a quiz that is off, and saving only the groups.
+
+### Moodle 5.3 in the dev pipeline too
+
+The PHPUnit matrix gains 5.3 on PostgreSQL 17 and on MariaDB 11.4, with service images taken from
+the matrix and the MariaDB health check on `mariadb-admin`, as in the release matrix.

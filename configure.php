@@ -213,6 +213,16 @@ foreach (array_keys($groups) as $key) {
     }
 }
 
+// What this level inherits when it has no activation of its own (#81): the quiz value for a
+// question, the instance default for a quiz.
+$inheritedenabled = ($instancemode === 1 || $instancemode === 3);
+if (!$quizmode && ($instancemode === 2 || $instancemode === 3)) {
+    $parentdefault = config_manager::get_quiz_default($cmid);
+    if ($parentdefault !== null && isset($parentdefault['_enabled'])) {
+        $inheritedenabled = (bool) $parentdefault['_enabled'];
+    }
+}
+
 // Determine initial enabled state.
 if ($instancemode === 0) {
     $currentenabled = false;
@@ -308,15 +318,35 @@ if ($mform->is_cancelled()) {
         $elements['_maxStructuredDimension'] = (int) $config['_maxStructuredDimension'];
     }
 
-    $elements['_allowStudentToggle'] = (int) (
-        !empty($data->allowstudenttoggle) && !empty($data->enabled)
-    );
 
-    // Store enabled flag when instance mode allows overrides.
-    if ($instancemode === 2 || $instancemode === 3) {
-        $elements['_enabled'] = isset($data->enabled)
-            ? (bool) $data->enabled
-            : ($instancemode === 3);
+
+    // Activation (#81): stored only when it says something, so that saving the toolbar groups
+    // does not quietly turn an inherited value into an override.
+    $submittedenabled = property_exists($data, 'enabled') ? (bool) $data->enabled : null;
+    $storeenabled = config_manager::activation_to_store(
+        $instancemode,
+        isset($config['_enabled']) ? (bool) $config['_enabled'] : null,
+        $inheritedenabled,
+        $submittedenabled
+    );
+    if ($storeenabled === null) {
+        unset($elements['_enabled']);
+    } else {
+        $elements['_enabled'] = $storeenabled;
+    }
+
+    // Student switch (#73): an absent field - disabled while the editor is off - keeps the
+    // author's stored choice instead of overwriting it with "no".
+    $editornow = $storeenabled ?? $inheritedenabled;
+    $storetoggle = config_manager::student_toggle_to_store(
+        isset($config['_allowStudentToggle']) ? (bool) $config['_allowStudentToggle'] : null,
+        $editornow,
+        property_exists($data, 'allowstudenttoggle') ? (bool) $data->allowstudenttoggle : null
+    );
+    if ($storetoggle === null) {
+        unset($elements['_allowStudentToggle']);
+    } else {
+        $elements['_allowStudentToggle'] = (int) $storetoggle;
     }
 
     if ($quizmode) {
