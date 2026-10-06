@@ -266,15 +266,19 @@ jobs:
       - name: No developer tooling, CI plumbing or test harnesses may ship
         run: |
           rc=0
+          # The change log is the one file under docs/ that ships: the README links to it.
+          allowed='^stackmatheditor/docs/$|^stackmatheditor/docs/CHANGES\.md$'
           while read -r forbidden; do
-            if grep -qE "^stackmatheditor/${forbidden}" /tmp/release.list; then
+            hits=$(grep -E "^stackmatheditor/${forbidden}" /tmp/release.list | grep -vE "$allowed" || true)
+            if [ -n "$hits" ]; then
               echo "FORBIDDEN in release artefact: $forbidden"
-              grep -E "^stackmatheditor/${forbidden}" /tmp/release.list | head -5
+              echo "$hits" | head -5
               rc=1
             fi
           done <<'PATTERNS'
           tools/
           docs/
+          tests/upgrade/
           \.github/
           \.idea/
           tests/load/

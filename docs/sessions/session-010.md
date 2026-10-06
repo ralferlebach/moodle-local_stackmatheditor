@@ -2671,3 +2671,28 @@ loop on error, so that thread logged in again and carried on. `check_jtl.py` now
 that: a failed login followed by a successful one on the same thread, reported as recovered. A
 thread that never logs in still fails the run, and so does any failure of anything else; both are
 covered by tests of the script.
+
+
+## 68. Iteration 64 (2026100700, version unchanged): README on the template, history in CHANGES.md
+
+The README follows `ralferlebach/moodle-plugintemplate` now: badges, a one-paragraph description,
+Requirements, Motivation, Installation, Usage & Settings, Capabilities, Scheduled Tasks, How it
+works, Theme support, repositories, support, proposals, release support, translation, RTL,
+Maintainers, Copyright - with Privacy, Third-party libraries and Development kept, because they
+say things a site administrator needs. Greek letters and integration events moved under "How this
+plugin works", where they belong.
+
+Badges: CI, MDL Shield, release 1.3.0, maturity stable, Moodle 4.5-5.3, PHP 8.2-8.4, GPL-3.0.
+
+The motivation section keeps six key features. Everything version-differentiated - the 1.3 release
+notes, the full 1.3 feature list, the 1.2.2 and 1.2.1 fixes, 1.2, 1.1 and 1.0 - is in
+`docs/CHANGES.md`, together with the device check: Android, Chrome and Firefox, portrait and
+landscape, without findings.
+
+`docs/` is excluded from the release archive, so the README would have linked to a file the
+shipped plugin does not contain. `.gitattributes` now excludes `docs/**` and re-includes
+`docs/CHANGES.md` - a directory-level exclusion cannot be overridden for a file inside it, which a
+git archive dry run showed - and the release-artefact gate allows exactly that one file under
+`docs/`. `tests/upgrade/` is excluded from the archive and the gate as well.
+
+The version stays at 2026100700 / 1.3.0 / MATURITY_STABLE, as decided: documentation only.
