@@ -108,7 +108,10 @@ jobs:
 
           url=''
           for _ in $(seq 1 60); do
-            url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log | head -1)
+            # `|| true`: while the tunnel is still starting, grep finds nothing and exits 1, and
+            # with bash -e and pipefail that ended the whole step on the first try.
+            url=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log \
+              2>/dev/null | head -1 || true)
             [ -n "$url" ] && break
             sleep 2
           done

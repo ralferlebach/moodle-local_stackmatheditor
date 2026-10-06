@@ -249,6 +249,8 @@ test.describe('settings matrix: level x setting -> result', () => {
     // able to have the editor while its neighbour, in the same quiz, does not.
 
     test('mode 2: quiz off, one question on - only that question has the editor', async({}, info) => {
+        // The serial cases before this one leave quiz and question overrides behind.
+        resetQuizConfig();
         await adminSettings(admin, {enabled: 2, groups: ['basic_operators']});
         await configure(teacher, null, {enabled: false});
         await configure(teacher, QBE[0], {enabled: true});
@@ -258,6 +260,8 @@ test.describe('settings matrix: level x setting -> result', () => {
     });
 
     test('mode 2: nothing configured - no editor anywhere', async({}, info) => {
+        // The serial cases before this one leave quiz and question overrides behind.
+        resetQuizConfig();
         await adminSettings(admin, {enabled: 2, groups: ['basic_operators']});
 
         const view = await studentView(student, info, 'mode 2, nothing set');
@@ -265,6 +269,8 @@ test.describe('settings matrix: level x setting -> result', () => {
     });
 
     test('mode 3: quiz on, one question off - only the other keeps the editor', async({}, info) => {
+        // The serial cases before this one leave quiz and question overrides behind.
+        resetQuizConfig();
         await adminSettings(admin, {enabled: 3, groups: ['basic_operators']});
         await configure(teacher, null, {enabled: true});
         await configure(teacher, QBE[0], {enabled: false});
@@ -274,6 +280,8 @@ test.describe('settings matrix: level x setting -> result', () => {
     });
 
     test('mode 3: quiz off, one question on - that question gets it back', async({}, info) => {
+        // The serial cases before this one leave quiz and question overrides behind.
+        resetQuizConfig();
         await adminSettings(admin, {enabled: 3, groups: ['basic_operators']});
         await configure(teacher, null, {enabled: false});
         await configure(teacher, QBE[1], {enabled: true});
@@ -283,6 +291,8 @@ test.describe('settings matrix: level x setting -> result', () => {
     });
 
     test('saving only the groups keeps a question following its quiz', async({}, info) => {
+        // The serial cases before this one leave quiz and question overrides behind.
+        resetQuizConfig();
         // The form pre-fills "on" from the quiz; saving it with other changes must not freeze
         // that into an override, or switching the quiz off afterwards would not reach it.
         await adminSettings(admin, {enabled: 2, groups: ['basic_operators']});

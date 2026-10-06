@@ -90,12 +90,12 @@ function measure(page) {
 }
 
 test('200 per cent zoom keeps everything inside the page', async({page}) => {
+    // Browser zoom at 200 % on a 1280 x 900 window is a 640 x 450 CSS viewport with twice the
+    // device pixel ratio - that is what WCAG 1.4.10 means by reflow. The first version set
+    // `zoom: 200%` on the body instead, which scales coordinates inside the page differently
+    // from the toolbar that contains them, and reported every button as outside it.
+    await page.setViewportSize({width: 640, height: 450});
     await attempt(page);
-
-    await page.evaluate(() => {
-        document.body.style.zoom = '200%';
-    });
-    await page.waitForTimeout(1000);
 
     const seen = await measure(page);
 

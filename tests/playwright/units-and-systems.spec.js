@@ -103,7 +103,18 @@ test('#72/8: system lines are built from a stored system and write it back', asy
         input.value = '(x+y=3) nounand (x-y=1)';
         input.dispatchEvent(new Event('change'));
     });
-    await page.getByRole('button', {name: /^Check$/}).first().click();
+    // STACK's Check is a submit input inside the question. Pressing it from the page avoids
+    // Playwright waiting for it to be unobstructed - the first run timed out on exactly that -
+    // and the page comes back with the stored answer.
+    await Promise.all([
+        page.waitForNavigation({waitUntil: 'domcontentloaded', timeout: 60000}),
+        page.evaluate(() => {
+            const question = document.querySelector('.que');
+            const check = question.querySelector('input[type="submit"][name$="-submit"]')
+                || question.querySelector('button[type="submit"], input[type="submit"]');
+            check.click();
+        }),
+    ]);
     await page.waitForSelector('.sme-mq-container', {timeout: 60000});
     await page.waitForTimeout(2000);
 
@@ -114,7 +125,7 @@ test('#72/8: system lines are built from a stored system and write it back', asy
     expect(rows, 'one line per relation').toBeGreaterThanOrEqual(2);
 
     // Edit the second line with the Blink soft-keyboard sequence from #72: input events only.
-    await page.evaluate(() => {
+    await page.evaluate(async() => {
         const question = document.querySelector('.que');
         const fields = question.querySelectorAll('.mq-editable-field');
         const textarea = fields[1].querySelector('textarea');
@@ -127,6 +138,7 @@ test('#72/8: system lines are built from a stored system and write it back', asy
             textarea.dispatchEvent(new InputEvent('input', {
                 bubbles: true, inputType: 'insertText', data: ch
             }));
+            await new Promise((resolve) => setTimeout(resolve, 40));
         }
     });
     await page.waitForTimeout(800);

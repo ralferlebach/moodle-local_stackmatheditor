@@ -65,7 +65,7 @@ async function attempt(page) {
  * @returns {Promise<void>}
  */
 async function softKeyboard(page, scope, text, engine) {
-    await page.evaluate(({scope, text, engine}) => {
+    await page.evaluate(async({scope, text, engine}) => {
         const wrap = document.querySelector(scope);
         const textarea = wrap.querySelector('.mq-editable-field textarea');
         textarea.focus();
@@ -87,6 +87,12 @@ async function softKeyboard(page, scope, text, engine) {
             return;
         }
 
+        // A real keyboard delivers each character in a task of its own, so the editor's poller
+        // runs between them and takes one character at a time. Dispatching them all in one go
+        // left "x+1" in the textarea at once, which MathQuill reads as a paste and ignores - the
+        // first run of this spec failed on exactly that, not on the editor.
+        const tick = () => new Promise((resolve) => setTimeout(resolve, 40));
+
         for (const ch of text) {
             if (engine === 'gecko') {
                 fire('keydown', {key: ch});
@@ -102,6 +108,7 @@ async function softKeyboard(page, scope, text, engine) {
             if (engine === 'gecko') {
                 fire('keyup', {key: ch});
             }
+            await tick();
         }
     }, {scope, text, engine});
 

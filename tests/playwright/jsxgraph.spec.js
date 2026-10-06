@@ -63,14 +63,16 @@ async function enableEditor(browser) {
  * @returns {Promise<?import('@playwright/test').Frame>} The board frame, or null.
  */
 async function boardFrame(page) {
-    for (let attempt = 0; attempt < 40; attempt++) {
+    // Up to a minute: the iframe loads JSXGraph from a CDN before it can draw anything.
+    for (let attempt = 0; attempt < 120; attempt++) {
         for (const frame of page.frames()) {
             if (frame === page.mainFrame()) {
                 continue;
             }
+            // Any frame with a board counts - STACK names the board element per block, so
+            // looking for one fixed id was one assumption too many.
             const ready = await frame.evaluate(
-                () => !!(document.getElementById('jxgbox') && window.JXG
-                    && Object.keys(window.JXG.JSXGraph.boards || {}).length)
+                () => !!(window.JXG && Object.keys(window.JXG.JSXGraph.boards || {}).length)
             ).catch(() => false);
             if (ready) {
                 return frame;
@@ -78,6 +80,17 @@ async function boardFrame(page) {
         }
         await page.waitForTimeout(500);
     }
+
+    // Nothing found: record what there was, so the next run is not another guess.
+    const frames = await Promise.all(page.frames().map(async(frame) => {
+        const info = await frame.evaluate(() => ({
+            jxg: typeof window.JXG,
+            divs: Array.from(document.querySelectorAll('div[id]')).map((d) => d.id).slice(0, 6),
+            scripts: Array.from(document.scripts).map((x) => x.src).filter(Boolean).slice(0, 4)
+        })).catch((e) => ({error: String(e).slice(0, 80)}));
+        return {url: frame.url().slice(0, 90), ...info};
+    }));
+    console.log('jsxgraph frames: ' + JSON.stringify(frames));
     return null;
 }
 

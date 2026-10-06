@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026100606 (release 1.3.0, MATURITY_STABLE)
+**Plugin version:** 2026100700 (release 1.3.0, MATURITY_STABLE)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -2625,3 +2625,49 @@ Windows job failed at "Set up job" before any of its own code ran. Pinned to `0.
 
 Neither was caught locally: a fixture is only checked by importing it into STACK, and an action
 reference only by GitHub resolving it.
+
+
+## 67. Iteration 63 (2026100700): six Playwright failures, one product gap among them
+
+Dev CI, k6 and JMeter (on its second attempt) were green; Playwright had six failures and the
+NVDA workflow did not get past its tunnel. Five of the six Playwright failures were mistakes in
+specs I had written without being able to run them. One was a real gap in the plugin.
+
+### The product gap: mode 1 could not take the switch away
+
+`permissions.spec.js` expected a quiz to revoke the student switch while the editor is on
+everywhere, and found it on all ten questions. The form only rendered the switch checkbox inside
+the block for the override modes 2 and 3, next to the activation checkbox. In mode 1 there is no
+activation checkbox, so there was no switch checkbox either - and #73 says a quiz or question may
+take the switch away whenever the site allows it. The checkbox is now rendered in modes 1, 2 and
+3, and its `disabledIf` only where the activation checkbox it depends on exists.
+
+### The five spec mistakes
+
+* **Zoom.** `zoom: 200%` on the body scales coordinates inside the page differently from the
+  toolbar that holds them, so every button looked like it was outside it. Browser zoom at 200 % is
+  a viewport half as wide; the spec sets 640 x 450 now, which is what WCAG reflow means.
+* **Soft keyboard.** All characters were dispatched in one go, so "x+1" sat in MathQuill's
+  textarea at once and was read as a paste. A real keyboard delivers one character per task; the
+  spec waits between characters now.
+* **JSXGraph.** The frame search required a board element called `jxgbox`; any frame with a
+  board now counts, the wait is a minute because the frame loads JSXGraph from a CDN, and if
+  nothing is found the spec prints every frame's URL, globals and script sources.
+* **Settings matrix.** The new two-question cases assumed a clean slate, but the serial cases
+  before them leave quiz and question overrides behind. Each resets the settings quiz first.
+* **System lines.** Clicking STACK's Check timed out waiting for the button to be unobstructed.
+  It is pressed from the page now, followed by a wait for the navigation.
+
+### NVDA: an empty grep ended the step
+
+The tunnel step ran under `bash -e -o pipefail`, and while cloudflared was still starting, the
+grep for its URL found nothing, exited 1, and ended the step on the first try. `|| true`.
+
+### JMeter: flaky in one specific way
+
+Attempt 1 of the green run failed on one login out of ten - a 404 from PHP's built-in server at
+ramp-up - while every request the plugin is measured on passed. The plan already starts the next
+loop on error, so that thread logged in again and carried on. `check_jtl.py` now forgives exactly
+that: a failed login followed by a successful one on the same thread, reported as recovered. A
+thread that never logs in still fails the run, and so does any failure of anything else; both are
+covered by tests of the script.
