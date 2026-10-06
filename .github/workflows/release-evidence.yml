@@ -66,8 +66,10 @@ jobs:
           for dir in tests/jest tests/playwright; do
             if [ -f "$dir/package-lock.json" ]; then
               echo "=== $dir" | tee -a evidence/dependency-audit.txt
+              # What would ship: nothing under tests/ is in the release archive, so in practice
+              # this is empty - but if a runtime dependency ever appears, this is where it shows.
               (cd "$dir" && npm audit --omit=dev --audit-level=high) \
-                2>&1 | tee -a evidence/dependency-audit.txt || true
+                2>&1 | tee -a evidence/dependency-audit.txt | tee -a evidence/runtime-audit.txt || true
               echo "--- including dev dependencies (advisory only)" \
                 | tee -a evidence/dependency-audit.txt
               (cd "$dir" && npm audit) 2>&1 | tee -a evidence/dependency-audit.txt || true
@@ -115,8 +117,12 @@ jobs:
         run: |
           # The audit above runs with continue-on-error so that the evidence is collected even
           # when it fails. For a release, a high or critical finding is a stop (#69).
-          if grep -qiE '"severity": *"(high|critical)"' evidence/dependency-audit.txt 2>/dev/null \
-             || grep -qiE '[0-9]+ (high|critical)' evidence/dependency-audit.txt 2>/dev/null; then
+          #
+          # Only runtime findings stop it. Everything under tests/ is a development tool and is
+          # excluded from the release archive; its findings are recorded above and assessed in
+          # docs/DEPENDENCY-AUDIT.md, but a DoS in a test runner's glob matcher is not a defect
+          # of the plugin a site installs (#69: dev-only advisories are not runtime blockers).
+          if grep -qiE '[0-9]+ (high|critical)' evidence/runtime-audit.txt 2>/dev/null; then
             echo "::error::High or critical dependency findings; assess them before releasing."
             exit 1
           fi

@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026100602 (release 1.3.0, MATURITY_STABLE)
+**Plugin version:** 2026100604 (release 1.3.0, MATURITY_STABLE)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -2519,3 +2519,48 @@ with one question on in a quiz that is off, and saving only the groups.
 
 The PHPUnit matrix gains 5.3 on PostgreSQL 17 and on MariaDB 11.4, with service images taken from
 the matrix and the MariaDB health check on `mariadb-admin`, as in the release matrix.
+
+
+## 63. Iteration 59 (2026100603): the board was one document further down
+
+### #77: why the JSXGraph spec never found a board
+
+STACK renders a `[[jsxgraph]]` block inside an iframe of its own - `[[iframe]]`, with the board in
+`#jxgbox` and JSXGraph loaded into that frame from a CDN. The slider talks to the STACK input in
+the parent page through `stack_js`, which sets the value and dispatches the non-bubbling change
+event the return channel listens for. Every earlier version of the spec looked for `.jxgbox` and
+`window.JXG` in the page; both exist, one document further down. Reading
+`stack/cas/castext2/blocks/jsxgraph.block.php` settled it.
+
+The spec now finds the frame whose document has `#jxgbox` and a board, reads the slider
+positions there, adds the frame element's offset so the mouse lands on the handle, and asserts
+both directions without a skip: slider to editor, editor to slider, five drag-then-type rounds
+(ten changes) with editor and input compared after every one, and a write count that catches
+the editor answering an adopted value with changes of its own.
+
+### #72: the phone's event sequence, in a real attempt
+
+A phone cannot run in CI, but what distinguishes it is the sequence of events its keyboard
+sends. `android-input.spec.js` reproduces that sequence on a Pixel 7 viewport with touch, in a
+real Moodle attempt, through the plugin's own editors into the original STACK input: Blink
+(keydown 229, beforeinput, input, no keypress - the sequence that lost the first characters),
+Gecko (keydown, keypress, input) and IME composition, for the single-line and the multi-line
+editor, plus a deletion that must stay a deletion.
+
+What it cannot do is replace the devices the issue names - Opera, Firefox and Firefox Klar on an
+actual phone - and the system editor has no fixture on the load quiz.
+
+
+## 64. Iteration 60 (2026100604): the dependency audit, done rather than planned
+
+`npm audit` on both lock files. The Playwright tree had a critical finding (`decompress`) that I
+had brought in myself with `@guidepup/setup` - a package the NVDA workflow does not even use,
+because it installs NVDA with `guidepup/setup-action`. Removed; the tree is clean.
+
+The Jest tree has 34 findings from two root advisories, braces and sprintf-js, neither with a
+patched version. Both are DoS issues needing crafted input to a test runner that only reads this
+repository. Accepted and documented in `docs/DEPENDENCY-AUDIT.md`.
+
+The release evidence gate used to grep the whole audit for "high" and would have stopped every
+release on those dev-only findings - exactly what #69 says must not happen. It gates on the
+runtime audit (`--omit=dev`) now and keeps the full audit as evidence.

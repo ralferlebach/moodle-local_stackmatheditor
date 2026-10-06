@@ -7,14 +7,12 @@
   "scripts": {
     "test": "playwright test",
     "install-browsers": "playwright install --with-deps chromium",
-    "nvda:setup": "guidepup-setup",
     "nvda": "playwright test --project=nvda"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.63.0",
     "@guidepup/playwright": "^0.13.0",
-    "@guidepup/guidepup": "^0.22.1",
-    "@guidepup/setup": "^0.17.0"
+    "@guidepup/guidepup": "^0.22.1"
   }
 }
