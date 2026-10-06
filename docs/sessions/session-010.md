@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026100604 (release 1.3.0, MATURITY_STABLE)
+**Plugin version:** 2026100605 (release 1.3.0, MATURITY_STABLE)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -2564,3 +2564,32 @@ repository. Accepted and documented in `docs/DEPENDENCY-AUDIT.md`.
 The release evidence gate used to grep the whole audit for "high" and would have stopped every
 release on those dev-only findings - exactly what #69 says must not happen. It gates on the
 runtime audit (`--omit=dev`) now and keeps the full audit as evidence.
+
+
+## 65. Iteration 61 (2026100605): the three pieces that needed code before a run
+
+### Upgrade test (#73, item 43)
+
+Every existing site reaches 1.3 by upgrading, and CI only ever installed fresh. A new `upgrade`
+job in the release workflow finds the previous release by what `version.php` said - the
+repository has no tags - installs a site with it, seeds the configuration a 1.2 site has (a quiz
+default, a question override, a global question default, activation mode 2) straight into the
+table, upgrades in place to the current commit and checks that every stored meaning survived and
+the 1.3 settings arrived with defaults that change nothing. It is part of `ci-complete`.
+
+### Units inputs (#77, item 18)
+
+`stack_units.xml` is the algebraic fixture with a STACK units input, seeded into a quiz of its own
+next to an algebraic question - the load quiz has a shape the performance suite depends on. The
+browser test types a quantity and writes one from outside, the path a JSXGraph binding takes.
+
+### System lines (#72, item 8)
+
+The editor builds system lines when the stored answer is several relations joined by nounand. The
+test stores such an answer, presses Check so the page comes back with it, counts the lines and
+edits one with the Blink soft-keyboard sequence from #72.
+
+### #69, item 32
+
+Recorded as a decision in the release checklist: stable was set before the evidence, and the risk
+was accepted explicitly.

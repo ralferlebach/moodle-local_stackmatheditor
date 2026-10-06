@@ -72,6 +72,12 @@ viewport, 24 by 24 pixel targets, keyboard reach and a visible focus.
 
 ## 6. Only then: flip the release metadata
 
+**For 1.3.0 this order was not kept, deliberately.** `MATURITY_STABLE` was set on 6 October 2026
+before the evidence runs had completed on the release commit. Ralf Erlebach accepted that risk
+explicitly (#69, item 32): a stable release whose browser, accessibility and load evidence was
+collected after the flag, not before it. The evidence still has to be produced; what was given up
+is only that it gated the flag.
+
 Atomically, in one commit:
 
 * `version.php`: `MATURITY_STABLE` and the final release string;

@@ -194,6 +194,16 @@ $jsxgraphcm = local_stackmatheditor_seed_quiz(
     ['stack_jsxgraph.xml']
 );
 
+// A units input (#77, item 18) next to an algebraic one, so a test can compare the two on one
+// page. Its own quiz: the load quiz has a fixed shape the performance suite depends on.
+$unitscm = local_stackmatheditor_seed_quiz(
+    $gen,
+    $course,
+    $category,
+    'SME Units Quiz',
+    ['stack_units.xml', 'stack_algebraic.xml']
+);
+
 // Warm STACK's CAS result cache: instantiate every question once now. Otherwise the first
 // attempts of all simulated students start at the same moment, each instantiating ten STACK
 // questions with a fresh Maxima process, and the herd runs into the CAS timeout on a small CI
@@ -248,6 +258,7 @@ $exports = [
     'SME_SETTINGS_CMID' => $settingscm,
     'SME_LOAD_CMID' => $loadcm,
     'SME_JSXGRAPH_CMID' => $jsxgraphcm,
+    'SME_UNITS_CMID' => $unitscm,
     'SME_USER_PASS' => $password,
     'SME_STUDENTS' => $students,
 ];
