@@ -3,11 +3,6 @@ moodle-local_stackmatheditor
 
 [![Moodle Plugin CI](https://github.com/ralferlebach/moodle-local_stackmatheditor/actions/workflows/moodle-plugin-ci-main.yml/badge.svg?branch=main)](https://github.com/ralferlebach/moodle-local_stackmatheditor/actions/workflows/moodle-plugin-ci-main.yml?query=branch%3Amain)
 [![MDL Shield](https://img.shields.io/endpoint?url=https%3A%2F%2Fmdlshield.com%2Fapi%2Fbadge%2Flocal_stackmatheditor)](https://mdlshield.com/plugins/local_stackmatheditor)
-[![Release](https://img.shields.io/badge/release-1.3.0-blue)](docs/CHANGES.md)
-[![Maturity](https://img.shields.io/badge/maturity-stable-brightgreen)](version.php)
-[![Moodle](https://img.shields.io/badge/Moodle-4.5%20%E2%80%93%205.3-orange)](https://moodle.org)
-[![PHP](https://img.shields.io/badge/PHP-8.2%20%E2%80%93%208.4-777bb4)](https://www.php.net)
-[![License: GPL v3](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
 
 STACK Math Editor replaces the plain text answer inputs of **STACK** questions with a visual
 **MathQuill** formula editor and a configurable toolbar. Students write mathematics as they would
@@ -51,8 +46,6 @@ question which toolbar groups are offered.
   answer travels with it.
 * Works with touch, pen and soft keyboards, and the toolbar follows the width of the editor.
 * Stays in step with scripts that write into the STACK input, such as JSXGraph sliders.
-
-The complete, version-by-version list is in [docs/CHANGES.md](docs/CHANGES.md).
 
 
 Installation

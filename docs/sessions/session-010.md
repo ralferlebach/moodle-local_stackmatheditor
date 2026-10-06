@@ -2696,3 +2696,31 @@ git archive dry run showed - and the release-artefact gate allows exactly that o
 `docs/`. `tests/upgrade/` is excluded from the archive and the gate as well.
 
 The version stays at 2026100700 / 1.3.0 / MATURITY_STABLE, as decided: documentation only.
+
+
+## 69. Iteration 65 (2026100700, version unchanged): NVDA job sent to its own localhost; README trimmed
+
+NVDA run 3 (commit 77a42b2) was the first to get as far as the tests: site built, tunnel up,
+Windows job handed the site - and then the test step failed within seconds. The job log is not
+readable without a sign-in and the API was not available in this session, so the cause is read
+from the workflow, not from the log: `handoff/site.env` named `SME_BASE_URL` twice. First the
+tunnel, then - from the seed's own export lines - `http://127.0.0.1:8000`, the address the site
+had when it was seeded. In `GITHUB_ENV` the last assignment wins, so the browser on Windows went
+to its own localhost. That fits the run: ten attempts failing in under a minute and an artefact
+of 778 KB, with traces and video switched on.
+
+- The seed's `SME_BASE_URL` line is dropped from the handoff, the tunnel is written last, and the
+  step fails if the file does not name exactly one.
+- The Windows job checks the site through the tunnel before the tests and says so in one
+  annotation if it cannot reach it.
+- In GitHub Actions the Playwright `github` reporter turns each failure into an annotation, and
+  `tests/playwright/nvda-summary.js` writes outcome, first error and every transcript into the
+  job summary. Both are on the run page without a sign-in.
+- Every NVDA test brings the browser to the foreground (`navigateToWebContent`) before it sets a
+  focus; three of the five did not, and NVDA reads the foreground window only.
+
+Not verified: the NVDA assertions themselves. No run has reached them yet.
+
+README, as ordered: two badges only (Moodle Plugin CI, MDL Shield); the sentence linking to
+`docs/CHANGES.md` is gone. `tests/a11y-nvda/` - the separate harness that was rejected - is still
+in the repository because unpacking an archive does not delete; it has to be removed by hand.

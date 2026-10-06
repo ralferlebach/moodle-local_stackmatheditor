@@ -53,5 +53,10 @@ module.exports = defineConfig({
         trace: 'on',
         video: 'on',
     },
-    reporter: [['list'], ['html', {open: 'never'}]],
+    // In GitHub Actions each failure also becomes an annotation on the run page, and the JSON
+    // file feeds the NVDA job summary - a red run can be read without opening a log.
+    reporter: process.env.GITHUB_ACTIONS
+        ? [['list'], ['html', {open: 'never'}], ['github'],
+            ['json', {outputFile: 'test-results/results.json'}]]
+        : [['list'], ['html', {open: 'never'}]],
 });

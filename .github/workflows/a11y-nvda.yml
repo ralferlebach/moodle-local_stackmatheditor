@@ -137,11 +137,17 @@ jobs:
           echo "Through the tunnel: HTTP $code"
           [ "$code" = "200" ] || { tail -40 /tmp/moodle-server.log; exit 1; }
 
+          # The seed prints SME_BASE_URL too - the address the site had when it was seeded, which
+          # is 127.0.0.1. In GITHUB_ENV the last assignment wins, so that line sent the Windows
+          # browser to its own localhost. The seed's line is dropped; the tunnel is the only one.
           mkdir -p handoff
           {
+            sed -n "s/^export \([A-Z_][A-Z0-9_]*\)='\(.*\)'$/\1=\2/p" /tmp/sme-seed.env \
+              | grep -v '^SME_BASE_URL='
             echo "SME_BASE_URL=$url"
-            sed -n "s/^export \([A-Z_][A-Z0-9_]*\)='\(.*\)'$/\1=\2/p" /tmp/sme-seed.env
           } > handoff/site.env
+          [ "$(grep -c '^SME_BASE_URL=' handoff/site.env)" = "1" ] \
+            || { echo "::error::handoff/site.env must name exactly one SME_BASE_URL"; exit 1; }
           cat handoff/site.env | sed 's/PASS=.*/PASS=***/'
 
       - name: Hand the site to the Windows job
@@ -220,11 +226,36 @@ jobs:
           done
           echo "The test site never came up."; exit 1
 
+      # Fail here, with a sentence, if the browser on this runner could not reach the site -
+      # not five times over inside the tests with a connection error each.
+      - name: Check the site from this runner
+        run: |
+          case "$SME_BASE_URL" in
+            https://*.trycloudflare.com) ;;
+            *) echo "::error::SME_BASE_URL is '$SME_BASE_URL', not the tunnel"; exit 1 ;;
+          esac
+          code=000
+          for _ in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+              "$SME_BASE_URL/login/index.php" || true)
+            [ "$code" = "200" ] && break
+            sleep 5
+          done
+          echo "Through the tunnel, from Windows: HTTP $code"
+          [ "$code" = "200" ] \
+            || { echo "::error::the test site answers HTTP $code through $SME_BASE_URL"; exit 1; }
+
       - name: Record what NVDA says
         working-directory: tests/playwright
         env:
           SME_NVDA: '1'
         run: npx playwright test --project=nvda
+
+      # The run page shows this without opening a log: what failed and why, and what NVDA said.
+      - name: Summarise
+        if: ${{ always() }}
+        working-directory: tests/playwright
+        run: node nvda-summary.js >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Collect the transcripts
         if: ${{ always() }}

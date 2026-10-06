@@ -100,11 +100,25 @@ async function attempt(page) {
     await page.waitForTimeout(2000);
 }
 
+/**
+ * Open an attempt and make the browser the window NVDA is listening to.
+ *
+ * NVDA reads the foreground window. Without this, a test that sets the focus itself would be
+ * talking to a browser NVDA is not following, and the transcript would be empty.
+ *
+ * @param {import('@playwright/test').Page} page Playwright page.
+ * @param {Object} nvda The Guidepup NVDA instance.
+ * @returns {Promise<void>}
+ */
+async function listen(page, nvda) {
+    await attempt(page);
+    await nvda.navigateToWebContent();
+    await nvda.clearSpokenPhraseLog();
+}
+
 test.describe('NVDA reads the editor', () => {
     test('the editor announces itself as an editable field with a name', async({page, nvda}) => {
-        await attempt(page);
-        await nvda.navigateToWebContent();
-        await nvda.clearSpokenPhraseLog();
+        await listen(page, nvda);
 
         for (let i = 0; i < 40; i++) {
             await nvda.press('Tab');
@@ -122,7 +136,7 @@ test.describe('NVDA reads the editor', () => {
     });
 
     test('the on/off switch announces its role and its state', async({page, nvda}) => {
-        await attempt(page);
+        await listen(page, nvda);
 
         const toggle = page.locator('.sme-toggle input[type="checkbox"]').first();
         test.skip(await toggle.count() === 0, 'the student switch is off on this site');
@@ -146,7 +160,7 @@ test.describe('NVDA reads the editor', () => {
     });
 
     test('toolbar buttons are announced by name, not by symbol', async({page, nvda}) => {
-        await attempt(page);
+        await listen(page, nvda);
 
         await page.locator('.sme-tb-btn').first().focus();
         await nvda.clearSpokenPhraseLog();
@@ -165,7 +179,7 @@ test.describe('NVDA reads the editor', () => {
     });
 
     test('the matrix chooser announces itself and gives the focus back', async({page, nvda}) => {
-        await attempt(page);
+        await listen(page, nvda);
 
         const chooser = page.locator('.sme-tb-btn[data-command="matrix"]').first();
         test.skip(await chooser.count() === 0, 'the matrix group is off on this site');
@@ -186,9 +200,7 @@ test.describe('NVDA reads the editor', () => {
     });
 
     test('the core flow is recorded for the person signing it off', async({page, nvda}) => {
-        await attempt(page);
-        await nvda.navigateToWebContent();
-        await nvda.clearSpokenPhraseLog();
+        await listen(page, nvda);
 
         for (let i = 0; i < 30; i++) {
             await nvda.next();
