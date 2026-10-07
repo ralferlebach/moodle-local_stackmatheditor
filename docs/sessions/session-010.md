@@ -2815,3 +2815,85 @@ The spec starts NVDA with full capture instead of the first utterance only: role
 often arrive as a second one.
 
 Not verified: the NVDA assertions. No run has reached them yet.
+
+
+## 72. Iteration 68 (2026100700, version unchanged): upgrade job takes the previous release from moodle.org
+
+Main CI runs 16 and 17 (commits c76b0ef, 7065167), read from the run pages.
+
+**Upgrade job.** It looked for the previous release in the git history
+(`git log -G"release *= *'1\.2\.2'"`) and found nothing: 1.2.2 was released from a branch of its
+own and is not an ancestor of main. As ordered, the job now takes the package from the Moodle
+plugins directory. `.github/fetch-previous-release.sh` reads
+`https://download.moodle.org/api/1.3/pluglist.php`, picks the newest published version of
+`local_stackmatheditor` that is older than the commit under test - older, not newest, because
+this commit's own version will be in the list once it is published -, downloads it from the URL
+the directory gives, compares the MD5 the directory states, and checks that the unpacked
+`version.php` says the version that was asked for. The checkout no longer needs the history.
+
+Run in the session, end to end, on a fresh Moodle 4.5 with STACK: the script fetched 1.2.2
+(2026091500, checksum as stated), the site installed with it, `seed_before.php` seeded, the
+upgrade to 2026100700 completed, and `verify_after.php` passed all nine checks.
+
+**Matrix.** Seven rows ended with "exceeded the maximum execution time of 35m0s" - none with a
+failed step. Every row runs the whole Behat suite, which has grown with the CAS contract; the dev
+workflow had its Behat limit raised to 60 minutes for the same reason. The row limit is 75 now.
+Not known: whether Behat passes on Moodle 5.0-5.3. No row there has ever run to its end, and the
+dev workflow runs Behat on 4.5 only.
+
+Left in the repository by unpacking: `tests/playwright/nvda-summary.js`, replaced by
+`run-summary.js`. To be deleted by hand.
+
+
+## 73. Iteration 69 (2026100700, version unchanged): issues checked against the runs on the release commit
+
+Runs on main, commit 7065167 (development c76b0ef is its parent), read through the API:
+
+| Workflow | Run | Result |
+|---|---|---|
+| Moodle Plugin CI Dev (c76b0ef) | 37619771767 | success |
+| Playwright | 37626231174 | success - 44 passed, 1 skipped (the documented `fixme`) |
+| Accessibility (NVDA) | 37626180385 | success - 4 passed, 1 skipped |
+| Load test (k6) | 37630688758 | success |
+| Load test (JMeter) | 37626205745 | cancelled after 15 minutes in "Set up JMeter" |
+| Moodle Plugin CI Main | 37626071278 | failure - upgrade job, and three rows over 35 minutes |
+
+In the main matrix eight rows passed in 25 to 34 minutes, on Moodle 4.5 to 5.2 with both
+databases. Both Moodle 5.3 rows and one 5.1 row were stopped by the limit during Behat. That
+supports iteration 68's 75 minutes; it does not say that 5.3 passes.
+
+Verified against these runs and the code, and ready to be ticked: #69 items 11, 14, 19, 21, 24,
+25; #71 item 27; #72 items 6, 7, 8, 16, 19; #73 item 41; #76 items 48, 49; #77 items 3, 4, 12-16,
+18 - which completes #77; #81 items 34, 36. Not ticked from this session: the session's GitHub
+access reads issues but may not change them.
+
+What the first real NVDA run showed, from its transcripts:
+
+- The field: "Math Input:, edit, multi line, blank". It has a role and a name - MathQuill's
+  own, which `aria-labelledby` puts before the plugin's `aria-label`.
+- The switch: "Formula editor off: type the answer as plain text.. off".
+- "Toolbar buttons are announced by name" passed with a transcript of the site navigation. The
+  focus was not on the toolbar when NVDA pressed Tab, and the assertions were satisfied by any
+  buttons anywhere. That result is void. The test now proves the focus before and after every
+  Tab and compares what NVDA says with the button's own label.
+- The matrix chooser test was skipped: a fresh site does not offer the matrix group. The NVDA
+  site is seeded with `--all-groups` now.
+
+JMeter: `curl` had no time limit and archive.apache.org stalled, twice. The download now tries
+the mirror network first, the archive second, four minutes at most each, checksum from
+apache.org.
+
+New tests, for #69's items that had no evidence, both green locally:
+
+- a11y-zoom: the core workflow at 200 per cent - type, use a toolbar button with the mouse,
+  delete; the answer arrives in the STACK input.
+- performance: no storms. Once the page has come to rest, five idle seconds bring no change
+  inside the questions and no request from the plugin; one keystroke brings 177 changes and no
+  plugin request. The first version of the test failed with 437 "idle" changes - MathJax
+  finishing the toolbars in one burst, after which the page was silent for fifteen seconds. The
+  test waits for rest instead of for three seconds.
+
+Still open for reasons that are not code: #69 items 10 and 26 (a person reads the NVDA
+transcripts), 12, 13, 18 (the new tests have to run in CI), 20, 22, 27, 30, 31; #71 items 24, 26;
+#72 items 3 and 5 (Opera, Firefox Klar on a device); #73 items 43-45, #76 items 50-51 and #81
+item 35 (main CI green, including the upgrade job).

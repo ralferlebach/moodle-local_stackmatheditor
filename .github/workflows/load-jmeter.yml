@@ -119,9 +119,18 @@ jobs:
       - name: Set up JMeter
         run: |
           # Supply-chain hardening: verify the download against Apache's published SHA-512.
-          base="https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz"
-          curl -fsSL "$base" -o jmeter.tgz
-          curl -fsSL "${base}.sha512" -o jmeter.tgz.sha512
+          # Two runs in a row ended here after fifteen minutes: the download from
+          # archive.apache.org had stalled, and curl without a time limit waits for ever. The
+          # mirror network comes first now, the archive is the fallback, and neither may take
+          # longer than four minutes. The checksum always comes from apache.org itself.
+          file="jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz"
+          fetch () { curl -fsSL --connect-timeout 20 --max-time 240 --retry 2 --retry-delay 5 "$1" -o "$2"; }
+          fetch "https://dlcdn.apache.org/$file" jmeter.tgz \
+            || fetch "https://archive.apache.org/dist/$file" jmeter.tgz \
+            || { echo "::error::JMeter ${JMETER_VERSION} could not be downloaded from Apache."; exit 1; }
+          fetch "https://downloads.apache.org/$file.sha512" jmeter.tgz.sha512 \
+            || fetch "https://archive.apache.org/dist/$file.sha512" jmeter.tgz.sha512 \
+            || { echo "::error::The JMeter checksum could not be downloaded from Apache."; exit 1; }
           # The .sha512 file already carries a filename; take the hash field only.
           echo "$(awk '{print $1}' jmeter.tgz.sha512)  jmeter.tgz" | sha512sum -c -
           tar xzf jmeter.tgz

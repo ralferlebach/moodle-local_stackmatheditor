@@ -104,6 +104,45 @@ test('200 per cent zoom keeps everything inside the page', async({page}) => {
     expect(seen.documentWidth).toBeLessThanOrEqual(seen.windowWidth + 2);
 });
 
+test('the core workflow works at 200 per cent zoom', async({page}) => {
+    // Reflow is half of it; the other half is that the thing still does its job: type, use the
+    // toolbar, and the answer arrives where STACK reads it.
+    await page.setViewportSize({width: 640, height: 450});
+    await attempt(page);
+
+    const question = page.locator('.que.stack').first();
+    const field = question.locator('.mq-editable-field').first();
+
+    await field.scrollIntoViewIfNeeded();
+    await field.click();
+    await expect(field.locator('textarea')).toBeFocused();
+    await page.keyboard.type('x');
+
+    // A toolbar button, with the mouse, where the zoomed layout has put it.
+    const plus = question.locator('.sme-tb-btn').first();
+    await plus.scrollIntoViewIfNeeded();
+    const box = await plus.boundingBox();
+    expect(box.x, 'the button is inside the zoomed viewport').toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(640);
+    await plus.click();
+    await page.keyboard.type('1');
+    await page.waitForTimeout(800);
+
+    const state = await question.evaluate((que) => {
+        const input = que.querySelector('input[name*="_ans"]');
+        const MQ = window.MathQuill.getInterface(2);
+        return {input: input.value, latex: MQ(que.querySelector('.mq-editable-field')).latex()};
+    });
+    expect(state.input.replace(/\s/g, '')).toBe('x+1');
+    expect(state.latex.replace(/\s/g, '')).toBe('x+1');
+
+    // The toolbar handed the focus back to the field: a deletion needs no click, and deletes
+    // what was typed last.
+    await page.keyboard.press('Backspace');
+    await page.waitForTimeout(500);
+    expect(await question.locator('input[name*="_ans"]').first().inputValue()).toBe('x+');
+});
+
 test('a narrow viewport keeps the toolbar usable', async({page}) => {
     await page.setViewportSize({width: 380, height: 800});
     await attempt(page);

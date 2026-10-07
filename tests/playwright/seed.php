@@ -271,6 +271,16 @@ $qbeids = $DB->get_fieldset_sql(
     ['quizid' => get_coursemodule_from_id('quiz', $settingscm, 0, false, MUST_EXIST)->instance]
 );
 
+// Option --all-groups switches every toolbar group on site-wide. A fresh site offers the default
+// selection only, and a run that has to hear the matrix chooser (NVDA, #69) needs it on the page.
+if (in_array('--all-groups', $argv ?? [], true)) {
+    set_config(
+        'default_groups',
+        implode(',', array_keys(\local_stackmatheditor\definitions::get_element_groups())),
+        'local_stackmatheditor'
+    );
+}
+
 // Option --reset removes every quiz- and question-level configuration of the settings quiz, so each
 // browser test starts from the admin settings alone.
 if (in_array('--reset', $argv ?? [], true)) {
