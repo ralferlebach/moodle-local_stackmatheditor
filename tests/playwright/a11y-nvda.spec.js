@@ -114,7 +114,27 @@ async function attempt(page) {
 async function listen(page, nvda) {
     await attempt(page);
     await nvda.navigateToWebContent();
+    // navigateToWebContent ends by moving NVDA to the top of the page; let that settle before a
+    // test sets the focus itself, or the two race.
+    await page.waitForTimeout(1000);
     await nvda.clearSpokenPhraseLog();
+}
+
+/**
+ * Put the focus on an element and make sure it is there before NVDA is asked to act.
+ *
+ * The first NVDA run on the release commit passed "toolbar buttons are announced by name" with a
+ * transcript of the site navigation: the focus had not been on the toolbar when Tab was pressed,
+ * and the assertions were satisfied by any five buttons anywhere. A test that sets the focus
+ * therefore proves that it is set.
+ *
+ * @param {import('@playwright/test').Locator} target Element to focus.
+ * @returns {Promise<void>}
+ */
+async function focusOn(target) {
+    await target.scrollIntoViewIfNeeded();
+    await target.focus();
+    await expect(target).toBeFocused();
 }
 
 test.describe('NVDA reads the editor', () => {
@@ -124,7 +144,7 @@ test.describe('NVDA reads the editor', () => {
         // The toolbar comes before the field in the tab order, with some seventy buttons. Start
         // on its last button and let NVDA make the one step into the field - forty Tabs from
         // the top of the page, as this test first did, end in the middle of the toolbar.
-        await page.locator('.sme-input-wrap').first().locator('.sme-tb-btn').last().focus();
+        await focusOn(page.locator('.sme-input-wrap').first().locator('.sme-tb-btn').last());
         await nvda.clearSpokenPhraseLog();
         await nvda.press('Tab');
         await page.waitForTimeout(1000);
@@ -144,7 +164,7 @@ test.describe('NVDA reads the editor', () => {
         const toggle = page.locator('.sme-toggle input[type="checkbox"]').first();
         test.skip(await toggle.count() === 0, 'the student switch is off on this site');
 
-        await toggle.focus();
+        await focusOn(toggle);
         await nvda.clearSpokenPhraseLog();
         await nvda.press('Shift+Tab');
         await nvda.press('Tab');
@@ -165,20 +185,32 @@ test.describe('NVDA reads the editor', () => {
     test('toolbar buttons are announced by name, not by symbol', async({page, nvda}) => {
         await listen(page, nvda);
 
-        await page.locator('.sme-tb-btn').first().focus();
+        const heard = [];
+
+        const buttons = page.locator('.sme-input-wrap').first().locator('.sme-tb-btn');
+        await focusOn(buttons.first());
         await nvda.clearSpokenPhraseLog();
-        for (let i = 0; i < 5; i++) {
+
+        // Each Tab has to land on the next toolbar button, and NVDA has to say that button's
+        // name - the word from the language pack, not the symbol on its face.
+        const missing = [];
+        for (let i = 1; i <= 5; i++) {
+            await nvda.clearSpokenPhraseLog();
             await nvda.press('Tab');
+            await expect(buttons.nth(i), `Tab ${i} must land on toolbar button ${i + 1}`).toBeFocused();
+
+            const label = await buttons.nth(i).getAttribute('aria-label');
+            const word = String(label || '').toLowerCase().match(/[a-zäöüß]{3,}/);
+            const said = await spoken(nvda);
+            heard.push(`${label}: ${said}`);
+
+            if (!word || !said.includes(word[0]) || !/button|schaltfläche/.test(said)) {
+                missing.push(`${label} -> "${said}"`);
+            }
         }
 
-        const log = await spoken(nvda);
-        archive('toolbar-buttons', await nvda.spokenPhraseLog());
-
-        expect(log).toMatch(/button|schaltfläche/);
-        // Every button carries an aria-label from the language pack. A button announced as a
-        // symbol alone tells a screen reader user nothing, and this is where that is checked
-        // rather than assumed.
-        expect(log.replace(/[^a-zäöüß ]/g, ' ').trim().length).toBeGreaterThan(20);
+        archive('toolbar-buttons', heard);
+        expect(missing, 'buttons NVDA did not announce by name and role').toEqual([]);
     });
 
     test('the matrix chooser announces itself and gives the focus back', async({page, nvda}) => {
@@ -187,7 +219,7 @@ test.describe('NVDA reads the editor', () => {
         const chooser = page.locator('.sme-tb-btn[data-command="matrix"]').first();
         test.skip(await chooser.count() === 0, 'the matrix group is off on this site');
 
-        await chooser.focus();
+        await focusOn(chooser);
         await nvda.clearSpokenPhraseLog();
         await nvda.press('Enter');
         await page.waitForTimeout(1500);

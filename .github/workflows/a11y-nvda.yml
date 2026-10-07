@@ -77,7 +77,7 @@ jobs:
       - name: Seed course, users and quizzes (same seed as playwright.yml)
         run: |
           web=moodle; [ -d moodle/public ] && web=moodle/public
-          php "$web/local/stackmatheditor/tests/playwright/seed.php" > /tmp/sme-seed.env \
+          php "$web/local/stackmatheditor/tests/playwright/seed.php" --all-groups > /tmp/sme-seed.env \
             || { echo "Seed failed. Its output:"; cat /tmp/sme-seed.env; exit 1; }
           cat /tmp/sme-seed.env
 

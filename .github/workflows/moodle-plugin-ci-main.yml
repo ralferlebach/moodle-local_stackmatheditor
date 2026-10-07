@@ -45,7 +45,9 @@ jobs:
   test:
     name: "CI / ${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.database }}"
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    # The whole Behat suite runs in every row, and it has grown with the CAS contract: seven of
+    # eight rows ran into the former 35 minutes without having failed anything.
+    timeout-minutes: 75
     services:
       postgres:
         # Moodle 5.3 requires PostgreSQL 17 and MariaDB 11.4; the older branches run on the
@@ -453,7 +455,7 @@ jobs:
     # new defaults are what they should be.
     name: Upgrade from the previous release
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
@@ -470,23 +472,16 @@ jobs:
       MOODLE_BRANCH: MOODLE_405_STABLE
       MOODLE_ADMIN_PASS: 'Admin!23'
     steps:
-      - name: Check out this commit with its history
+      - name: Check out this commit
         uses: actions/checkout@v6
         with:
           path: plugin-new
-          fetch-depth: 0
 
-      - name: Find the previous release
-        run: |
-          # No tags in this repository, so the release is found by what version.php said.
-          sha=$(git -C plugin-new log --format=%H -G"release *= *'1\.2\.2'" -- version.php | head -1)
-          if [ -z "$sha" ]; then
-            echo "::error::No commit with release 1.2.2 in version.php was found."; exit 1
-          fi
-          echo "Previous release: $sha"
-          mkdir plugin
-          git -C plugin-new archive "$sha" | tar -x -C plugin
-          grep -E "release|version " plugin/version.php
+      # The package moodle.org hands to a site administrator - the newest published version
+      # older than this commit - not a rebuild from this repository's history. Looking for the
+      # release in the history found nothing: 1.2.2 was released from a branch of its own.
+      - name: Fetch the previous release from the Moodle plugins directory
+        run: bash plugin-new/.github/fetch-previous-release.sh plugin-new plugin
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
