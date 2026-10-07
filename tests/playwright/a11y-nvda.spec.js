@@ -137,6 +137,23 @@ async function focusOn(target) {
     await expect(target).toBeFocused();
 }
 
+/**
+ * What has the focus, in words a failure message can use.
+ *
+ * @param {import('@playwright/test').Page} page Playwright page.
+ * @returns {Promise<string>} The element's label, or its tag and text.
+ */
+function focused(page) {
+    return page.evaluate(() => {
+        const active = document.activeElement;
+        if (!active) {
+            return 'nothing';
+        }
+        return active.getAttribute('aria-label')
+            || `${active.tagName.toLowerCase()} "${(active.textContent || '').trim().slice(0, 40)}"`;
+    });
+}
+
 test.describe('NVDA reads the editor', () => {
     test('the editor announces itself as an editable field with a name', async({page, nvda}) => {
         await listen(page, nvda);
@@ -188,28 +205,52 @@ test.describe('NVDA reads the editor', () => {
         const heard = [];
 
         const buttons = page.locator('.sme-input-wrap').first().locator('.sme-tb-btn');
+
+        // In browse mode NVDA does not tab from the focused element but from its own cursor
+        // wherever that is - after navigateToWebContent, at the top of the page. That is where
+        // the first Tab of this test went, twice. A keyboard user on a toolbar is in focus mode,
+        // where Tab goes from the focus; whether NVDA is in it cannot be asked, only seen. So:
+        // press Tab, look where the focus went, and switch the mode once if it went elsewhere.
+        let mode = 'as found';
         await focusOn(buttons.first());
         await nvda.clearSpokenPhraseLog();
+        await nvda.press('Tab');
+        if (!await buttons.nth(1).evaluate((button) => button === document.activeElement)) {
+            heard.push(`first Tab went to: ${await focused(page)} - "${await spoken(nvda)}"`);
+            await nvda.perform(nvda.keyboardCommands.toggleBetweenBrowseAndFocusMode, {capture: false});
+            mode = 'after switching between browse and focus mode';
+            await focusOn(buttons.first());
+            await nvda.clearSpokenPhraseLog();
+            await nvda.press('Tab');
+        }
+        heard.push(`NVDA mode: ${mode}`);
 
         // Each Tab has to land on the next toolbar button, and NVDA has to say that button's
         // name - the word from the language pack, not the symbol on its face.
         const missing = [];
-        for (let i = 1; i <= 5; i++) {
-            await nvda.clearSpokenPhraseLog();
-            await nvda.press('Tab');
-            await expect(buttons.nth(i), `Tab ${i} must land on toolbar button ${i + 1}`).toBeFocused();
+        try {
+            for (let i = 1; i <= 5; i++) {
+                if (i > 1) {
+                    await nvda.clearSpokenPhraseLog();
+                    await nvda.press('Tab');
+                }
+                const label = await buttons.nth(i).getAttribute('aria-label');
+                const said = await spoken(nvda);
+                heard.push(`${label}: ${said}`);
 
-            const label = await buttons.nth(i).getAttribute('aria-label');
-            const word = String(label || '').toLowerCase().match(/[a-zäöüß]{3,}/);
-            const said = await spoken(nvda);
-            heard.push(`${label}: ${said}`);
+                // Named in the message, so a miss says where the focus is instead of "inactive".
+                expect(await focused(page), `Tab ${i} must land on toolbar button ${i + 1}`).toBe(label);
 
-            if (!word || !said.includes(word[0]) || !/button|schaltfläche/.test(said)) {
-                missing.push(`${label} -> "${said}"`);
+                const word = String(label || '').toLowerCase().match(/[a-zäöüß]{3,}/);
+                if (!word || !said.includes(word[0]) || !/button|schaltfläche/.test(said)) {
+                    missing.push(`${label} -> "${said}"`);
+                }
             }
+        } finally {
+            // Also when it fails: what NVDA said is what explains the failure.
+            archive('toolbar-buttons', heard);
         }
 
-        archive('toolbar-buttons', heard);
         expect(missing, 'buttons NVDA did not announce by name and role').toEqual([]);
     });
 

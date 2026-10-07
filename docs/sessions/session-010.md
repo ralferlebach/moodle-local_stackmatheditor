@@ -2897,3 +2897,32 @@ Still open for reasons that are not code: #69 items 10 and 26 (a person reads th
 transcripts), 12, 13, 18 (the new tests have to run in CI), 20, 22, 27, 30, 31; #71 items 24, 26;
 #72 items 3 and 5 (Opera, Firefox Klar on a device); #73 items 43-45, #76 items 50-51 and #81
 item 35 (main CI green, including the upgrade job).
+
+
+## 74. Iteration 70 (2026100700, version unchanged): NVDA tabs from its own cursor, not from the focus
+
+NVDA run 37678246346 on main (3670c5e): four tests passed, the matrix chooser among them for the
+first time - "Matrix, dialog. Matrix, table. ... 1 times 1 matrix, row 1, column 1", and after
+Escape the button again, "collapsed, opens dialog". One failed, twice: "toolbar buttons are
+announced by name". The focus was on the first toolbar button - the test had proved it - and
+after NVDA's Tab the second button did not have it.
+
+That is the behaviour the previous run had only hinted at with its transcript of the site
+navigation. In browse mode NVDA does not hand Tab to the browser as it is: when its own cursor is
+not inside the focused element, it tabs relative to that cursor. `navigateToWebContent` leaves
+the cursor at the top of the page, and a focus set by script does not reliably bring it along.
+The step into the editor field (last button, one Tab) happened to work; the same step from the
+first button did not.
+
+Whether NVDA is in browse or focus mode cannot be asked - Guidepup's configuration leaves the
+mode change to a sound - but it can be seen: the test presses Tab, looks where the focus went,
+and switches the mode once if it went elsewhere. The transcript records which mode it ended up
+in and, if the first Tab missed, where it landed and what NVDA said. A miss later on names the
+element that has the focus instead of reporting "inactive". The transcript is written when the
+test fails, too.
+
+Not verified: this cannot run outside Windows. If the second attempt misses as well, the
+transcript will say where the focus went.
+
+`tests/load/__pycache__/` had been committed; `__pycache__/` is in `.gitignore` now, the
+directory has to be deleted by hand.
