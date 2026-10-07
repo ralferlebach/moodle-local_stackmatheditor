@@ -80,35 +80,6 @@ MPL-2.0 requires modified files to be identifiable as modified. The
 modification is not applied to the distributed build by hand: it lives in the
 fork's source tree, and the fork's history is the record of what was changed.
 
-Local patch (local_stackmatheditor #72)
----------------------------------------
-mathquill.js carries one change against the upstream 0.10.1 release, in the
-keyboard shim (saneKeyboardEvents):
-
-  Blink on Android delivers soft-keyboard text as input events without a
-  keypress. The shim registers its typedText handler only from the keypress
-  and paste paths, so the first characters were dropped until some other key
-  - Enter, typically - happened to register it. The patch makes the input
-  event its own text-entry path, and handles an IME commit on compositionend
-  character by character.
-
-  Registering the handler rather than calling it directly is what keeps the
-  patch safe where the classic path also runs: typedText() empties the
-  textarea when it inserts, so a second run finds nothing to insert. No
-  browser detection is involved.
-
-  Search for "local_stackmatheditor #72" in thirdparty/mathquill/mathquill.js
-  to find the change. 1.3.x carries the same fix in the MathQuill fork it
-  ships, so this patch is a 1.2.x-only measure.
-
-  SHA-256 of the patched file:
-    mathquill.js  ad2df51a09d57c3dd6e8e3c139c9fae74befbef0b19ef1e29e8cb23efebc21f1
-
-Re-applying the patch after an update:
-  Take the upstream 0.10.1 mathquill.js, find the line that binds
-  'keydown keypress input keyup focusout paste' and add the two handlers
-  described above after it.
-
 Installation / update procedure
 -------------------------------
 The library is stored in:

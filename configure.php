@@ -205,11 +205,27 @@ if ($quizmode) {
     $config = config_manager::get_config($cmid, $qbeid, $questionid);
 }
 
+// What this level has stored itself. $config is what applies here, inherited values included;
+// deciding what to store needs the level's own values only (#81).
+$own = $quizmode
+    ? (config_manager::get_own_config($cmid) ?? [])
+    : (config_manager::get_own_config($cmid, (int) $qbeid) ?? []);
+
 // Build selected group keys.
 $selectedkeys = [];
 foreach (array_keys($groups) as $key) {
     if (!empty($config[$key])) {
         $selectedkeys[] = $key;
+    }
+}
+
+// What this level inherits when it has no activation of its own (#81): the quiz value for a
+// question, the instance default for a quiz.
+$inheritedenabled = ($instancemode === 1 || $instancemode === 3);
+if (!$quizmode && ($instancemode === 2 || $instancemode === 3)) {
+    $parentdefault = config_manager::get_quiz_default($cmid);
+    if ($parentdefault !== null && isset($parentdefault['_enabled'])) {
+        $inheritedenabled = (bool) $parentdefault['_enabled'];
     }
 }
 
@@ -269,8 +285,17 @@ if (isset($config['_allowStudentToggle'])) {
     }
 }
 
+// What the level above allows, for deciding whether a submitted value says anything.
+$inheritedtoggle = config_manager::get_instance_student_toggle();
+if (!$quizmode) {
+    $quizown = config_manager::get_own_config($cmid) ?? [];
+    if (isset($quizown['_allowStudentToggle'])) {
+        $inheritedtoggle = $inheritedtoggle && (bool) $quizown['_allowStudentToggle'];
+    }
+}
+
 $formdata = [
-    'maxdimension'       => $config['_maxStructuredDimension'] ?? '',
+    'maxdimension'       => $own['_maxStructuredDimension'] ?? '',
     'groups'             => $selectedkeys,
     'enabled'            => (int) $currentenabled,
     'allowstudenttoggle' => (int) ((bool) $currentstudenttoggle),
@@ -304,19 +329,40 @@ if ($mform->is_cancelled()) {
         } else {
             $elements['_maxStructuredDimension'] = $cleaned;
         }
-    } else if (isset($config['_maxStructuredDimension'])) {
-        $elements['_maxStructuredDimension'] = (int) $config['_maxStructuredDimension'];
+    } else if (isset($own['_maxStructuredDimension'])) {
+        $elements['_maxStructuredDimension'] = (int) $own['_maxStructuredDimension'];
     }
 
-    $elements['_allowStudentToggle'] = (int) (
-        !empty($data->allowstudenttoggle) && !empty($data->enabled)
-    );
 
-    // Store enabled flag when instance mode allows overrides.
-    if ($instancemode === 2 || $instancemode === 3) {
-        $elements['_enabled'] = isset($data->enabled)
-            ? (bool) $data->enabled
-            : ($instancemode === 3);
+
+    // Activation (#81): stored only when it says something, so that saving the toolbar groups
+    // does not quietly turn an inherited value into an override.
+    $submittedenabled = property_exists($data, 'enabled') ? (bool) $data->enabled : null;
+    $storeenabled = config_manager::activation_to_store(
+        $instancemode,
+        isset($own['_enabled']) ? (bool) $own['_enabled'] : null,
+        $inheritedenabled,
+        $submittedenabled
+    );
+    if ($storeenabled === null) {
+        unset($elements['_enabled']);
+    } else {
+        $elements['_enabled'] = $storeenabled;
+    }
+
+    // Student switch (#73): an absent field - disabled while the editor is off - keeps the
+    // author's stored choice instead of overwriting it with "no".
+    $editornow = $storeenabled ?? $inheritedenabled;
+    $storetoggle = config_manager::student_toggle_to_store(
+        isset($own['_allowStudentToggle']) ? (bool) $own['_allowStudentToggle'] : null,
+        $editornow,
+        property_exists($data, 'allowstudenttoggle') ? (bool) $data->allowstudenttoggle : null,
+        $inheritedtoggle
+    );
+    if ($storetoggle === null) {
+        unset($elements['_allowStudentToggle']);
+    } else {
+        $elements['_allowStudentToggle'] = (int) $storetoggle;
     }
 
     if ($quizmode) {

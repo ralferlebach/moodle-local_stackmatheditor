@@ -89,3 +89,4 @@ tests/a11y-nvda/playwright-report/
 tests/a11y-nvda/test-results/
 tests/a11y-nvda/transcripts/
 tests/a11y-nvda/nvda-results.json
+tests/playwright/transcripts/

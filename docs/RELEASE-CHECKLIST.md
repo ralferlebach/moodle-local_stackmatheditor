@@ -48,15 +48,18 @@ on the grounds that CI "usually passes".
 
 ## 4. Screen reader evidence
 
-`accessibility (NVDA)`, started by hand with a URL the runner can reach and a quiz's course
-module id. A Windows runner cannot host Moodle with Maxima, so it points at a site that is
-already up - staging, or a tunnel to a local instance - and records what NVDA actually says
-about the editor, the switch, the toolbar and the matrix chooser. The transcripts come back as
-an artefact, each headed with the commit and the date.
+`tests/playwright/a11y-nvda.spec.js`, run from Windows against the development site - the same
+seed, the same accounts and the same helpers as every other browser spec, with NVDA listening.
+`tests/playwright/README.md` has the three commands. It is not in CI: NVDA exists only on
+Windows, and a Windows runner cannot host Moodle with Maxima.
 
-It fails when something a student depends on is silent. It cannot tell you whether what NVDA
-says is understandable, in what order it comes, or whether something is read twice - those
-questions are printed at the end of the run for the person signing off.
+It records what NVDA says about the editor, the switch, the toolbar and the matrix chooser into
+`tests/playwright/transcripts/`, one file per flow with the commit and the time at the top, and
+fails when something a student depends on is silent. It cannot tell you whether what NVDA says
+is understandable, in what order it comes, or whether something is read twice.
+
+`a11y-zoom.spec.js` covers the measurable half in the normal run: 200 per cent zoom, a 380 pixel
+viewport, 24 by 24 pixel targets, keyboard reach and a visible focus.
 
 ## 5. What no workflow can do for you
 
@@ -68,6 +71,12 @@ questions are printed at the end of the run for the person signing off.
   An open, unexplained P1 must not sit quietly next to a stable release.
 
 ## 6. Only then: flip the release metadata
+
+**For 1.3.0 this order was not kept, deliberately.** `MATURITY_STABLE` was set on 6 October 2026
+before the evidence runs had completed on the release commit. Ralf Erlebach accepted that risk
+explicitly (#69, item 32): a stable release whose browser, accessibility and load evidence was
+collected after the flag, not before it. The evidence still has to be produced; what was given up
+is only that it gated the flag.
 
 Atomically, in one commit:
 

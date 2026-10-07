@@ -352,6 +352,36 @@ class config_manager {
     }
 
     /**
+     * What one level has stored itself - nothing inherited, nothing merged.
+     *
+     * get_config() answers "what applies here"; a form that decides what to store needs "what
+     * did this level say". Asking the merged configuration instead made a question that had only
+     * inherited "on" from its quiz look as if it had chosen it, and the next save - of the
+     * toolbar groups alone - froze that into an override (#81).
+     *
+     * @param int $cmid Course module ID.
+     * @param int $qbeid Question bank entry ID, 0 for the quiz level.
+     * @return array|null The level's own stored values, null when it has no record.
+     */
+    public static function get_own_config(int $cmid, int $qbeid = 0): ?array {
+        $col = self::get_config_column();
+
+        if ($qbeid > 0) {
+            $rec = self::get_one(
+                "cmid = :cmid AND questionbankentryid = :qbeid",
+                ['cmid' => $cmid, 'qbeid' => $qbeid]
+            );
+        } else {
+            $rec = self::get_one(
+                "cmid = :cmid AND questionbankentryid IS NULL",
+                ['cmid' => $cmid]
+            );
+        }
+
+        return $rec ? self::decode_raw_config($rec->$col) : null;
+    }
+
+    /**
      * Load the quiz-level default config for a given cmid.
      * Returns null if no quiz-level record exists yet.
      *
@@ -644,6 +674,77 @@ class config_manager {
         }
 
         return $defaultenabled;
+    }
+
+    /**
+     * What to store for the activation of one level when its form is saved (#81).
+     *
+     * A form always submits a value, because the checkbox is pre-filled with what the level
+     * inherits. Storing that value unconditionally would turn every save - even one that only
+     * changed the toolbar groups - into an explicit override, and the level would silently stop
+     * following the one above it. So the value is stored only when it says something: when it
+     * differs from what is inherited, or when the level already had an explicit value of its own.
+     *
+     * @param int $mode Instance activation mode.
+     * @param bool|null $existing The level's stored value, null when it has none.
+     * @param bool $inherited What the level gets without a value of its own.
+     * @param bool|null $submitted What the form sent, null when the field was absent.
+     * @return bool|null Value to store, or null to keep inheriting.
+     */
+    public static function activation_to_store(
+        int $mode,
+        ?bool $existing,
+        bool $inherited,
+        ?bool $submitted
+    ): ?bool {
+        // Modes 0 and 1 have no overrides at all; nothing below them is stored.
+        if ($mode !== 2 && $mode !== 3) {
+            return null;
+        }
+
+        if ($submitted === null) {
+            return $existing;
+        }
+
+        if ($existing === null && $submitted === $inherited) {
+            return null;
+        }
+
+        return $submitted;
+    }
+
+    /**
+     * What to store for the student switch of one level when its form is saved (#73).
+     *
+     * While the editor is off at a level the checkbox is disabled, and a disabled field is not
+     * submitted. Reading that absence as "not allowed" used to overwrite the author's choice
+     * with 0, so switching the editor back on did not bring the switch back. The stored choice
+     * is kept instead; get_effective_student_toggle() already refuses the switch wherever the
+     * editor is off, so keeping it changes nothing until the editor returns.
+     *
+     * @param bool|null $existing The level's stored value, null when it has none.
+     * @param bool $editorenabled Whether the editor is on at this level after the save.
+     * @param bool|null $submitted What the form sent, null when the field was absent.
+     * @param bool|null $inherited What the level gets without a value of its own, when known.
+     * @return bool|null Value to store, or null to keep inheriting.
+     */
+    public static function student_toggle_to_store(
+        ?bool $existing,
+        bool $editorenabled,
+        ?bool $submitted,
+        ?bool $inherited = null
+    ): ?bool {
+        if (!$editorenabled || $submitted === null) {
+            return $existing;
+        }
+
+        // As with the activation: a pre-filled checkbox that was not touched says nothing, and
+        // storing it would stop the level from following the one above.
+        if ($existing === null && $inherited !== null && $submitted === $inherited) {
+            return null;
+        }
+
+        return $submitted;
     }
 
     /**

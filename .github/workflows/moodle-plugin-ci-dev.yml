@@ -350,7 +350,7 @@ jobs:
     needs: [lint-php]
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.pg || '16' }}
         env:
           POSTGRES_USER: 'postgres'
           POSTGRES_HOST_AUTH_METHOD: 'trust'
@@ -358,13 +358,13 @@ jobs:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
       mariadb:
-        image: mariadb:10.11
+        image: mariadb:${{ matrix.mariadb || '10.11' }}
         env:
           MYSQL_USER: 'root'
           MYSQL_ALLOW_EMPTY_PASSWORD: "true"
         ports:
           - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 3
+        options: --health-cmd="mariadb-admin ping" --health-interval 10s --health-timeout 5s --health-retries 3
     strategy:
       fail-fast: false
       matrix:
@@ -372,6 +372,9 @@ jobs:
           - { moodle: MOODLE_405_STABLE, php: '8.2', database: pgsql }
           - { moodle: MOODLE_500_STABLE, php: '8.3', database: mariadb }
           - { moodle: MOODLE_502_STABLE, php: '8.3', database: pgsql }
+          # Moodle 5.3 needs PHP 8.3, PostgreSQL 17 or MariaDB 11.4.
+          - { moodle: MOODLE_503_STABLE, php: '8.3', database: pgsql, pg: '17' }
+          - { moodle: MOODLE_503_STABLE, php: '8.4', database: mariadb, mariadb: '11.4' }
     steps:
       - uses: actions/checkout@v6
         with:

@@ -151,6 +151,7 @@ test.describe('settings matrix: level x setting -> result', () => {
     let admin;
     let teacher;
     let student;
+    let siteBefore;
 
     test.beforeAll(async({browser}) => {
         CMID = env('SME_SETTINGS_CMID');
@@ -162,10 +163,29 @@ test.describe('settings matrix: level x setting -> result', () => {
         await loginAs(admin, env('SME_ADMIN_USER', 'admin'), env('SME_ADMIN_PASS'));
         await loginAs(teacher, 'sme_teacher', USERPASS);
         await loginAs(student, 'sme_student01', USERPASS);
+
+        // These cases change site settings every other spec depends on. Remember what the site
+        // had, so that it can be handed back as it was found.
+        await admin.goto('/admin/settings.php?section=local_stackmatheditor');
+        siteBefore = {
+            enabled: await admin.locator('select[name="s_local_stackmatheditor_enabled"]').inputValue(),
+            groups: await admin.locator('select[name="s_local_stackmatheditor_default_groups[]"]')
+                .evaluate((select) => Array.from(select.selectedOptions).map((option) => option.value)),
+        };
     });
 
     test.beforeEach(() => {
         resetQuizConfig();
+    });
+
+    // The last case leaves the site "off by default" with one toolbar group. The specs that run
+    // after this one - smoke, toolbar layout, units and systems - then met a site without
+    // editors, and failed for a reason that had nothing to do with them.
+    test.afterAll(async() => {
+        resetQuizConfig();
+        if (siteBefore) {
+            await adminSettings(admin, siteBefore);
+        }
     });
 
     test('admin: on/off', async({}, info) => {
@@ -242,5 +262,65 @@ test.describe('settings matrix: level x setting -> result', () => {
         expect(view[1].groups).toEqual(['greek_lower']);
         expect(view[0].value).toBe(EXPECTED);
         expect(view[1].value).toBe(EXPECTED);
+    });
+
+    // ── #80 / #81: the activation matrix with two questions ─────────────────────────────────
+    // Two questions on one page, because the defect was a page-level gate: one question must be
+    // able to have the editor while its neighbour, in the same quiz, does not.
+
+    test('mode 2: quiz off, one question on - only that question has the editor', async({}, info) => {
+        // The serial cases before this one leave quiz and question overrides behind.
+        resetQuizConfig();
+        await adminSettings(admin, {enabled: 2, groups: ['basic_operators']});
+        await configure(teacher, null, {enabled: false});
+        await configure(teacher, QBE[0], {enabled: true});
+
+        const view = await studentView(student, info, 'mode 2, quiz off, question 1 on');
+        expect(view.map((q) => q.editor)).toEqual([true, false]);
+    });
+
+    test('mode 2: nothing configured - no editor anywhere', async({}, info) => {
+        // The serial cases before this one leave quiz and question overrides behind.
+        resetQuizConfig();
+        await adminSettings(admin, {enabled: 2, groups: ['basic_operators']});
+
+        const view = await studentView(student, info, 'mode 2, nothing set');
+        expect(view.map((q) => q.editor)).toEqual([false, false]);
+    });
+
+    test('mode 3: quiz on, one question off - only the other keeps the editor', async({}, info) => {
+        // The serial cases before this one leave quiz and question overrides behind.
+        resetQuizConfig();
+        await adminSettings(admin, {enabled: 3, groups: ['basic_operators']});
+        await configure(teacher, null, {enabled: true});
+        await configure(teacher, QBE[0], {enabled: false});
+
+        const view = await studentView(student, info, 'mode 3, quiz on, question 1 off');
+        expect(view.map((q) => q.editor)).toEqual([false, true]);
+    });
+
+    test('mode 3: quiz off, one question on - that question gets it back', async({}, info) => {
+        // The serial cases before this one leave quiz and question overrides behind.
+        resetQuizConfig();
+        await adminSettings(admin, {enabled: 3, groups: ['basic_operators']});
+        await configure(teacher, null, {enabled: false});
+        await configure(teacher, QBE[1], {enabled: true});
+
+        const view = await studentView(student, info, 'mode 3, quiz off, question 2 on');
+        expect(view.map((q) => q.editor)).toEqual([false, true]);
+    });
+
+    test('saving only the groups keeps a question following its quiz', async({}, info) => {
+        // The serial cases before this one leave quiz and question overrides behind.
+        resetQuizConfig();
+        // The form pre-fills "on" from the quiz; saving it with other changes must not freeze
+        // that into an override, or switching the quiz off afterwards would not reach it.
+        await adminSettings(admin, {enabled: 2, groups: ['basic_operators']});
+        await configure(teacher, null, {enabled: true});
+        await configure(teacher, QBE[0], {groups: ['greek_lower']});
+        await configure(teacher, null, {enabled: false});
+
+        const view = await studentView(student, info, 'groups saved, then quiz off');
+        expect(view.map((q) => q.editor)).toEqual([false, false]);
     });
 });

@@ -943,6 +943,26 @@ define([
         $input[0].addEventListener('input', adoptExternalValue);
         $input[0].addEventListener('change', adoptExternalValue);
 
+        /**
+         * Does the input hold a value this editor was given but could not show? (#77)
+         *
+         * A single-line editor cannot display everything a script may write into the input - a
+         * relation system, for one. The editor is then empty although the input is not, and the
+         * forced hand-over on Check and Submit used to write that emptiness over the value: the
+         * answer was gone without anybody having deleted it. An empty editor that was never
+         * edited has nothing to say. Once the student types or deletes, the edit handler has
+         * written the editor's state and this is false again.
+         *
+         * @returns {boolean} True while the input's value must be left alone.
+         */
+        function holdsUnshownValue() {
+            var current = $input.val();
+
+            return !!(current && current.trim())
+                && current === lastwritten
+                && !mqField.latex().trim();
+        }
+
         // On/off switch for the editor (#13). Only for the single-line editor: a relation
         // system would have to be rebuilt from the plain text on the way back, and silently
         // dropping what a student typed while the editor was off is not an option.
@@ -952,7 +972,7 @@ define([
             editor: [$tb[0], $container[0]],
             strings: (ctx.defs && ctx.defs.strings) || {},
             toInput: function() {
-                if (!prefilling) {
+                if (!prefilling && !holdsUnshownValue()) {
                     syncingToInput = true;
                     try {
                         lastwritten = syncToInput(mqField, $input, convOpts, ctx.dbg, true);
@@ -982,7 +1002,7 @@ define([
 
         // Check / Submit always send the visible state (#48).
         Bridge.register(function() {
-            if (!prefilling) {
+            if (!prefilling && !holdsUnshownValue()) {
                 syncingToInput = true;
                 try {
                     lastwritten = syncToInput(mqField, $input, convOpts, ctx.dbg, true);

@@ -139,6 +139,13 @@ async function attempt(page, who) {
     await page.waitForSelector('.sme-mq-container, .sme-toolbar', {timeout: 60000});
 }
 
+// The load quiz is shared with the other specs. Hand it back as the seed made it: switch
+// allowed, chooser limit inherited - the last cases here leave it with neither.
+test.afterAll(async({browser}) => {
+    await siteSettings(browser, {enabled: 1, studentToggle: true, maxDimension: 5});
+    await quizSettings(browser, {studentToggle: true, maxDimension: ''});
+});
+
 test.describe('#73: the student switch is a permission', () => {
     test('with the permission the switch is there and keeps the answer', async({browser}) => {
         await siteSettings(browser, {enabled: 1, studentToggle: true, maxDimension: 5});

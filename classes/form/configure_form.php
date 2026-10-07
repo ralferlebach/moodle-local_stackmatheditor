@@ -185,8 +185,26 @@ class configure_form extends \moodleform {
                 'local_stackmatheditor'
             );
 
-            // Directly below, and only usable while the editor is on (#73): a subordinate
-            // permission, never a way to switch the editor on.
+            // Context hint: show what the parent default is.
+            $parenthint = ($instancemode === 3)
+                ? get_string('configure_enabled_parenthint_on', 'local_stackmatheditor')
+                : get_string('configure_enabled_parenthint_off', 'local_stackmatheditor');
+            $mform->addElement(
+                'static',
+                'enabled_hint',
+                '',
+                '<small class="text-muted">'
+                    . '<i class="fa fa-info-circle mr-1" aria-hidden="true"></i>'
+                    . $parenthint
+                    . '</small>'
+            );
+        }
+
+        // The student switch (#73). Not only in the override modes: with the editor on
+        // everywhere (mode 1) a quiz or a question must still be able to take the switch away,
+        // which is what the issue asks for - and in mode 1 there is no activation checkbox for it
+        // to sit under. Mode 0 has no editor, so there is no switch to allow.
+        if ($instancemode !== 0) {
             $mform->addElement(
                 'advcheckbox',
                 'allowstudenttoggle',
@@ -201,21 +219,11 @@ class configure_form extends \moodleform {
                 'configure_studenttoggle_label',
                 'local_stackmatheditor'
             );
-            $mform->disabledIf('allowstudenttoggle', 'enabled', 'notchecked');
-
-            // Context hint: show what the parent default is.
-            $parenthint = ($instancemode === 3)
-                ? get_string('configure_enabled_parenthint_on', 'local_stackmatheditor')
-                : get_string('configure_enabled_parenthint_off', 'local_stackmatheditor');
-            $mform->addElement(
-                'static',
-                'enabled_hint',
-                '',
-                '<small class="text-muted">'
-                    . '<i class="fa fa-info-circle mr-1" aria-hidden="true"></i>'
-                    . $parenthint
-                    . '</small>'
-            );
+            // Only where an activation checkbox exists: a rule against a field that is not on the
+            // form disables the switch for good, which is how mode 1 lost it.
+            if ($instancemode === 2 || $instancemode === 3) {
+                $mform->disabledIf('allowstudenttoggle', 'enabled', 'notchecked');
+            }
         }
 
         // Toolbar groups section.

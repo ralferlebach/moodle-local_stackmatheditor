@@ -48,7 +48,9 @@ jobs:
     timeout-minutes: 35
     services:
       postgres:
-        image: postgres:16
+        # Moodle 5.3 requires PostgreSQL 17 and MariaDB 11.4; the older branches run on the
+        # versions they have always been tested with.
+        image: postgres:${{ matrix.pg || '16' }}
         env:
           POSTGRES_USER: 'postgres'
           POSTGRES_HOST_AUTH_METHOD: 'trust'
@@ -56,13 +58,14 @@ jobs:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
       mariadb:
-        image: mariadb:10.11
+        image: mariadb:${{ matrix.mariadb || '10.11' }}
         env:
           MYSQL_USER: 'root'
           MYSQL_ALLOW_EMPTY_PASSWORD: "true"
         ports:
           - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 3
+        # mariadb-admin, not mysqladmin: the 11.x images dropped the old name, and 10.11 has both.
+        options: --health-cmd="mariadb-admin ping" --health-interval 10s --health-timeout 5s --health-retries 3
     strategy:
       fail-fast: false
       matrix:
@@ -77,6 +80,8 @@ jobs:
           - { moodle: MOODLE_501_STABLE, php: '8.4', database: mariadb, grunt: false }
           - { moodle: MOODLE_502_STABLE, php: '8.3', database: mariadb, grunt: false }
           - { moodle: MOODLE_502_STABLE, php: '8.4', database: pgsql, grunt: false }
+          - { moodle: MOODLE_503_STABLE, php: '8.3', database: pgsql, grunt: false, pg: '17' }
+          - { moodle: MOODLE_503_STABLE, php: '8.4', database: mariadb, grunt: false, mariadb: '11.4' }
     steps:
       - name: Check out repository code
         uses: actions/checkout@v6
@@ -261,15 +266,19 @@ jobs:
       - name: No developer tooling, CI plumbing or test harnesses may ship
         run: |
           rc=0
+          # The change log is the one file under docs/ that ships: the README links to it.
+          allowed='^stackmatheditor/docs/$|^stackmatheditor/docs/CHANGES\.md$'
           while read -r forbidden; do
-            if grep -qE "^stackmatheditor/${forbidden}" /tmp/release.list; then
+            hits=$(grep -E "^stackmatheditor/${forbidden}" /tmp/release.list | grep -vE "$allowed" || true)
+            if [ -n "$hits" ]; then
               echo "FORBIDDEN in release artefact: $forbidden"
-              grep -E "^stackmatheditor/${forbidden}" /tmp/release.list | head -5
+              echo "$hits" | head -5
               rc=1
             fi
           done <<'PATTERNS'
           tools/
           docs/
+          tests/upgrade/
           \.github/
           \.idea/
           tests/load/
@@ -437,9 +446,83 @@ jobs:
           fi
           echo "No stale files found."
 
+  upgrade:
+    # Every existing site reaches 1.3 by upgrading, and nothing else in CI took that path - the
+    # matrix installs fresh (#73). This installs the previous release, seeds the configuration a
+    # real site has, upgrades in place to this commit and checks that the stored meaning and the
+    # new defaults are what they should be.
+    name: Upgrade from the previous release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: moodle
+          POSTGRES_PASSWORD: moodle
+          POSTGRES_DB: moodle
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready" --health-interval=10s
+          --health-timeout=5s --health-retries=5
+    env:
+      MOODLE_BRANCH: MOODLE_405_STABLE
+      MOODLE_ADMIN_PASS: 'Admin!23'
+    steps:
+      - name: Check out this commit with its history
+        uses: actions/checkout@v6
+        with:
+          path: plugin-new
+          fetch-depth: 0
+
+      - name: Find the previous release
+        run: |
+          # No tags in this repository, so the release is found by what version.php said.
+          sha=$(git -C plugin-new log --format=%H -G"release *= *'1\.2\.2'" -- version.php | head -1)
+          if [ -z "$sha" ]; then
+            echo "::error::No commit with release 1.2.2 in version.php was found."; exit 1
+          fi
+          echo "Previous release: $sha"
+          mkdir plugin
+          git -C plugin-new archive "$sha" | tar -x -C plugin
+          grep -E "release|version " plugin/version.php
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pgsql, gd, intl, zip, soap, mbstring, curl, xml, exif
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      - name: Install Maxima (STACK)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq maxima gnuplot-nox
+
+      - name: Install a site with the previous release
+        run: bash plugin-new/.github/build-test-site.sh
+
+      - name: Seed configuration the way a 1.2 site has it
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          php plugin-new/tests/upgrade/seed_before.php "$web"
+
+      - name: Upgrade in place to this commit
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          rsync -a --delete --exclude .git plugin-new/ "$web/local/stackmatheditor/"
+          php "$web/admin/cli/upgrade.php" --non-interactive
+
+      - name: Check what the upgrade left behind
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          php plugin-new/tests/upgrade/verify_after.php "$web"
+
   ci-complete:
     name: CI complete
-    needs: [maturity-gate, stale-files]
+    needs: [maturity-gate, stale-files, upgrade]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: always()
@@ -451,7 +534,8 @@ jobs:
           rc=0
           for entry in \
             "maturity-gate=${{ needs.maturity-gate.result }}" \
-            "stale-files=${{ needs.stale-files.result }}"; do
+            "stale-files=${{ needs.stale-files.result }}" \
+            "upgrade=${{ needs.upgrade.result }}"; do
             echo "  ${entry%%=*}: ${entry#*=}"
             if [[ "${entry#*=}" != "success" ]]; then
               rc=1

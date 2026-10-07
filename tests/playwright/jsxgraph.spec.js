@@ -51,10 +51,55 @@ async function enableEditor(browser) {
 }
 
 /**
- * Open the JSXGraph question as a student.
+ * The frame that holds the JSXGraph board.
  *
- * @param {Page} page Playwright page.
- * @returns {Promise<void>}
+ * STACK renders a [[jsxgraph]] block inside an iframe of its own - `[[iframe]]` with the board in
+ * `#jxgbox` and JSXGraph loaded into that frame, not into the page. That is why the first versions
+ * of this spec found neither `.jxgbox` nor `window.JXG`: both exist, one document further down.
+ * The slider writes into the STACK input in the parent through `stack_js`, which then dispatches
+ * the non-bubbling change event #77 is about.
+ *
+ * @param {import('@playwright/test').Page} page Playwright page.
+ * @returns {Promise<?import('@playwright/test').Frame>} The board frame, or null.
+ */
+async function boardFrame(page) {
+    // Up to a minute: the iframe loads JSXGraph from a CDN before it can draw anything.
+    for (let attempt = 0; attempt < 120; attempt++) {
+        for (const frame of page.frames()) {
+            if (frame === page.mainFrame()) {
+                continue;
+            }
+            // Any frame with a board counts - STACK names the board element per block, so
+            // looking for one fixed id was one assumption too many. The registry is JXG.boards;
+            // JXG.JSXGraph.boards exists too but stays empty (JSXGraph 1.12).
+            const ready = await frame.evaluate(
+                () => !!(window.JXG && Object.keys(window.JXG.boards || {}).length)
+            ).catch(() => false);
+            if (ready) {
+                return frame;
+            }
+        }
+        await page.waitForTimeout(500);
+    }
+
+    // Nothing found: record what there was, so the next run is not another guess.
+    const frames = await Promise.all(page.frames().map(async(frame) => {
+        const info = await frame.evaluate(() => ({
+            jxg: typeof window.JXG,
+            divs: Array.from(document.querySelectorAll('div[id]')).map((d) => d.id).slice(0, 6),
+            scripts: Array.from(document.scripts).map((x) => x.src).filter(Boolean).slice(0, 4)
+        })).catch((e) => ({error: String(e).slice(0, 80)}));
+        return {url: frame.url().slice(0, 90), ...info};
+    }));
+    console.log('jsxgraph frames: ' + JSON.stringify(frames));
+    return null;
+}
+
+/**
+ * Open the JSXGraph question as a student and wait for its board.
+ *
+ * @param {import('@playwright/test').Page} page Playwright page.
+ * @returns {Promise<?import('@playwright/test').Frame>} The board frame.
  */
 async function openQuestion(page) {
     await loginAs(page, 'sme_student06', env('SME_USER_PASS'));
@@ -67,145 +112,96 @@ async function openQuestion(page) {
     }
     await page.waitForSelector('.sme-toolbar', {timeout: 60000});
 
-    // The board is drawn after the question. STACK's container does not always carry the
-    // .jxgbox class at the moment it appears, so anything whose class or id mentions jxg counts.
-    const board = await page.waitForSelector('[class*="jxg"], [id*="jxg"]', {timeout: 20000})
-        .catch(() => null);
-
-    if (!board) {
-        // Say what was on the page instead of only that something was missing: the next run
-        // should not need another guess.
-        const seen = await page.evaluate(() => ({
-            questions: document.querySelectorAll('.que.stack').length,
-            editors: document.querySelectorAll('.sme-mq-container').length,
-            divIds: Array.from(document.querySelectorAll('div[id]'))
-                .map((d) => d.id)
-                .filter((id) => /jxg|stack|board/i.test(id))
-                .slice(0, 12),
-            hasRequire: typeof window.require === 'function'
-        }));
-        test.info().annotations.push({
-            type: 'no board',
-            description: JSON.stringify(seen)
-        });
-        return;
-    }
-
-    // STACK loads JSXGraph through RequireJS, and an AMD module does not set a global - which is
-    // why waiting for window.JXG timed out even though the board was on the page. Ask RequireJS
-    // for it instead, and publish it so the helpers below can use the board API.
-    await page.evaluate(() => new Promise((resolve) => {
-        if (window.JXG) {
-            resolve(true);
-            return;
-        }
-        if (typeof window.require !== 'function') {
-            resolve(false);
-            return;
-        }
-        const candidates = ['qtype_stack/jsxgraphcore', 'jsxgraphcore', 'qtype_stack/jsxgraph'];
-        let index = 0;
-        const attempt = () => {
-            if (index >= candidates.length) {
-                resolve(false);
-                return;
-            }
-            const name = candidates[index];
-            index += 1;
-            window.require([name], (module) => {
-                window.JXG = window.JXG || module;
-                resolve(!!window.JXG);
-            }, attempt);
-        };
-        attempt();
-    }));
-
-    await page.waitForFunction(
-        () => window.JXG && Object.keys(window.JXG.JSXGraph.boards || {}).length > 0,
-        null,
-        {timeout: 20000}
-    ).catch(() => {
-        // Handled by the skip in each test, which says what was missing.
-    });
-
-    // Printed either way, and to the console rather than an annotation: a skipped test writes
-    // nothing into the job log, and the last run left us guessing what the page had on it.
-    const context = await page.evaluate(() => ({
-        boards: window.JXG ? Object.keys(window.JXG.JSXGraph.boards || {}).length : 'no JXG',
-        jxgElements: document.querySelectorAll('[class*="jxg"], [id*="jxg"]').length,
-        boardIds: Array.from(document.querySelectorAll('div[id]'))
-            .map((d) => d.id)
-            .filter((id) => /jxg|board|stack/i.test(id))
-            .slice(0, 10),
-        questions: document.querySelectorAll('.que.stack').length,
-        editors: document.querySelectorAll('.sme-mq-container').length
-    }));
-    console.log('jsxgraph page context: ' + JSON.stringify(context));
+    const frame = await boardFrame(page);
+    console.log('jsxgraph board frame: ' + (frame ? frame.url().slice(0, 80) : 'none'));
+    return frame;
 }
 
 /**
- * Skip cleanly when the board API is not reachable from the test.
+ * Where a slider's handle is on the page, and what it reads.
  *
- * Better than a minute of polling followed by a timeout: the suite stays green and the reason
- * is written down where the next person will read it.
+ * The board reports screen coordinates inside its own frame; the frame element's position on the
+ * page is added so the mouse lands where the handle is drawn.
  *
- * @param {Page} page Playwright page.
- * @returns {Promise<boolean>} True when the board API is available.
- */
-async function boardsAvailable(page) {
-    return page.evaluate(
-        () => !!(window.JXG && Object.keys(window.JXG.JSXGraph.boards || {}).length)
-    );
-}
-
-/**
- * Where a slider's handle is on screen, and what it currently reads.
- *
- * @param {Page} page Playwright page.
+ * @param {import('@playwright/test').Page} page Playwright page.
+ * @param {import('@playwright/test').Frame} frame The board frame.
  * @param {number} index Which slider, in creation order.
- * @returns {Promise<?Object>} {x, y, value} in page coordinates, or null.
+ * @returns {Promise<?Object>} {x, y, value, count} in page coordinates.
  */
-function sliderAt(page, index) {
-    return page.evaluate((which) => {
-        const boards = Object.values(window.JXG.JSXGraph.boards || {});
-        if (!boards.length) {
-            return null;
-        }
-        const board = boards[0];
+async function sliderAt(page, frame, index) {
+    const inner = await frame.evaluate((which) => {
+        const board = Object.values(window.JXG.boards)[0];
         const sliders = board.objectsList.filter((o) => o.elType === 'slider');
         const slider = sliders[which];
         if (!slider) {
             return null;
         }
-
         const box = board.containerObj.getBoundingClientRect();
-        const coords = slider.coords.scrCoords;
-
         return {
-            x: box.left + coords[1],
-            y: box.top + coords[2],
+            x: box.left + slider.coords.scrCoords[1],
+            y: box.top + slider.coords.scrCoords[2],
             value: slider.Value(),
             count: sliders.length
         };
     }, index);
+
+    if (!inner) {
+        return null;
+    }
+
+    const element = await frame.frameElement();
+
+    // The mouse works in viewport coordinates, and the board is below the fold on a default
+    // window: bring the handle to the middle of the viewport before reading where it is.
+    await element.evaluate((iframe, y) => {
+        const top = iframe.getBoundingClientRect().top + y;
+        window.scrollBy(0, top - window.innerHeight / 2);
+    }, inner.y);
+    await page.waitForTimeout(300);
+
+    const offset = await element.boundingBox();
+
+    return {
+        x: offset.x + inner.x,
+        y: offset.y + inner.y,
+        value: inner.value,
+        count: inner.count
+    };
 }
 
 /**
- * What the editor and the input currently hold for one answer.
+ * Drag a slider handle by a horizontal distance, the way a student does.
  *
- * @param {Page} page Playwright page.
- * @param {string} name Input name, e.g. 'ans1'.
+ * @param {import('@playwright/test').Page} page Playwright page.
+ * @param {Object} handle Result of sliderAt().
+ * @param {number} dx Pixels to the right.
+ * @returns {Promise<void>}
+ */
+async function drag(page, handle, dx) {
+    await page.mouse.move(handle.x, handle.y);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + dx, handle.y, {steps: 8});
+    await page.mouse.up();
+    await page.waitForTimeout(800);
+}
+
+/**
+ * What the editor and the original input hold for one answer.
+ *
+ * @param {import('@playwright/test').Page} page Playwright page.
+ * @param {string} name Input name suffix, e.g. 'ans1'.
  * @returns {Promise<Object>} {input, latex}.
  */
 function answerState(page, name) {
     return page.evaluate((inputname) => {
-        const input = document.querySelector('input[name$="_' + inputname + '"]')
-            || document.querySelector('input[name="' + inputname + '"]');
+        const input = document.querySelector('input[name$="_' + inputname + '"]');
         if (!input) {
             return {input: null, latex: null};
         }
-        const wrap = input.closest('.sme-input-wrap') || input.previousElementSibling;
-        const field = wrap ? wrap.querySelector('.mq-editable-field') : null;
+        // The editor is inserted immediately before the input it replaces, not around it.
+        const wrap = input.previousElementSibling;
+        const field = wrap && wrap.classList.contains('sme-input-wrap')
+            ? wrap.querySelector('.mq-editable-field') : null;
         const MQ = window.MathQuill
             ? window.MathQuill.getInterface(window.MathQuill.getInterface.MAX || 2)
             : null;
@@ -215,123 +211,137 @@ function answerState(page, name) {
     }, name);
 }
 
+/**
+ * The numbers in a value, so 0.5 matches "0.5" in Maxima and "0.5" in LaTeX alike.
+ *
+ * @param {string} text Any text.
+ * @returns {string} Digits, dots and minus signs only.
+ */
+function digits(text) {
+    return String(text || '').replace(/[^0-9.\-]/g, '');
+}
+
+/**
+ * Type into one of the editors.
+ *
+ * @param {import('@playwright/test').Page} page Playwright page.
+ * @param {string} name Input name suffix.
+ * @param {string} text What to type.
+ * @returns {Promise<void>}
+ */
+async function typeInto(page, name, text) {
+    const field = page.locator(
+        '.sme-input-wrap:has(+ input[name$="_' + name + '"]) .mq-editable-field'
+    ).first();
+    // The page has just been scrolled to the board, and scrolling back is animated: a click sent
+    // while the page was still moving landed on the board's iframe, and everything typed after it
+    // went there. Scroll first, let it settle, and do not type until the editor has the focus.
+    await field.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
+    await field.click();
+    await expect(field.locator('textarea')).toBeFocused();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.type(text);
+    await page.waitForTimeout(800);
+}
+
+// The seed leaves the id at 0 when the JSXGraph quiz could not be built; say so instead of
+// failing on a page that does not exist.
+test.skip(!Number(process.env.SME_JSXGRAPH_CMID || 0),
+    'the JSXGraph quiz could not be seeded - see the seed step for the reason');
+
 test.beforeAll(async({browser}) => {
     await enableEditor(browser);
 });
 
 test('moving a slider updates the visible editor', async({page}) => {
-    await openQuestion(page);
-    test.skip(!await boardsAvailable(page), 'the JSXGraph board API is not reachable here');
+    const frame = await openQuestion(page);
+    expect(frame, 'the JSXGraph board must render in its STACK iframe').not.toBeNull();
 
-    const before = await sliderAt(page, 0);
-    expect(before, 'the board must have sliders').not.toBeNull();
+    const before = await sliderAt(page, frame, 0);
     expect(before.count).toBe(4);
-
     const start = await answerState(page, 'ans1');
 
-    // Drag the handle. The question snaps to 0.5, so a short drag is a real change.
-    await page.mouse.move(before.x, before.y);
-    await page.mouse.down();
-    await page.mouse.move(before.x + 40, before.y, {steps: 8});
-    await page.mouse.up();
-    await page.waitForTimeout(800);
+    await drag(page, before, 40);
 
-    const after = await sliderAt(page, 0);
+    const after = await sliderAt(page, frame, 0);
     const state = await answerState(page, 'ans1');
 
     expect(after.value, 'the drag must move the slider').not.toBe(before.value);
     expect(state.input, 'JSXGraph writes into the original input').not.toBe(start.input);
-    // The whole point of #77: the editor shows what the input holds.
-    expect(state.latex).toContain(String(after.value).replace('-', ''));
+    // #77: the editor shows what the input holds.
+    expect(digits(state.latex)).toBe(digits(state.input));
 });
 
 test('typing in the editor moves the slider', async({page}) => {
-    await openQuestion(page);
-    test.skip(!await boardsAvailable(page), 'the JSXGraph board API is not reachable here');
+    const frame = await openQuestion(page);
+    expect(frame).not.toBeNull();
 
-    const before = await sliderAt(page, 1);
-    expect(before).not.toBeNull();
-
-    // Type into the second field the way a student does.
-    await page.evaluate(() => {
-        const input = document.querySelector('input[name$="_ans2"]');
-        const wrap = input.closest('.sme-input-wrap') || input.previousElementSibling;
-        const field = wrap.querySelector('.mq-editable-field');
-        field.classList.add('sme-target');
-    });
-    await page.locator('.sme-target').click();
-    await page.keyboard.type('2');
-    await page.waitForTimeout(800);
+    const before = await sliderAt(page, frame, 1);
+    await typeInto(page, 'ans2', before.value === 2 ? '3' : '2');
 
     const state = await answerState(page, 'ans2');
-    const after = await sliderAt(page, 1);
+    const after = await sliderAt(page, frame, 1);
 
-    expect(state.input, 'the editor writes into the original input').toContain('2');
-    expect(after.value, 'and JSXGraph follows').not.toBe(before.value);
+    expect(state.input).toMatch(/^[23]$/);
+    expect(after.value, 'and JSXGraph follows').toBe(Number(state.input));
 });
 
-test('ten alternating changes do not drift', async({page}) => {
-    await openQuestion(page);
-    test.skip(!await boardsAvailable(page), 'the JSXGraph board API is not reachable here');
+test('alternating changes do not drift', async({page}) => {
+    const frame = await openQuestion(page);
+    expect(frame).not.toBeNull();
 
-    for (let i = 0; i < 5; i += 1) {
-        const handle = await sliderAt(page, 2);
-        await page.mouse.move(handle.x, handle.y);
-        await page.mouse.down();
-        await page.mouse.move(handle.x + (i % 2 ? -20 : 20), handle.y, {steps: 5});
-        await page.mouse.up();
-        await page.waitForTimeout(400);
+    for (let round = 0; round < 5; round++) {
+        const handle = await sliderAt(page, frame, 2);
+        await drag(page, handle, round % 2 ? -20 : 20);
 
         const afterdrag = await answerState(page, 'ans3');
-        const slider = await sliderAt(page, 2);
-        expect(
-            afterdrag.latex,
-            'after drag ' + i + ': editor and input must agree'
-        ).toContain(String(slider.value).replace('-', ''));
+        expect(digits(afterdrag.latex), 'after drag ' + round).toBe(digits(afterdrag.input));
 
-        await page.evaluate(() => {
-            const input = document.querySelector('input[name$="_ans3"]');
-            const wrap = input.closest('.sme-input-wrap') || input.previousElementSibling;
-            const field = wrap.querySelector('.mq-editable-field');
-            field.classList.add('sme-target3');
-        });
-        await page.locator('.sme-target3').click();
-        await page.keyboard.press('End');
-        await page.keyboard.type('1');
-        await page.waitForTimeout(400);
-
+        await typeInto(page, 'ans3', String(round % 2 ? 1 : 2));
         const aftertype = await answerState(page, 'ans3');
-        expect(aftertype.input, 'after typing ' + i).toContain('1');
+        const slider = await sliderAt(page, frame, 2);
+
+        expect(aftertype.input, 'after typing ' + round).toBe(String(round % 2 ? 1 : 2));
+        expect(slider.value, 'slider follows after typing ' + round).toBe(Number(aftertype.input));
     }
 });
 
-test('no double validation while the slider moves', async({page}) => {
-    await openQuestion(page);
-    test.skip(!await boardsAvailable(page), 'the JSXGraph board API is not reachable here');
+test('an adopted value is not written back as a second change', async({page}) => {
+    const frame = await openQuestion(page);
+    expect(frame).not.toBeNull();
 
-    // STACK validates on the input and change events the editor raises. An adopted external
-    // value must not raise another round: the value came from STACK's own binding.
+    // Count the changes the input sees during one drag. Each JSXGraph update is one change;
+    // the editor adopting it must not add one of its own on top.
     await page.evaluate(() => {
-        window.smeEvents = [];
+        window.smeChanges = 0;
         const input = document.querySelector('input[name$="_ans4"]');
-        ['input', 'change'].forEach((type) => {
-            input.addEventListener(type, () => window.smeEvents.push(type));
+        input.addEventListener('change', () => {
+            window.smeChanges++;
+        });
+        window.smeWrites = 0;
+        const original = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        Object.defineProperty(input, 'value', {
+            get() {
+                return original.get.call(this);
+            },
+            set(v) {
+                window.smeWrites++;
+                original.set.call(this, v);
+            }
         });
     });
 
-    const handle = await sliderAt(page, 3);
-    await page.mouse.move(handle.x, handle.y);
-    await page.mouse.down();
-    await page.mouse.move(handle.x + 30, handle.y, {steps: 6});
-    await page.mouse.up();
-    await page.waitForTimeout(1000);
+    const handle = await sliderAt(page, frame, 3);
+    await drag(page, handle, 30);
 
-    const counted = await page.evaluate(() => window.smeEvents.length);
+    const counts = await page.evaluate(() => ({changes: window.smeChanges, writes: window.smeWrites}));
     const state = await answerState(page, 'ans4');
 
-    // JSXGraph fires while dragging; what must not happen is the editor answering each of them
-    // with a write of its own, which would double the count again.
-    expect(counted).toBeGreaterThan(0);
-    expect(state.latex).not.toBeNull();
-    expect(state.input).not.toBe('');
+    expect(counts.changes).toBeGreaterThan(0);
+    // The editor writes back only what it adopted for its own display, never more often than
+    // JSXGraph wrote: one write per external change at most.
+    expect(counts.writes).toBeLessThanOrEqual(counts.changes * 2);
+    expect(digits(state.latex)).toBe(digits(state.input));
 });

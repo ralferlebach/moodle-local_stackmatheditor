@@ -2,7 +2,7 @@
 
 **Branch:** `development`
 **Date:** 2026-09-13
-**Plugin version:** 2026100102 (release 1.3.0-dev, MATURITY_ALPHA)
+**Plugin version:** 2026100700 (release 1.3.0, MATURITY_STABLE)
 **Predecessor:** session-009 (#53–#56)
 
 ---
@@ -2401,3 +2401,417 @@ real one rather than a fixture.
 The release checklist's manual sample becomes: start the workflow, read five transcripts, answer
 four questions, record the date and the NVDA version. The evidence is archived with the commit
 instead of living in somebody's memory.
+
+
+## 59. Iteration 55 (2026100200): the NVDA suite, built on what was already there
+
+The first attempt asked for a URL a GitHub runner could reach and a course module id typed by
+hand. Nobody has a public staging Moodle lying around, and the question "what do I enter here"
+was the right one: I had built a second world next to the one that already works.
+
+The browser suite has all of it - `seed.php` prints the ids, `helpers.js` logs in, the accounts
+exist, `SME_BASE_URL` points at the site. The screen reader needs none of that to be different.
+It needs Windows and a visible browser, and that is all.
+
+So `a11y-nvda.spec.js` now lives in `tests/playwright/`, uses `env()`, `loginAs()` and `open()`
+from the same helpers, logs in as a seeded student and opens the same quiz as the other specs.
+It is kept out of the default run by `testIgnore` and gets its own project when `SME_NVDA` is
+set - a visible browser, one worker, a longer timeout. Three commands on the Windows side, and
+the site is the one already running in WSL.
+
+What came out of the first attempt and stays: the four assertions where silence is a defect, the
+transcripts with commit and date, and the honest limit that a judgement is not a test.
+`a11y-zoom.spec.js` keeps the measurable half - zoom, viewport, target size, keyboard reach,
+focus visibility - in the run that happens anyway.
+
+What was deleted: the separate package, the static harness, the AMD shim, the generated fixture
+exports and the Windows workflow. The harness worked - the editor booted in Chromium without
+Moodle, which was interesting - but "interesting" is not a reason to maintain a second way of
+loading this plugin. One site, one seed, one set of helpers.
+
+
+## 60. Iteration 56 (2026100600): 1.3.0, stable
+
+### The red CI was four newlines
+
+Both pipelines failed on the same thing: "File is stale and needs to be rebuilt" for the maps of
+tex2max, max2tex, input_fields and textarea_fields. The sources were identical to mine, and so
+were the minified files. The committed maps each ended with a newline that grunt does not write;
+the ZIPs I delivered did not have it. Something on the way into the repository - an editor
+saving the file, most likely - added it to exactly the four maps that had been opened.
+
+`.editorconfig` now tells editors to leave `amd/build/` alone, and every build file in this
+delivery was regenerated in a fresh 4.5 tree and copied over together, not module by module.
+
+### NVDA inside GitHub, without anything to type
+
+The second attempt still asked for a URL, because NVDA needs Windows and the site needs Linux.
+The answer is two jobs that meet: the Linux job builds and seeds the site exactly as the
+Playwright workflow does, opens a temporary Cloudflare tunnel in front of it, points Moodle's
+wwwroot at the tunnel and hands the URL plus the seed values to the Windows job as an artefact.
+The Windows job waits for that artefact, runs `a11y-nvda.spec.js` with NVDA listening, and
+uploads a "done" artefact the Linux job is waiting for before it shuts the site down.
+
+The server and the tunnel are started with `setsid nohup` so they outlive the step that starts
+them - the reason serve-test-site.sh is normally sourced in the same step as the tests.
+
+Found on the way: `tests/playwright/package.json` had gained the Guidepup dependencies in the
+last delivery without a matching `package-lock.json`, so `npm ci` - in every Playwright run, not
+only this one - would have refused. The lock file is regenerated.
+
+### Moodle 5.3
+
+`MOODLE_503_STABLE` exists and is marked stable (build 20261005). Its environment file asks for
+PHP 8.3, PostgreSQL 17 and MariaDB 11.4, so the release matrix gains two 5.3 rows with those
+database versions; the service images take their version from the matrix. MariaDB 11 dropped
+the `mysqladmin` name, so the health check uses `mariadb-admin`, which 10.11 has too.
+`$plugin->supported` is `[405, 503]`.
+
+### Release metadata, atomically
+
+`version.php`: 2026100600, `1.3.0`, `MATURITY_STABLE`. README: the heading says 1.3 without "in
+development", the support matrix says 5.3, and the release notes list what was added and fixed
+since they were last written - the switch permission, the cross product, the pointer choosers,
+the container-responsive toolbar, the external sync, the activation fix and the cross-quiz fix.
+
+
+## 61. Iteration 57 (2026100601): the toolbar backlog leaves the code
+
+The five commented-out groups in `definitions.php` - number sets, quantifiers, physical
+constants, hyperbolic and further calculus operators, statistics - move to
+`docs/toolbar-backlog.md`, each with the reason it is not shipped and the three steps that bring
+one back. `definitions.php` no longer carries operations nobody can see; #34's last point.
+The button catalogue is unchanged at 117, so nothing a student sees moves.
+
+
+## 62. Iteration 58 (2026100602): the two gaps from the issue audit
+
+### #73 item 17: switching the editor back on lost the switch
+
+The save stored `_allowStudentToggle = allowed AND editor enabled`. While the editor is off the
+checkbox is disabled, a disabled field is not submitted, and the stored "allowed" became 0 - so
+turning the editor back on did not bring the switch back. `student_toggle_to_store()` now keeps
+the stored choice whenever the editor is off or the field is absent; the effective resolution
+already refuses the switch wherever the editor is off, so keeping the choice changes nothing
+until the editor returns.
+
+### #81: what was already there, and what was missing
+
+The locked-off and locked-on hints for modes 0 and 1 already existed in the form, as did the
+defaults for new configurations. What was missing was persistence: the form always submits the
+activation, pre-filled with what the level inherits, and the save stored it unconditionally. Any
+save - even one that only changed the toolbar groups - turned an inherited value into an override,
+and the question stopped following its quiz. `activation_to_store()` stores a value only when it
+differs from what is inherited or the level already had one of its own.
+
+Both rules are pure functions in `config_manager` now, so they are tested as rules rather than
+through a form: `form_persistence_test.php` with twelve activation cases, the switch cases, the
+"saved the groups, then the quiz went off" scenario and re-enabling the editor.
+
+Preview is defined and tested: a question preview has no course module, so it follows the
+instance mode alone - shown in modes 1 and 3, not in 0 and 2.
+
+`settings.spec.js` gains five browser cases on the two-question settings quiz: mode 2 with one
+question on in a quiz that is off, mode 2 with nothing set, mode 3 with one question off, mode 3
+with one question on in a quiz that is off, and saving only the groups.
+
+### Moodle 5.3 in the dev pipeline too
+
+The PHPUnit matrix gains 5.3 on PostgreSQL 17 and on MariaDB 11.4, with service images taken from
+the matrix and the MariaDB health check on `mariadb-admin`, as in the release matrix.
+
+
+## 63. Iteration 59 (2026100603): the board was one document further down
+
+### #77: why the JSXGraph spec never found a board
+
+STACK renders a `[[jsxgraph]]` block inside an iframe of its own - `[[iframe]]`, with the board in
+`#jxgbox` and JSXGraph loaded into that frame from a CDN. The slider talks to the STACK input in
+the parent page through `stack_js`, which sets the value and dispatches the non-bubbling change
+event the return channel listens for. Every earlier version of the spec looked for `.jxgbox` and
+`window.JXG` in the page; both exist, one document further down. Reading
+`stack/cas/castext2/blocks/jsxgraph.block.php` settled it.
+
+The spec now finds the frame whose document has `#jxgbox` and a board, reads the slider
+positions there, adds the frame element's offset so the mouse lands on the handle, and asserts
+both directions without a skip: slider to editor, editor to slider, five drag-then-type rounds
+(ten changes) with editor and input compared after every one, and a write count that catches
+the editor answering an adopted value with changes of its own.
+
+### #72: the phone's event sequence, in a real attempt
+
+A phone cannot run in CI, but what distinguishes it is the sequence of events its keyboard
+sends. `android-input.spec.js` reproduces that sequence on a Pixel 7 viewport with touch, in a
+real Moodle attempt, through the plugin's own editors into the original STACK input: Blink
+(keydown 229, beforeinput, input, no keypress - the sequence that lost the first characters),
+Gecko (keydown, keypress, input) and IME composition, for the single-line and the multi-line
+editor, plus a deletion that must stay a deletion.
+
+What it cannot do is replace the devices the issue names - Opera, Firefox and Firefox Klar on an
+actual phone - and the system editor has no fixture on the load quiz.
+
+
+## 64. Iteration 60 (2026100604): the dependency audit, done rather than planned
+
+`npm audit` on both lock files. The Playwright tree had a critical finding (`decompress`) that I
+had brought in myself with `@guidepup/setup` - a package the NVDA workflow does not even use,
+because it installs NVDA with `guidepup/setup-action`. Removed; the tree is clean.
+
+The Jest tree has 34 findings from two root advisories, braces and sprintf-js, neither with a
+patched version. Both are DoS issues needing crafted input to a test runner that only reads this
+repository. Accepted and documented in `docs/DEPENDENCY-AUDIT.md`.
+
+The release evidence gate used to grep the whole audit for "high" and would have stopped every
+release on those dev-only findings - exactly what #69 says must not happen. It gates on the
+runtime audit (`--omit=dev`) now and keeps the full audit as evidence.
+
+
+## 65. Iteration 61 (2026100605): the three pieces that needed code before a run
+
+### Upgrade test (#73, item 43)
+
+Every existing site reaches 1.3 by upgrading, and CI only ever installed fresh. A new `upgrade`
+job in the release workflow finds the previous release by what `version.php` said - the
+repository has no tags - installs a site with it, seeds the configuration a 1.2 site has (a quiz
+default, a question override, a global question default, activation mode 2) straight into the
+table, upgrades in place to the current commit and checks that every stored meaning survived and
+the 1.3 settings arrived with defaults that change nothing. It is part of `ci-complete`.
+
+### Units inputs (#77, item 18)
+
+`stack_units.xml` is the algebraic fixture with a STACK units input, seeded into a quiz of its own
+next to an algebraic question - the load quiz has a shape the performance suite depends on. The
+browser test types a quantity and writes one from outside, the path a JSXGraph binding takes.
+
+### System lines (#72, item 8)
+
+The editor builds system lines when the stored answer is several relations joined by nounand. The
+test stores such an answer, presses Check so the page comes back with it, counts the lines and
+edits one with the Blink soft-keyboard sequence from #72.
+
+### #69, item 32
+
+Recorded as a decision in the release checklist: stable was set before the evidence, and the risk
+was accepted explicitly.
+
+
+## 66. Iteration 62 (2026100606): four red workflows, two causes
+
+Dev CI was green. Playwright, NVDA, k6 and JMeter all failed - and all four at the same step:
+"Seed test data", exit code 1, with nothing printed.
+
+### One wrong word in a fixture took down every browser and load workflow
+
+`stack_units.xml` used `<answertest>Units</answertest>`. STACK has no test called plain "Units" -
+there are UnitsSigFigs, UnitsAbsolute and their strict variants - so the import threw, and
+`seed.php` with it. Every workflow that builds a test site runs the same seed, so one fixture for
+one test stopped four workflows.
+
+Three changes, because each of them would have limited the damage on its own:
+
+* the fixture uses AlgEquiv; what is under test is the units *input*, not the grading;
+* the quizzes that serve a single spec - JSXGraph and units - are seeded through a wrapper that
+  catches the failure, reports it on stderr, exports the id as 0 and lets the rest of the seed
+  finish; both specs skip with the reason when their id is 0;
+* the seed step prints its own output when it fails. Its stdout goes into the env file, so an
+  exception message used to vanish, and "exit code 1" was all the log ever said. That is why this
+  took a log download to understand rather than a glance.
+
+### The NVDA job never started
+
+`guidepup/setup-action@v1` does not exist; the action is tagged `0.21.0`, `0.20.0` and so on, with
+no major-version alias. GitHub refuses to start a job whose actions it cannot resolve, so the
+Windows job failed at "Set up job" before any of its own code ran. Pinned to `0.21.0`.
+
+Neither was caught locally: a fixture is only checked by importing it into STACK, and an action
+reference only by GitHub resolving it.
+
+
+## 67. Iteration 63 (2026100700): six Playwright failures, one product gap among them
+
+Dev CI, k6 and JMeter (on its second attempt) were green; Playwright had six failures and the
+NVDA workflow did not get past its tunnel. Five of the six Playwright failures were mistakes in
+specs I had written without being able to run them. One was a real gap in the plugin.
+
+### The product gap: mode 1 could not take the switch away
+
+`permissions.spec.js` expected a quiz to revoke the student switch while the editor is on
+everywhere, and found it on all ten questions. The form only rendered the switch checkbox inside
+the block for the override modes 2 and 3, next to the activation checkbox. In mode 1 there is no
+activation checkbox, so there was no switch checkbox either - and #73 says a quiz or question may
+take the switch away whenever the site allows it. The checkbox is now rendered in modes 1, 2 and
+3, and its `disabledIf` only where the activation checkbox it depends on exists.
+
+### The five spec mistakes
+
+* **Zoom.** `zoom: 200%` on the body scales coordinates inside the page differently from the
+  toolbar that holds them, so every button looked like it was outside it. Browser zoom at 200 % is
+  a viewport half as wide; the spec sets 640 x 450 now, which is what WCAG reflow means.
+* **Soft keyboard.** All characters were dispatched in one go, so "x+1" sat in MathQuill's
+  textarea at once and was read as a paste. A real keyboard delivers one character per task; the
+  spec waits between characters now.
+* **JSXGraph.** The frame search required a board element called `jxgbox`; any frame with a
+  board now counts, the wait is a minute because the frame loads JSXGraph from a CDN, and if
+  nothing is found the spec prints every frame's URL, globals and script sources.
+* **Settings matrix.** The new two-question cases assumed a clean slate, but the serial cases
+  before them leave quiz and question overrides behind. Each resets the settings quiz first.
+* **System lines.** Clicking STACK's Check timed out waiting for the button to be unobstructed.
+  It is pressed from the page now, followed by a wait for the navigation.
+
+### NVDA: an empty grep ended the step
+
+The tunnel step ran under `bash -e -o pipefail`, and while cloudflared was still starting, the
+grep for its URL found nothing, exited 1, and ended the step on the first try. `|| true`.
+
+### JMeter: flaky in one specific way
+
+Attempt 1 of the green run failed on one login out of ten - a 404 from PHP's built-in server at
+ramp-up - while every request the plugin is measured on passed. The plan already starts the next
+loop on error, so that thread logged in again and carried on. `check_jtl.py` now forgives exactly
+that: a failed login followed by a successful one on the same thread, reported as recovered. A
+thread that never logs in still fails the run, and so does any failure of anything else; both are
+covered by tests of the script.
+
+
+## 68. Iteration 64 (2026100700, version unchanged): README on the template, history in CHANGES.md
+
+The README follows `ralferlebach/moodle-plugintemplate` now: badges, a one-paragraph description,
+Requirements, Motivation, Installation, Usage & Settings, Capabilities, Scheduled Tasks, How it
+works, Theme support, repositories, support, proposals, release support, translation, RTL,
+Maintainers, Copyright - with Privacy, Third-party libraries and Development kept, because they
+say things a site administrator needs. Greek letters and integration events moved under "How this
+plugin works", where they belong.
+
+Badges: CI, MDL Shield, release 1.3.0, maturity stable, Moodle 4.5-5.3, PHP 8.2-8.4, GPL-3.0.
+
+The motivation section keeps six key features. Everything version-differentiated - the 1.3 release
+notes, the full 1.3 feature list, the 1.2.2 and 1.2.1 fixes, 1.2, 1.1 and 1.0 - is in
+`docs/CHANGES.md`, together with the device check: Android, Chrome and Firefox, portrait and
+landscape, without findings.
+
+`docs/` is excluded from the release archive, so the README would have linked to a file the
+shipped plugin does not contain. `.gitattributes` now excludes `docs/**` and re-includes
+`docs/CHANGES.md` - a directory-level exclusion cannot be overridden for a file inside it, which a
+git archive dry run showed - and the release-artefact gate allows exactly that one file under
+`docs/`. `tests/upgrade/` is excluded from the archive and the gate as well.
+
+The version stays at 2026100700 / 1.3.0 / MATURITY_STABLE, as decided: documentation only.
+
+
+## 69. Iteration 65 (2026100700, version unchanged): NVDA job sent to its own localhost; README trimmed
+
+NVDA run 3 (commit 77a42b2) was the first to get as far as the tests: site built, tunnel up,
+Windows job handed the site - and then the test step failed within seconds. The job log is not
+readable without a sign-in and the API was not available in this session, so the cause is read
+from the workflow, not from the log: `handoff/site.env` named `SME_BASE_URL` twice. First the
+tunnel, then - from the seed's own export lines - `http://127.0.0.1:8000`, the address the site
+had when it was seeded. In `GITHUB_ENV` the last assignment wins, so the browser on Windows went
+to its own localhost. That fits the run: ten attempts failing in under a minute and an artefact
+of 778 KB, with traces and video switched on.
+
+- The seed's `SME_BASE_URL` line is dropped from the handoff, the tunnel is written last, and the
+  step fails if the file does not name exactly one.
+- The Windows job checks the site through the tunnel before the tests and says so in one
+  annotation if it cannot reach it.
+- In GitHub Actions the Playwright `github` reporter turns each failure into an annotation, and
+  `tests/playwright/run-summary.js` writes outcome, first error and every transcript into the
+  job summary. Both are on the run page without a sign-in.
+- Every NVDA test brings the browser to the foreground (`navigateToWebContent`) before it sets a
+  focus; three of the five did not, and NVDA reads the foreground window only.
+
+Not verified: the NVDA assertions themselves. No run has reached them yet.
+
+README, as ordered: two badges only (Moodle Plugin CI, MDL Shield); the sentence linking to
+`docs/CHANGES.md` is gone. `tests/a11y-nvda/` - the separate harness that was rejected - is still
+in the repository because unpacking an archive does not delete; it has to be removed by hand.
+
+
+## 70. Iteration 66 (2026100700, version unchanged): Playwright run locally, six failures, four of them the product
+
+Playwright run 21 (commit 77a42b2) was red and its log is not readable without a sign-in. Instead
+of another round of guessing, the CI site was built in the session - Moodle 4.5, STACK, Maxima,
+PostgreSQL, the seed, Chromium - and the suite run against it: 27 passed, 6 failed, 11 did not
+run. Each failure was then reproduced and traced on that site. After the fixes: 44 passed,
+1 skipped (a documented `fixme`), PHPUnit 180 tests green, Jest 1278 green, PHPCS clean.
+
+Product defects the specs were right about:
+
+- **#76, chooser limit.** `toolbar.build()` wrote the slot's limit into the definitions object
+  every editor on the page shares, so the toolbar built last decided for all of them; and the
+  multi-line editor passed the site value instead of its slot's. A quiz override of 7 showed 5.
+  The limit now lives in a per-toolbar view of the definitions, and the multi-line editor reads
+  its slot.
+- **#81, frozen override.** `configure.php` took the "existing" activation from the merged
+  configuration. A question that only inherited "on" from its quiz therefore looked as if it had
+  chosen it, and saving its toolbar groups stored `_enabled: true` - switching the quiz off
+  afterwards did not reach it. `config_manager::get_own_config()` returns what a level stored
+  itself; the page uses it for activation, student switch and chooser limit. The student switch
+  got the same store-only-what-says-something rule. The unit test for this case had passed
+  because it handed the function the null the page never did; three tests now pin the page.
+- **#77, lost answer.** A value written into the input that the single-line editor cannot show -
+  a relation system - left the editor empty, and Check/Submit then wrote that emptiness over the
+  value. An empty editor that was never edited no longer overwrites the input.
+- **Angle button.** Its label was `'\u{2220}ABC'` in single quotes and reached the toolbar as
+  those ten characters. Double quotes; the button fixture regenerated.
+
+Defects of the specs:
+
+- a11y-zoom: the toolbar has about seventy buttons before the field; sixty Tabs were not enough.
+- android-input: events built by hand with `dispatchEvent` are not what a browser sends. The spec
+  now uses the DevTools input pipeline (`Input.insertText`, `imeSetComposition`, real key
+  events), and no longer runs serially, so one failure does not hide five results.
+- jsxgraph: JSXGraph 1.12 keeps its boards in `JXG.boards`, not `JXG.JSXGraph.boards`; the board
+  is below the fold and the mouse works in viewport coordinates; a click sent while the page was
+  still scrolling back landed on the board's iframe; the editor sits before its input, not
+  around it.
+- settings and permissions left the site "off by default" with one group, and the load quiz
+  without switch and with a limit of 3 - the specs after them met a different site. Both restore
+  what they found.
+
+Known gap, not fixed, marked `test.fixme`: a keydown with key "Unidentified" (keyCode 229)
+directly before the text makes the MathQuill fork's `typedText()` return early - an upstream guard
+against a ChromeOS quirk - and the character is dropped. The devices checked for #72 evidently do
+not send that keydown; a keyboard that does would lose input. This is a fork change and a
+decision.
+
+Observation, not changed: the toolbar precedes the field in the tab order, so a keyboard user
+passes about seventy buttons to reach the answer field. One tab stop with arrow-key navigation
+(roving tabindex) would be the usual pattern.
+
+Workflows: the Playwright job has 35 minutes instead of 20 (run 21 ended at 18:47), and both
+browser workflows write totals, failures and - for NVDA - transcripts into the job summary via
+`tests/playwright/run-summary.js`. NVDA's first test no longer tabs from the top of the page.
+
+Not run: Behat, k6, JMeter, NVDA.
+
+
+## 71. Iteration 67 (2026100700, version unchanged): NVDA not installed - three Guidepup parts that did not fit
+
+Runs on commit afda74d, read from the run pages (annotations are public, logs are not).
+
+Playwright run 22: the six failures of iteration 66, on a commit that does not contain
+iteration 66 yet. Nothing new to fix; the fixes are in this archive.
+
+NVDA run 4: the first run to reach NVDA. Tunnel, handoff and the new preflight worked; every
+test failed with `Error: NVDA not installed at NVDAClient.connect`. Read from the Guidepup
+sources rather than guessed:
+
+- `guidepup/setup-action@0.21.0` bundles `@guidepup/setup` 0.23.0, which installs an NVDA build
+  under the registry key `guidepup_nvda_0.2.0-2026.1.1`.
+- `@guidepup/guidepup` 0.22.x - what `^0.22.1` in package.json resolved to - looks for an older
+  build. The project has since moved on altogether: current libraries find NVDA in a cache
+  directory, chosen by a manifest inside the library, and the setup tool has an `install`
+  command that reads that manifest from the project.
+
+So the fix is a set of versions that belong together, not a path: `@guidepup/guidepup` 0.33.0,
+`@guidepup/playwright` 0.19.1 and `@guidepup/setup` 0.24.1 - the combination the Guidepup
+Playwright project runs in its own Windows CI. The libraries are pinned exactly; the workflow
+runs `setup --ci` before and `install nvda` after `npm ci`, in the project directory, and then
+asks the library whether it finds NVDA, so a mismatch fails in one line. The setup action is gone.
+The runner is `windows-2025`, named instead of "latest". The lockfile lost 557 lines; `npm audit`
+reports nothing.
+
+The spec starts NVDA with full capture instead of the first utterance only: role and state
+often arrive as a second one.
+
+Not verified: the NVDA assertions. No run has reached them yet.
