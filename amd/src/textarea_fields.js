@@ -526,6 +526,25 @@ define([
     }
 
     /**
+     * The chooser limit for this editor's slot (#76).
+     *
+     * Same rule as for single-line inputs: the slot map answers per question, the site value
+     * only where the map says nothing. Multi-line editors used the site value regardless.
+     *
+     * @returns {number} Largest structure the choosers may offer here.
+     */
+    EquivEditor.prototype.maxDimension = function() {
+        var perslot = this.ctx.slotMaxDimension || {};
+        var slot = String(this.slot || '');
+
+        if (slot && Object.prototype.hasOwnProperty.call(perslot, slot)) {
+            return perslot[slot];
+        }
+
+        return this.ctx.maxDimension || 0;
+    };
+
+    /**
      * Build the editor DOM and initialise all rows.
      */
     EquivEditor.prototype.build = function() {
@@ -537,7 +556,7 @@ define([
         this.$wrap = $('<div>').addClass('sme-equiv-wrap');
         this.$tb = toolbar.build(function() {
             return self.activeField();
-        }, this.config, this.ctx.defs, this.ctx.maxDimension || 0);
+        }, this.config, this.ctx.defs, this.maxDimension());
         this.$wrap.append(this.$tb);
 
         this.$rows = $('<div>').addClass('sme-equiv-rows');

@@ -2714,7 +2714,7 @@ of 778 KB, with traces and video switched on.
 - The Windows job checks the site through the tunnel before the tests and says so in one
   annotation if it cannot reach it.
 - In GitHub Actions the Playwright `github` reporter turns each failure into an annotation, and
-  `tests/playwright/nvda-summary.js` writes outcome, first error and every transcript into the
+  `tests/playwright/run-summary.js` writes outcome, first error and every transcript into the
   job summary. Both are on the run page without a sign-in.
 - Every NVDA test brings the browser to the foreground (`navigateToWebContent`) before it sets a
   focus; three of the five did not, and NVDA reads the foreground window only.
@@ -2724,3 +2724,94 @@ Not verified: the NVDA assertions themselves. No run has reached them yet.
 README, as ordered: two badges only (Moodle Plugin CI, MDL Shield); the sentence linking to
 `docs/CHANGES.md` is gone. `tests/a11y-nvda/` - the separate harness that was rejected - is still
 in the repository because unpacking an archive does not delete; it has to be removed by hand.
+
+
+## 70. Iteration 66 (2026100700, version unchanged): Playwright run locally, six failures, four of them the product
+
+Playwright run 21 (commit 77a42b2) was red and its log is not readable without a sign-in. Instead
+of another round of guessing, the CI site was built in the session - Moodle 4.5, STACK, Maxima,
+PostgreSQL, the seed, Chromium - and the suite run against it: 27 passed, 6 failed, 11 did not
+run. Each failure was then reproduced and traced on that site. After the fixes: 44 passed,
+1 skipped (a documented `fixme`), PHPUnit 180 tests green, Jest 1278 green, PHPCS clean.
+
+Product defects the specs were right about:
+
+- **#76, chooser limit.** `toolbar.build()` wrote the slot's limit into the definitions object
+  every editor on the page shares, so the toolbar built last decided for all of them; and the
+  multi-line editor passed the site value instead of its slot's. A quiz override of 7 showed 5.
+  The limit now lives in a per-toolbar view of the definitions, and the multi-line editor reads
+  its slot.
+- **#81, frozen override.** `configure.php` took the "existing" activation from the merged
+  configuration. A question that only inherited "on" from its quiz therefore looked as if it had
+  chosen it, and saving its toolbar groups stored `_enabled: true` - switching the quiz off
+  afterwards did not reach it. `config_manager::get_own_config()` returns what a level stored
+  itself; the page uses it for activation, student switch and chooser limit. The student switch
+  got the same store-only-what-says-something rule. The unit test for this case had passed
+  because it handed the function the null the page never did; three tests now pin the page.
+- **#77, lost answer.** A value written into the input that the single-line editor cannot show -
+  a relation system - left the editor empty, and Check/Submit then wrote that emptiness over the
+  value. An empty editor that was never edited no longer overwrites the input.
+- **Angle button.** Its label was `'\u{2220}ABC'` in single quotes and reached the toolbar as
+  those ten characters. Double quotes; the button fixture regenerated.
+
+Defects of the specs:
+
+- a11y-zoom: the toolbar has about seventy buttons before the field; sixty Tabs were not enough.
+- android-input: events built by hand with `dispatchEvent` are not what a browser sends. The spec
+  now uses the DevTools input pipeline (`Input.insertText`, `imeSetComposition`, real key
+  events), and no longer runs serially, so one failure does not hide five results.
+- jsxgraph: JSXGraph 1.12 keeps its boards in `JXG.boards`, not `JXG.JSXGraph.boards`; the board
+  is below the fold and the mouse works in viewport coordinates; a click sent while the page was
+  still scrolling back landed on the board's iframe; the editor sits before its input, not
+  around it.
+- settings and permissions left the site "off by default" with one group, and the load quiz
+  without switch and with a limit of 3 - the specs after them met a different site. Both restore
+  what they found.
+
+Known gap, not fixed, marked `test.fixme`: a keydown with key "Unidentified" (keyCode 229)
+directly before the text makes the MathQuill fork's `typedText()` return early - an upstream guard
+against a ChromeOS quirk - and the character is dropped. The devices checked for #72 evidently do
+not send that keydown; a keyboard that does would lose input. This is a fork change and a
+decision.
+
+Observation, not changed: the toolbar precedes the field in the tab order, so a keyboard user
+passes about seventy buttons to reach the answer field. One tab stop with arrow-key navigation
+(roving tabindex) would be the usual pattern.
+
+Workflows: the Playwright job has 35 minutes instead of 20 (run 21 ended at 18:47), and both
+browser workflows write totals, failures and - for NVDA - transcripts into the job summary via
+`tests/playwright/run-summary.js`. NVDA's first test no longer tabs from the top of the page.
+
+Not run: Behat, k6, JMeter, NVDA.
+
+
+## 71. Iteration 67 (2026100700, version unchanged): NVDA not installed - three Guidepup parts that did not fit
+
+Runs on commit afda74d, read from the run pages (annotations are public, logs are not).
+
+Playwright run 22: the six failures of iteration 66, on a commit that does not contain
+iteration 66 yet. Nothing new to fix; the fixes are in this archive.
+
+NVDA run 4: the first run to reach NVDA. Tunnel, handoff and the new preflight worked; every
+test failed with `Error: NVDA not installed at NVDAClient.connect`. Read from the Guidepup
+sources rather than guessed:
+
+- `guidepup/setup-action@0.21.0` bundles `@guidepup/setup` 0.23.0, which installs an NVDA build
+  under the registry key `guidepup_nvda_0.2.0-2026.1.1`.
+- `@guidepup/guidepup` 0.22.x - what `^0.22.1` in package.json resolved to - looks for an older
+  build. The project has since moved on altogether: current libraries find NVDA in a cache
+  directory, chosen by a manifest inside the library, and the setup tool has an `install`
+  command that reads that manifest from the project.
+
+So the fix is a set of versions that belong together, not a path: `@guidepup/guidepup` 0.33.0,
+`@guidepup/playwright` 0.19.1 and `@guidepup/setup` 0.24.1 - the combination the Guidepup
+Playwright project runs in its own Windows CI. The libraries are pinned exactly; the workflow
+runs `setup --ci` before and `install nvda` after `npm ci`, in the project directory, and then
+asks the library whether it finds NVDA, so a mismatch fails in one line. The setup action is gone.
+The runner is `windows-2025`, named instead of "latest". The lockfile lost 557 lines; `npm audit`
+reports nothing.
+
+The spec starts NVDA with full capture instead of the first utterance only: role and state
+often arrive as a second one.
+
+Not verified: the NVDA assertions. No run has reached them yet.

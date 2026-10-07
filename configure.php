@@ -205,6 +205,12 @@ if ($quizmode) {
     $config = config_manager::get_config($cmid, $qbeid, $questionid);
 }
 
+// What this level has stored itself. $config is what applies here, inherited values included;
+// deciding what to store needs the level's own values only (#81).
+$own = $quizmode
+    ? (config_manager::get_own_config($cmid) ?? [])
+    : (config_manager::get_own_config($cmid, (int) $qbeid) ?? []);
+
 // Build selected group keys.
 $selectedkeys = [];
 foreach (array_keys($groups) as $key) {
@@ -279,8 +285,17 @@ if (isset($config['_allowStudentToggle'])) {
     }
 }
 
+// What the level above allows, for deciding whether a submitted value says anything.
+$inheritedtoggle = config_manager::get_instance_student_toggle();
+if (!$quizmode) {
+    $quizown = config_manager::get_own_config($cmid) ?? [];
+    if (isset($quizown['_allowStudentToggle'])) {
+        $inheritedtoggle = $inheritedtoggle && (bool) $quizown['_allowStudentToggle'];
+    }
+}
+
 $formdata = [
-    'maxdimension'       => $config['_maxStructuredDimension'] ?? '',
+    'maxdimension'       => $own['_maxStructuredDimension'] ?? '',
     'groups'             => $selectedkeys,
     'enabled'            => (int) $currentenabled,
     'allowstudenttoggle' => (int) ((bool) $currentstudenttoggle),
@@ -314,8 +329,8 @@ if ($mform->is_cancelled()) {
         } else {
             $elements['_maxStructuredDimension'] = $cleaned;
         }
-    } else if (isset($config['_maxStructuredDimension'])) {
-        $elements['_maxStructuredDimension'] = (int) $config['_maxStructuredDimension'];
+    } else if (isset($own['_maxStructuredDimension'])) {
+        $elements['_maxStructuredDimension'] = (int) $own['_maxStructuredDimension'];
     }
 
 
@@ -325,7 +340,7 @@ if ($mform->is_cancelled()) {
     $submittedenabled = property_exists($data, 'enabled') ? (bool) $data->enabled : null;
     $storeenabled = config_manager::activation_to_store(
         $instancemode,
-        isset($config['_enabled']) ? (bool) $config['_enabled'] : null,
+        isset($own['_enabled']) ? (bool) $own['_enabled'] : null,
         $inheritedenabled,
         $submittedenabled
     );
@@ -339,9 +354,10 @@ if ($mform->is_cancelled()) {
     // author's stored choice instead of overwriting it with "no".
     $editornow = $storeenabled ?? $inheritedenabled;
     $storetoggle = config_manager::student_toggle_to_store(
-        isset($config['_allowStudentToggle']) ? (bool) $config['_allowStudentToggle'] : null,
+        isset($own['_allowStudentToggle']) ? (bool) $own['_allowStudentToggle'] : null,
         $editornow,
-        property_exists($data, 'allowstudenttoggle') ? (bool) $data->allowstudenttoggle : null
+        property_exists($data, 'allowstudenttoggle') ? (bool) $data->allowstudenttoggle : null,
+        $inheritedtoggle
     );
     if ($storetoggle === null) {
         unset($elements['_allowStudentToggle']);

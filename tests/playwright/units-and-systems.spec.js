@@ -124,23 +124,13 @@ test('#72/8: system lines are built from a stored system and write it back', asy
     });
     expect(rows, 'one line per relation').toBeGreaterThanOrEqual(2);
 
-    // Edit the second line with the Blink soft-keyboard sequence from #72: input events only.
-    await page.evaluate(async() => {
-        const question = document.querySelector('.que');
-        const fields = question.querySelectorAll('.mq-editable-field');
-        const textarea = fields[1].querySelector('textarea');
-        textarea.focus();
-        for (const ch of '+0') {
-            textarea.dispatchEvent(new KeyboardEvent('keydown', {
-                bubbles: true, key: 'Unidentified', keyCode: 229
-            }));
-            textarea.value += ch;
-            textarea.dispatchEvent(new InputEvent('input', {
-                bubbles: true, inputType: 'insertText', data: ch
-            }));
-            await new Promise((resolve) => setTimeout(resolve, 40));
-        }
-    });
+    // Edit the second line the way Blink's soft keyboard does (#72): the character arrives as an
+    // insertText input from the browser's own pipeline, with no keypress.
+    await page.locator('.que').first().locator('.mq-editable-field textarea').nth(1).focus();
+    for (const ch of '+0') {
+        await page.keyboard.insertText(ch);
+        await page.waitForTimeout(40);
+    }
     await page.waitForTimeout(800);
 
     const state = await firstQuestion(page);

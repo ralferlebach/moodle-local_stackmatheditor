@@ -352,6 +352,36 @@ class config_manager {
     }
 
     /**
+     * What one level has stored itself - nothing inherited, nothing merged.
+     *
+     * get_config() answers "what applies here"; a form that decides what to store needs "what
+     * did this level say". Asking the merged configuration instead made a question that had only
+     * inherited "on" from its quiz look as if it had chosen it, and the next save - of the
+     * toolbar groups alone - froze that into an override (#81).
+     *
+     * @param int $cmid Course module ID.
+     * @param int $qbeid Question bank entry ID, 0 for the quiz level.
+     * @return array|null The level's own stored values, null when it has no record.
+     */
+    public static function get_own_config(int $cmid, int $qbeid = 0): ?array {
+        $col = self::get_config_column();
+
+        if ($qbeid > 0) {
+            $rec = self::get_one(
+                "cmid = :cmid AND questionbankentryid = :qbeid",
+                ['cmid' => $cmid, 'qbeid' => $qbeid]
+            );
+        } else {
+            $rec = self::get_one(
+                "cmid = :cmid AND questionbankentryid IS NULL",
+                ['cmid' => $cmid]
+            );
+        }
+
+        return $rec ? self::decode_raw_config($rec->$col) : null;
+    }
+
+    /**
      * Load the quiz-level default config for a given cmid.
      * Returns null if no quiz-level record exists yet.
      *
@@ -695,15 +725,23 @@ class config_manager {
      * @param bool|null $existing The level's stored value, null when it has none.
      * @param bool $editorenabled Whether the editor is on at this level after the save.
      * @param bool|null $submitted What the form sent, null when the field was absent.
+     * @param bool|null $inherited What the level gets without a value of its own, when known.
      * @return bool|null Value to store, or null to keep inheriting.
      */
     public static function student_toggle_to_store(
         ?bool $existing,
         bool $editorenabled,
-        ?bool $submitted
+        ?bool $submitted,
+        ?bool $inherited = null
     ): ?bool {
         if (!$editorenabled || $submitted === null) {
             return $existing;
+        }
+
+        // As with the activation: a pre-filled checkbox that was not touched says nothing, and
+        // storing it would stop the level from following the one above.
+        if ($existing === null && $inherited !== null && $submitted === $inherited) {
+            return null;
         }
 
         return $submitted;

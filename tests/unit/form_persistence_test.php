@@ -28,6 +28,7 @@ namespace local_stackmatheditor;
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers     \local_stackmatheditor\config_manager::activation_to_store
  * @covers     \local_stackmatheditor\config_manager::student_toggle_to_store
+ * @covers     \local_stackmatheditor\config_manager::get_own_config
  */
 final class form_persistence_test extends \advanced_testcase {
     /**
@@ -105,6 +106,77 @@ final class form_persistence_test extends \advanced_testcase {
         // value of its own.
         config_manager::save_quiz_default(55, ['_enabled' => 0]);
         $this->assertFalse(config_manager::get_effective_enabled(55, 66));
+    }
+
+    /**
+     * A level's own values are not the merged ones (#81).
+     *
+     * The case above hands activation_to_store() a null by hand. The configuration page handed
+     * it the merged configuration instead, in which a question that only inherits "on" has
+     * "_enabled" set - and froze it on the next save. What the page has to ask is this.
+     *
+     * @return void
+     */
+    public function test_a_level_knows_what_it_stored_itself(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        set_config('enabled', 2, 'local_stackmatheditor');
+
+        $this->assertNull(config_manager::get_own_config(55), 'no quiz record yet');
+        $this->assertNull(config_manager::get_own_config(55, 66), 'no question record yet');
+
+        config_manager::save_quiz_default(55, ['_enabled' => 1, '_maxStructuredDimension' => 7]);
+
+        // What applies to the question includes the quiz values ...
+        $merged = config_manager::get_config(55, 66);
+        $this->assertTrue((bool) $merged['_enabled']);
+        // ... what the question stored itself does not.
+        $this->assertNull(config_manager::get_own_config(55, 66));
+        $this->assertSame(7, config_manager::get_own_config(55)['_maxStructuredDimension']);
+
+        config_manager::save_config(55, 66, ['basic_operators' => 1]);
+        $own = config_manager::get_own_config(55, 66);
+        $this->assertArrayNotHasKey('_enabled', $own);
+        $this->assertArrayNotHasKey('_maxStructuredDimension', $own);
+
+        // Another quiz is another context.
+        $this->assertNull(config_manager::get_own_config(56, 66));
+    }
+
+    /**
+     * The configuration page decides what to store from the level's own values (#81).
+     *
+     * @return void
+     */
+    public function test_the_page_asks_the_level_itself(): void {
+        global $CFG;
+
+        $source = file_get_contents($CFG->dirroot . '/local/stackmatheditor/configure.php');
+
+        $this->assertStringContainsString('config_manager::get_own_config(', $source);
+        foreach (['_enabled', '_allowStudentToggle', '_maxStructuredDimension'] as $key) {
+            $this->assertStringContainsString("isset(\$own['{$key}'])", $source, $key);
+        }
+        // The merged configuration must not come back as the "existing" value.
+        $this->assertStringNotContainsString("isset(\$config['_enabled']) ? (bool)", $source);
+        $this->assertStringNotContainsString("isset(\$config['_allowStudentToggle']) ? (bool)", $source);
+    }
+
+    /**
+     * The switch: a pre-filled checkbox that was not touched is not an override (#73).
+     *
+     * @return void
+     */
+    public function test_an_untouched_switch_keeps_inheriting(): void {
+        // Nothing stored, the form shows what is inherited, saved unchanged: nothing stored.
+        $this->assertNull(config_manager::student_toggle_to_store(null, true, true, true));
+        $this->assertNull(config_manager::student_toggle_to_store(null, true, false, false));
+        // Changed against what is inherited: stored.
+        $this->assertFalse(config_manager::student_toggle_to_store(null, true, false, true));
+        $this->assertTrue(config_manager::student_toggle_to_store(null, true, true, false));
+        // A value of its own stays its own, even when it now equals the inherited one.
+        $this->assertTrue(config_manager::student_toggle_to_store(true, true, true, true));
+        $this->assertFalse(config_manager::student_toggle_to_store(false, true, false, false));
     }
 
     /**

@@ -409,7 +409,7 @@
     },
     {
         "group": "geometry",
-        "display": "\\u{2220}ABC",
+        "display": "∠ABC",
         "kind": "write",
         "template": "\\angle ",
         "semantic": "angle",

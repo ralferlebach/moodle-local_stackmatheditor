@@ -45,10 +45,14 @@ Once, on the Windows side:
 
 ```powershell
 cd tests\playwright
+npx -y @guidepup/setup@0.24.1 setup         # the foreground-window lock relaxed
 npm install
 npx playwright install chromium
-npx @guidepup/setup      # portable NVDA, and the foreground-window lock relaxed
+npx -y @guidepup/setup@0.24.1 install nvda  # the NVDA build the installed Guidepup expects
 ```
+
+The three Guidepup parts have to fit: the library in `package.json` (pinned), the setup tool, and
+the NVDA build the setup tool fetches for that library. Change one and re-run `install nvda`.
 
 Then, against the Moodle you already develop on - from Windows, a site in WSL is reachable at
 localhost:

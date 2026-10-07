@@ -183,7 +183,8 @@ jobs:
 
   nvda:
     name: NVDA on Windows
-    runs-on: windows-latest
+    # Named, not "latest": Guidepup lists the Windows versions it supports.
+    runs-on: windows-2025
     timeout-minutes: 75
     defaults:
       run:
@@ -198,15 +199,40 @@ jobs:
         with:
           node-version: '22'
 
-      # A portable NVDA, plus the foreground-window lock relaxed so it hears new windows.
-      - name: Set up NVDA
-        uses: guidepup/setup-action@0.21.0
+      # Guidepup comes in three parts that have to fit: the library the tests use, the setup tool
+      # that prepares Windows, and the NVDA build the setup tool downloads FOR that library. The
+      # setup action installed an NVDA for a newer library than the one in package.json, and the
+      # tests then found "NVDA not installed". The versions below are the ones the Guidepup
+      # Playwright project runs together in its own CI (library 0.33.0, integration 0.19.1,
+      # setup 0.24.1); the library versions are pinned in package.json for the same reason.
+      - name: Prepare Windows for screen reader automation
+        run: npx -y @guidepup/setup@0.24.1 setup --ci
 
       - name: Install the browser suite
         working-directory: tests/playwright
         run: |
           npm ci --no-audit --no-fund
           npx playwright install chromium
+
+      # After npm ci and in the project directory: the tool reads the installed library to
+      # decide which NVDA build it needs.
+      - name: Install NVDA for the installed Guidepup
+        working-directory: tests/playwright
+        run: |
+          npx -y @guidepup/setup@0.24.1 install nvda
+          # Ask the library itself whether it finds what was just installed - here, in one line,
+          # rather than as "NVDA not installed" in every test.
+          node -e "
+            let check;
+            try { check = require('@guidepup/guidepup/lib/windows/NVDA/isNVDAInstalled'); }
+            catch (e) { console.log('::notice::could not ask Guidepup about NVDA: ' + e.message); process.exit(0); }
+            if (!check.isNVDAInstalled()) {
+              console.log('::error::Guidepup ' + require('@guidepup/guidepup/package.json').version
+                + ' does not find the NVDA the setup tool installed');
+              process.exit(1);
+            }
+            console.log('Guidepup finds NVDA.');
+          "
 
       - name: Wait for the test site
         env:
@@ -255,7 +281,9 @@ jobs:
       - name: Summarise
         if: ${{ always() }}
         working-directory: tests/playwright
-        run: node nvda-summary.js >> "$GITHUB_STEP_SUMMARY" || true
+        env:
+          SME_NVDA: '1'
+        run: node run-summary.js "NVDA" >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Collect the transcripts
         if: ${{ always() }}

@@ -119,7 +119,7 @@ test('the keyboard reaches the editor and the toolbar', async({page}) => {
 
     const reached = {editor: false, toolbar: false, toggle: false};
 
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 250; i++) {
         await page.keyboard.press('Tab');
         const where = await page.evaluate(() => {
             const active = document.activeElement;

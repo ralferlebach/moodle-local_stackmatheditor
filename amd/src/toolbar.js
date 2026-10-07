@@ -508,8 +508,11 @@ define([
             var $bar = $('<div>').addClass('sme-toolbar');
 
             // The chooser limit is resolved per slot on the server (#76); the caller knows the
-            // slot, the toolbar only the number.
+            // slot, the toolbar only the number. It belongs to THIS toolbar: the definitions are
+            // shared by every editor on the page, and writing the limit into them made the last
+            // toolbar built decide for all the others. A view of the definitions carries it.
             if (defs && maxdimension) {
+                defs = Object.create(defs);
                 defs._maxDimension = maxdimension;
             }
 

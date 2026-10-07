@@ -151,6 +151,7 @@ test.describe('settings matrix: level x setting -> result', () => {
     let admin;
     let teacher;
     let student;
+    let siteBefore;
 
     test.beforeAll(async({browser}) => {
         CMID = env('SME_SETTINGS_CMID');
@@ -162,10 +163,29 @@ test.describe('settings matrix: level x setting -> result', () => {
         await loginAs(admin, env('SME_ADMIN_USER', 'admin'), env('SME_ADMIN_PASS'));
         await loginAs(teacher, 'sme_teacher', USERPASS);
         await loginAs(student, 'sme_student01', USERPASS);
+
+        // These cases change site settings every other spec depends on. Remember what the site
+        // had, so that it can be handed back as it was found.
+        await admin.goto('/admin/settings.php?section=local_stackmatheditor');
+        siteBefore = {
+            enabled: await admin.locator('select[name="s_local_stackmatheditor_enabled"]').inputValue(),
+            groups: await admin.locator('select[name="s_local_stackmatheditor_default_groups[]"]')
+                .evaluate((select) => Array.from(select.selectedOptions).map((option) => option.value)),
+        };
     });
 
     test.beforeEach(() => {
         resetQuizConfig();
+    });
+
+    // The last case leaves the site "off by default" with one toolbar group. The specs that run
+    // after this one - smoke, toolbar layout, units and systems - then met a site without
+    // editors, and failed for a reason that had nothing to do with them.
+    test.afterAll(async() => {
+        resetQuizConfig();
+        if (siteBefore) {
+            await adminSettings(admin, siteBefore);
+        }
     });
 
     test('admin: on/off', async({}, info) => {

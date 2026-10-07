@@ -18,9 +18,10 @@ plugin's own `amd/build` and the vendored MathQuill build, whose provenance is r
 ### tests/playwright - 0 findings
 
 The audit found one critical (`decompress`) and one moderate finding, both arriving through
-`@guidepup/setup`. That package was only needed for a local `npx @guidepup/setup`; the NVDA
-workflow uses `guidepup/setup-action` instead. It was removed as a dependency, and `npx` still
-fetches it on demand for a local run. The tree is clean now.
+`@guidepup/setup`. That package is a command-line tool, not something the tests import: it was
+removed as a dependency, and the NVDA workflow and a local run call it through `npx` with a pinned
+version. With `@guidepup/guidepup` 0.33.0 and `@guidepup/playwright` 0.19.1 the tree has ten
+packages and no finding.
 
 ### tests/jest - 34 findings, accepted
 

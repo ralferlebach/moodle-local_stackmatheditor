@@ -753,7 +753,7 @@ class definitions {
                 'tooltip' => get_string('btn_distance', $p),
             ],
             [
-                'display' => '\u{2220}ABC',
+                'display' => "\u{2220}ABC",
                 'semantic' => 'angle',
                 'write'   => '\\angle ',
                 'tooltip' => get_string('btn_angle_object', $p),

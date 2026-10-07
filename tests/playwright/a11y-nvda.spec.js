@@ -40,8 +40,9 @@ const path = require('path');
 
 const {env, loginAs, open} = require('./helpers');
 
-// Capture the hints too: "press space to toggle" is part of what a student hears.
-test.use({nvdaStartOptions: {capture: 'initial'}});
+// Everything NVDA says after a command, not only its first utterance: role and state often come
+// as a second one ("check box", then "checked").
+test.use({nvdaStartOptions: {capture: true}});
 
 /**
  * Keep what NVDA said, with the commit and the date on top.
@@ -120,13 +121,15 @@ test.describe('NVDA reads the editor', () => {
     test('the editor announces itself as an editable field with a name', async({page, nvda}) => {
         await listen(page, nvda);
 
-        for (let i = 0; i < 40; i++) {
-            await nvda.press('Tab');
-            const said = (await nvda.lastSpokenPhrase()).toLowerCase();
-            if (said.includes('edit') || said.includes('formula') || said.includes('formel')) {
-                break;
-            }
-        }
+        // The toolbar comes before the field in the tab order, with some seventy buttons. Start
+        // on its last button and let NVDA make the one step into the field - forty Tabs from
+        // the top of the page, as this test first did, end in the middle of the toolbar.
+        await page.locator('.sme-input-wrap').first().locator('.sme-tb-btn').last().focus();
+        await nvda.clearSpokenPhraseLog();
+        await nvda.press('Tab');
+        await page.waitForTimeout(1000);
+        await expect(page.locator('.sme-input-wrap').first().locator('.mq-editable-field textarea'))
+            .toBeFocused();
 
         const log = await spoken(nvda);
         archive('editor-field', await nvda.spokenPhraseLog());

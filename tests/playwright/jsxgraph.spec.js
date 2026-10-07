@@ -70,9 +70,10 @@ async function boardFrame(page) {
                 continue;
             }
             // Any frame with a board counts - STACK names the board element per block, so
-            // looking for one fixed id was one assumption too many.
+            // looking for one fixed id was one assumption too many. The registry is JXG.boards;
+            // JXG.JSXGraph.boards exists too but stays empty (JSXGraph 1.12).
             const ready = await frame.evaluate(
-                () => !!(window.JXG && Object.keys(window.JXG.JSXGraph.boards || {}).length)
+                () => !!(window.JXG && Object.keys(window.JXG.boards || {}).length)
             ).catch(() => false);
             if (ready) {
                 return frame;
@@ -129,7 +130,7 @@ async function openQuestion(page) {
  */
 async function sliderAt(page, frame, index) {
     const inner = await frame.evaluate((which) => {
-        const board = Object.values(window.JXG.JSXGraph.boards)[0];
+        const board = Object.values(window.JXG.boards)[0];
         const sliders = board.objectsList.filter((o) => o.elType === 'slider');
         const slider = sliders[which];
         if (!slider) {
@@ -149,6 +150,15 @@ async function sliderAt(page, frame, index) {
     }
 
     const element = await frame.frameElement();
+
+    // The mouse works in viewport coordinates, and the board is below the fold on a default
+    // window: bring the handle to the middle of the viewport before reading where it is.
+    await element.evaluate((iframe, y) => {
+        const top = iframe.getBoundingClientRect().top + y;
+        window.scrollBy(0, top - window.innerHeight / 2);
+    }, inner.y);
+    await page.waitForTimeout(300);
+
     const offset = await element.boundingBox();
 
     return {
@@ -188,8 +198,10 @@ function answerState(page, name) {
         if (!input) {
             return {input: null, latex: null};
         }
-        const wrap = input.closest('.sme-input-wrap') || input.parentElement;
-        const field = wrap ? wrap.querySelector('.mq-editable-field') : null;
+        // The editor is inserted immediately before the input it replaces, not around it.
+        const wrap = input.previousElementSibling;
+        const field = wrap && wrap.classList.contains('sme-input-wrap')
+            ? wrap.querySelector('.mq-editable-field') : null;
         const MQ = window.MathQuill
             ? window.MathQuill.getInterface(window.MathQuill.getInterface.MAX || 2)
             : null;
@@ -219,9 +231,15 @@ function digits(text) {
  */
 async function typeInto(page, name, text) {
     const field = page.locator(
-        '.sme-input-wrap:has(input[name$="_' + name + '"]) .mq-editable-field'
+        '.sme-input-wrap:has(+ input[name$="_' + name + '"]) .mq-editable-field'
     ).first();
+    // The page has just been scrolled to the board, and scrolling back is animated: a click sent
+    // while the page was still moving landed on the board's iframe, and everything typed after it
+    // went there. Scroll first, let it settle, and do not type until the editor has the focus.
+    await field.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
     await field.click();
+    await expect(field.locator('textarea')).toBeFocused();
     await page.keyboard.press('Control+A');
     await page.keyboard.press('Backspace');
     await page.keyboard.type(text);

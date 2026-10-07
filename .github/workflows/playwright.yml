@@ -41,7 +41,8 @@ jobs:
   playwright:
     name: "Playwright smoke / ${{ inputs.moodle_branch || 'MOODLE_405_STABLE' }}"
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # A green run takes about ten minutes; a red one retries every failure with video and trace.
+    timeout-minutes: 35
     services:
       postgres:
         image: postgres:16
@@ -105,6 +106,14 @@ jobs:
           web=moodle; [ -d moodle/public ] && web=moodle/public
           cd "$web/local/stackmatheditor/tests/playwright"
           npm test
+      # The run page shows this without a sign-in: totals, and every test that did not simply
+      # pass, with its first error.
+      - name: Summarise
+        if: ${{ always() }}
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          cd "$web/local/stackmatheditor/tests/playwright"
+          node run-summary.js "Playwright" >> "$GITHUB_STEP_SUMMARY" || true
       - name: Collect report, videos and server log
         if: ${{ always() }}
         run: |

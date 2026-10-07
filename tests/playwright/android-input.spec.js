@@ -23,6 +23,7 @@
  * mobile viewport with touch, for each of the three ways a browser can deliver text:
  *
  *   Blink (Chrome, Opera, Edge, Brave on Android)  input events only, no usable keypress
+ *   Blink with a 229 keydown before the text         known gap in the fork, marked fixme
  *   Gecko (Firefox, Firefox Klar on Android)        keydown, keypress, input
  *   IME composition                                 compositionstart / update / end
  *
@@ -34,7 +35,7 @@ const {test, expect, devices} = require('@playwright/test');
 const {env, loginAs, open} = require('./helpers');
 
 test.use({...devices['Pixel 7']});
-test.describe.configure({mode: 'serial', timeout: 120000});
+test.describe.configure({mode: 'default', timeout: 120000});
 
 /**
  * Open an attempt with both editor types on the page.
@@ -58,6 +59,12 @@ async function attempt(page) {
 /**
  * Deliver text to a freshly focused editor the way a given engine's soft keyboard does.
  *
+ * The events come from the browser's own input pipeline (DevTools protocol), not from
+ * dispatchEvent: they are trusted, the browser changes the textarea itself and fires
+ * beforeinput/input in its own order. An earlier version of this spec built the events by hand;
+ * the editor ignored them although it accepts the real thing on a phone, so that version tested
+ * the imitation rather than the editor.
+ *
  * @param {import('@playwright/test').Page} page Playwright page.
  * @param {string} scope CSS selector of the editor wrap.
  * @param {string} text Characters to deliver.
@@ -65,53 +72,40 @@ async function attempt(page) {
  * @returns {Promise<void>}
  */
 async function softKeyboard(page, scope, text, engine) {
-    await page.evaluate(async({scope, text, engine}) => {
-        const wrap = document.querySelector(scope);
-        const textarea = wrap.querySelector('.mq-editable-field textarea');
-        textarea.focus();
+    await page.locator(`${scope} .mq-editable-field textarea`).first().focus();
 
-        const fire = (type, init) => textarea.dispatchEvent(
-            type.startsWith('key')
-                ? new KeyboardEvent(type, {bubbles: true, cancelable: true, ...init})
-                : type.startsWith('composition')
-                    ? new CompositionEvent(type, {bubbles: true, ...init})
-                    : new InputEvent(type, {bubbles: true, cancelable: true, ...init})
-        );
+    const cdp = await page.context().newCDPSession(page);
 
-        if (engine === 'ime') {
-            fire('compositionstart', {data: ''});
-            textarea.value = text;
-            fire('compositionupdate', {data: text});
-            fire('input', {inputType: 'insertCompositionText', data: text, isComposing: true});
-            fire('compositionend', {data: text});
-            return;
-        }
-
-        // A real keyboard delivers each character in a task of its own, so the editor's poller
-        // runs between them and takes one character at a time. Dispatching them all in one go
-        // left "x+1" in the textarea at once, which MathQuill reads as a paste and ignores - the
-        // first run of this spec failed on exactly that, not on the editor.
-        const tick = () => new Promise((resolve) => setTimeout(resolve, 40));
-
+    if (engine === 'ime') {
+        // A composition: the text is underlined while it is composed, then committed as a whole.
+        await cdp.send('Input.imeSetComposition',
+            {text, selectionStart: text.length, selectionEnd: text.length});
+        await cdp.send('Input.insertText', {text});
+    } else {
         for (const ch of text) {
             if (engine === 'gecko') {
-                fire('keydown', {key: ch});
-                fire('keypress', {key: ch, charCode: ch.charCodeAt(0)});
+                // Firefox on Android: keydown, keypress, input, keyup with the real key.
+                await page.keyboard.type(ch);
             } else {
-                // Blink on Android: keydown says "Unidentified" with keyCode 229, and no
-                // keypress follows. This is the sequence that used to lose the first characters.
-                fire('keydown', {key: 'Unidentified', keyCode: 229});
-                fire('beforeinput', {inputType: 'insertText', data: ch});
+                // Blink on Android: no keypress, and no keydown the editor can use - the
+                // character arrives as an insertText input and nothing else. This is the sequence
+                // that used to lose the first characters.
+                if (engine === 'blink229') {
+                    await cdp.send('Input.dispatchKeyEvent',
+                        {type: 'rawKeyDown', key: 'Unidentified', windowsVirtualKeyCode: 229});
+                }
+                await cdp.send('Input.insertText', {text: ch});
+                if (engine === 'blink229') {
+                    await cdp.send('Input.dispatchKeyEvent',
+                        {type: 'keyUp', key: 'Unidentified', windowsVirtualKeyCode: 229});
+                }
             }
-            textarea.value += ch;
-            fire('input', {inputType: 'insertText', data: ch});
-            if (engine === 'gecko') {
-                fire('keyup', {key: ch});
-            }
-            await tick();
+            // A person does not type three characters in one task.
+            await page.waitForTimeout(40);
         }
-    }, {scope, text, engine});
+    }
 
+    await cdp.detach();
     await page.waitForTimeout(800);
 }
 
@@ -131,8 +125,14 @@ function stackValue(page, scope) {
     }, scope);
 }
 
-for (const engine of ['blink', 'gecko', 'ime']) {
+for (const engine of ['blink', 'blink229', 'gecko', 'ime']) {
     test(`single-line editor accepts the first characters (${engine})`, async({page}) => {
+        // Known gap, in the MathQuill fork and not yet fixed: when a keydown with key
+        // "Unidentified" (keyCode 229) precedes the text, typedText() returns early - an upstream
+        // guard against a ChromeOS Ctrl-Shift-U quirk - and the character is dropped. The devices
+        // checked for #72 do not send that keydown; a keyboard that does would lose its input.
+        test.fixme(engine === 'blink229', 'MathQuill fork drops text after an "Unidentified" keydown');
+
         await attempt(page);
         const scope = '.que:nth-of-type(1) .sme-input-wrap';
         await page.evaluate((s) => {
@@ -178,13 +178,7 @@ test('a deletion is still a deletion on a soft keyboard', async({page}) => {
     });
 
     await softKeyboard(page, '[data-sme-target="del"]', 'ab', 'blink');
-    await page.evaluate(() => {
-        const textarea = document.querySelector('[data-sme-target="del"] .mq-editable-field textarea');
-        textarea.dispatchEvent(new KeyboardEvent('keydown', {bubbles: true, key: 'Backspace'}));
-        textarea.dispatchEvent(new InputEvent('input', {
-            bubbles: true, inputType: 'deleteContentBackward'
-        }));
-    });
+    await page.keyboard.press('Backspace');
     await page.waitForTimeout(600);
 
     // The input handler must not insert anything for a deletion; the keystroke path removes one
