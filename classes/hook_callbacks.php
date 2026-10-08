@@ -29,21 +29,10 @@ use local_stackmatheditor\output\configure_injector;
  */
 class hook_callbacks {
     /**
-     * Pages where the MathQuill editor is injected.
-     *
-     * Note: mod_adaptivequiz's attempt.php calls
-     *   $PAGE->set_url('/mod/adaptivequiz/view.php', ['cmid' => $cm->id])
-     * which results in pagetype 'mod-adaptivequiz-view'.  The additional
-     * is_adaptivequiz_attempt() guard prevents activation on the plain view page.
-     *
-     * @var string[]
-     */
-    /**
      * Pages where the editor is loaded.
      *
-     * Kept as a method rather than a constant since #50: the list also comes from
-     * context_resolver, which an administrator can extend for a question-engine consumer this
-     * plugin has never heard of.
+     * A method rather than a constant: the list also comes from context_resolver, which an
+     * administrator can extend for a question-engine consumer this plugin does not know.
      *
      * @return bool True when the current page may host an editable STACK input.
      */
@@ -103,12 +92,15 @@ class hook_callbacks {
     /**
      * Return true if the current page is one where the editor should run.
      *
-     * The page type only decides whether the bootstrap is loaded (#50). Whether an editable
+     * The page type only decides whether the bootstrap is loaded. Whether an editable
      * STACK input is actually there is decided in the browser, against the rendered DOM, so a
      * page that carries none costs a module load and nothing else.
      *
      * For mod-adaptivequiz-view, only the actual attempt page qualifies; the plain view page
-     * (student overview / teacher report) does not.
+     * (student overview / teacher report) does not. mod_adaptivequiz's attempt.php calls
+     *   $PAGE->set_url('/mod/adaptivequiz/view.php', ['cmid' => $cm->id])
+     * so the attempt carries the pagetype of the view page, and is_adaptivequiz_attempt() tells
+     * the two apart.
      *
      * @return bool
      */
@@ -190,7 +182,7 @@ class hook_callbacks {
             return;
         }
 
-        // Behind the page gate: no trace for pages this plugin does not touch (#53).
+        // Behind the page gate: no trace for pages this plugin does not touch.
         quiz_helper::dbg(
             'before_footer: page=' . $PAGE->pagetype
             . ' editor=' . ($iseditor ? 'Y' : 'N')
@@ -201,7 +193,7 @@ class hook_callbacks {
 
         // Editor injection (mod_quiz and mod_adaptivequiz).
         if ($iseditor) {
-            // Only what holds for the whole page is decided here (#80, #81): a question may
+            // Only what holds for the whole page is decided here: a question may
             // switch the editor on where its quiz leaves it off, and it can only do that if the
             // runtime is on the page to ask.
             if (!config_manager::page_may_need_editor()) {
@@ -212,6 +204,8 @@ class hook_callbacks {
                     editor_injector::inject($cmid);
                     quiz_helper::dbg('editor injected: cmid=' . $cmid);
                 } catch (\Throwable $e) {
+                    // Page boundary: the attempt page works without the editor. Defects are
+                    // reported by caught(), everything else leaves the plain STACK input.
                     quiz_helper::caught($e, 'editor injection');
                 }
             }
@@ -237,6 +231,7 @@ class hook_callbacks {
                     configure_injector::inject($cmid);
                 }
             } catch (\Throwable $e) {
+                // Page boundary: the quiz page works without the configuration link.
                 quiz_helper::caught($e, 'configure injection');
             }
         }

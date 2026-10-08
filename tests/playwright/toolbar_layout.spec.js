@@ -19,7 +19,9 @@
  * Opening Moodle's navigation drawer leaves the viewport alone and takes a third of the width
  * away from the question. A viewport media query does not notice that; a container query does.
  * These tests measure what is on screen: no button beyond the right edge of its container, and
- * no group of five or fewer torn apart.
+ * no group of five or fewer, no cluster of a larger group torn apart while it fits on a line -
+ * at one width and across every width from 700 down to 300 pixels. What is wider than the whole
+ * toolbar on its own breaks inside instead of reaching out of it.
  *
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -232,6 +234,57 @@ test('a narrow container wraps the toolbar without a narrow window', async({page
     expect(narrow.brokenGroups, JSON.stringify(narrow.brokenGroups)).toEqual([]);
 });
 
+test('no group and no cluster breaks while it fits, at any container width', async({page}) => {
+    await openAttempt(page);
+
+    // One width is a sample; the fonts of the machine decide where a group would land. A group
+    // that once broke only between 425 and 431 px of question width - by the few pixels its own
+    // separator took - passed locally and failed on the CI runner. So every width from wide to
+    // very narrow, in small steps: whatever fits on a line stays on it.
+    const failures = await page.evaluate(async() => {
+        const frame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const room = (toolbar) => {
+            const style = getComputedStyle(toolbar);
+            return toolbar.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+        };
+        const span = (buttons, gap) => buttons.reduce((sum, b) => sum + b.getBoundingClientRect().width, 0)
+            + gap * (buttons.length - 1);
+        const lines = (buttons) => new Set(buttons.map((b) => Math.round(b.getBoundingClientRect().top))).size;
+        const found = [];
+
+        for (let width = 700; width >= 300; width -= 4) {
+            document.querySelectorAll('.que.stack').forEach((question) => {
+                question.style.maxWidth = width + 'px';
+            });
+            await frame();
+            document.querySelectorAll('.sme-toolbar').forEach((toolbar) => {
+                const free = room(toolbar);
+                const bar = toolbar.getBoundingClientRect();
+                toolbar.querySelectorAll('button').forEach((button) => {
+                    const box = button.getBoundingClientRect();
+                    if (box.right > bar.right + 1 || box.left < bar.left - 1) {
+                        found.push(width + 'px: outside the toolbar: ' + button.getAttribute('aria-label'));
+                    }
+                });
+                toolbar.querySelectorAll('.sme-tb-group, .sme-tb-cluster').forEach((part) => {
+                    const buttons = Array.from(part.querySelectorAll(':scope > button, :scope > * > button'));
+                    if (part.classList.contains('sme-tb-group-wrap') || buttons.length < 2) {
+                        return;
+                    }
+                    const gap = parseFloat(getComputedStyle(part).columnGap) || 0;
+                    if (lines(buttons) > 1 && span(buttons, gap) <= free) {
+                        found.push(width + 'px: broken although it fits: '
+                            + (part.getAttribute('data-group') || part.className));
+                    }
+                });
+            });
+        }
+        return Array.from(new Set(found));
+    });
+
+    expect(failures, failures.slice(0, 20).join('\n')).toEqual([]);
+});
+
 test('the ends of a large group stay together', async({page}) => {
     await openAttempt(page);
 
@@ -245,24 +298,51 @@ test('the ends of a large group stay together', async({page}) => {
     const clusters = await page.evaluate(() => {
         const broken = [];
 
+        const outside = [];
+        let together = 0;
         document.querySelectorAll('.sme-tb-cluster').forEach((cluster) => {
             const buttons = Array.from(cluster.querySelectorAll('button'));
             if (buttons.length < 2) {
                 return;
             }
+            const toolbar = cluster.closest('.sme-toolbar');
+            const style = getComputedStyle(toolbar);
+            const room = toolbar.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+            const gap = parseFloat(getComputedStyle(cluster).columnGap) || 0;
+            const width = buttons.reduce((sum, b) => sum + b.getBoundingClientRect().width, 0)
+                + gap * (buttons.length - 1);
             const tops = new Set(buttons.map((b) => Math.round(b.getBoundingClientRect().top)));
+            // A cluster wider than the whole toolbar has to break rather than reach out of it.
+            if (width > room) {
+                return;
+            }
+            together += 1;
             if (tops.size > 1) {
                 broken.push(cluster.className + ' with ' + buttons.length + ' buttons');
             }
         });
+        document.querySelectorAll('.sme-toolbar').forEach((toolbar) => {
+            const bar = toolbar.getBoundingClientRect();
+            toolbar.querySelectorAll('.sme-tb-cluster button').forEach((button) => {
+                const box = button.getBoundingClientRect();
+                if (box.right > bar.right + 1 || box.left < bar.left - 1) {
+                    outside.push(button.getAttribute('aria-label'));
+                }
+            });
+        });
 
         return {
             broken: broken,
+            outside: outside,
+            together: together,
             clusters: document.querySelectorAll('.sme-tb-cluster').length
         };
     });
 
-    // Only groups of more than five buttons have clusters; the fixture has several.
+    // Only groups of more than five buttons have clusters; the fixture has several, and most of
+    // them fit even at this width.
     expect(clusters.clusters).toBeGreaterThan(0);
+    expect(clusters.together).toBeGreaterThan(0);
     expect(clusters.broken, JSON.stringify(clusters.broken)).toEqual([]);
+    expect(clusters.outside, JSON.stringify(clusters.outside)).toEqual([]);
 });

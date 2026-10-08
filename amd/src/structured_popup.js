@@ -14,7 +14,7 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * Toolbar popups for matrix and vector dimensions (#62).
+ * Toolbar popups for matrix and vector dimensions.
  *
  * The matrix popup is the grid known from office applications: moving over a cell highlights
  * the block from (1,1) to that cell, and the chosen size is also written out as text, because
@@ -43,7 +43,7 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
      * Strings the popup shows, replaced by the caller with the language pack values
      * (definitions::get_popup_strings()). Until then each holds Moodle's marker for a missing
      * string rather than English text, so a string that does not arrive is visible in every
-     * language instead of silently English (#92).
+     * language instead of silently English.
      *
      * @type {Object}
      */
@@ -156,7 +156,7 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
      * @param {HTMLElement} owner Button that opens the popup.
      * @param {Function} onChoose Called with the structured model.
      * @param {?Object} current Size of the structure being changed, or null for a new one.
-     * @param {number} max Largest size the site, quiz or question allows (#76).
+     * @param {number} max Largest size the site, quiz or question allows.
      * @returns {HTMLElement} The popup element.
      */
     function openMatrixGrid(owner, onChoose, current, max) {
@@ -285,7 +285,7 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
         });
 
         /**
-         * The cell under a pointer, wherever the pointer currently is (#75).
+         * The cell under a pointer, wherever the pointer currently is.
          *
          * Drag selection cannot rely on the event target: once the pointer is captured, every
          * move is reported on the element the gesture started on.
@@ -366,7 +366,7 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
         register(element, owner);
 
         // An existing matrix opens on its own size, so the grid shows what is there and the
-        // student changes it rather than starting over (#62).
+        // student changes it rather than starting over.
         var startrows = current && current.rows ? Math.min(size, current.rows) : 1;
         var startcolumns = current && current.columns ? Math.min(size, current.columns) : 1;
         highlight(startrows, startcolumns);
@@ -387,7 +387,7 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
      * @param {HTMLElement} owner Button that opens the popup.
      * @param {Function} onChoose Called with the structured model.
      * @param {?Object} current Size of the structure being changed, or null for a new one.
-     * @param {number} max Largest dimension the site, quiz or question allows (#76).
+     * @param {number} max Largest dimension the site, quiz or question allows.
      * @returns {HTMLElement} The popup element.
      */
     function openVectorChooser(owner, onChoose, current, max) {
@@ -493,11 +493,11 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
         });
 
         /**
-         * The gesture pad (#75).
+         * The gesture pad.
          *
          * One drag decides both things a vector needs: the direction says whether it is a row or
-         * a column, the distance says how long it is. The buttons below stay exactly as they
-         * were - a gesture is an addition, never the only way in.
+         * a column, the distance says how long it is. The buttons below remain fully usable - a
+         * gesture is an addition, never the only way in.
          */
         var pad = document.createElement('div');
         var padcells = [];

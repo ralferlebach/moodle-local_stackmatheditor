@@ -14,7 +14,7 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * Structured input model for matrices and vectors (#62).
+ * Structured input model for matrices and vectors.
  *
  * The editor does not build complex structures by writing a LaTeX string into MathQuill. It
  * builds a model first, validates it, and only then renders it. The model is also what the
@@ -33,7 +33,7 @@ define([], function() {
     'use strict';
 
     /**
-     * Largest structure the editor creates, for the UI and the model alike (#62 §11).
+     * Largest structure the editor creates, for the UI and the model alike.
      *
      * @type {number}
      */
@@ -71,7 +71,7 @@ define([], function() {
     }
 
     /**
-     * Clamp a configured maximum into what the editor can actually offer (#76).
+     * Clamp a configured maximum into what the editor can actually offer.
      *
      * The server resolves the hierarchy and sends a number; this is the last guard, so that a
      * value that somehow arrives broken cannot produce a chooser with no cells or with hundreds.
@@ -90,7 +90,7 @@ define([], function() {
     }
 
     /**
-     * Which way a pointer gesture is going (#75).
+     * Which way a pointer gesture is going.
      *
      * A vector is a row or a column, and the drag decides which: the axis the pointer travelled
      * furthest along wins. A gesture that has barely moved has no direction yet, and saying so is
@@ -116,7 +116,7 @@ define([], function() {
     }
 
     /**
-     * How many cells a gesture of this length covers (#75).
+     * How many cells a gesture of this length covers.
      *
      * @param {number} distance Distance in pixels along the dominant axis.
      * @param {number} step Size of one cell in pixels, including its gap.
@@ -300,7 +300,7 @@ define([], function() {
 
 
     /**
-     * Coordinate separators a point may be written with (#63).
+     * Coordinate separators a point may be written with.
      *
      * Display only: the separator changes what a student sees and types, never the semantics.
      *

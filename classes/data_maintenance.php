@@ -21,11 +21,11 @@ namespace local_stackmatheditor;
  *
  * Configuration rows with cmid > 0 belong to exactly one course module. When that course module
  * is deleted, its rows are meaningless and still carry a personal reference (usermodified), so they
- * are removed together with the course module (#85). Rows whose module context no longer exists
- * are called orphans; they can be left over from installations that ran without the observer, or
- * from course deletions, which remove course modules without a per-module event.
+ * are removed together with the course module. Rows whose module context no longer exists are
+ * called orphans; they can stem from course deletions, which remove course modules without a
+ * per-module event, or from sites on which the observer was not yet active.
  *
- * The same class repairs duplicate scope rows (#87): one row per (cmid, questionbankentryid) is
+ * The same class repairs duplicate scope rows: one row per (cmid, questionbankentryid) is
  * kept by the application rather than a unique index (docs/DATA-INTEGRITY.md), and this class
  * restores that invariant on existing data. The upgrade to 2026100800 runs both repairs once.
  *
@@ -62,7 +62,7 @@ class data_maintenance {
     /**
      * Delete all configuration rows of one course module.
      *
-     * @param int $cmid Course module id; 0 (the legacy global scope) is never touched.
+     * @param int $cmid Course module id; 0 (the global scope) is never touched.
      * @return int Number of deleted rows.
      */
     public static function delete_for_cmid(int $cmid): int {

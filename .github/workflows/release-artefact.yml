@@ -114,22 +114,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Check-runs only list what ran. The full matrix (main CI) and the release evidence
-          # (which itself requires Playwright, NVDA and the load runs, docs/RELEASE-CHECKLIST.md)
-          # have to have run on exactly this commit, and green.
-          sha="${{ github.sha }}"
-          missing=0
-          for wf in moodle-plugin-ci-main.yml release-evidence.yml; do
-            status=$(gh run list --repo "${{ github.repository }}" --workflow "$wf" --commit "$sha" \
-              --json conclusion --jq '.[0].conclusion' 2>/dev/null || true)
-            case "$status" in
-              success) echo "  $wf: success" ;;
-              "")      echo "  $wf: NIE auf diesem Commit gelaufen"; missing=1 ;;
-              *)       echo "  $wf: $status"; missing=1 ;;
-            esac
-          done
-          if [ "$missing" -ne 0 ]; then
-            echo "Starten Sie die fehlenden Workflows auf $sha und taggen Sie danach erneut."
+          # Check-runs only list what ran. The gates the release needs - main CI, Playwright on
+          # 4.5 and 5.3, NVDA, k6, JMeter - and the release evidence have to have run on exactly
+          # this commit, finished, and be green. The gates are checked directly, not only through
+          # the evidence: an evidence run made before they finished proves nothing.
+          rc=0
+          bash plugin/.github/required-runs.sh "${{ github.repository }}" "${{ github.sha }}" release-evidence.yml || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "Starten Sie die fehlenden Workflows auf ${{ github.sha }}, warten Sie sie ab und taggen Sie danach erneut."
             exit 1
           fi
 
@@ -329,6 +321,13 @@ jobs:
           fi
           echo "Release $release ist als MATURITY_STABLE deklariert."
 
+      # What no workflow can check - the NVDA judgement, the Android devices - and the residual
+      # risks accepted instead of them: a stable release waits until every item of
+      # docs/RELEASE-SIGNOFF.json is done or accepted, with a date and a name.
+      - name: Require the manual sign-off of a stable release
+        if: ${{ startsWith(github.ref, 'refs/tags/') && steps.version.outputs.maturity == '200' }}
+        run: python3 plugin/.github/check-signoff.py plugin --complete
+
       - name: Keep the artefact for the install check
         id: intern
         uses: actions/upload-artifact@v4
@@ -484,14 +483,19 @@ jobs:
           php helpers/tests/concurrency/concurrent_save.php "$web" --workers=12 --rounds=30
 
   upgrade:
-    name: Upgrade the published release to this ZIP / ${{ matrix.moodle }}
+    name: Upgrade the published release to this ZIP / ${{ matrix.moodle }} / ${{ matrix.database }}
     needs: artefact
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        moodle: [MOODLE_405_STABLE, MOODLE_503_STABLE]
+        # The upgrade step rewrites data with SQL of its own (orphans, duplicates), so it runs on
+        # both database families; the newest Moodle on PostgreSQL, the LTS on both.
+        include:
+          - {moodle: MOODLE_405_STABLE, database: pgsql}
+          - {moodle: MOODLE_405_STABLE, database: mariadb}
+          - {moodle: MOODLE_503_STABLE, database: pgsql}
     services:
       postgres:
         image: postgres:17
@@ -504,6 +508,15 @@ jobs:
           --health-timeout 5s --health-retries 10
         ports:
           - 5432:5432
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: moodle
+        ports:
+          - 3306:3306
+        options: --health-cmd="mariadb-admin ping -pmoodle" --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      DB_TYPE: ${{ matrix.database }}
     steps:
       - name: Check out the helper scripts
         uses: actions/checkout@v6
@@ -518,7 +531,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          extensions: pgsql, zip, gd, intl, soap, mbstring, curl, xml, exif
+          extensions: pgsql, mysqli, zip, gd, intl, soap, mbstring, curl, xml, exif
           ini-values: max_input_vars=5000
           coverage: none
 
@@ -534,6 +547,14 @@ jobs:
           mkdir unpacked
           unzip -q artefact/*.zip -d unpacked
           test -f unpacked/stackmatheditor/version.php
+
+      - name: Create the MariaDB database with Moodle's character set
+        if: ${{ matrix.database == 'mariadb' }}
+        run: |
+          mysql -h 127.0.0.1 -P 3306 -uroot -pmoodle -e \
+            "CREATE DATABASE moodle DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+             CREATE USER 'moodle'@'%' IDENTIFIED BY 'moodle';
+             GRANT ALL PRIVILEGES ON moodle.* TO 'moodle'@'%';"
 
       # The newest version the Moodle plugins directory publishes below the ZIP's version - what
       # a site administrator actually has installed.

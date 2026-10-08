@@ -192,10 +192,12 @@ function requireFixture(test, present, what) {
 }
 
 /**
- * Skip a test for a reason that is allowed in every run, also in strict mode.
+ * Skip a test for a reason that is legitimate on some sites, also in strict mode.
  *
  * The annotation is what run-summary.js accepts as an intended skip; every other skip, and every
- * fixme, fails the summary gate in strict mode.
+ * fixme, fails the summary gate in strict mode. A run that has to prove what such a test checks -
+ * the Moodle 5.3 row of the Playwright workflow for the dark colour mode - sets
+ * SME_NO_OPTIONAL_SKIPS=1, and the skip becomes a failure.
  *
  * @param {Object} test The Playwright test object.
  * @param {boolean} condition Skip when true.
@@ -205,6 +207,9 @@ function requireFixture(test, present, what) {
 function optionalSkip(test, condition, reason) {
     if (!condition) {
         return;
+    }
+    if (process.env.SME_NO_OPTIONAL_SKIPS === '1') {
+        throw new Error(`This run has to execute the test, but it would skip: ${reason}.`);
     }
     test.info().annotations.push({type: 'optional-skip', description: reason});
     test.skip(true, reason);

@@ -27,17 +27,31 @@ from". It records what is being
 certified (commit, version, vendored MathQuill with checksums), runs a dependency audit, builds
 the release archive and writes the checklist of what a human still has to confirm.
 
-Start these on the same commit **first**; the evidence workflow now checks them and fails when
-one is missing or not green, so it is run last rather than first:
+Start these on the same commit **first and wait until they have finished**; the evidence
+workflow checks them and fails when one is missing, still running or not green, so it is run
+last rather than first:
 
-* `moodle-plugin-ci-main.yml` - code gates across the support matrix, upgrade included
-* `playwright.yml` - browser path, accessibility included (200 and 400 per cent zoom)
-* `a11y-nvda.yml` - started by hand; the NVDA transcripts of this commit
+* `moodle-plugin-ci-main.yml` - code gates across the support matrix, upgrade from the
+  published build on PostgreSQL and MariaDB included; its job "CI complete" has to be green
+* `playwright.yml` - browser path, accessibility included (200 and 400 per cent zoom), started
+  with the default `moodle_branch: all`: one job for Moodle 4.5 and one for 5.3, both have to be
+  green. On 5.3 the dark colour mode exists, so its tests run there and may not skip
+* `a11y-nvda.yml` - the NVDA transcripts of this commit
 * `load-k6.yml` and `load-jmeter.yml` - performance smoke
 
+The check is `.github/required-runs.sh`: per workflow the newest run whose `head_sha` is exactly
+this commit; it has to be completed with conclusion success, and for main CI and Playwright the
+named jobs have to be among its green jobs. The result is the script's exit code and the last
+line of `required-runs.txt` (`RESULT: PASS` or `RESULT: FAIL`), so the file and the outcome of
+the workflow cannot disagree.
+
+**Do not cite release evidence run 37797946872** (commit bdc4a19, 8 October 2026). It ended
+green although main CI was still running and Playwright had not run: the old check set its
+result inside a `{ ... } | tee` block, a subshell, and lost it. Evidence for build 2026100800
+has to be produced again with the corrected workflow.
+
 The evidence lists the commit, the SHA-256 of the release archive and the links of these runs,
-and leaves the lines to sign by hand: the NVDA judgement and the Android devices (section 5),
-and that exactly this archive is published (section 3).
+and the state of the manual sign-off (section 5).
 
 It also stops on a high or critical dependency finding. The audit itself still runs to
 completion, so the evidence records what was found either way.
@@ -51,19 +65,28 @@ the honest signal, not a gate with a key.
 The gate sits where a release is made:
 
 * `release-artefact.yml` runs on a pushed tag `v<release>`. It refuses a tag that does not match
-  `$plugin->release`, a stable tag on a build that is not declared stable, and a commit whose
-  checks, main CI or release evidence are not green. It then builds the ZIP and tests exactly
-  that file - installed into fresh 4.5 and 5.3 sites and smoked (configuration, backup and
-  restore, deletion, concurrent writes, CLI), installed as an upgrade over the build the plugins
-  directory published before, PHPUnit and Behat run from the archive - and only then publishes
-  it with its SHA-256.
+  `$plugin->release`, a stable tag on a build that is not declared stable, a commit whose
+  check-runs are not all green, a commit without the green gates of section 2 and a green
+  release evidence (checked directly with `.github/required-runs.sh`, not only through the
+  evidence), and a stable tag while an item of `docs/RELEASE-SIGNOFF.json` is open. It then
+  builds the ZIP and tests exactly that file - installed into fresh 4.5 and 5.3 sites and
+  smoked (configuration, backup and restore, deletion, concurrent writes, CLI), installed as an
+  upgrade over the build the plugins directory published before (4.5 on PostgreSQL and MariaDB,
+  5.3 on PostgreSQL), PHPUnit and Behat run from the archive - and only then publishes it with
+  its SHA-256.
 * `release-guard.yml` turns a GitHub release that was published by hand back into a draft and
   fails, so a release cannot appear past the gate by accident.
 
-What remains is the upload to the Moodle plugins directory, which is done by hand and which no
-workflow can see. Upload the ZIP of the GitHub release and nothing else, and compare its SHA-256
-with the published one; the evidence has a line for that. The remaining risk is recorded in
-`docs/RESIDUAL-RISKS.md` (R2).
+Two separate steps, in this order:
+
+1. **GitHub release** - automatic, by the tag, through the gate above.
+2. **Moodle plugins directory** - by hand, after step 1. Download the ZIP and its `.sha256` from
+   the GitHub release, run `sha256sum -c <zip>.sha256`, upload exactly that ZIP, and note the
+   SHA-256 in the release issue. No other archive - not one built locally, not GitHub's
+   automatic source archive.
+
+No workflow can see step 2; that is residual risk R2 in `docs/RESIDUAL-RISKS.md`, to be accepted
+in `docs/RELEASE-SIGNOFF.json` before the tag.
 
 ## 4. Screen reader evidence
 
@@ -85,7 +108,9 @@ pixel targets, keyboard reach and a visible focus.
 
 ## 5. What no workflow can do for you
 
-`docs/MANUAL-ACCEPTANCE.md` has the steps and the tables to fill in.
+`docs/MANUAL-ACCEPTANCE.md` has the steps and the tables to fill in; the result goes into
+`docs/RELEASE-SIGNOFF.json` (status `done` or `accepted`, `date`, `by`), which
+`release-artefact.yml` checks before it publishes a stable release.
 
 * The judgement half of the accessibility sample: read the transcripts from section 4 and say
   whether they describe something a person can work with. Record date, browser and NVDA version.
@@ -93,9 +118,9 @@ pixel targets, keyboard reach and a visible focus.
   and do not need repeating by hand.
 * Real Android devices: the first soft-keyboard input in a fresh field, in Chrome, Opera,
   Firefox and Firefox Klar, and with a keyboard other than Gboard.
-* The decision on every open P0 and P1: closed, or accepted as a residual risk with a reason, a
-  name and a date in `docs/RESIDUAL-RISKS.md`. An open, unexplained P1 must not sit quietly next
-  to a stable release.
+* The decision on every open P0 and P1: closed, or accepted as a residual risk - the reason in
+  `docs/RESIDUAL-RISKS.md`, the name and the date in `docs/RELEASE-SIGNOFF.json`. An open,
+  unexplained P1 cannot sit next to a stable release: the tag is refused.
 
 ## 6. Only then: flip the release metadata
 

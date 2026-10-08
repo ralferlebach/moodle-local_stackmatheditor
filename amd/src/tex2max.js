@@ -84,7 +84,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
      * Maxima function names that are always recognised, independent of the
      * server-side definitions. Merged with defs.functionNames so that a
      * missing or partial definitions payload can never turn a function call
-     * such as sqrt(x) into an implicit product (s*q*r*t*(x), see #39).
+     * such as sqrt(x) into an implicit product (s*q*r*t*(x)).
      *
      * @type {string[]}
      */
@@ -93,7 +93,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
         'arcsin', 'arccos', 'arctan', 'asin', 'acos', 'atan',
         'sinh', 'cosh', 'tanh', 'binomial', 'integrate', 'diff',
-        // Maxima functions the editor has to know as complete tokens (#61): without them
+        // Maxima functions the editor has to know as complete tokens: without them
         // max(x,y) picks up an implicit multiplication star before the bracket.
         'max', 'min'
     ];
@@ -103,9 +103,9 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
      *
      * Converting a control word yields a bare Maxima word (\sqrt{x} becomes
      * sqrt(x), \pi becomes pi). Without a boundary that word fuses with
-     * whatever precedes it: a\sqrt{b} became the identifier "asqrt", and
-     * \pm\sqrt{...} became "\pmsqrt", which the \pm rule no longer
-     * matched and single-variable mode split into p*m*s*q*r*t (#39).
+     * whatever precedes it: a\sqrt{b} would become the identifier "asqrt", and
+     * \pm\sqrt{...} would become "\pmsqrt", which the \pm rule does not
+     * match and single-variable mode would split into p*m*s*q*r*t.
      * The marker is skipped by the tokenizer and resolved at the very end.
      *
      * @type {string}
@@ -113,7 +113,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     var BOUNDARY = '\uE000';
 
     /**
-     * Marker for a space the user typed on purpose (#64).
+     * Marker for a space the user typed on purpose.
      *
      * Distinct from BOUNDARY: a boundary is the converter's own token separator and may
      * disappear, while this one is user input and always ends up as a space in the CAS
@@ -605,19 +605,19 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Marker for the cross product between the LaTeX pass and the Maxima pass (#34).
+     * Marker for the cross product between the LaTeX pass and the Maxima pass.
      *
      * @type {string}
      */
     var CROSS_MARKER = '\uE004';
 
     /**
-     * Turn the cross product into what Maxima can evaluate (#34).
+     * Turn the cross product into what Maxima can evaluate.
      *
      * There is no cross product function in Maxima or in STACK. The operator is `~` from the
      * vect package, and it only produces a result inside express(), so `a x b` becomes
      * `express(a ~ b)`. Nothing else has to be defined in the question - `load("vect");` is the
-     * whole prerequisite, and #66 hides the button where that line is missing.
+     * whole prerequisite, and the cross product button is hidden where that line is missing.
      *
      * Runs on the finished Maxima string, where the operands are plain: an identifier, a number,
      * a bracketed group or a function call. Innermost first, so a nested product becomes
@@ -764,7 +764,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Convert the elementary geometry notation to STACK's geometry functions (#63).
+     * Convert the elementary geometry notation to STACK's geometry functions.
      *
      * Only the three constructs that have a documented counterpart in STACK's geometry.mac are
      * converted:
@@ -805,17 +805,17 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // A point: coordinates in brackets, separated by the configured separator. The name in
         // front is a label and does not travel to the CAS.
         //
-        // The brackets are matched structurally (#79): coordinates are ordinary expressions and
-        // may contain function calls of their own, and a pattern that forbids inner brackets
-        // does not reject P(f(x)|g(x)) - it leaves it alone, so a point reaches the CAS as a
-        // function call with a logical or inside it.
+        // The brackets are matched structurally: coordinates are ordinary expressions and
+        // may contain function calls of their own. A pattern that forbids inner brackets
+        // would not reject P(f(x)|g(x)) but leave it alone, so the point would reach the CAS
+        // as a function call with a logical or inside it.
         s = convertPointNotation(s, separator);
 
         return s;
     }
 
     /**
-     * UI label of each differential operator, by semantic id (#45).
+     * UI label of each differential operator, by semantic id.
      *
      * The label is what the student sees; the CAS name comes from the site settings. "rot" is
      * the German name for what Maxima calls curl, and neither becomes the other by accident.
@@ -829,7 +829,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     };
 
     /**
-     * Convert the differential operators to their configured CAS function (#45).
+     * Convert the differential operators to their configured CAS function.
      *
      * An operator that has no configured function is reported through the problem channel
      * instead of being written out: "rot(F)" would be an identifier the CAS does not know, and a
@@ -864,8 +864,8 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
 
             s = s.replace(applied, operators[semantic] + '$1');
 
-            // What is left has no operand in brackets - an answer written with the older,
-            // display-only buttons. "grad f" is not a CAS call, so it is reported.
+            // What is left has no operand in brackets, such as a stored answer written with the
+            // legacy display-only buttons. "grad f" is not a CAS call, so it is reported.
             bare.lastIndex = 0;
             if (bare.test(s)) {
                 bare.lastIndex = 0;
@@ -903,7 +903,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
      * the same as |...|.
      *
      * An empty cell is an incomplete editor state, not a value: it is reported through the
-     * problem channel (#44) instead of being padded with a zero, which would silently change the
+     * problem channel instead of being padded with a zero, which would silently change the
      * answer.
      *
      * @param {string} s Input.
@@ -1040,7 +1040,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Replace the LaTeX commands of the central operator table (#35).
+     * Replace the LaTeX commands of the central operator table.
      *
      * @param {string} s LaTeX string.
      * @returns {string} String with markers or Maxima operators.
@@ -1171,7 +1171,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Maxima form of one set relation (#35). Proper subsets are a logical
+     * Maxima form of one set relation. Proper subsets are a logical
      * statement and therefore use "and", not the structural nounand.
      *
      * @param {string} name Relation name from the operator table.
@@ -1296,7 +1296,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Convert the operator markers of one bracket level, innermost first (#35).
+     * Convert the operator markers of one bracket level, innermost first.
      *
      * ⇔ becomes the logical conjunction of both implications and ⇐ a swapped
      * implication, because STACK knows neither "iff" nor "impliedby".
@@ -1342,7 +1342,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Turn set/logic operator markers into STACK-valid Maxima (#35).
+     * Turn set/logic operator markers into STACK-valid Maxima.
      *
      * @param {string} s Maxima string that may contain operator markers.
      * @returns {string} Converted string.
@@ -1366,7 +1366,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
 
     /**
      * Expand plus-minus (±) and minus-plus (∓) into two coupled alternatives
-     * joined by STACK's non-simplifying "nounor" (#30).
+     * joined by STACK's non-simplifying "nounor".
      *
      * The signs are coupled, not combined: variant A reads ± as + and ∓ as -,
      * variant B reads ± as - and ∓ as +. "x=a±b∓c" therefore yields exactly
@@ -1375,7 +1375,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
      *
      * A "+" that ends up in unary position (start, after a relation, "(", ","
      * or "[") is dropped from both alternatives - for ± that is the first, for
-     * ∓ the second one (#49); it carries no meaning and must never read like
+     * ∓ the second one; it carries no meaning and must never read like
      * "+x = ...". A binary "+" is never touched.
      *
      * Both alternatives are wrapped in brackets so that "nounor" never binds
@@ -1395,7 +1395,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         v1 = s.replace(/\u00b1/g, '+').replace(/\u2213/g, '-');
         v2 = s.replace(/\u00b1/g, '-').replace(/\u2213/g, '+');
 
-        // Symmetric (#49): the positive alternative is v1 for ± but v2 for ∓.
+        // Symmetric: the positive alternative is v1 for ± but v2 for ∓.
         v1 = stripUnaryPlus(v1);
         v2 = stripUnaryPlus(v2);
 
@@ -1403,7 +1403,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Operator names MathQuill recognises while typing (#58, #60).
+     * Operator names MathQuill recognises while typing.
      *
      * MathQuill scans every contiguous run of letters and un-italicises any operator name it
      * finds inside it, at any position. Typing "Umax" therefore produces the LaTeX "U\\max ",
@@ -1437,20 +1437,20 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     var AUTO_OPERATOR_NAMES = buildAutoOperatorNames();
 
     /**
-     * Re-join operator names that MathQuill split out of a longer identifier (#58, #60).
+     * Re-join operator names that MathQuill split out of a longer identifier.
      *
      * The editor cannot tell "Umax" (one variable) from "U max" (a product) once MathQuill has
      * turned the input into "U\\max ". The deciding question is whether the operator name is
      * applied to anything: a name followed by an opening delimiter is a function call and stays
      * one, everything else is part of the identifier the user typed.
      *
-     *     U\\max              -> Umax          (one identifier, #58)
+     *     U\\max              -> Umax          (one identifier)
      *     \\max imum          -> maximum       (one identifier)
      *     a\\sin\\left(x\\right) -> unchanged    (a times sin of x)
      *     \\max\\left(a,b\\right) -> unchanged    (the function max)
      *
      * This runs before markControlWords(), so a re-joined name never gets a token boundary and
-     * can no longer be separated by resolveBoundaries() or split by the variable-mode logic.
+     * cannot be separated later by resolveBoundaries() or split by the variable-mode logic.
      *
      * @param {string} s LaTeX input.
      * @returns {string} Input with glued operator names merged into their identifier.
@@ -1479,7 +1479,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
             }
 
             // The name fills a subscript or superscript group on its own: typing "U_max" gives
-            // U_{\max}, which is a label, not a function applied to something (#61).
+            // U_{\max}, which is a label, not a function applied to something.
             if (before === '{' && /^\}/.test(after)) {
                 return name;
             }
@@ -1576,7 +1576,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Convert and report structures that cannot be serialised yet (#44).
+     * Convert and report structures that cannot be serialised yet.
      *
      * An integral without a (simple) integration variable is a visible but incomplete editor
      * state, not a CAS expression: no "integrate(expr)" is ever invented. In that case maxima is
@@ -1626,7 +1626,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Turn point notation into a Maxima list, with bracket-aware coordinates (#79).
+     * Turn point notation into a Maxima list, with bracket-aware coordinates.
      *
      * @param {string} s LaTeX with \left/\right still in place.
      * @param {string} separator The configured coordinate separator.
@@ -1723,10 +1723,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Replace the innermost pair of matching delimiters, repeatedly (#79).
+     * Replace the innermost pair of matching delimiters, repeatedly.
      *
      * A non-greedy regex ends at the first closing delimiter it can find, not at the one that
-     * belongs to the opening it started from: `\left|\left|x\right|\right|` came apart into
+     * belongs to the opening it started from: `\left|\left|x\right|\right|` would come apart into
      * `abs()x abs()`. Working from the inside out gives every pair its own partner, because the
      * first closing delimiter always belongs to the last opening before it.
      *
@@ -1763,9 +1763,9 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     /**
      * Replace every occurrence of a LaTeX command with brace arguments, however deeply nested.
      *
-     * The regexes this replaces could see one level of braces inside an argument and no more, so
-     * `\sqrt{\sqrt{x}}` lost the inner braces and reached the CAS as `sqrt(sqrtx)` - a different
-     * expression that still looks plausible (#79). Reading the argument with a bracket counter
+     * A regex sees only a fixed depth of braces inside an argument; one that allows a single level
+     * strips the inner braces of `\sqrt{\sqrt{x}}` and hands the CAS `sqrt(sqrtx)` - a different
+     * expression that still looks plausible. Reading the argument with a bracket counter
      * and repeating until nothing changes is closed under nesting at any depth.
      *
      * @param {string} s LaTeX.
@@ -2009,7 +2009,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Replace every \\int … d<var> by a placeholder for integrate(…) (#44).
+     * Replace every \\int … d<var> by a placeholder for integrate(…).
      *
      * @param {string} s LaTeX.
      * @param {Object} opts Conversion options.
@@ -2127,7 +2127,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Replace every Leibniz derivative operator with operand by a placeholder for diff(…) (#46).
+     * Replace every Leibniz derivative operator with operand by a placeholder for diff(…).
      *
      * ∂/∂x (E) → diff(E,x); ∂ⁿ/∂xⁿ (E) → diff(E,x,n); ∂ᴺ/(∂xⁿ ∂yᵐ) (E) → diff(E,x,n,y,m).
      * The operand must be bracketed (no implicit scope rule); a numerator order must equal the
@@ -2230,7 +2230,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // stack mode ("gamma (x)", "epsilon _0").
         s = s.replace(/(\\[a-zA-Z]+)\s+(?=[^A-Za-z0-9\s])/g, '$1');
         // "det(A)" is what the button writes and what a student types; Maxima calls it
-        // determinant() (#45). A variable named det is left alone: only a call counts.
+        // determinant(). A variable named det is left alone: only a call counts.
         s = s.replace(/(^|[^A-Za-z0-9_%])det(\s*(?:\\left)?\()/g, '$1determinant$2');
         // The times sign is the cross product here, not multiplication: there is no times
         // button for multiplication (that is \cdot), so it can only come from the cross
@@ -2238,15 +2238,15 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = s.replace(/\\times/g, CROSS_MARKER);
         s = convertGeometry(s, defs);
         // The double bar is a norm, not an absolute value: abs() of a vector is not what the
-        // button promises (#34). Only with a configured norm function - otherwise the old
-        // behaviour stands, and the operator is reported like any other unavailable one.
+        // button promises. Only with a configured norm function; without one the norm is not
+        // converted here and is reported like any other unavailable operator.
         if (defs && defs.normFunction) {
             var normname = defs.normFunction;
             s = replaceInnermostDelimiters(s, '\\left\\|', '\\right\\|', function(content) {
                 return normname + '(' + content + ')';
             });
         }
-        // The absolute value, while its delimiters are still distinguishable (#79): after
+        // The absolute value, while its delimiters are still distinguishable: after
         // \left and \right are stripped, |a||b| and ||x|| read the same and no rule can tell
         // nesting from two separate values. MathQuill always writes the long form.
         s = replaceInnermostDelimiters(s, '\\left|', '\\right|', function(content) {
@@ -2257,7 +2257,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = convertCasesToAndRelations(s);
         s = mergeGluedOperatorNames(s);
         s = markControlWords(s);
-        // Set braces survive the generic brace removal below (#39: no
+        // Set braces survive the generic brace removal below (no
         // backslash may reach the CAS string).
         s = s.replace(/\\left\s*\\\{/g, '\uE001').replace(/\\right\s*\\\}/g, '\uE002');
         s = s.replace(/\\\{/g, '\uE001').replace(/\\\}/g, '\uE002');
@@ -2265,7 +2265,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = s.replace(/\\right/g, '');
 
         // All of these read their arguments with a bracket counter and repeat until nothing
-        // changes (#79): a regex that allows one level of braces inside an argument silently
+        // changes: a regex that allows one level of braces inside an argument silently
         // corrupts the second level instead of failing.
         s = replaceOptionalArgCommand(s, 'sqrt', function(index, radicand) {
             return '(' + radicand + ')^(1/(' + index + '))';
@@ -2302,7 +2302,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
             });
         });
         // A superscript keeps its parentheses unless the exponent is a single unambiguous token.
-        // MathQuill writes x^{2} where older versions wrote x^2, and x^(2) would otherwise reach
+        // MathQuill writes x^{2} rather than x^2, and x^(2) would otherwise reach
         // the CAS for every squared term. Anything longer than one digit group or one letter stays
         // wrapped: x^ab would be split into x^a*b by implicit multiplication.
         s = s.replace(
@@ -2316,7 +2316,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
             }
         );
         // A subscript group that is followed directly by more characters is not part of the
-        // subscript (#59): U_{m}ax is U_m followed by ax, and must never collapse into U_max,
+        // subscript: U_{m}ax is U_m followed by ax, and must never collapse into U_max,
         // which is what U_{max} means. The boundary marker keeps the two apart for the
         // variable-mode logic and for resolveBoundaries().
         s = s.replace(/_\{([^{}]*)\}(?=[A-Za-z0-9])/g, '_$1' + BOUNDARY);
@@ -2348,7 +2348,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = s.replace(/\\&/g, '&');
         s = s.replace(/\\leq?(?![a-zA-Z])/g, '<=');
         s = s.replace(/\\geq?(?![a-zA-Z])/g, '>=');
-        // Lookahead: without it \\neg (¬) became "#g".
+        // Lookahead: without it \\neg (¬) would become "#g".
         s = s.replace(/\\neq?(?![a-zA-Z])/g, '#');
         s = s.replace(/\\ne(?![a-zA-Z])/g, '#');
         s = s.replace(/\\approx(?![a-zA-Z])/g, '~=');
@@ -2359,12 +2359,12 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = s.replace(/\\sum(?![a-zA-Z])/g, 'sum');
         s = s.replace(/\\prod(?![a-zA-Z])/g, 'product');
         // Bare bars, for input that never had \left|: a pair of identical delimiters cannot be
-        // nested unambiguously, so this stays the simple rule it always was. Anything the editor
-        // produces went through the \left| pass above.
+        // nested unambiguously, so this stays a simple rule. Anything the editor produces has
+        // already gone through the \left| pass above.
         s = s.replace(/\\\|/g, '|');
         s = s.replace(/\|([^|]+)\|/g, 'abs($1)');
 
-        // Greek letters (#22) use STACK's own convention: the letter's name. STACK accepts every
+        // Greek letters use STACK's own convention: the letter's name. STACK accepts every
         // name as a student variable and typesets it as the Greek glyph. The variant glyphs have
         // no STACK identity of their own and map to their letter (\varphi -> phi), so they never
         // reach STACK as an unknown word that single-letter mode would split into v*a*r*p*h*i.
@@ -2396,7 +2396,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
             );
         });
 
-        // Set-theory and logic operators from the central table (#35). Operators
+        // Set-theory and logic operators from the central table. Operators
         // that need their operands become marker characters here and function
         // calls in convertStructuredOperators(); the others are emitted directly.
         s = replaceTableOperators(s);
@@ -2414,16 +2414,16 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = s.replace(/\\hbar(?![a-zA-Z])/g, 'hbar');
         s = s.replace(/\\dagger(?![a-zA-Z])/g, 'dagger');
         s = s.replace(/\\intercal(?![a-zA-Z])/g, 'T');
-        // A typed space is a deliberate boundary, not decoration (#64): STACK's
+        // A typed space is a deliberate boundary, not decoration: STACK's
         // space-sensitive "insert stars" variants distinguish "a b" from "ab". The marker
         // survives the passes below and becomes a plain space at the very end.
         s = s.replace(/\\ /g, EXPLICIT_SPACE);
         // Spacing commands carry no mathematical meaning.
         s = s.replace(/\\[,;:!]/g, '');
         // A structure this converter knows but could not finish reading must not be handed to
-        // the fallback below (#79): stripping the backslash off \frac turns it into the word
+        // the fallback below: stripping the backslash off \frac turns it into the word
         // "frac" and produces a plausible expression that means something else. That only
-        // happens when a safety limit was reached, which is a failure, not a conversion.
+        // happens when a safety limit is reached, which is a failure, not a conversion.
         var unfinished = s.match(
             /\\(frac|sqrt|binom|nthroot|vec|overline|mathrm|mathbb|text|operatorname)(?![a-zA-Z])/
         );
@@ -2433,7 +2433,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
 
         // Any control word still left is unknown to this converter. Keep its
         // name as a plain word so STACK reports an unknown identifier instead
-        // of rejecting the backslash (#39).
+        // of rejecting the backslash.
         s = s.replace(/\\([a-zA-Z]+)/g, '$1');
         s = s.replace(/[{}]/g, '');
         s = s.replace(/\uE001/g, '{').replace(/\uE002/g, '}');
@@ -2450,10 +2450,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = resolveBoundaries(s);
         s = resolveCrossProducts(s);
         // The typed space becomes an ordinary space here, after every pass that could have
-        // dropped it (#64). What it means is STACK's decision, not the editor's.
+        // dropped it. What it means is STACK's decision, not the editor's.
         s = s.replace(new RegExp(EXPLICIT_SPACE, 'g'), ' ');
         // "lambda(" is Maxima's anonymous-function constructor. A Greek lambda written in front of
-        // a bracket is always a product (#22); in stack mode, where no implicit multiplication is
+        // a bracket is always a product; in stack mode, where no implicit multiplication is
         // inserted, make that explicit.
         s = s.replace(/(^|[^A-Za-z0-9_%])lambda\s*(?=\()/g, '$1lambda*');
         s = s.replace(/\s+/g, ' ').trim();

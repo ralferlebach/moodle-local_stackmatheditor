@@ -126,5 +126,40 @@ check(config_manager::get_effective_student_toggle($quiza), 'quiz A offers the s
 // A site that has the plugin must not have lost its activation mode.
 check((int) get_config('local_stackmatheditor', 'enabled') === 2, 'the activation mode survived');
 
+// The same settings as a fresh install: every setting of the settings page has a stored value,
+// and apart from the activation mode the seed changed, it is the default a fresh install writes.
+require_once($CFG->libdir . '/adminlib.php');
+// The settings file adds its page only for a user with site configuration rights.
+\core\session\manager::set_user(get_admin());
+$settingspage = admin_get_root(true, false)->locate('local_stackmatheditor');
+check($settingspage instanceof admin_settingpage, 'the settings page is there');
+$differs = [];
+$compared = 0;
+foreach ($settingspage->settings as $setting) {
+    if ($setting->plugin !== 'local_stackmatheditor' || $setting->name === 'enabled') {
+        continue;
+    }
+    $compared++;
+    $stored = $setting->get_setting();
+    $default = $setting->get_defaultsetting();
+    // A multiselect stores a list; its order does not matter.
+    $normal = function ($value) {
+        if (!is_array($value)) {
+            return (string) $value;
+        }
+        $value = array_map('strval', array_values($value));
+        sort($value);
+        return implode(',', $value);
+    };
+    if ($stored === null || $normal($stored) !== $normal($default)) {
+        $differs[] = $setting->name . '=' . var_export($stored, true)
+            . ' (fresh install: ' . var_export($default, true) . ')';
+    }
+}
+check(
+    $compared > 5 && $differs === [],
+    "the other {$compared} settings have the value of a fresh install" . ($differs ? ': ' . implode(', ', $differs) : '')
+);
+
 echo $failures ? "{$failures} check(s) failed.\n" : "Upgrade verified.\n";
 exit($failures ? 1 : 0);

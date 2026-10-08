@@ -31,11 +31,11 @@
 function xmldb_local_stackmatheditor_upgrade(int $oldversion): bool {
     global $DB;
 
-    // A fresh install comes from db/install.xml (#56).
+    // A fresh install comes from db/install.xml.
 
     if ($oldversion < 2026100800) {
         // Data the versions before 2026100800 could leave behind, brought to the state a fresh
-        // install of this version keeps by itself (#85, #87). The step is written against the
+        // install of this version keeps by itself. The step is written against the
         // table, not against the plugin's classes, so a later change to them cannot change what
         // this step did. Running it twice changes nothing the second time.
         $table = 'local_stackmatheditor';

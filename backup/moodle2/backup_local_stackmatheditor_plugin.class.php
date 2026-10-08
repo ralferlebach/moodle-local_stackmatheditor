@@ -23,7 +23,7 @@
  */
 
 /**
- * Adds the configurations of a quiz or adaptive quiz to its module backup (#88).
+ * Adds the configurations of a quiz or adaptive quiz to its module backup.
  *
  * The rows are written below the module element: the quiz-level default (questionbankentryid
  * empty) and one row per configured question bank entry. The ids are the ones of the source site;

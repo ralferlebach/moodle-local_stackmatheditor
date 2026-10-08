@@ -56,7 +56,7 @@ class get_config extends external_api {
     /**
      * Return toolbar configs for the given question IDs within a quiz.
      *
-     * The caller has to prove three things before anything is answered (#67): the course module
+     * The caller has to prove three things before anything is answered: the course module
      * is a quiz, the user may view it, and each question asked about is used by that quiz.
      * Question ids that fail the last test are dropped from the answer - fail closed - rather
      * than resolved against the whole question bank.
@@ -76,14 +76,14 @@ class get_config extends external_api {
         );
 
         // The course module must really be a quiz: a context id alone says nothing about what
-        // the module is (#67, regression of #14).
+        // the module is.
         $cm = get_coursemodule_from_id('quiz', $params['cmid'], 0, false, MUST_EXIST);
 
         $context = \context_module::instance($cm->id);
         self::validate_context($context);
 
-        // A valid context is not an authorisation. Being able to see the quiz is the least this
-        // endpoint may ask for, and it is what #14 settled on.
+        // A valid context is not an authorisation. Being able to see the quiz is the minimum this
+        // endpoint requires.
         require_capability('mod/quiz:view', $context);
 
         // And a valid question id does not prove the question belongs to this quiz. Only the

@@ -33,7 +33,7 @@ class quiz_helper {
     /**
      * Write a developer trace message to the PHP error log.
      *
-     * Emitted only when Moodle runs with DEBUG_DEVELOPER; silent on production sites (#53).
+     * Emitted only when Moodle runs with DEBUG_DEVELOPER; silent on production sites.
      * error_log() keeps the message out of the browser and away from page rendering.
      *
      * @param string $msg Message to log.
@@ -98,7 +98,8 @@ class quiz_helper {
         try {
             $cols   = $DB->get_columns('quiz_slots');
             $result = isset($cols['questionbankentryid']);
-        } catch (\Throwable $e) {
+        } catch (\moodle_exception $e) {
+            // The table cannot be read: answer as if the column were not there.
             self::caught($e, 'slots_have_qbeid');
             $result = false;
         }
@@ -126,7 +127,8 @@ class quiz_helper {
             $data = self::slots_have_qbeid()
                 ? self::load_questions_direct($quizinstanceid)
                 : self::load_questions_via_refs($quizinstanceid);
-        } catch (\Throwable $e) {
+        } catch (\moodle_exception $e) {
+            // Unreadable slots or a vanished question: the quiz has no editor-relevant questions.
             self::caught($e, 'load_quiz_stack_questions');
         }
 
@@ -136,7 +138,7 @@ class quiz_helper {
     }
 
     /**
-     * Every question bank entry used by a quiz, regardless of question type (#67).
+     * Every question bank entry used by a quiz, regardless of question type.
      *
      * The external service needs to know which questions belong to a quiz before it answers
      * anything about them. Unlike load_quiz_stack_questions() this does not filter by question
@@ -179,7 +181,7 @@ class quiz_helper {
                     }
                 }
             }
-        } catch (\Throwable $e) {
+        } catch (\moodle_exception $e) {
             // A quiz whose slots cannot be read scopes to nothing, never to everything.
             self::caught($e, 'load_quiz_qbeids');
             return [];
@@ -191,9 +193,9 @@ class quiz_helper {
     /**
      * Does a quiz use a question bank entry?
      *
-     * The configuration page takes the entry from the request. Without this check a user who
-     * may manage one quiz could open the configuration - and with it a rendered preview and the
-     * input semantics - of any STACK question on the site (MDL Shield, 2026-10-08).
+     * The configuration page takes the entry from the request. This check is the IDOR protection
+     * of that page: without it a user who may manage one quiz could open the configuration - and
+     * with it a rendered preview and the input semantics - of any STACK question on the site.
      *
      * @param int $quizinstanceid Quiz instance id.
      * @param int $qbeid Question bank entry id.
@@ -208,7 +210,7 @@ class quiz_helper {
     }
 
     /**
-     * The STACK question a quiz-level user may configure, or an exception (#84).
+     * The STACK question a quiz-level user may configure, or an exception.
      *
      * The configuration page takes the question from the request. Three things have to hold
      * before it may show, evaluate or save anything about it:
@@ -263,8 +265,8 @@ class quiz_helper {
      * mod_adaptivequiz has no slots: an instance names question categories in
      * {adaptivequiz_question}, and the questions are whatever those categories contain. The
      * settings navigation offers the configuration link only when one of them is a STACK
-     * question. This method was called there for a long time without existing; the catch-all
-     * around the call turned the error into a link that never appeared (MDL Shield, 2026-10-08).
+     * question; the caller wraps this in a fail-soft boundary, so a defect here only hides the
+     * link and is reported through caught().
      *
      * @param int $instanceid Adaptive quiz instance id.
      * @return bool True if at least one question in the instance's categories is a STACK question.
@@ -289,25 +291,40 @@ class quiz_helper {
     }
 
     /**
-     * Report something a catch-all caught.
+     * Report something a fail-soft catch caught.
      *
-     * The catch-alls around page hooks and lookups exist so that a database or loading problem
-     * never breaks a quiz page for a student. They also caught a call to a method that did not
-     * exist, and the only trace of it was a developer log line nobody read. A programming error
-     * (\Error: undefined method or function, type error) is therefore reported through
-     * debugging() - visible on a development site and a failure in PHPUnit and Behat, silent on a
-     * production site like everything else here.
+     * The plugin catches at two levels (docs/ERROR-HANDLING.md): lookups catch the exceptions
+     * Moodle raises for missing or unreadable data (\moodle_exception), and the page hooks catch
+     * everything, so that nothing the editor does can break a quiz page for a student. Whatever
+     * points at a defect of the code rather than at the data - a PHP \Error (undefined method,
+     * type error), a coding_exception, SQL the database rejects - is reported through debugging():
+     * visible on a development site and a failure in PHPUnit and Behat, silent on a production
+     * site. A missing record or a refused capability stays quiet.
      *
      * @param \Throwable $e What was caught.
      * @param string $where Where it was caught.
      * @return void
      */
     public static function caught(\Throwable $e, string $where): void {
-        if ($e instanceof \Error) {
+        if (self::is_defect($e)) {
             debugging("local_stackmatheditor: {$where}: " . get_class($e) . ': ' . $e->getMessage(), DEBUG_DEVELOPER);
             return;
         }
         self::dbg("{$where}: " . $e->getMessage());
+    }
+
+    /**
+     * Whether a caught throwable points at a defect of the code rather than at the data.
+     *
+     * @param \Throwable $e What was caught.
+     * @return bool True for \Error, coding_exception and SQL errors.
+     */
+    public static function is_defect(\Throwable $e): bool {
+        return $e instanceof \Error
+            || $e instanceof \coding_exception
+            || $e instanceof \dml_read_exception
+            || $e instanceof \dml_write_exception
+            || $e instanceof \ddl_exception;
     }
 
     /**
@@ -483,7 +500,8 @@ class quiz_helper {
         $result = ['slotmap' => [], 'qbeids' => [], 'qbeidmap' => []];
         try {
             $result = self::do_load_attempt_slots($attemptid, $quizinstanceid);
-        } catch (\Throwable $e) {
+        } catch (\moodle_exception $e) {
+            // An attempt that cannot be loaded (deleted, another user's): no slot mapping.
             self::caught($e, 'load_attempt_stack_slots');
         }
         self::$attemptcache[$key] = $result;
@@ -549,15 +567,15 @@ class quiz_helper {
     }
 
     /**
-     * Capability that authorises changing the editor configuration of an activity (#86).
+     * Capability that authorises changing the editor configuration of an activity.
      *
      * Configuring is a write action, so it is tied to a write capability of the module context:
      *   - mod_quiz: mod/quiz:manage (edit the quiz);
      *   - mod_adaptivequiz: moodle/course:manageactivities, as that module has no manage
-     *     capability of its own. mod/adaptivequiz:viewreport was used before; it is a read
-     *     capability and a role that may only see reports must not change the configuration.
-     * A capability of the plugin's own (local/stackmatheditor:configure) was considered; the
-     * module's write capabilities are used so that the roles a site already has keep working.
+     *     capability of its own. A read capability such as mod/adaptivequiz:viewreport is not
+     *     enough: a role that may only see reports must not change the configuration.
+     * There is deliberately no capability of the plugin's own (local/stackmatheditor:configure):
+     * the module's write capabilities let the roles a site already has keep working.
      *
      * Settings navigation, the configure links on the quiz edit page and configure.php all ask
      * this method, so what is offered and what is allowed cannot drift apart.
@@ -598,14 +616,15 @@ class quiz_helper {
             }
             // The capability alone is not access: configure.php runs require_login() for the
             // course module, so a link is only offered to someone who can open the activity -
-            // in the course, and seeing the module (#86).
+            // in the course, and seeing the module.
             $course = get_course((int) $cm->course);
             if (!can_access_course($course)) {
                 return false;
             }
             return get_fast_modinfo($course)->get_cm($cmid)->uservisible;
         } catch (\moodle_exception $e) {
-            self::dbg('can_configure: ' . $e->getMessage());
+            // A module or course that cannot be read: nobody configures it.
+            self::caught($e, 'can_configure');
             return false;
         }
     }
@@ -613,7 +632,7 @@ class quiz_helper {
     /**
      * Check whether the current user may configure the given quiz.
      *
-     * Kept for callers of earlier builds; it follows can_configure().
+     * Alias of can_configure(), kept as part of the public API; it follows can_configure().
      *
      * @param int $cmid Course module ID.
      * @return bool True if the user can configure the activity.
@@ -627,7 +646,7 @@ class quiz_helper {
      *
      * The complete URL including all query parameters is kept, so the Back button returns to
      * exactly the calling page (view, edit, review, ...). Without a page URL the module's view
-     * page is used (#47).
+     * page is used.
      *
      * @param int    $cmid    Course module ID.
      * @param string $modname Module name ('quiz' or 'adaptivequiz').
@@ -644,7 +663,8 @@ class quiz_helper {
         try {
             $url = $PAGE->url->out(false);
             return ($url !== '') ? $url : $fallback;
-        } catch (\Throwable $e) {
+        } catch (\moodle_exception $e) {
+            // A page URL that cannot be written out: back to the activity.
             self::caught($e, 'get_return_url');
             return $fallback;
         }
@@ -668,7 +688,7 @@ class quiz_helper {
      * Only URLs on this site are accepted: root-relative paths ("/mod/quiz/edit.php?cmid=5")
      * or absolute URLs below $CFG->wwwroot. External targets ("https://example.org/"),
      * protocol-relative ones ("//example.org/"), script URLs and paths relative to the current
-     * directory are rejected, so the Back button can never become an open redirect (#47).
+     * directory are rejected, so the Back button can never become an open redirect.
      *
      * @param string $raw     Requested URL (e.g. the returnurl parameter).
      * @param int    $cmid    Course module ID.

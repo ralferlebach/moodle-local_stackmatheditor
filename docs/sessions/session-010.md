@@ -3245,3 +3245,53 @@ published 2026100700 is offered the upgrade.
 
 Note for the push: `thirdparty/patches/` was removed in iteration 75 but is still in 756f540
 (unpacking a ZIP does not delete) - `git rm -r thirdparty/patches`.
+
+## 81. Iteration 77 (2026100800, version unchanged): remaining work after the re-audit of bdc4a19
+
+Version stays 1.3.0 / 2026100800 by decision of the maintainer. Pushed state bdc4a19 was identical
+to the delivered tree.
+
+- **P0 false green of the release evidence:** run 37797946872 ended green although main CI was
+  still running and Playwright had not run - `missing=1` was set inside `{ ... } | tee`, a
+  subshell. The check is now `.github/required-runs.sh`: per workflow the newest run whose
+  `head_sha` is the commit, completed and successful, for main CI the job "CI complete" and for
+  Playwright one green job each for Moodle 4.5 and 5.3; the result is the exit code and the last
+  line of `required-runs.txt`. Tested against the real repository (bdc4a19: FAIL on Playwright;
+  758c5e7: FAIL, the green Playwright run has no 4.5/5.3 jobs; unknown commit: FAIL everywhere)
+  and with a stub (PASS, still running, missing job). `release-artefact.yml` calls it directly
+  for a tag, with `release-evidence.yml` as an additional requirement, so an evidence run made
+  too early does not carry a release. Run 37797946872 is named in RELEASE-CHECKLIST as not
+  citable.
+- **Playwright red on CI (toolbar_layout, "matrix_operators (5)" broken at 420 px):** reproduced
+  with a width sweep - every group broke within a band of about 7 px above its own width,
+  because the group's separator (padding-right 6 + border 1, margin 6) counted towards the line.
+  Separators are now `::after` elements in the column gap (no layout), so a group breaks only
+  when its buttons do not fit. Clusters of large groups may break when they alone are wider than
+  the toolbar (before they reached out of it below ~350 px). New test: sweep 700-300 px in 4 px
+  steps; it fails with the old CSS (424/428 px matrix_operators, 352-360 px
+  differential_operators, buttons outside at 344/348 px) and passes with the new one.
+- **Playwright 4.5 + 5.3:** `playwright.yml` runs both by default (`moodle_branch: all`, jobs
+  "Playwright / MOODLE_405_STABLE" and "/ MOODLE_503_STABLE"); the 5.3 job sets
+  `SME_NO_OPTIONAL_SKIPS=1`, so the dark mode tests must run there (optionalSkip throws,
+  run-summary counts every skip).
+- **Upgrade on MariaDB:** main CI upgrade job and the release workflow's upgrade job run on
+  PostgreSQL and MariaDB; `check_database_schema.php` in both; `verify_after.php` compares every
+  setting of the settings page with the fresh-install default (13 settings). Replayed locally from
+  the published 2026100700 on PostgreSQL and MariaDB: green.
+- **Adaptive quiz backup/restore/duplicate:** `backup_restore_adaptivequiz_test.php` (with users,
+  without users, duplicate; question rows of an adaptive quiz do not travel).
+- **Manual sign-off as a gate:** `docs/RELEASE-SIGNOFF.json` (status/date/by per item, R1-R6),
+  `.github/check-signoff.py`: format in main CI, `--complete` refuses a stable tag in
+  `release-artefact.yml`. R4 and R6 accepted, R1/R2/R3/R5 open - the tag waits for them.
+  GitHub release and moodle.org upload described as two steps, SHA-256 check before the upload.
+- **Comments:** issue numbers, audit markers and bug narratives removed from production PHP,
+  `amd/src` and `styles.css`; reasons kept as present-tense rules. Checked mechanically: `php -w`
+  identical for every PHP file, identical JS token streams, CSS identical without comments,
+  minified builds identical apart from their docblock.
+- **Inline JS:** the size-field logic of `configure.php` is `amd/src/configure_form.js` with Jest
+  tests; the remaining inline script (`page_helper::inject_json_element`) carries JSON only.
+- **Catch-alls:** lookups catch `\moodle_exception` only; `\Throwable` only at four page
+  boundaries; `caught()` reports `\Error`, `coding_exception` and SQL errors through
+  `debugging()`. `error_handling_test.php` fails on a new catch-all or a silent catch;
+  `preview_config_test.php` covers the positive path of the preview lookup.
+  `docs/ERROR-HANDLING.md`.

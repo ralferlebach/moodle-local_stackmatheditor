@@ -17,7 +17,7 @@
 /**
  * Event observers of local_stackmatheditor.
  *
- * Configuration rows belong to a course module and are removed with it (#85). Deleting a single
+ * Configuration rows belong to a course module and are removed with it. Deleting a single
  * course module fires course_module_deleted; deleting a course (remove_course_contents) removes its
  * course modules without that event and fires course_content_deleted at the end instead.
  *

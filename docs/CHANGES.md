@@ -68,6 +68,11 @@ duplicate configurations are removed once during the upgrade.
   ignored.
 * A toolbar group that is wider on its own than a very narrow editor breaks inside instead of
   reaching out of the toolbar.
+* A toolbar group that fits on a line stays on one line at every editor width. Its separator
+  took a few pixels of the line, so at some widths - which ones depended on the fonts - a group
+  of five broke apart although its buttons fitted. The separator now sits in the gap between the
+  groups and takes no room. A cluster of a large group that is wider than a very narrow toolbar
+  breaks inside instead of reaching out of it.
 * Right-to-left pages (Hebrew, Arabic, Persian): formula, button symbols and the rows and columns of
   the matrix chooser stay left to right - labels like ∂²/∂x∂y or ∠ABC were rearranged by the
   page direction and the grid was mirrored. The choosers open under their button on the side the

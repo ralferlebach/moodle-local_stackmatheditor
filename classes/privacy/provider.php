@@ -33,15 +33,15 @@ use core_privacy\local\request\writer;
  * The plugin stores toolbar configurations per quiz and per question. Those are course data, not
  * personal data - the only personal reference is `usermodified`, the person who last changed a
  * configuration. A deletion request therefore anonymises that reference (usermodified = 0) and
- * keeps the configuration itself: deleting it would destroy a colleague's course setup (#55).
+ * keeps the configuration itself: deleting it would destroy a colleague's course setup.
  *
- * Records with cmid > 0 belong to the module context of that course module; the legacy path with
+ * Records with cmid > 0 belong to the module context of that course module; the global scope with
  * cmid = 0 has no course module and belongs to the system context.
  *
- * Rows of a deleted course module are removed with it (observer, #85). A row whose module context
- * is gone anyway (an orphan from before the observer existed) cannot be reached through a module
- * context; it is attributed to the user context of usermodified, so that export and deletion still
- * find it. As an orphan configures nothing any more, deleting the user's data removes it entirely.
+ * Rows of a deleted course module are removed with it (observer). A row whose module context is
+ * gone anyway (an orphan the observer did not catch) cannot be reached through a module context;
+ * it is attributed to the user context of usermodified, so that export and deletion still find
+ * it. As an orphan configures nothing, deleting the user's data removes it entirely.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
@@ -97,7 +97,7 @@ class provider implements core_userlist_provider, metadata_provider, request_pro
             'userid'    => $userid,
         ] + \local_stackmatheditor\data_maintenance::orphan_params());
 
-        // Legacy records without a course module belong to the system context.
+        // Global records (cmid = 0) have no course module and belong to the system context.
         $sql = "SELECT ctx.id
                   FROM {context} ctx
                  WHERE ctx.contextlevel = :systemlevel
@@ -161,7 +161,7 @@ class provider implements core_userlist_provider, metadata_provider, request_pro
             foreach ($records as $record) {
                 $scope = self::scope_name($record);
                 $data[] = (object)[
-                    // Readable in the language of the export; the key stays machine-readable (#92).
+                    // Readable in the language of the export; the key stays machine-readable.
                     'scope'               => get_string('privacy:scope_' . $scope, 'local_stackmatheditor'),
                     'scope_key'           => $scope,
                     'cmid'                => (int) $record->cmid,

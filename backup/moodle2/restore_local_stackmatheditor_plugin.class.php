@@ -23,7 +23,7 @@
  */
 
 /**
- * Restores the configurations of a quiz or adaptive quiz onto the new ids (#88).
+ * Restores the configurations of a quiz or adaptive quiz onto the new ids.
  *
  * Restore, import and duplication all run through here:
  *   - cmid is the new course module, never the one in the backup;

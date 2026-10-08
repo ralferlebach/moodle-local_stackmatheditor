@@ -108,7 +108,7 @@ define([
      * @returns {Object} {action, command} or null.
      */
     function resolveCommand(el) {
-        // "popup" property → the toolbar opens a chooser (#62). The structure itself is built
+        // "popup" property → the toolbar opens a chooser. The structure itself is built
         // from the structured model, never from a LaTeX string.
         if (el.popup) {
             return {action: 'popup', command: el.popup};
@@ -213,7 +213,7 @@ define([
      * Insert a structured model into the field.
      *
      * The model decides; MathQuill gets the shape through its own structure API, so no LaTeX
-     * string is assembled here (#62 §6).
+     * string is assembled here.
      *
      * @param {Object} field MathQuill field.
      * @param {Object} model Structured model.
@@ -239,7 +239,7 @@ define([
     }
 
     /**
-     * Describe the structure the cursor is in, in the terms the choosers use (#62).
+     * Describe the structure the cursor is in, in the terms the choosers use.
      *
      * A 1 x n or n x 1 matrix is a vector to this editor, which is how it was inserted, so the
      * vector chooser recognises it as one and the matrix chooser as a matrix.
@@ -268,7 +268,7 @@ define([
     }
 
     /**
-     * Change the size of the structure the cursor is in (#62).
+     * Change the size of the structure the cursor is in.
      *
      * Asks first when filled cells would be discarded: growing is free, shrinking is not, and a
      * student should not lose an entry to a menu choice.
@@ -291,7 +291,7 @@ define([
         }
 
         if (preview.cellsLost > 0) {
-            // No English fallback (#92): a missing string shows as Moodle's "[[key]]" marker.
+            // No English fallback: a missing string shows as Moodle's "[[key]]" marker.
             var question = (strings.resize_confirm || '[[resize_confirm]]').replace('{a}', preview.cellsLost);
             // eslint-disable-next-line no-alert
             if (!window.confirm(question)) {
@@ -344,7 +344,7 @@ define([
     }
 
     /**
-     * The chooser limit for this editor (#76).
+     * The chooser limit for this editor.
      *
      * Already resolved on the server; the client only has to find the number for its slot.
      *
@@ -356,15 +356,15 @@ define([
     }
 
     /**
-     * Give a group the structure its break rule needs (#74).
+     * Give a group the structure its break rule needs.
      *
      * Up to five buttons: nothing to do, the group stays whole. Beyond that, the first three and
      * the last three move into a cluster each, and the buttons in between stay direct children
      * of the group so that flexbox can break between them.
      *
-     * The middle buttons are deliberately not wrapped in an element of their own. The issue
-     * suggests a wrapper with display:contents; a wrapper that has to be made invisible to the
-     * layout is a wrapper that does not need to exist, and display:contents has a history of
+     * The middle buttons are deliberately not wrapped in an element of their own, not even in
+     * one with display:contents: a wrapper that has to be made invisible to the layout is a
+     * wrapper that does not need to exist, and display:contents has a history of
      * dropping elements from the accessibility tree. Direct children wrap natively and no
      * browser has an opinion about them.
      *
@@ -468,7 +468,7 @@ define([
             try {
                 if (action === 'write') {
                     f.write(command);
-                    // Templates (#44/#46): MathQuill leaves the cursor after the written LaTeX;
+                    // Templates: MathQuill leaves the cursor after the written LaTeX;
                     // 'left' moves it back into the template's first field (e.g. the integrand).
                     for (var steps = parseInt(el.left, 10) || 0; steps > 0; steps--) {
                         f.keystroke('Left');
@@ -501,16 +501,16 @@ define([
          * @param {Object|Function} target MQ field or getter.
          * @param {Object} config Enabled group flags.
          * @param {Object} defs Definitions.
-         * @param {number} maxdimension Chooser limit for this slot, resolved on the server (#76).
+         * @param {number} maxdimension Chooser limit for this slot, resolved on the server.
          * @returns {jQuery} Toolbar element.
          */
         build: function(target, config, defs, maxdimension) {
             var $bar = $('<div>').addClass('sme-toolbar');
 
-            // The chooser limit is resolved per slot on the server (#76); the caller knows the
+            // The chooser limit is resolved per slot on the server; the caller knows the
             // slot, the toolbar only the number. It belongs to THIS toolbar: the definitions are
-            // shared by every editor on the page, and writing the limit into them made the last
-            // toolbar built decide for all the others. A view of the definitions carries it.
+            // shared by every editor on the page, and writing the limit into them would let the
+            // last toolbar built decide for all the others. A view of the definitions carries it.
             if (defs && maxdimension) {
                 defs = Object.create(defs);
                 defs._maxDimension = maxdimension;

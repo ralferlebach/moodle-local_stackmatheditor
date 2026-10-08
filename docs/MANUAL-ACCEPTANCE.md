@@ -62,6 +62,9 @@ and Firefox are already ticked in #72; Opera and Firefox Klar are still open the
 ## 3. Where the result goes
 
 * Comment on #69 (section 1) and #72 (section 2) with the filled-in table.
-* Tick the matching items there; close the issue when nothing is left.
-* If a check is not done before a release, the residual risk in `docs/RESIDUAL-RISKS.md` is what
-  stands instead - accepted with a name and a date, not left implicit.
+* Set the item in `docs/RELEASE-SIGNOFF.json` to `done` with `date` and `by` (`nvda-judgement`,
+  `android-devices`).
+* Tick the matching items in the issue; close it when nothing is left.
+* If a check is not done before a release, the residual risk in `docs/RESIDUAL-RISKS.md` stands
+  instead: the item is set to `accepted` with a date and a name. While an item is `open`,
+  `release-artefact.yml` refuses a stable tag.

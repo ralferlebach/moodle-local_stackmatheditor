@@ -70,21 +70,20 @@ function local_stackmatheditor_extend_settings_navigation(
         return;
     }
 
-    // Settings navigation is module specific and stays that way (#50): the runtime editor works
+    // Settings navigation is module specific and stays that way: the runtime editor works
     // wherever a STACK question is rendered, but a configuration link needs a module whose
     // question-bank context, capability and return URL the plugin can actually resolve.
     if (!\local_stackmatheditor\context_resolver::has_configuration_ui($cm->modname)) {
         return;
     }
 
-    // The same write capability configure.php requires (#86).
+    // The same write capability configure.php requires.
     $capname = \local_stackmatheditor\quiz_helper::configure_capability($cm->modname);
     if ($capname === null || !has_capability($capname, $context)) {
         return;
     }
 
-    // For mod_adaptivequiz: skip the link when the configured question categories
-    // Hold no STACK questions.
+    // For mod_adaptivequiz: skip the link when its question categories hold no STACK questions.
     if ($cm->modname === 'adaptivequiz') {
         try {
             $instanceid = (int) $cm->instance;
@@ -95,7 +94,8 @@ function local_stackmatheditor_extend_settings_navigation(
                 return;
             }
         } catch (\Throwable $e) {
-            // Suppress the link on any DB or class-loading error; a programming error is reported.
+            // Navigation boundary: the settings menu is built without the link. A defect is
+            // reported by caught(); a missing pool or table only hides the link.
             \local_stackmatheditor\quiz_helper::caught($e, 'extend_settings_navigation: adaptivequiz STACK check');
             return;
         }
@@ -111,7 +111,7 @@ function local_stackmatheditor_extend_settings_navigation(
     $cmid = (int) $cm->id;
 
     // The link carries the page it is opened from, so "Back" on the configuration page returns
-    // to exactly that page (#47). On the configuration page itself its own return target is
+    // to exactly that page. On the configuration page itself its own return target is
     // passed on instead, so the parameter never nests.
     $returnurl = \local_stackmatheditor\quiz_helper::get_return_url($cmid, $cm->modname);
     if ($PAGE->has_set_url() && $PAGE->url->compare(new moodle_url('/local/stackmatheditor/configure.php'), URL_MATCH_BASE)) {

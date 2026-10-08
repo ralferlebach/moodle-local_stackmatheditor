@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * Report configuration records that the old lookup could have mixed between quizzes (#68).
+ * Report configuration records that the old lookup could have mixed between quizzes.
  *
  * Until 2026091502 the lookup had a layer that matched a question bank entry in any quiz, and a
  * second one on the old questionid column that was equally unscoped. Both are gone. This script
@@ -25,7 +25,7 @@
  *     but the database does not forbid;
  *   - records of the old questionid kind, where that column still exists;
  *   - question bank entries configured in more than one quiz, which is legitimate and was the
- *     situation in which the removed layer used to leak.
+ *     situation in which the removed layer leaked.
  *
  * Read-only. It changes nothing and recommends nothing it cannot back up.
  *
@@ -92,7 +92,7 @@ if (isset($columns['questionid'])) {
 }
 
 // 3. Question bank entries used in more than one quiz. Legitimate, and the situation in which
-// the removed layer used to leak one quiz's configuration into another.
+// the removed layer leaked one quiz's configuration into another.
 $sql = "SELECT questionbankentryid, COUNT(DISTINCT cmid) AS quizzes
           FROM {" . $table . "}
          WHERE questionbankentryid IS NOT NULL AND cmid > 0

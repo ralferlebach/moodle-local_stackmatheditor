@@ -14,7 +14,7 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * On/off switch for the formula editor (#13).
+ * On/off switch for the formula editor.
  *
  * A student can put the editor away - to see more of the question on a phone, or to type STACK
  * syntax directly. Switching off hands the current answer to the original STACK input in Maxima
@@ -60,7 +60,7 @@ define([], function() {
      *
      * The id must not look like a STACK input: the editor looks for "_ans" in name and id, and a
      * switch called sme-toggle-q1:1_ans1 would be picked up as an input and get an editor of its
-     * own, and that one another one (#13).
+     * own, and that one another one.
      *
      * @type {number}
      */
@@ -119,7 +119,7 @@ define([], function() {
     }
 
     /**
-     * A language string the caller injected, or Moodle's marker for a missing one (#92).
+     * A language string the caller injected, or Moodle's marker for a missing one.
      *
      * The strings are a contract with the server (definitions::get_js_strings()). An English
      * fallback here would hide a missing string from every language but English; "[[key]]" is

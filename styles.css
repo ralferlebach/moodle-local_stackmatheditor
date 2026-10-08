@@ -24,7 +24,7 @@
  */
 
 /*
- * Colours (#93). Every colour is a Bootstrap 5 variable first (--bs-*), with the value Moodle 4.5
+ * Colours. Every colour is a Bootstrap 5 variable first (--bs-*), with the value Moodle 4.5
  * shows as fallback. Moodle 5.x defines the --bs-* variables and switches them in its dark colour
  * mode (5.3+); Moodle 4.5 does not define them, so it keeps exactly the colours it had. The
  * Bootstrap 4 names (--white, --gray-400, --primary ...) are not defined on 5.x, which is why they
@@ -38,8 +38,11 @@
 .sme-toolbar {
     display: flex;
     flex-wrap: wrap;
-    gap: 2px;
-    padding: 4px;
+    /* The space between groups is the column gap, not a margin of the group: a gap is not
+       counted at the end of a line, so a group that fits the toolbar never has to break. */
+    gap: 2px 13px;
+    /* One pixel more on the right than the separator reaches past a group. */
+    padding: 4px 8px 4px 4px;
     background: var(--bs-tertiary-bg, #f8f9fa);
     border: 1px solid var(--bs-border-color, #dee2e6);
     border-radius: 4px 4px 0 0;
@@ -52,23 +55,32 @@
 
 /*
  * A group never breaks by itself: up to five buttons it is one piece, and beyond that the
- * clusters below hold the ends together (#74).
+ * clusters below hold the ends together.
  */
 .sme-tb-group {
     display: inline-flex;
     /*
      * A group moves to the next line as a whole first: the toolbar breaks its lines by the
-     * groups' full widths. Only a group that is wider than the whole toolbar on its own - a
-     * five-button group in a very narrow container, e.g. Moodle 5.3's question layout at 420 px -
-     * breaks inside, instead of reaching out of the toolbar (#93).
+     * groups' widths. Only a group that is wider than the whole toolbar on its own breaks inside,
+     * instead of reaching out of the toolbar. The group has no margin, padding or border of its
+     * own, so "wider than the toolbar" means its buttons, nothing else.
      */
     flex-wrap: wrap;
     gap: 2px;
-    margin-right: 6px;
-    padding-right: 6px;
-    border-right: 1px solid var(--bs-border-color, #dee2e6);
+    position: relative;
     min-width: 0;
     max-width: 100%;
+}
+
+/* The separator sits in the middle of the column gap and takes no space. */
+.sme-tb-group:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    right: -7px;
+    border-right: 1px solid var(--bs-border-color, #dee2e6);
+    pointer-events: none;
 }
 
 /* Only a group of more than five buttons may break, and only between its clusters. */
@@ -76,21 +88,22 @@
     flex-wrap: wrap;
 }
 
+/*
+ * A cluster stays on one line, unless it is wider than the whole toolbar on its own; then it
+ * breaks inside rather than reaching out of the toolbar - the same rule as for a group.
+ */
 .sme-tb-cluster {
     display: inline-flex;
-    flex: 0 0 auto;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
     gap: 2px;
+    min-width: 0;
+    max-width: 100%;
     white-space: nowrap;
 }
 
 .sme-tb-btn {
     flex: 0 0 auto;
-}
-
-.sme-tb-group:last-child {
-    border-right: none;
-    margin-right: 0;
-    padding-right: 0;
 }
 
 .sme-tb-btn {
@@ -102,7 +115,7 @@
 }
 
 /* ═══════════════════════════════════════════════════
-   STACK MathEditor – narrow editors (#74)
+   STACK MathEditor – narrow editors
 
    What matters is the width of the editor, not of the
    browser window: opening Moodle's navigation drawer
@@ -136,18 +149,18 @@
 
 @container smeeditor (max-width: 900px) {
     .sme-toolbar {
-        gap: 4px;
+        gap: 4px 13px;
     }
 }
 
 @container smeeditor (max-width: 650px) {
     .sme-toolbar {
+        gap: 4px 9px;
         padding: 6px;
     }
 
-    .sme-tb-group {
-        margin-right: 4px;
-        padding-right: 4px;
+    .sme-tb-group:not(:last-child)::after {
+        right: -5px;
     }
 
     .sme-tb-btn {
@@ -161,7 +174,7 @@
 
 @media (max-width: 767px) {
     .sme-toolbar {
-        gap: 4px;
+        gap: 4px 9px;
         padding: 6px;
     }
 
@@ -169,9 +182,8 @@
         flex-wrap: wrap;
     }
 
-    .sme-tb-group {
-        margin-right: 4px;
-        padding-right: 4px;
+    .sme-tb-group:not(:last-child)::after {
+        right: -5px;
     }
 
     .sme-tb-btn {
@@ -517,7 +529,7 @@
     line-height: 1;
 }
 
-/* Matrix and vector popups (#62). */
+/* Matrix and vector popups. */
 .sme-structured-popup {
     background: var(--bs-body-bg, var(--white, #fff));
     border: 1px solid var(--bs-border-color, var(--gray-400, #ced4da));
@@ -578,7 +590,7 @@
 
 /*
  * A typed space is a multiplication boundary for STACK's space-sensitive "insert stars"
- * variants (#64): "a b" must be distinguishable from "ab" on screen. No symbol is drawn -
+ * variants: "a b" must be distinguishable from "ab" on screen. No symbol is drawn -
  * a dot would mean explicit multiplication - only a little more room than a bare nbsp.
  */
 .sme-mq-field .mq-space,
@@ -588,7 +600,7 @@
 }
 
 /*
- * On/off switch for the editor (#13). Students switch it off to see more of the question on a
+ * On/off switch for the editor. Students switch it off to see more of the question on a
  * small screen, or to type plain STACK syntax; the original input comes back in its place.
  */
 .sme-toggle {
@@ -658,8 +670,8 @@
 /*
  * The original STACK input while the editor is on: clipped to one pixel, never display:none, so
  * it keeps its place in the accessibility tree and STACK's validation feedback stays where it
- * belongs. No offset to a side: in a right-to-left page a "left" offset is flipped to the right
- * and the input sat outside the window there.
+ * belongs. No offset to a side: in a right-to-left page RTLCSS flips a "left" offset to the
+ * right, which would put the input outside the window.
  */
 .sme-original-hidden {
     border: 0;
@@ -686,7 +698,7 @@
 }
 
 /*
- * Pointer selection in the choosers (#75).
+ * Pointer selection in the choosers.
  *
  * touch-action: none is what stops the page from scrolling while a finger draws a matrix size;
  * without it the browser claims the gesture as a scroll before the first pointermove arrives.

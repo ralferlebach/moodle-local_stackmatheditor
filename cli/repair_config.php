@@ -17,11 +17,11 @@
 /**
  * Repair historical data of the configuration table.
  *
- * Two kinds of rows the current code no longer produces can exist on sites that ran an earlier
- * build:
- *   - orphans (#85): rows of course modules that were deleted before the plugin removed its rows
- *     together with the course module; they still carry a personal reference (usermodified);
- *   - duplicate scopes (#87): more than one row per (cmid, questionbankentryid); the runtime reads
+ * Two kinds of rows the current code does not produce can exist in the table:
+ *   - orphans: rows of course modules that are gone, deleted while the observer that removes the
+ *     rows with the course module was not active; they still carry a personal reference
+ *     (usermodified);
+ *   - duplicate scopes: more than one row per (cmid, questionbankentryid); the runtime reads
  *     the newest one (timemodified, then id), the repair keeps exactly that one.
  *
  * Without --execute the script only reports (dry run). Exit code 0 on success, 2 on bad options.

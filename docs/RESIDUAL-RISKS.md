@@ -1,9 +1,10 @@
 # Residual risks of 1.3.0 (build 2026100800)
 
-#71: "open P1 are closed or formally accepted as a residual risk". This file is the formal part:
-every point a release of this build goes out with although it is not closed, why it is
-tolerable, what limits it, and who accepted it when. A row without a name and a date is not
-accepted - it is open, and the release waits.
+#71: "open P1 are closed or formally accepted as a residual risk". This file describes every
+point a release of this build goes out with although it is not closed, why it is tolerable and
+what limits it; who accepted it when is recorded in `docs/RELEASE-SIGNOFF.json`. A risk without
+a name and a date there is not accepted - it is open, and the release workflow refuses to
+publish.
 
 | # | Risk | Issue | Why tolerable | What limits it | Closed by |
 |---|---|---|---|---|---|
@@ -16,14 +17,13 @@ accepted - it is open, and the release waits.
 
 ## Acceptance
 
-| Risk | Accepted by | Date | Note |
-|---|---|---|---|
-| R1 | | | |
-| R2 | | | |
-| R3 | | | |
-| R4 | Ralf Erlebach | 2026-09-27 | `docs/RELEASE-CHECKLIST.md`, section 7 |
-| R5 | | | |
-| R6 | Ralf Erlebach | 2026-10-08 | Version name stays 1.3.0 |
+Recorded in `docs/RELEASE-SIGNOFF.json`, one item per risk: `status` (`open`, `done` for a
+manual check that was made, `accepted` for an accepted risk), `date` and `by`. The main CI
+checks the file's format; `release-artefact.yml` refuses a stable tag while any item is open
+(`.github/check-signoff.py --complete`). So a risk without a name and a date does not only wait
+on paper - the release cannot be published.
+
+State of build 2026100800: R4 and R6 accepted; R1, R2, R3 and R5 open.
 
 Once a risk is closed (R1 and R3 by the manual acceptance), its row moves to the change log of
 the next release, and this file keeps only what is still open.

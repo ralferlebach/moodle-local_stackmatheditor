@@ -41,7 +41,7 @@ class editor_injector {
     /**
      * @var string Build of the vendored MathQuill fork (thirdpartylibs.xml). It is the cache key of
      * the library URLs: the plugin version stays the same when only the library is rebuilt, and a
-     * browser must not keep running the previous build (#72).
+     * browser must not keep running the previous build.
      */
     public const MATHQUILL_VERSION = '0.10.1-sme.6';
 
@@ -75,9 +75,9 @@ class editor_injector {
 
         // Build per-slot enabled map.
         $slotenabled = self::build_slot_enabled($slotconfigs);
-        // And, for every slot that has an editor, whether students may switch it off (#73).
+        // And, for every slot that has an editor, whether students may switch it off.
         $slottoggle = self::build_slot_student_toggle($slotconfigs, $slotenabled);
-        // Largest structure the choosers offer in each slot (#76).
+        // Largest structure the choosers offer in each slot.
         $slotmax = self::build_slot_max_dimension($slotconfigs);
 
         $instancevarmode = config_manager::get_instance_variable_mode();
@@ -105,8 +105,8 @@ class editor_injector {
             'slotVarModes'     => !empty($slotvarmodes) ? $slotvarmodes : new \stdClass(),
             'slotEnabled'      => !empty($slotenabled) ? $slotenabled : new \stdClass(),
             // What applies to a field the slot map says nothing about - an adaptive quiz has no
-            // per-question configuration, so without this the runtime would enable everything
-            // the moment the page gate stopped deciding (#81).
+            // per-question configuration, and the page gate does not decide per quiz, so without
+            // this the runtime would enable everything.
             'defaultEnabled'   => config_manager::get_effective_enabled($cmid),
             'slotStudentToggle' => !empty($slottoggle) ? $slottoggle : new \stdClass(),
             'allowStudentToggle' => config_manager::get_instance_student_toggle(),
@@ -227,13 +227,14 @@ class editor_injector {
             return [];
         }
         // The preview page has checked this already; the injector does not rely on it, because it
-        // takes the question id from the request on its own (MDL Shield, 2026-10-08).
+        // takes the question id from the request on its own.
         require_once($CFG->libdir . '/questionlib.php');
         try {
             if (!question_has_capability_on($questionid, 'use')) {
                 return [];
             }
-        } catch (\Throwable $e) {
+        } catch (\moodle_exception $e) {
+            // A question without category or context: no configuration for the preview.
             quiz_helper::caught($e, 'resolve_preview_configs');
             return [];
         }
@@ -250,7 +251,7 @@ class editor_injector {
     }
 
     /**
-     * Remove groups whose CAS packages are not available in this question (#66).
+     * Remove groups whose CAS packages are not available in this question.
      *
      * A group that is configured but unavailable is switched off for the learner, who never
      * learns why: a button that the question cannot execute is worse than no button, and the
@@ -331,7 +332,7 @@ class editor_injector {
     }
 
     /**
-     * Per-slot permission for the student switch (#73).
+     * Per-slot permission for the student switch.
      *
      * A subordinate permission: no editor, no switch, and any level that says no is final. The
      * merged slot config carries the quiz and question values, so the AND is over the site
@@ -361,7 +362,7 @@ class editor_injector {
     }
 
     /**
-     * Per-slot chooser limit (#76).
+     * Per-slot chooser limit.
      *
      * The client is handed the resolved number, never the levels it came from: resolving a
      * hierarchy is a server's job, and a browser that knows only the answer cannot get it wrong.

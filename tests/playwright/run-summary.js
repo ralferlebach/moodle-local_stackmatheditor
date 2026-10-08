@@ -23,7 +23,8 @@
  * With SME_STRICT_FIXTURES=1 (the CI workflows) it is also a gate (#89) and exits with 1 when
  *   - no result file was written or no test was collected,
  *   - a spec file of this run collected no test,
- *   - a test was skipped without the 'optional-skip' annotation (helpers.optionalSkip), or
+ *   - a test was skipped without the 'optional-skip' annotation (helpers.optionalSkip), or at
+ *     all when SME_NO_OPTIONAL_SKIPS=1 (the run has to execute every test), or
  *   - a test is marked fixme: a known-broken path does not pass as a skip.
  * The process exit code of Playwright says that nothing failed; this says that what should have
  * run did run.
@@ -108,7 +109,7 @@ if (fs.existsSync(results)) {
                 const types = annotations.map((annotation) => annotation.type);
                 if (types.includes('fixme')) {
                     problems.push(`fixme: ${spec.file || ''} - ${spec.title}`);
-                } else if (!types.includes('optional-skip')) {
+                } else if (!types.includes('optional-skip') || process.env.SME_NO_OPTIONAL_SKIPS === '1') {
                     const reason = (annotations.find((annotation) => annotation.type === 'skip') || {}).description;
                     problems.push(`unexpected skip: ${spec.file || ''} - ${spec.title}`
                         + (reason ? ` (${reason})` : ''));
