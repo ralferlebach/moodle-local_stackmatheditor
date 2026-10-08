@@ -8,8 +8,13 @@ Version numbers follow `version.php`: the release name (`1.3.0`) and the build
 (`YYYYMMDDNN`).
 
 
-1.3.0 (2026100700) - stable
+1.3.0 (2026100800) - stable
 ----------------------------
+
+Build 2026100700 was published on 7 October 2026. Build 2026100800 keeps the release name and adds
+the security, privacy, lifecycle, backup and integrity fixes listed under *Fixed*, together with an
+upgrade step: on a site with 2026100700 or older, configurations of deleted activities and
+duplicate configurations are removed once during the upgrade.
 
 ### New
 
@@ -63,6 +68,11 @@ Version numbers follow `version.php`: the release name (`1.3.0`) and the build
   ignored.
 * A toolbar group that is wider on its own than a very narrow editor breaks inside instead of
   reaching out of the toolbar.
+* Right-to-left pages (Hebrew, Arabic, Persian): formula, button symbols and the rows and columns of
+  the matrix chooser stay left to right - labels like ∂²/∂x∂y or ∠ABC were rearranged by the
+  page direction and the grid was mirrored. The choosers open under their button on the side the
+  page reads from, and STACK's hidden input no longer sits outside the window on the right. The
+  toolbar itself follows the page.
 * Two teachers saving the same quiz or question at the same moment no longer leave two
   configurations behind. Writes of one scope are serialised by a lock and run in one transaction;
   when duplicates from earlier builds exist, every read picks the same one (newest, then highest

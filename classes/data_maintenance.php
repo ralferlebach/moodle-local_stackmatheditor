@@ -25,9 +25,9 @@ namespace local_stackmatheditor;
  * are called orphans; they can be left over from installations that ran without the observer, or
  * from course deletions, which remove course modules without a per-module event.
  *
- * The same class repairs duplicate scope rows (#87): the table has no unique index (the version is
- * pinned, a schema change is not possible), so the application keeps exactly one row per
- * (cmid, questionbankentryid) and this class can restore that invariant on existing data.
+ * The same class repairs duplicate scope rows (#87): one row per (cmid, questionbankentryid) is
+ * kept by the application rather than a unique index (docs/DATA-INTEGRITY.md), and this class
+ * restores that invariant on existing data. The upgrade to 2026100800 runs both repairs once.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach

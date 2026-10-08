@@ -597,8 +597,10 @@ class config_manager {
     /**
      * Internal upsert. Handles both question-level (qbeid int) and quiz-level (qbeid null) records.
      *
-     * The table has no unique index on (cmid, questionbankentryid) and cannot get one while the
-     * version is pinned, so the scope is made unique by the application (#87):
+     * The scope is made unique by the application, not by a unique index (#87, decision recorded
+     * in docs/DATA-INTEGRITY.md): questionbankentryid is NULL for the quiz-level default, and
+     * databases disagree on whether NULLs collide in a unique index - PostgreSQL and MariaDB
+     * would let any number of quiz defaults through, which is the case that matters. Instead:
      *   - writers of the same scope are serialised with the Moodle lock API;
      *   - read, write and the removal of surplus rows run in one database transaction;
      *   - after the write the scope is collapsed to the row every read returns, which also repairs

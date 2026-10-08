@@ -3196,3 +3196,52 @@ Issues: #86, #88, #89, #90, #91, #92, #93 ticked and closed. #84, #85, #87, #94 
 CI items (green main CI incl. browser runs on the fix commit; static gates), which wait for this
 delivery to be pushed and run. #69 (manual NVDA judgement), #71 (open P1, tag and release
 metadata) and #72 (Opera and Firefox Klar on devices) keep their human items.
+
+## 80. Iteration 76 (2026100800): version, upgrade step, concurrency, release smoke, RTL
+
+Re-audit of 2026-10-08 (on 7781a9d) worked through; the release name stays 1.3.0 by decision of
+the maintainer (the review proposed 1.3.1), the build becomes 2026100800, so every site with the
+published 2026100700 is offered the upgrade.
+
+- **Upgrade step** (`db/upgrade.php`, savepoint 2026100800), written against the table rather than
+  the plugin classes: removes configurations of course modules whose context no longer exists
+  (chunks of 500) and collapses duplicate scopes to the row every read returns (newest, then
+  highest id). Idempotent. `tests/unit/upgrade_step_test.php`; checked by hand on MariaDB.
+  `tests/upgrade/seed_before.php` now leaves what 2026100700 leaves behind - a quiz deleted with
+  its rows still there, an orphan, a duplicate pair - and `verify_after.php` checks that the
+  upgrade removed exactly those, that the observer works right after it and that a second repair
+  finds nothing. Run locally from the ZIP published on moodle.org to the working tree: green.
+- **One row per scope:** decision record `docs/DATA-INTEGRITY.md` - no unique index (NULL quiz
+  defaults never collide on PostgreSQL/MariaDB), lock + transaction + collapse instead.
+  `tests/concurrency/concurrent_save.php` starts N PHP processes writing the same two scopes at the
+  same moment; its control mode runs the old read-then-insert path and shows the race (5-12
+  duplicates per run on PostgreSQL and MariaDB), the real path always leaves 1/1 (4.5 PG, 5.3 PG,
+  4.5 MariaDB, 16 x 40 stress). Main CI job *Concurrent writes* (pgsql, mariadb);
+  `build-test-site.sh` takes `DB_TYPE`/`DB_PORT`.
+- **Release ZIP tested as shipped** (`release-artefact.yml`): required files extended (events,
+  observer, data_maintenance, backup, upgrade, repair CLI, fixture); the installed ZIP runs
+  `tests/release/smoke.php` (import, configure, override, backup/restore into a new course,
+  deletion, invariants) and the concurrency script; job `upgrade` installs the previously
+  published build, seeds, replaces it with the ZIP, upgrades and verifies (4.5 and 5.3); job
+  `archive-tests` runs PHPUnit (`--fail-on-warning`) and Behat from the unpacked ZIP; publish
+  needs all of them. Fixture tests that need `tests/jest` skip in the archive.
+- **Release guard:** `release-guard.yml` turns a GitHub release published by hand back into a draft
+  and fails. RELEASE-CHECKLIST section 3 describes the gate; the moodle.org upload by hand is the
+  remaining path, accepted as R2 in the new `docs/RESIDUAL-RISKS.md`.
+- **Manual acceptance:** `docs/MANUAL-ACCEPTANCE.md` with the NVDA judgement (#69) and the Android
+  device table (#72); the release evidence asks for both, for the SHA-256 of the uploaded
+  archive and for the residual-risk acceptance.
+- **RTL:** the seed writes a minimal `he` language pack (`thisdirection = rtl`) into the dataroot;
+  `rtl.spec.js` (toolbar, both choosers, switch, configure page, focus order, overflow, axe).
+  Found and fixed: button symbols and labels such as ∂²/∂x∂y or ∠ABC were rearranged by the page
+  direction, the matrix grid was mirrored, the choosers anchored to the left of their button, and
+  STACK's hidden input sat 9999 px outside the window on the right (RTLCSS flips `left`). Math
+  elements keep `direction: ltr` (`/*rtl:ignore*/`), the choosers anchor by the toolbar's
+  direction and are clamped to the viewport, the hidden input is clipped to one pixel without a
+  side offset (with a `max-width` above STACK's `.que.stack input[type=text]`). No other physical
+  properties needed changing.
+- **CI:** `install-maxima.sh` downloads first with retries (the 5.3/pgsql failure of 7781a9d);
+  release metadata test (`documentation_test::test_release_metadata_agrees`).
+
+Note for the push: `thirdparty/patches/` was removed in iteration 75 but is still in 756f540
+(unpacking a ZIP does not delete) - `git rm -r thirdparty/patches`.

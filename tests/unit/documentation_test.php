@@ -300,4 +300,41 @@ final class documentation_test extends \advanced_testcase {
         $configure = file_get_contents($CFG->dirroot . '/local/stackmatheditor/configure.php');
         $this->assertStringContainsString('context_resolver::supports_question_configuration($modname)', $configure);
     }
+
+    /**
+     * version.php, the change log and the README describe the same release.
+     *
+     * #71: README, version.php, tag and release metadata are set consistently for stable. The
+     * tag is checked where it is made - release-artefact.yml refuses a tag other than
+     * "v" plus the release name and a stable tag on a build that is not declared stable. This
+     * test covers what is in the repository: the newest change-log entry names the release, the
+     * build and the maturity of version.php, and the README does not call a stable build
+     * "in development".
+     *
+     * @return void
+     */
+    public function test_release_metadata_agrees(): void {
+        global $CFG;
+        $plugin = new \stdClass();
+        require($CFG->dirroot . '/local/stackmatheditor/version.php');
+
+        $changes = file_get_contents($CFG->dirroot . '/local/stackmatheditor/docs/CHANGES.md');
+        $found = preg_match('/^(\d+\.\d+\.\d+) \((\d{10})\) - ([a-z]+)$/m', $changes, $heading);
+        $this->assertSame(1, $found, 'the change log starts its newest entry with "<release> (<build>) - <maturity>"');
+        $maturities = [
+            MATURITY_ALPHA => 'alpha',
+            MATURITY_BETA => 'beta',
+            MATURITY_RC => 'rc',
+            MATURITY_STABLE => 'stable',
+        ];
+        $this->assertSame($plugin->release, $heading[1], 'release name in the change log');
+        $this->assertSame((string) $plugin->version, $heading[2], 'build in the change log');
+        $this->assertSame($maturities[$plugin->maturity], $heading[3], 'maturity in the change log');
+
+        if ($plugin->maturity === MATURITY_STABLE) {
+            $readme = file_get_contents($CFG->dirroot . '/local/stackmatheditor/README.md');
+            $this->assertStringNotContainsStringIgnoringCase('in development', $readme);
+            $this->assertStringNotContainsString('-dev', $plugin->release);
+        }
+    }
 }

@@ -283,6 +283,9 @@ jobs:
           tools/
           docs/
           tests/upgrade/
+          tests/concurrency/
+          tests/release/
+          tests/a11y-nvda/
           \.github/
           \.idea/
           tests/load/
@@ -499,7 +502,7 @@ jobs:
       - name: Install a site with the previous release
         run: bash plugin-new/.github/build-test-site.sh
 
-      - name: Seed configuration the way a 1.2 site has it
+      - name: Seed configuration, a deleted quiz and a duplicate the way the previous release leaves them
         run: |
           web=moodle; [ -d moodle/public ] && web=moodle/public
           php plugin-new/tests/upgrade/seed_before.php "$web"
@@ -516,9 +519,79 @@ jobs:
           web=moodle; [ -d moodle/public ] && web=moodle/public
           php plugin-new/tests/upgrade/verify_after.php "$web"
 
+  concurrency:
+    # One configuration per scope under real concurrency (#87): the unit tests run in one process
+    # and one transaction and can only show that a held lock makes a writer wait. This installs a
+    # real site on each database family and lets several PHP processes write the same scopes at
+    # the same moment (tests/concurrency/concurrent_save.php). The control run uses the previous
+    # release's write path and only reports - it shows the load really races.
+    name: Concurrent writes / ${{ matrix.database }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [pgsql, mariadb]
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: moodle
+          POSTGRES_PASSWORD: moodle
+          POSTGRES_DB: moodle
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready" --health-interval=10s
+          --health-timeout=5s --health-retries=5
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: moodle
+        ports:
+          - 3306:3306
+        options: --health-cmd="mariadb-admin ping -pmoodle" --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      MOODLE_BRANCH: MOODLE_405_STABLE
+      MOODLE_ADMIN_PASS: 'Admin!23'
+      DB_TYPE: ${{ matrix.database }}
+    steps:
+      - name: Check out this commit
+        uses: actions/checkout@v6
+        with:
+          path: plugin
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pgsql, mysqli, gd, intl, zip, soap, mbstring, curl, xml, exif
+          ini-values: max_input_vars=5000
+          coverage: none
+      - name: Install Maxima (STACK)
+        run: bash plugin/.github/install-maxima.sh
+      - name: Create the MariaDB database with Moodle's character set
+        if: ${{ matrix.database == 'mariadb' }}
+        run: |
+          mysql -h 127.0.0.1 -P 3306 -uroot -pmoodle -e \
+            "CREATE DATABASE moodle DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+             CREATE USER 'moodle'@'%' IDENTIFIED BY 'moodle';
+             GRANT ALL PRIVILEGES ON moodle.* TO 'moodle'@'%';"
+      - name: Install a site with STACK and this commit
+        run: bash plugin/.github/build-test-site.sh
+      - name: Control - the previous write path under the same load
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          php plugin/tests/concurrency/concurrent_save.php "$web" --control --workers=12 --rounds=30
+      - name: One row per scope under concurrent writes
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          for run in 1 2 3; do
+            php plugin/tests/concurrency/concurrent_save.php "$web" --workers=12 --rounds=30
+          done
+
   ci-complete:
     name: CI complete
-    needs: [maturity-gate, stale-files, upgrade]
+    needs: [maturity-gate, stale-files, upgrade, concurrency]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     if: always()
@@ -531,7 +604,8 @@ jobs:
           for entry in \
             "maturity-gate=${{ needs.maturity-gate.result }}" \
             "stale-files=${{ needs.stale-files.result }}" \
-            "upgrade=${{ needs.upgrade.result }}"; do
+            "upgrade=${{ needs.upgrade.result }}" \
+            "concurrency=${{ needs.concurrency.result }}"; do
             echo "  ${entry%%=*}: ${entry#*=}"
             if [[ "${entry#*=}" != "success" ]]; then
               rc=1

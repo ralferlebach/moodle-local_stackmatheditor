@@ -108,7 +108,17 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
         element.style.position = 'absolute';
         element.style.zIndex = '1051';
         if (box) {
-            element.style.left = (box.left + window.pageXOffset) + 'px';
+            // Below the button, on the side the page reads from: its left edge in a left-to-right
+            // page, its right edge in a right-to-left one - and never past the window's edge.
+            var width = element.offsetWidth || 0;
+            // The button itself is set left to right (its symbols are mathematics); the page
+            // direction is that of the toolbar around it.
+            var context = (owner.closest && owner.closest('.sme-toolbar')) || document.body;
+            var rtl = window.getComputedStyle && window.getComputedStyle(context).direction === 'rtl';
+            var left = rtl ? box.right - width : box.left;
+            var viewport = document.documentElement.clientWidth || window.innerWidth;
+            left = Math.max(0, Math.min(left, viewport - width));
+            element.style.left = (left + window.pageXOffset) + 'px';
             element.style.top = (box.bottom + window.pageYOffset + 2) + 'px';
         }
     }

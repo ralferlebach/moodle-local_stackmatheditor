@@ -1,10 +1,15 @@
 # Release artefact - local_stackmatheditor
 #
-# Builds the distributable ZIP from a tag, installs exactly that ZIP into clean Moodle sites and
-# only then attaches it to a GitHub Release. Taken over from moodle-mod_vimipad and adapted:
-# a local plugin (root folder "stackmatheditor", installed into local/), STACK and its
-# behaviours as dependencies of the install check, and the vendored MathQuill build checked
-# against the checksums its provenance file names.
+# Builds the distributable ZIP from a tag and tests exactly that ZIP before it attaches it to a
+# GitHub Release: installed into fresh Moodle 4.5 and 5.3 sites and smoked there (configuration,
+# backup and restore, deletion, concurrent writes, the CLI scripts); installed as an upgrade over
+# the version the Moodle plugins directory published before it; and the plugin's PHPUnit tests
+# and Behat scenarios run from the archive. The ZIP's SHA-256 is published next to it.
+# release-guard.yml makes sure no release reaches GitHub any other way.
+#
+# Taken over from moodle-mod_vimipad and adapted: a local plugin (root folder "stackmatheditor",
+# installed into local/), STACK and its behaviours as dependencies of the install check, and the
+# vendored MathQuill build checked against the checksums its provenance file names.
 #
 # The package is uploaded with archive: false, so the file you download is the plugin itself and
 # not a ZIP inside GitHub's artifact ZIP - the nested archive browsers flag as potentially
@@ -183,9 +188,9 @@ jobs:
         run: |
           # Checked, not written: rewriting version.php here would put a number in the ZIP that
           # no commit contains. Unlike mod_vimipad the build number may be older than the
-          # tagged commit - this plugin keeps it pinned while a release is being finished (1.3.0:
-          # 2026100700) - but never newer: a date in the future would make every later build
-          # look like a downgrade.
+          # tagged commit - a release can be finished and tagged a day after its build number
+          # was set - but never newer: a date in the future would make every later build look
+          # like a downgrade.
           version="${{ steps.version.outputs.version }}"
           versiondate="${version:0:8}"
           commitdate=$(git -C plugin log -1 --format=%cd --date=format:%Y%m%d "${{ github.sha }}")
@@ -194,7 +199,7 @@ jobs:
             exit 1
           fi
           if [ "$versiondate" != "$commitdate" ]; then
-            echo "::notice::Build $version ist aelter als der getaggte Commit ($commitdate) - die Version ist gepinnt."
+            echo "::notice::Build $version ist aelter als der getaggte Commit ($commitdate)."
           fi
           echo "Versionsdatum $versiondate, Commit $commitdate."
 
@@ -256,7 +261,7 @@ jobs:
             echo "Das Archiv enthaelt Sprachpakete ausser Englisch und Deutsch."
             exit 1
           fi
-          if unzip -Z1 "$name" | grep -E 'node_modules|/\.git/|/\.github/|tests/(playwright|jest|load|upgrade|a11y-nvda)/|/docs/sessions/|/tools/|__pycache__|\.pyc$'; then
+          if unzip -Z1 "$name" | grep -E 'node_modules|/\.git/|/\.github/|tests/(playwright|jest|load|upgrade|concurrency|release|a11y-nvda)/|/docs/sessions/|/tools/|__pycache__|\.pyc$'; then
             echo "Das Archiv enthaelt Dateien, die nicht ausgeliefert werden duerfen."
             exit 1
           fi
@@ -285,6 +290,11 @@ jobs:
             stackmatheditor/db/install.xml \
             stackmatheditor/db/access.php \
             stackmatheditor/db/events.php \
+            stackmatheditor/db/upgrade.php \
+            stackmatheditor/classes/observer.php \
+            stackmatheditor/classes/data_maintenance.php \
+            stackmatheditor/cli/repair_config.php \
+            stackmatheditor/tests/fixtures/stack_algebraic.xml \
             stackmatheditor/db/hooks.php \
             stackmatheditor/backup/moodle2/backup_local_stackmatheditor_plugin.class.php \
             stackmatheditor/backup/moodle2/restore_local_stackmatheditor_plugin.class.php \
@@ -373,14 +383,18 @@ jobs:
           - 5432:5432
 
     steps:
-      # Only the helper scripts (install-maxima.sh, build-test-site.sh), from the very commit the
-      # archive was built from. The plugin itself comes from the ZIP and nowhere else.
+      # Only the helper scripts (site build, smoke, concurrency), from the very commit the archive
+      # was built from. The plugin itself comes from the ZIP and nowhere else.
       - name: Check out the helper scripts
         uses: actions/checkout@v6
         with:
           ref: ${{ needs.artefact.outputs.resolved }}
           path: helpers
-          sparse-checkout: .github
+          sparse-checkout: |
+            .github
+            tests/release
+            tests/concurrency
+            tests/upgrade
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
@@ -459,9 +473,194 @@ jobs:
             fi
           done
 
+      - name: Smoke the paths a site uses - configuration, backup and restore, deletion
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          php helpers/tests/release/smoke.php "$web"
+
+      - name: One row per scope under concurrent writes
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          php helpers/tests/concurrency/concurrent_save.php "$web" --workers=12 --rounds=30
+
+  upgrade:
+    name: Upgrade the published release to this ZIP / ${{ matrix.moodle }}
+    needs: artefact
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        moodle: [MOODLE_405_STABLE, MOODLE_503_STABLE]
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: moodle
+          POSTGRES_PASSWORD: moodle
+          POSTGRES_DB: moodle
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 10
+        ports:
+          - 5432:5432
+    steps:
+      - name: Check out the helper scripts
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.artefact.outputs.resolved }}
+          path: helpers
+          sparse-checkout: |
+            .github
+            tests/upgrade
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pgsql, zip, gd, intl, soap, mbstring, curl, xml, exif
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      - name: Download the release ZIP
+        uses: actions/download-artifact@v4
+        with:
+          name: intern-pruefpaket
+          path: artefact
+
+      - name: Unpack the ZIP
+        run: |
+          cd artefact && sha256sum -c ./*.sha256 && cd ..
+          mkdir unpacked
+          unzip -q artefact/*.zip -d unpacked
+          test -f unpacked/stackmatheditor/version.php
+
+      # The newest version the Moodle plugins directory publishes below the ZIP's version - what
+      # a site administrator actually has installed.
+      - name: Fetch the published previous release
+        run: bash helpers/.github/fetch-previous-release.sh unpacked/stackmatheditor plugin
+
+      - name: Install Maxima (STACK CAS)
+        run: bash helpers/.github/install-maxima.sh
+
+      - name: Install a site with the published release
+        env:
+          MOODLE_BRANCH: ${{ matrix.moodle }}
+          MOODLE_DATAROOT: ${{ runner.temp }}/moodledata
+        run: bash helpers/.github/build-test-site.sh
+
+      - name: Seed what the published release leaves behind
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          php helpers/tests/upgrade/seed_before.php "$web"
+
+      - name: Replace the plugin with the ZIP and upgrade
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          rm -rf "$web/local/stackmatheditor"
+          cp -a unpacked/stackmatheditor "$web/local/stackmatheditor"
+          php moodle/admin/cli/upgrade.php --non-interactive
+          php moodle/admin/cli/check_database_schema.php
+
+      - name: Check what the upgrade left behind
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          php helpers/tests/upgrade/verify_after.php "$web"
+
+  archive-tests:
+    # The plugin's own PHPUnit tests and Behat scenarios, run from the archive rather than from
+    # the repository: what ships has to pass on its own.
+    name: Plugin tests from the ZIP / MOODLE_405_STABLE
+    needs: artefact
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      STACK_BRANCH: master
+      ADAPTIVEMULTIPART_BRANCH: master
+      DFEXPLICITVAILDATE_BRANCH: master
+      DFCBMEXPLICITVAILDATE_BRANCH: master
+      IMPORTASVERSION_BRANCH: main
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: 'postgres'
+          POSTGRES_HOST_AUTH_METHOD: 'trust'
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
+    steps:
+      - name: Check out the helper scripts
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.artefact.outputs.resolved }}
+          path: helpers
+          sparse-checkout: .github
+
+      - name: Download the release ZIP
+        uses: actions/download-artifact@v4
+        with:
+          name: intern-pruefpaket
+          path: artefact
+
+      - name: Unpack the ZIP as the plugin under test
+        run: |
+          cd artefact && sha256sum -c ./*.sha256 && cd ..
+          mkdir unpacked
+          unzip -q artefact/*.zip -d unpacked
+          mv unpacked/stackmatheditor plugin
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pgsql, zip, gd, intl, soap, mbstring, curl, xml, exif
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install Maxima (STACK CAS)
+        run: bash helpers/.github/install-maxima.sh
+
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo "$(cd ci/bin; pwd)" >> "$GITHUB_PATH"
+          echo "$(cd ci/vendor/bin; pwd)" >> "$GITHUB_PATH"
+          sudo locale-gen en_AU.UTF-8
+          echo "NVM_DIR=$HOME/.nvm" >> "$GITHUB_ENV"
+
+      - name: Install Moodle, STACK and the plugin from the ZIP
+        env:
+          DB: pgsql
+          MOODLE_BRANCH: MOODLE_405_STABLE
+        run: |
+          moodle-plugin-ci add-plugin --branch "$STACK_BRANCH" maths/moodle-qtype_stack
+          moodle-plugin-ci add-plugin --branch "$ADAPTIVEMULTIPART_BRANCH" maths/moodle-qbehaviour_adaptivemultipart
+          moodle-plugin-ci add-plugin --branch "$DFEXPLICITVAILDATE_BRANCH" maths/moodle-qbehaviour_dfexplicitvaildate
+          moodle-plugin-ci add-plugin --branch "$DFCBMEXPLICITVAILDATE_BRANCH" maths/moodle-qbehaviour_dfcbmexplicitvaildate
+          moodle-plugin-ci add-plugin --branch "$IMPORTASVERSION_BRANCH" maths/moodle-qbank_importasversion
+          moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
+
+      - name: PHPUnit from the archive
+        run: moodle-plugin-ci phpunit --fail-on-warning --testdox
+
+      - name: Initialise STACK CAS for the Behat site
+        working-directory: moodle
+        run: php "$GITHUB_WORKSPACE/helpers/.github/stack-behat-init.php"
+
+      - name: Behat from the archive
+        run: |
+          moodle-plugin-ci behat --profile chrome --auto-rerun 0 \
+            --tags "@local_stackmatheditor&&~@broken&&~@wip" --dump
+
   publish:
     name: Publish the release
-    needs: [artefact, install]
+    needs: [artefact, install, upgrade, archive-tests]
     runs-on: ubuntu-24.04
     steps:
       - name: Download the release ZIP
@@ -516,7 +715,11 @@ jobs:
             | Reifegrad | `${{ needs.artefact.outputs.maturity }}` (200 = MATURITY_STABLE) |
             | Pruefsumme | SHA-256, als eigene Datei beigelegt |
 
-            Dieses Archiv wurde aus dem getaggten Commit erzeugt und in frische
-            Moodle-4.5- und -5.3-Installationen mit STACK entpackt und installiert,
-            bevor es hier erschien. Die Pruefsumme gehoert zu genau dieser Datei.
+            Dieses Archiv wurde aus dem getaggten Commit erzeugt und, bevor es hier
+            erschien, genau so geprueft: in frische Moodle-4.5- und -5.3-Installationen
+            mit STACK installiert und dort gesmoked (Konfiguration, Sicherung und
+            Wiederherstellung, Loeschen, gleichzeitige Schreibzugriffe), als Upgrade auf
+            die zuvor im Plugin-Verzeichnis veroeffentlichte Version eingespielt, und
+            PHPUnit und Behat liefen aus dem Archiv. Die Pruefsumme gehoert zu genau
+            dieser Datei.
             Aenderungen: `docs/CHANGES.md` im Archiv.

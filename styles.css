@@ -656,15 +656,33 @@
 }
 
 /*
- * The original STACK input while the editor is on: off screen, never display:none, so it keeps
- * its place in the accessibility tree and STACK's validation feedback stays where it belongs.
+ * The original STACK input while the editor is on: clipped to one pixel, never display:none, so
+ * it keeps its place in the accessibility tree and STACK's validation feedback stays where it
+ * belongs. No offset to a side: in a right-to-left page a "left" offset is flipped to the right
+ * and the input sat outside the window there.
  */
 .sme-original-hidden {
+    border: 0;
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
     height: 1px;
-    left: -9999px;
+    margin: -1px;
+    max-width: 1px;
     overflow: hidden;
+    padding: 0;
     position: absolute;
+    white-space: nowrap;
     width: 1px;
+}
+
+/*
+ * STACK gives the input an inline width and limits it with ".que.stack input[type=text]
+ * {max-width: 100%}"; the cap needs a selector above that one so the clipped input keeps one
+ * pixel and cannot widen a narrow page.
+ */
+.que.stack input.sme-original-hidden[type],
+.que.stack textarea.sme-original-hidden {
+    max-width: 1px;
 }
 
 /*
@@ -699,4 +717,28 @@
 
 .sme-vector-pad-column {
     flex-direction: column;
+}
+
+/*
+ * Right-to-left pages. Mathematics is written left to right in every language: the formula in
+ * the editor, the symbols on the toolbar buttons (∂²/∂x∂y, ∠ABC) and the rows and columns of the
+ * matrix and vector choosers keep that direction, isolated from the page around them. The
+ * toolbar itself follows the page: its first group starts on the right. The popup label is
+ * language text and takes the direction of its own content.
+ * Moodle builds its right-to-left stylesheet with RTLCSS, which would turn these into
+ * direction: rtl; the rtl:ignore directive keeps them as written.
+ */
+.sme-mq-container .mq-editable-field,
+.sme-equiv-rows .mq-editable-field,
+.sme-tb-btn,
+.sme-matrix-grid,
+.sme-vector-pad,
+.sme-vector-row {
+    /*rtl:ignore*/
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.sme-structured-popup-label {
+    unicode-bidi: plaintext;
 }

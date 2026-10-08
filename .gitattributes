@@ -73,6 +73,8 @@ makefile   text eol=lf
 /tests/load             export-ignore
 /tests/playwright       export-ignore
 /tests/upgrade          export-ignore
+/tests/concurrency      export-ignore
+/tests/release          export-ignore
 /tests/a11y-nvda        export-ignore
 /tests/jest             export-ignore
 

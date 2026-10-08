@@ -280,6 +280,23 @@ $qbeids = $DB->get_fieldset_sql(
     ['quizid' => get_coursemodule_from_id('quiz', $settingscm, 0, false, MUST_EXIST)->instance]
 );
 
+// A right-to-left language for rtl.spec.js: a minimal pack of only its langconfig.php, which is
+// what makes Moodle render a page right to left (dir="rtl", the flipped theme CSS). Every string
+// falls back to English. Created only where no real Hebrew pack is installed.
+$rtlpack = $CFG->dataroot . '/lang/he';
+if (!is_dir($CFG->dirroot . '/lang/he') && !is_file($rtlpack . '/langconfig.php')) {
+    make_writable_directory($rtlpack);
+    file_put_contents($rtlpack . '/langconfig.php', implode("\n", [
+        '<?php',
+        '$string[\'thisdirection\'] = \'rtl\';',
+        '$string[\'thislanguage\'] = \'Hebrew (SME RTL test)\';',
+        '$string[\'thislanguageint\'] = \'Hebrew\';',
+        '$string[\'parentlanguage\'] = \'\';',
+        '',
+    ]));
+    get_string_manager()->reset_caches();
+}
+
 // Moodle 5.3+ (theme_boost colour modes): offer the modes, so the dark mode smoke test can switch
 // to dark as a user would (#93). The site default stays light; nothing else changes.
 if (class_exists('\\theme_boost\\colour_mode')) {

@@ -556,8 +556,8 @@ class quiz_helper {
      *   - mod_adaptivequiz: moodle/course:manageactivities, as that module has no manage
      *     capability of its own. mod/adaptivequiz:viewreport was used before; it is a read
      *     capability and a role that may only see reports must not change the configuration.
-     * A plugin capability (local/stackmatheditor:configure) would need a version bump to be
-     * installed; the version is pinned for 1.3.0.
+     * A capability of the plugin's own (local/stackmatheditor:configure) was considered; the
+     * module's write capabilities are used so that the roles a site already has keep working.
      *
      * Settings navigation, the configure links on the quiz edit page and configure.php all ask
      * this method, so what is offered and what is allowed cannot drift apart.
