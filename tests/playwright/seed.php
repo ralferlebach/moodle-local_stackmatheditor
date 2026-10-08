@@ -91,7 +91,8 @@ function local_stackmatheditor_seed_import(string $file, stdClass $category, std
     file_put_contents($tmp, $xml);
     $format = new qformat_xml();
     $format->setCategory($category);
-    $format->setContexts([context_course::instance($course->id)]);
+    // The context of the category: the course on Moodle 4.5, the question bank module on 5.0+.
+    $format->setContexts([context::instance_by_id($category->contextid)]);
     $format->setCourse($course);
     $format->setFilename($tmp);
     $format->setMatchgrades('nearest');
@@ -179,7 +180,15 @@ if (!$course) {
     $course = $gen->create_course(['shortname' => 'SMETEST', 'fullname' => 'STACK MathQuill Editor tests']);
 }
 $context = context_course::instance($course->id);
-$category = question_make_default_categories([$context]);
+$bankhelper = '\\core_question\\local\\bank\\question_bank_helper';
+if (method_exists($bankhelper, 'get_default_open_instance_system_type')) {
+    // Moodle 5.0+: there are no course-level question banks any more; questions live in a
+    // question bank module of the course. question_make_default_categories() no longer works.
+    $bank = $bankhelper::get_default_open_instance_system_type($course, true);
+    $category = question_get_default_category(context_module::instance($bank->id)->id, true);
+} else {
+    $category = question_make_default_categories([$context]);
+}
 
 $users = ['sme_teacher' => 'editingteacher'];
 for ($i = 1; $i <= $students; $i++) {
@@ -271,6 +280,12 @@ $qbeids = $DB->get_fieldset_sql(
     ['quizid' => get_coursemodule_from_id('quiz', $settingscm, 0, false, MUST_EXIST)->instance]
 );
 
+// Moodle 5.3+ (theme_boost colour modes): offer the modes, so the dark mode smoke test can switch
+// to dark as a user would (#93). The site default stays light; nothing else changes.
+if (class_exists('\\theme_boost\\colour_mode')) {
+    set_config('enablecolourmodes', 1, 'theme_boost');
+}
+
 // Option --all-groups switches every toolbar group on site-wide. A fresh site offers the default
 // selection only, and a run that has to hear the matrix chooser (NVDA, #69) needs it on the page.
 if (in_array('--all-groups', $argv ?? [], true)) {
@@ -279,6 +294,9 @@ if (in_array('--all-groups', $argv ?? [], true)) {
         implode(',', array_keys(\local_stackmatheditor\definitions::get_element_groups())),
         'local_stackmatheditor'
     );
+    // The NVDA run also has to hear the student switch; it is on by default, this makes the
+    // promise explicit instead of depending on the default (#89).
+    set_config('allowstudenttoggle', 1, 'local_stackmatheditor');
 }
 
 // Option --reset removes every quiz- and question-level configuration of the settings quiz, so each

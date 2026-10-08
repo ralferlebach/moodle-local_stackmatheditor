@@ -39,6 +39,13 @@ use local_stackmatheditor\output\page_helper;
  */
 class editor_injector {
     /**
+     * @var string Build of the vendored MathQuill fork (thirdpartylibs.xml). It is the cache key of
+     * the library URLs: the plugin version stays the same when only the library is rebuilt, and a
+     * browser must not keep running the previous build (#72).
+     */
+    public const MATHQUILL_VERSION = '0.10.1-sme.6';
+
+    /**
      * Inject MathQuill CSS, init call, and runtime JSON.
      *
      * @param int $cmid Course module ID.
@@ -53,10 +60,12 @@ class editor_injector {
             : 'mathquill.js';
 
         $mqjsurl  = (new \moodle_url(
-            '/local/stackmatheditor/thirdparty/mathquill/' . $jsfile
+            '/local/stackmatheditor/thirdparty/mathquill/' . $jsfile,
+            ['v' => self::MATHQUILL_VERSION]
         ))->out(false);
         $mqcssurl = (new \moodle_url(
-            '/local/stackmatheditor/thirdparty/mathquill/mathquill.css'
+            '/local/stackmatheditor/thirdparty/mathquill/mathquill.css',
+            ['v' => self::MATHQUILL_VERSION]
         ))->out(false);
 
         // Resolve per-slot configs.

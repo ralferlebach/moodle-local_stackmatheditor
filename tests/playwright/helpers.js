@@ -157,4 +157,60 @@ async function closeLeftovers() {
     await Promise.all(contexts.map((context) => context.close().catch(() => undefined)));
 }
 
-module.exports = {env, fillStable, loginAs, open, openPage, closePage, closeLeftovers};
+/**
+ * Whether a missing fixture fails the test instead of skipping it (#89).
+ *
+ * The CI workflows set SME_STRICT_FIXTURES=1: there the seed promises every quiz, input and
+ * setting a spec needs, so a missing one is a broken seed or a broken plugin and must turn the run
+ * red. Locally, against a site seeded by hand, the same spec skips with the reason.
+ *
+ * @returns {boolean} True in strict mode.
+ */
+function strictFixtures() {
+    return process.env.SME_STRICT_FIXTURES === '1';
+}
+
+/**
+ * Require a fixture: fail in strict mode, skip with the reason otherwise.
+ *
+ * Call it inside a test or a beforeEach hook.
+ *
+ * @param {Object} test The Playwright test object.
+ * @param {*} present Truthy when the fixture is there.
+ * @param {string} what What is missing, for the message.
+ * @returns {void}
+ */
+function requireFixture(test, present, what) {
+    if (present) {
+        return;
+    }
+    if (strictFixtures()) {
+        throw new Error(`Required fixture missing: ${what}. The seed promises it for this run, `
+            + 'so the test fails instead of skipping.');
+    }
+    test.skip(true, `fixture missing: ${what}`);
+}
+
+/**
+ * Skip a test for a reason that is allowed in every run, also in strict mode.
+ *
+ * The annotation is what run-summary.js accepts as an intended skip; every other skip, and every
+ * fixme, fails the summary gate in strict mode.
+ *
+ * @param {Object} test The Playwright test object.
+ * @param {boolean} condition Skip when true.
+ * @param {string} reason Why skipping is legitimate here.
+ * @returns {void}
+ */
+function optionalSkip(test, condition, reason) {
+    if (!condition) {
+        return;
+    }
+    test.info().annotations.push({type: 'optional-skip', description: reason});
+    test.skip(true, reason);
+}
+
+module.exports = {
+    env, fillStable, loginAs, open, openPage, closePage, closeLeftovers,
+    strictFixtures, requireFixture, optionalSkip,
+};

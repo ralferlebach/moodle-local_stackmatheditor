@@ -222,4 +222,84 @@ final class documentation_test extends \advanced_testcase {
 
         return $keys;
     }
+
+    /**
+     * The MathQuill build is named the same everywhere, and the checksums are those of the files.
+     *
+     * #71: the README named 0.10.1-sme.1 while sme.5 was vendored.
+     *
+     * @return void
+     */
+    public function test_mathquill_version_and_checksums_agree(): void {
+        global $CFG;
+        $root = $CFG->dirroot . '/local/stackmatheditor/';
+
+        $xml = simplexml_load_file($root . 'thirdpartylibs.xml');
+        $this->assertNotFalse($xml);
+        $version = (string) $xml->library[0]->version;
+        $this->assertMatchesRegularExpression('/^0\.10\.1-sme\.\d+$/', $version);
+
+        $readme = file_get_contents($root . 'README.md');
+        $this->assertStringContainsString("MathQuill {$version} ", $readme, 'README third-party section');
+        preg_match_all('/MathQuill (0\.10\.1-sme\.\d+)/', $readme, $named);
+        $this->assertSame([$version], array_values(array_unique($named[1])), 'README names one build');
+
+        $provenance = file_get_contents($root . 'thirdparty/readme_moodle.txt');
+        $this->assertStringContainsString("Version: {$version}", $provenance);
+        $this->assertStringContainsString("Build provenance of {$version}", $provenance);
+        $this->assertSame(
+            $version,
+            \local_stackmatheditor\output\editor_injector::MATHQUILL_VERSION,
+            'the cache key of the library URLs'
+        );
+
+        foreach (['mathquill.js', 'mathquill.min.js', 'mathquill.css'] as $file) {
+            $this->assertMatchesRegularExpression(
+                '/^\s+' . preg_quote($file, '/') . '\s+' . hash_file('sha256', $root . 'thirdparty/mathquill/' . $file) . '$/m',
+                $provenance,
+                "SHA-256 of {$file} in thirdparty/readme_moodle.txt"
+            );
+        }
+        if (preg_match('/Patch applied:\s+(\S+)\s+SHA-256 ([0-9a-f]{64})/', $provenance, $patch)) {
+            $this->assertFileExists($root . $patch[1]);
+            $this->assertSame($patch[2], hash_file('sha256', $root . $patch[1]), 'SHA-256 of the patch');
+        }
+    }
+
+    /**
+     * The README support table says per-question configuration exactly where the configuration
+     * page offers it.
+     *
+     * #71: the table said "yes" for the adaptive quiz, whose configuration page has quiz mode only.
+     *
+     * @return void
+     */
+    public function test_support_table_matches_runtime(): void {
+        global $CFG;
+        $readme = file_get_contents($CFG->dirroot . '/local/stackmatheditor/README.md');
+        $rows = [
+            'quiz' => '| Quiz attempt |',
+            'adaptivequiz' => '| Adaptive Quiz (',
+        ];
+        foreach ($rows as $modname => $prefix) {
+            $line = null;
+            foreach (explode("\n", $readme) as $candidate) {
+                if (strpos($candidate, $prefix) === 0) {
+                    $line = $candidate;
+                }
+            }
+            $this->assertNotNull($line, "README support table row for {$modname}");
+            $cells = array_map('trim', explode('|', trim($line, " |")));
+            $perquestion = strpos($cells[2], 'yes') === 0;
+            $this->assertSame(
+                context_resolver::supports_question_configuration($modname),
+                $perquestion,
+                "per-question configuration of {$modname}: README says '{$cells[2]}'"
+            );
+            $this->assertTrue(context_resolver::has_configuration_ui($modname), $modname);
+        }
+        // The configuration page decides its mode by the same method.
+        $configure = file_get_contents($CFG->dirroot . '/local/stackmatheditor/configure.php');
+        $this->assertStringContainsString('context_resolver::supports_question_configuration($modname)', $configure);
+    }
 }

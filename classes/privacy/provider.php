@@ -38,6 +38,11 @@ use core_privacy\local\request\writer;
  * Records with cmid > 0 belong to the module context of that course module; the legacy path with
  * cmid = 0 has no course module and belongs to the system context.
  *
+ * Rows of a deleted course module are removed with it (observer, #85). A row whose module context
+ * is gone anyway (an orphan from before the observer existed) cannot be reached through a module
+ * context; it is attributed to the user context of usermodified, so that export and deletion still
+ * find it. As an orphan configures nothing any more, deleting the user's data removes it entirely.
+ *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -77,6 +82,20 @@ class provider implements core_userlist_provider, metadata_provider, request_pro
                   JOIN {context} ctx ON ctx.instanceid = sme.cmid AND ctx.contextlevel = :modulelevel
                  WHERE sme.usermodified = :userid AND sme.cmid > 0";
         $contextlist->add_from_sql($sql, ['modulelevel' => CONTEXT_MODULE, 'userid' => $userid]);
+
+        // Orphans whose module context is gone are reported in the user's own context.
+        $sql = "SELECT ctx.id
+                  FROM {context} ctx
+                 WHERE ctx.contextlevel = :userlevel AND ctx.instanceid = :ctxuserid
+                       AND EXISTS (SELECT 1
+                                     FROM {local_stackmatheditor} sme
+                                    WHERE sme.usermodified = :userid
+                                          AND " . \local_stackmatheditor\data_maintenance::orphan_condition() . ")";
+        $contextlist->add_from_sql($sql, [
+            'userlevel' => CONTEXT_USER,
+            'ctxuserid' => $userid,
+            'userid'    => $userid,
+        ] + \local_stackmatheditor\data_maintenance::orphan_params());
 
         // Legacy records without a course module belong to the system context.
         $sql = "SELECT ctx.id
@@ -140,8 +159,11 @@ class provider implements core_userlist_provider, metadata_provider, request_pro
             $column = \local_stackmatheditor\config_manager::get_config_column_public();
             $data = [];
             foreach ($records as $record) {
+                $scope = self::scope_name($record);
                 $data[] = (object)[
-                    'scope'               => self::scope_name($record),
+                    // Readable in the language of the export; the key stays machine-readable (#92).
+                    'scope'               => get_string('privacy:scope_' . $scope, 'local_stackmatheditor'),
+                    'scope_key'           => $scope,
                     'cmid'                => (int) $record->cmid,
                     'questionbankentryid' => $record->questionbankentryid === null
                         ? null
@@ -174,6 +196,11 @@ class provider implements core_userlist_provider, metadata_provider, request_pro
         if ($where === null) {
             return;
         }
+        if ($context->contextlevel === CONTEXT_USER) {
+            // Orphans configure nothing; the only thing left to them is the personal reference.
+            $DB->delete_records_select('local_stackmatheditor', $where, $params);
+            return;
+        }
         $DB->set_field_select('local_stackmatheditor', 'usermodified', 0, $where, $params);
     }
 
@@ -193,6 +220,10 @@ class provider implements core_userlist_provider, metadata_provider, request_pro
                 continue;
             }
             $params['userid'] = $userid;
+            if ($context->contextlevel === CONTEXT_USER) {
+                $DB->delete_records_select('local_stackmatheditor', "{$where} AND usermodified = :userid", $params);
+                continue;
+            }
             $DB->set_field_select(
                 'local_stackmatheditor',
                 'usermodified',
@@ -218,6 +249,14 @@ class provider implements core_userlist_provider, metadata_provider, request_pro
             return;
         }
         [$insql, $inparams] = $DB->get_in_or_equal($userids, SQL_PARAMS_NAMED, 'u');
+        if ($userlist->get_context()->contextlevel === CONTEXT_USER) {
+            $DB->delete_records_select(
+                'local_stackmatheditor',
+                "{$where} AND usermodified {$insql}",
+                array_merge($params, $inparams)
+            );
+            return;
+        }
         $DB->set_field_select(
             'local_stackmatheditor',
             'usermodified',
@@ -240,14 +279,22 @@ class provider implements core_userlist_provider, metadata_provider, request_pro
         if ($context->contextlevel === CONTEXT_SYSTEM) {
             return ['cmid = 0', []];
         }
+        if ($context->contextlevel === CONTEXT_USER) {
+            // Orphans of this user. The statements using this condition have no table alias.
+            $condition = \local_stackmatheditor\data_maintenance::orphan_condition('');
+            return [
+                "usermodified = :ctxowner AND {$condition}",
+                ['ctxowner' => $context->instanceid] + \local_stackmatheditor\data_maintenance::orphan_params(),
+            ];
+        }
         return [null, []];
     }
 
     /**
-     * Human-readable scope of one configuration record.
+     * Scope key of one configuration record; the export shows it through privacy:scope_<key>.
      *
      * @param \stdClass $record Record of local_stackmatheditor.
-     * @return string Scope name.
+     * @return string Scope key: global, quiz or question.
      */
     protected static function scope_name(\stdClass $record): string {
         if ((int) $record->cmid === 0) {

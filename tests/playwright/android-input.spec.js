@@ -23,7 +23,7 @@
  * mobile viewport with touch, for each of the three ways a browser can deliver text:
  *
  *   Blink (Chrome, Opera, Edge, Brave on Android)  input events only, no usable keypress
- *   Blink with a 229 keydown before the text         known gap in the fork, marked fixme
+ *   Blink with a 229 keydown before the text         keydown key="Unidentified", keyCode 229
  *   Gecko (Firefox, Firefox Klar on Android)        keydown, keypress, input
  *   IME composition                                 compositionstart / update / end
  *
@@ -32,7 +32,7 @@
  */
 
 const {test, expect, devices} = require('@playwright/test');
-const {env, loginAs, open} = require('./helpers');
+const {env, loginAs, open, requireFixture} = require('./helpers');
 
 test.use({...devices['Pixel 7']});
 test.describe.configure({mode: 'default', timeout: 120000});
@@ -127,12 +127,9 @@ function stackValue(page, scope) {
 
 for (const engine of ['blink', 'blink229', 'gecko', 'ime']) {
     test(`single-line editor accepts the first characters (${engine})`, async({page}) => {
-        // Known gap, in the MathQuill fork and not yet fixed: when a keydown with key
-        // "Unidentified" (keyCode 229) precedes the text, typedText() returns early - an upstream
-        // guard against a ChromeOS Ctrl-Shift-U quirk - and the character is dropped. The devices
-        // checked for #72 do not send that keydown; a keyboard that does would lose its input.
-        test.fixme(engine === 'blink229', 'MathQuill fork drops text after an "Unidentified" keydown');
-
+        // blink229: a keydown with key "Unidentified" and keyCode 229 precedes every character.
+        // The upstream guard against Chrome's Ctrl-Shift-U entry used to drop that character;
+        // MathQuill 0.10.1-sme.6 ignores only the Unicode entry itself (#72).
         await attempt(page);
         const scope = '.que:nth-of-type(1) .sme-input-wrap';
         await page.evaluate((s) => {
@@ -144,10 +141,16 @@ for (const engine of ['blink', 'blink229', 'gecko', 'ime']) {
 
         // No Enter was needed, which is the whole of #72.
         expect(await stackValue(page, '[data-sme-target="single"]')).toBe('x+1');
+
+        // One Backspace removes one character - text entry left nothing behind that a deletion
+        // would act on twice.
+        await page.keyboard.press('Backspace');
+        await page.waitForTimeout(800);
+        expect(await stackValue(page, '[data-sme-target="single"]')).toBe('x+');
     });
 }
 
-for (const engine of ['blink', 'gecko']) {
+for (const engine of ['blink', 'blink229', 'gecko']) {
     test(`multi-line editor accepts the first characters (${engine})`, async({page}) => {
         await attempt(page);
         const found = await page.evaluate(() => {
@@ -158,7 +161,7 @@ for (const engine of ['blink', 'gecko']) {
             wrap.setAttribute('data-sme-target', 'multi');
             return true;
         });
-        test.skip(!found, 'no multi-line STACK input on this page');
+        requireFixture(test, found, 'a multi-line STACK input on the load quiz page');
 
         await softKeyboard(page, '[data-sme-target="multi"]', 'y=2', engine);
 

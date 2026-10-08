@@ -8,6 +8,7 @@ static moodle-plugin-ci pipeline and have their own workflow (`.github/workflows
 | `smoke.spec.js` | the site answers, the settings page opens, `requirejs.php` serves the built `tex2max` |
 | `settings.spec.js` | level (admin, quiz, question, inheritance chain) × setting (on/off, toolbar groups, implicit multiplication), changed through the real UI and verified in a student attempt, with screenshots |
 | `performance.spec.js` | ten STACK editors on one page: ready in time, exactly one editor and toolbar per question, also after reloading |
+| `dark-mode.spec.js` | Moodle 5.3+: switches to Boost's dark colour mode through its menu, then axe and measured contrast for toolbar, editor fields, typed text, switch, matrix chooser and the configuration page with its preview opened through Bootstrap's collapse. Skips, as an allowed optional skip, on a Moodle without colour modes; run the Playwright workflow with `moodle_branch: MOODLE_503_STABLE` for it |
 | `a11y.spec.js` | axe-core (WCAG 2.0/2.1 A/AA) on editors, toolbars and the configuration page; every toolbar button named from the language pack; keyboard input |
 
 `seed.php` (idempotent, disposable test sites only) creates course `SMETEST`, a teacher, 20
@@ -31,6 +32,25 @@ SME_ADMIN_PASS='<admin password>' npm test
 | `SME_BASE_URL` | from `seed.php` (`$CFG->wwwroot`) | site under test |
 | `SME_ADMIN_USER` | `admin` | site administrator |
 | `SME_ADMIN_PASS` | — (required) | password; a missing value fails the test instead of skipping it |
+| `SME_STRICT_FIXTURES` | unset (CI: `1`) | a fixture the seed promises (JSXGraph quiz, units quiz, multi-line input, student switch, matrix chooser) fails the test when missing instead of skipping it |
+
+### Moodle 5.1 and later
+
+`.github/build-test-site.sh` and `seed.php` handle both layouts: on 5.1+ the site needs
+`composer install` (the routed API, which saves for example the colour mode, needs its libraries),
+and questions live in a question bank module of the course instead of the course bank. Moodle 5.3
+requires PostgreSQL 17; the Playwright workflow uses it for every branch.
+
+### Required paths cannot skip (#89)
+
+In CI every fixture is required: `helpers.requireFixture()` fails the test when one is missing.
+Locally, against a site seeded by hand, the same call skips with the reason. A skip that is
+legitimate in every run goes through `helpers.optionalSkip()`, which annotates it.
+
+`run-summary.js` writes the job summary and, with `SME_STRICT_FIXTURES=1`, is a gate: it exits
+with 1 when a spec file of the run collected no test, when a test was skipped without the
+`optional-skip` annotation, or when a test is marked `fixme`. Playwright's own exit code says that
+nothing failed; the gate says that everything that should run did run.
 
 Reports land in `playwright-report/` (HTML) and `test-results/` (videos, traces, screenshots).
 Open a trace with `npx playwright show-trace test-results/<test>/trace.zip`.
@@ -77,7 +97,7 @@ chooser announces itself and returns the focus. What it cannot settle: whether a
 *understandable*, in what order it comes, whether something is read twice. Read the transcripts
 and answer those yourself.
 
-`a11y-zoom.spec.js` needs no screen reader and runs in the normal suite: 200 per cent zoom
+`a11y-zoom.spec.js` needs no screen reader and runs in the normal suite: 200 and 400 per cent zoom
 without horizontal scrolling, a 380 pixel viewport with no button outside its toolbar and none
 below 24 by 24 pixels, the keyboard reaching editor and toolbar, a visible focus everywhere.
 

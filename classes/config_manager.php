@@ -36,7 +36,13 @@ namespace local_stackmatheditor;
  */
 class config_manager {
     /** @var string Database table name. */
-    const TABLE = 'local_stackmatheditor';
+    public const TABLE = 'local_stackmatheditor';
+
+    /** @var string Total read order of a scope: newest first, id breaks ties within a second. */
+    public const READ_ORDER = 'timemodified DESC, id DESC';
+
+    /** @var int Seconds a writer waits for the scope lock (config locktimeout overrides it). */
+    private const LOCK_TIMEOUT = 10;
 
 
     // Instance-level helpers.
@@ -160,7 +166,10 @@ class config_manager {
 
 
     /**
-     * Safe single-record fetch: returns newest matching record.
+     * Safe single-record fetch: returns the newest matching record.
+     *
+     * The order is total (timemodified has second resolution, id breaks the tie), so the record a
+     * read returns is the same one collapse_scope() keeps (#87).
      *
      * @param string $where SQL WHERE clause.
      * @param array  $params Query parameters.
@@ -169,7 +178,7 @@ class config_manager {
     private static function get_one(string $where, array $params): ?\stdClass {
         global $DB;
         $sql     = "SELECT * FROM {" . self::TABLE . "} WHERE {$where}"
-                 . " ORDER BY timemodified DESC";
+                 . " ORDER BY " . self::READ_ORDER;
         $records = $DB->get_records_sql($sql, $params, 0, 1);
         return $records ? reset($records) : null;
     }
@@ -448,12 +457,13 @@ class config_manager {
                     self::TABLE,
                     "questionid {$legacyinsql} AND questionid > 0"
                         . " AND (cmid = 0 OR cmid = :lcmid)",
-                    $legacyparams
+                    $legacyparams,
+                    self::READ_ORDER
                 );
-                // Index by questionid for O(1) lookup.
+                // Index by questionid for O(1) lookup; the newest record per questionid wins.
                 $legacybyqid = [];
                 foreach ($legacyrecs as $rec) {
-                    $legacybyqid[(int) $rec->questionid] = $rec;
+                    $legacybyqid[(int) $rec->questionid] ??= $rec;
                 }
                 foreach ($qbeids as $qbeid) {
                     if (!isset($questionids[$qbeid])) {
@@ -478,10 +488,10 @@ class config_manager {
         $records = $DB->get_records_select(
             self::TABLE,
             "cmid = :cmid AND questionbankentryid {$insql}",
-            $params
+            $params,
+            self::READ_ORDER
         );
-        foreach ($records as $rec) {
-            $qbeid = (int) $rec->questionbankentryid;
+        foreach (self::newest_per_qbeid($records) as $qbeid => $rec) {
             if (isset($configs[$qbeid])) {
                 $configs[$qbeid] = self::merge_config_layer(
                     $configs[$qbeid],
@@ -511,10 +521,10 @@ class config_manager {
             $records = $DB->get_records_select(
                 self::TABLE,
                 "cmid = :cmid AND questionbankentryid {$insql}",
-                $params
+                $params,
+                self::READ_ORDER
             );
-            foreach ($records as $rec) {
-                $qbeid = (int) $rec->questionbankentryid;
+            foreach (self::newest_per_qbeid($records) as $qbeid => $rec) {
                 if (isset($configs[$qbeid])) {
                     $configs[$qbeid] = self::merge_config_layer(
                         $configs[$qbeid],
@@ -530,6 +540,23 @@ class config_manager {
 
     // Public write API.
 
+
+    /**
+     * Keep only the first (newest) record per question bank entry of a READ_ORDER result.
+     *
+     * Without a unique index a scope may hold more than one row; merging all of them would mix
+     * an older configuration into the newer one. The runtime reads exactly one row per scope.
+     *
+     * @param \stdClass[] $records Records ordered by READ_ORDER.
+     * @return \stdClass[] Records keyed by question bank entry id.
+     */
+    private static function newest_per_qbeid(array $records): array {
+        $result = [];
+        foreach ($records as $rec) {
+            $result[(int) $rec->questionbankentryid] ??= $rec;
+        }
+        return $result;
+    }
 
     /**
      * Save question-level config (cmid + qbeid).
@@ -568,13 +595,20 @@ class config_manager {
     }
 
     /**
-     * Internal upsert. Handles both question-level (qbeid int) and
-     * quiz-level (qbeid null) records. Removes duplicates on update.
+     * Internal upsert. Handles both question-level (qbeid int) and quiz-level (qbeid null) records.
+     *
+     * The table has no unique index on (cmid, questionbankentryid) and cannot get one while the
+     * version is pinned, so the scope is made unique by the application (#87):
+     *   - writers of the same scope are serialised with the Moodle lock API;
+     *   - read, write and the removal of surplus rows run in one database transaction;
+     *   - after the write the scope is collapsed to the row every read returns, which also repairs
+     *     duplicates left by older versions or by a lock factory that does not serialise.
      *
      * @param int      $cmid
      * @param int|null $qbeid  null for quiz-level default.
      * @param array    $elements
      * @param int      $userid
+     * @throws \moodle_exception When the scope lock cannot be obtained in time.
      */
     private static function upsert_record(
         int $cmid,
@@ -585,44 +619,90 @@ class config_manager {
         global $DB;
 
         $col  = self::get_config_column();
-        $now  = time();
         $json = json_encode($elements, JSON_THROW_ON_ERROR);
 
-        if ($qbeid === null) {
-            $where  = "cmid = :cmid AND questionbankentryid IS NULL";
-            $params = ['cmid' => $cmid];
-        } else {
-            $where  = "cmid = :cmid AND questionbankentryid = :qbeid";
-            $params = ['cmid' => $cmid, 'qbeid' => $qbeid];
+        $factory  = \core\lock\lock_config::get_lock_factory('local_stackmatheditor');
+        $resource = self::scope_lock_key($cmid, $qbeid);
+        $timeout  = (int) (get_config('local_stackmatheditor', 'locktimeout') ?: self::LOCK_TIMEOUT);
+        $lock     = $factory->get_lock($resource, max(1, $timeout));
+        if (!$lock) {
+            throw new \moodle_exception('locktimeout', 'moodle');
         }
 
-        $records = $DB->get_records_select(
-            self::TABLE,
-            $where,
-            $params,
-            'timemodified DESC'
-        );
+        try {
+            $transaction = $DB->start_delegated_transaction();
+            [$where, $params] = self::scope_condition($cmid, $qbeid);
+            $records = $DB->get_records_select(self::TABLE, $where, $params, self::READ_ORDER, '*', 0, 1);
+            $now = time();
 
-        if (!empty($records)) {
-            $keep               = array_shift($records);
-            $keep->$col         = $json;
-            $keep->usermodified = $userid;
-            $keep->timemodified = $now;
-            $DB->update_record(self::TABLE, $keep);
-
-            foreach ($records as $dupe) {
-                $DB->delete_records(self::TABLE, ['id' => $dupe->id]);
+            if ($records) {
+                $keep               = reset($records);
+                $keep->$col         = $json;
+                $keep->usermodified = $userid;
+                $keep->timemodified = max($now, (int) $keep->timemodified);
+                $DB->update_record(self::TABLE, $keep);
+            } else {
+                $record                      = new \stdClass();
+                $record->cmid                = $cmid;
+                $record->questionbankentryid = $qbeid; // Null for quiz-level defaults.
+                $record->$col                = $json;
+                $record->usermodified        = $userid;
+                $record->timecreated         = $now;
+                $record->timemodified        = $now;
+                $DB->insert_record(self::TABLE, $record);
             }
-        } else {
-            $record                      = new \stdClass();
-            $record->cmid                = $cmid;
-            $record->questionbankentryid = $qbeid; // Null for quiz-level defaults.
-            $record->$col                = $json;
-            $record->usermodified        = $userid;
-            $record->timecreated         = $now;
-            $record->timemodified        = $now;
-            $DB->insert_record(self::TABLE, $record);
+
+            self::collapse_scope($cmid, $qbeid);
+            $transaction->allow_commit();
+        } finally {
+            $lock->release();
         }
+    }
+
+    /**
+     * Reduce one scope to the row every read returns and delete the others.
+     *
+     * @param int      $cmid  Course module id (0 = global scope).
+     * @param int|null $qbeid Question bank entry id, null for the quiz-level default.
+     * @return int Number of deleted rows.
+     */
+    public static function collapse_scope(int $cmid, ?int $qbeid): int {
+        global $DB;
+        [$where, $params] = self::scope_condition($cmid, $qbeid);
+        $ids = $DB->get_fieldset_sql(
+            "SELECT id FROM {" . self::TABLE . "} WHERE {$where} ORDER BY " . self::READ_ORDER,
+            $params
+        );
+        $surplus = array_slice($ids, 1);
+        if ($surplus) {
+            $DB->delete_records_list(self::TABLE, 'id', $surplus);
+        }
+        return count($surplus);
+    }
+
+    /**
+     * SQL condition for one scope.
+     *
+     * @param int      $cmid  Course module id.
+     * @param int|null $qbeid Question bank entry id, null for the quiz-level default.
+     * @return array [where, params]
+     */
+    private static function scope_condition(int $cmid, ?int $qbeid): array {
+        if ($qbeid === null) {
+            return ['cmid = :cmid AND questionbankentryid IS NULL', ['cmid' => $cmid]];
+        }
+        return ['cmid = :cmid AND questionbankentryid = :qbeid', ['cmid' => $cmid, 'qbeid' => $qbeid]];
+    }
+
+    /**
+     * Lock resource name of one scope.
+     *
+     * @param int      $cmid  Course module id.
+     * @param int|null $qbeid Question bank entry id, null for the quiz-level default.
+     * @return string Resource key.
+     */
+    public static function scope_lock_key(int $cmid, ?int $qbeid): string {
+        return 'scope_' . $cmid . '_' . ($qbeid === null ? 'default' : $qbeid);
     }
 
 

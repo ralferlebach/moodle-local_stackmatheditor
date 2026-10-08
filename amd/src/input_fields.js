@@ -735,6 +735,11 @@ define([
 
         var systemParts = getRelationSystemParts(initialMaxima);
         var prefilling = (initialMaxima && initialMaxima.trim()) ? true : false;
+        // True until the initial value has been written into the editor (two ticks after
+        // creation, see the pre-fill below). External values are not taken before that.
+        var initialPending = prefilling;
+        // True while adoptExternalValue() is writing into the editor - its re-entrancy guard.
+        var adopting = false;
         // The last value this editor wrote into the input, so the return channel (#77) can tell
         // its own echo from a change somebody else made.
         var lastwritten = initialMaxima || '';
@@ -909,8 +914,12 @@ define([
         function adoptExternalValue(e) {
             var current = $input.val();
 
-            // Our own write, echoed back by the event we raised for STACK.
-            if (syncingToInput || prefilling || current === lastwritten) {
+            // Our own write, echoed back by the event we raised for STACK, or a call from inside
+            // an adoption. Not the prefilling flag: an earlier adoption releases it one tick
+            // later, and a fast slider drag delivers its next pointer events - Chrome runs input
+            // before timers - while it is still up. The last value of a drag was dropped that way
+            // and the editor stayed one step behind the input (#77).
+            if (syncingToInput || adopting || initialPending || current === lastwritten) {
                 return;
             }
 
@@ -928,13 +937,18 @@ define([
             // The editor is being told, not asked: writing the value back out now would raise a
             // second validation for a value STACK already has.
             prefilling = true;
-            if (current && current.trim()) {
-                prefill(mqField, current, ctx.defs, varMode, ctx.dbg);
-            } else {
-                mqField.latex('');
+            adopting = true;
+            try {
+                if (current && current.trim()) {
+                    prefill(mqField, current, ctx.defs, varMode, ctx.dbg);
+                } else {
+                    mqField.latex('');
+                }
+                $input.val(current);
+                lastwritten = current;
+            } finally {
+                adopting = false;
             }
-            $input.val(current);
-            lastwritten = current;
             setTimeout(function() {
                 prefilling = false;
             }, 0);
@@ -1049,6 +1063,7 @@ define([
                 // slightly different Maxima string.
                 $input.val(initialMaxima);
                 lastwritten = initialMaxima;
+                initialPending = false;
                 // Release the prefilling guard after one more tick so that any
                 // async MathQuill edit events triggered by the latex() call above
                 // (which MathQuill can fire on a deferred internal setTimeout) are

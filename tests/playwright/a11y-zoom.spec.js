@@ -16,9 +16,10 @@
 /**
  * The parts of the accessibility sample that are measurements, not judgements (#69).
  *
- * Zoom, viewport width, target size, keyboard reach and a visible focus ring: each either holds
- * or does not, so each belongs in the run that happens anyway rather than on a checklist
- * somebody works through by hand. No screen reader needed, so this runs in the normal suite.
+ * Zoom (200 and 400 per cent), viewport width, target size, keyboard reach and a visible focus
+ * ring: each either holds or does not, so each belongs in the run that happens anyway rather
+ * than on a checklist somebody works through by hand. No screen reader needed, so this runs in
+ * the normal suite.
  *
  * @copyright  2026 Ralf Erlebach
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -80,68 +81,97 @@ function measure(page) {
             });
         });
 
+        // What sticks out of the viewport to the right, and whether it is the editor's. Off-canvas
+        // drawers are outside on purpose. Moodle 5.3's own page header has a .row with negative
+        // margins that is 4 px wider than a 640 px viewport; that is core's to fix, not this
+        // plugin's, so it is reported but does not decide the test.
+        const outside = [];
+        document.querySelectorAll('body *').forEach((element) => {
+            const box = element.getBoundingClientRect();
+            if (!box.width || box.right <= window.innerWidth + 1 || element.closest('.drawer')) {
+                return;
+            }
+            const ours = !!element.closest('[class*="sme-"]');
+            outside.push({ours, what: `${element.tagName}.${String(element.className).slice(0, 60)}`,
+                right: Math.round(box.right)});
+        });
+
         return {
             overflowing,
             tiny,
+            ownOutside: outside.filter((item) => item.ours).map((item) => `${item.what} ${item.right}`),
+            otherOutside: outside.filter((item) => !item.ours).map((item) => `${item.what} ${item.right}`),
             documentWidth: document.documentElement.scrollWidth,
             windowWidth: window.innerWidth,
         };
     });
 }
 
-test('200 per cent zoom keeps everything inside the page', async({page}) => {
-    // Browser zoom at 200 % on a 1280 x 900 window is a 640 x 450 CSS viewport with twice the
-    // device pixel ratio - that is what WCAG 1.4.10 means by reflow. The first version set
-    // `zoom: 200%` on the body instead, which scales coordinates inside the page differently
-    // from the toolbar that contains them, and reported every button as outside it.
-    await page.setViewportSize({width: 640, height: 450});
-    await attempt(page);
+// Browser zoom on a 1280 x 900 window is that window divided by the zoom factor in CSS pixels:
+// 640 x 450 at 200 %, 320 x 225 at 400 %. 400 % is where WCAG 1.4.10 asks for reflow (320 CSS
+// pixels wide); 200 % is the common case. The first version set `zoom: 200%` on the body instead,
+// which scales coordinates inside the page differently from the toolbar that contains them, and
+// reported every button as outside it.
+for (const zoom of [200, 400]) {
+    const viewport = {width: Math.round(1280 * 100 / zoom), height: Math.round(900 * 100 / zoom)};
 
-    const seen = await measure(page);
+    test(`${zoom} per cent zoom keeps everything inside the page`, async({page}) => {
+        await page.setViewportSize(viewport);
+        await attempt(page);
 
-    expect(seen.overflowing, JSON.stringify(seen.overflowing)).toEqual([]);
-    // WCAG 1.4.10: no horizontal scrolling of the page itself.
-    expect(seen.documentWidth).toBeLessThanOrEqual(seen.windowWidth + 2);
-});
+        const seen = await measure(page);
 
-test('the core workflow works at 200 per cent zoom', async({page}) => {
-    // Reflow is half of it; the other half is that the thing still does its job: type, use the
-    // toolbar, and the answer arrives where STACK reads it.
-    await page.setViewportSize({width: 640, height: 450});
-    await attempt(page);
-
-    const question = page.locator('.que.stack').first();
-    const field = question.locator('.mq-editable-field').first();
-
-    await field.scrollIntoViewIfNeeded();
-    await field.click();
-    await expect(field.locator('textarea')).toBeFocused();
-    await page.keyboard.type('x');
-
-    // A toolbar button, with the mouse, where the zoomed layout has put it.
-    const plus = question.locator('.sme-tb-btn').first();
-    await plus.scrollIntoViewIfNeeded();
-    const box = await plus.boundingBox();
-    expect(box.x, 'the button is inside the zoomed viewport').toBeGreaterThanOrEqual(0);
-    expect(box.x + box.width).toBeLessThanOrEqual(640);
-    await plus.click();
-    await page.keyboard.type('1');
-    await page.waitForTimeout(800);
-
-    const state = await question.evaluate((que) => {
-        const input = que.querySelector('input[name*="_ans"]');
-        const MQ = window.MathQuill.getInterface(2);
-        return {input: input.value, latex: MQ(que.querySelector('.mq-editable-field')).latex()};
+        expect(seen.overflowing, JSON.stringify(seen.overflowing)).toEqual([]);
+        // WCAG 1.4.10: nothing of the editor makes the page scroll sideways.
+        expect(seen.ownOutside, 'editor elements outside the viewport').toEqual([]);
+        if (seen.documentWidth > seen.windowWidth + 2) {
+            // The page scrolls, but not because of the editor (checked above): say what does.
+            test.info().annotations.push({
+                type: 'core-overflow',
+                description: `${seen.documentWidth} > ${seen.windowWidth}: ${seen.otherOutside.join('; ')}`,
+            });
+        }
     });
-    expect(state.input.replace(/\s/g, '')).toBe('x+1');
-    expect(state.latex.replace(/\s/g, '')).toBe('x+1');
 
-    // The toolbar handed the focus back to the field: a deletion needs no click, and deletes
-    // what was typed last.
-    await page.keyboard.press('Backspace');
-    await page.waitForTimeout(500);
-    expect(await question.locator('input[name*="_ans"]').first().inputValue()).toBe('x+');
-});
+    test(`the core workflow works at ${zoom} per cent zoom`, async({page}) => {
+        // Reflow is half of it; the other half is that the thing still does its job: type, use
+        // the toolbar, and the answer arrives where STACK reads it.
+        await page.setViewportSize(viewport);
+        await attempt(page);
+
+        const question = page.locator('.que.stack').first();
+        const field = question.locator('.mq-editable-field').first();
+
+        await field.scrollIntoViewIfNeeded();
+        await field.click();
+        await expect(field.locator('textarea')).toBeFocused();
+        await page.keyboard.type('x');
+
+        // A toolbar button, with the mouse, where the zoomed layout has put it.
+        const plus = question.locator('.sme-tb-btn').first();
+        await plus.scrollIntoViewIfNeeded();
+        const box = await plus.boundingBox();
+        expect(box.x, 'the button is inside the zoomed viewport').toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+        await plus.click();
+        await page.keyboard.type('1');
+        await page.waitForTimeout(800);
+
+        const state = await question.evaluate((que) => {
+            const input = que.querySelector('input[name*="_ans"]');
+            const MQ = window.MathQuill.getInterface(2);
+            return {input: input.value, latex: MQ(que.querySelector('.mq-editable-field')).latex()};
+        });
+        expect(state.input.replace(/\s/g, '')).toBe('x+1');
+        expect(state.latex.replace(/\s/g, '')).toBe('x+1');
+
+        // The toolbar handed the focus back to the field: a deletion needs no click, and deletes
+        // what was typed last.
+        await page.keyboard.press('Backspace');
+        await page.waitForTimeout(500);
+        expect(await question.locator('input[name*="_ans"]').first().inputValue()).toBe('x+');
+    });
+}
 
 test('a narrow viewport keeps the toolbar usable', async({page}) => {
     await page.setViewportSize({width: 380, height: 800});
@@ -193,6 +223,7 @@ test('focus is visible wherever it lands', async({page}) => {
     await attempt(page);
 
     const invisible = [];
+    const elsewhere = [];
 
     for (let i = 0; i < 25; i++) {
         await page.keyboard.press('Tab');
@@ -205,16 +236,23 @@ test('focus is visible wherever it lands', async({page}) => {
 
             return {
                 label: active.getAttribute('aria-label') || active.tagName,
+                // The editor's own controls; the question text around them is core's. On Moodle
+                // 5.3 MathJax 4 makes every formula in the question text a tab stop with a
+                // focus style of its own that this check does not recognise.
+                ours: !!active.closest('[class*="sme-"], .mq-editable-field'),
                 visible: (style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0)
                     || (style.boxShadow && style.boxShadow !== 'none'),
             };
         });
 
         if (check && !check.visible) {
-            invisible.push(check.label);
+            (check.ours ? invisible : elsewhere).push(check.label);
         }
     }
 
+    if (elsewhere.length) {
+        test.info().annotations.push({type: 'core-focus', description: elsewhere.join('; ')});
+    }
     // The browser's own focus ring counts; what fails here is an element styled until it has
     // none.
     expect(invisible, `no visible focus on: ${JSON.stringify(invisible)}`).toEqual([]);

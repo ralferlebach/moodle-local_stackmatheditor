@@ -29,7 +29,7 @@
  */
 
 const {test, expect} = require('@playwright/test');
-const {env, loginAs, openPage, closePage} = require('./helpers');
+const {env, loginAs, openPage, closePage, requireFixture} = require('./helpers');
 
 // Local reference: 40-70 s per test. A slider question is slow to instantiate.
 test.describe.configure({mode: 'serial', timeout: 180000});
@@ -153,9 +153,11 @@ async function sliderAt(page, frame, index) {
 
     // The mouse works in viewport coordinates, and the board is below the fold on a default
     // window: bring the handle to the middle of the viewport before reading where it is.
+    // 'instant': Bootstrap 5 (Moodle 5.x) sets scroll-behavior: smooth on the root, and a
+    // smooth scroll is still moving when the handle's position is read - the drag then misses.
     await element.evaluate((iframe, y) => {
         const top = iframe.getBoundingClientRect().top + y;
-        window.scrollBy(0, top - window.innerHeight / 2);
+        window.scrollBy({top: top - window.innerHeight / 2, left: 0, behavior: 'instant'});
     }, inner.y);
     await page.waitForTimeout(300);
 
@@ -246,12 +248,17 @@ async function typeInto(page, name, text) {
     await page.waitForTimeout(800);
 }
 
-// The seed leaves the id at 0 when the JSXGraph quiz could not be built; say so instead of
-// failing on a page that does not exist.
-test.skip(!Number(process.env.SME_JSXGRAPH_CMID || 0),
-    'the JSXGraph quiz could not be seeded - see the seed step for the reason');
+// The seed leaves the id at 0 when the JSXGraph quiz could not be built. In CI that is a failure
+// (the seed promises the quiz), locally the spec skips with the reason (#89).
+test.beforeEach(() => {
+    requireFixture(test, Number(process.env.SME_JSXGRAPH_CMID || 0),
+        'the JSXGraph quiz (SME_JSXGRAPH_CMID) - see the seed step for the reason');
+});
 
 test.beforeAll(async({browser}) => {
+    if (!Number(process.env.SME_JSXGRAPH_CMID || 0)) {
+        return;
+    }
     await enableEditor(browser);
 });
 

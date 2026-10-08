@@ -116,8 +116,10 @@ define(['jquery'], function($) {
         return $('<a>')
             .attr('href', href)
             .attr('title', title)
-            .addClass('sme-configure-edit-link ml-1 mr-1')
-            .css({'color': '#0f6cbf', 'font-size': '1em', 'text-decoration': 'none'})
+            // Spacing for Bootstrap 4 (ml/mr, Moodle 4.5) and 5 (ms/me, Moodle 5.x); the colour is
+            // the theme's link colour, so it follows the dark colour mode (#93).
+            .addClass('sme-configure-edit-link ml-1 mr-1 ms-1 me-1')
+            .css({'font-size': '1em', 'text-decoration': 'none'})
             .append($('<i>').addClass('fa fa-calculator fa-fw').attr('aria-hidden', 'true'));
     }
 

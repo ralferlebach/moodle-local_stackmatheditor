@@ -98,15 +98,17 @@ final class review_2026_10_08_test extends \advanced_testcase {
 
         $source = file_get_contents($CFG->dirroot . '/local/stackmatheditor/configure.php');
 
-        $check = strpos($source, 'quiz_helper::quiz_uses_entry(');
-        $query = strpos($source, 'WHERE qv.questionbankentryid = :qbeid');
-        $preview = strpos($source, 'question_bank::load_question(');
+        $check = strpos($source, 'quiz_helper::require_configurable_question(');
+        $this->assertNotFalse($check, 'configure.php must resolve the question through the checked helper');
 
-        $this->assertNotFalse($check, 'configure.php must check that the quiz uses the entry');
-        $this->assertLessThan($query, $check, 'the check comes before the question is looked up');
-        $this->assertLessThan($preview, $check, 'the check comes before the preview');
-        // The capability gate stays first of all.
-        $this->assertLessThan($check, strpos($source, 'require_capability($capname, $context);'));
+        // After the login gate, before anything is shown, evaluated or saved.
+        $this->assertLessThan($check, strpos($source, 'require_login('));
+        foreach (['question_bank::load_question(', 'get_semantics_summary(', '$mform->get_data()'] as $later) {
+            $this->assertNotFalse(strpos($source, $later), $later);
+            $this->assertLessThan(strpos($source, $later), $check, "the check comes before {$later}");
+        }
+        // No second, unchecked way to the question.
+        $this->assertStringNotContainsString('WHERE qv.questionbankentryid = :qbeid', $source);
     }
 
     /**

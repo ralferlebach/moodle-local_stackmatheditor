@@ -208,6 +208,56 @@ class quiz_helper {
     }
 
     /**
+     * The STACK question a quiz-level user may configure, or an exception (#84).
+     *
+     * The configuration page takes the question from the request. Three things have to hold
+     * before it may show, evaluate or save anything about it:
+     *
+     *  1. the question bank entry is one the quiz uses - an entry of another quiz, another course
+     *     or no quiz at all gets the same answer as one that does not exist, so the page can be
+     *     used neither to view nor to probe questions elsewhere;
+     *  2. it is a STACK question;
+     *  3. the user may view the question in its own question bank context - managing the quiz is
+     *     not the same as being allowed to see every question it uses.
+     *
+     * @param int $quizinstanceid Quiz instance id (from the course module the page was opened for).
+     * @param int $qbeid Question bank entry id from the request, 0 if none.
+     * @param int $questionid Question id from the request, 0 if none.
+     * @return \stdClass The question record (id, name, qtype, version) with its qbeid.
+     * @throws \moodle_exception If any of the three does not hold.
+     */
+    public static function require_configurable_question(int $quizinstanceid, int $qbeid, int $questionid): \stdClass {
+        global $CFG, $DB;
+
+        if ($qbeid <= 0 && $questionid > 0) {
+            $qbeid = (int) config_manager::resolve_qbeid($questionid);
+        }
+        if ($qbeid <= 0 || !self::quiz_uses_entry($quizinstanceid, $qbeid)) {
+            throw new \moodle_exception('cannotresolveqbeid', 'local_stackmatheditor');
+        }
+
+        $sql = "SELECT q.id, q.name, q.qtype, qv.version
+                  FROM {question} q
+                  JOIN {question_versions} qv ON qv.questionid = q.id
+                 WHERE qv.questionbankentryid = :qbeid
+              ORDER BY qv.version DESC";
+        $versions = $DB->get_records_sql($sql, ['qbeid' => $qbeid], 0, 1);
+        $question = $versions ? reset($versions) : null;
+        if (!$question) {
+            throw new \moodle_exception('cannotresolveqbeid', 'local_stackmatheditor');
+        }
+        if ($question->qtype !== 'stack') {
+            throw new \moodle_exception('notstackquestion', 'local_stackmatheditor');
+        }
+
+        require_once($CFG->libdir . '/questionlib.php');
+        question_require_capability_on((int) $question->id, 'view');
+
+        $question->qbeid = $qbeid;
+        return $question;
+    }
+
+    /**
      * Does an adaptive quiz draw from a question category that holds a STACK question?
      *
      * mod_adaptivequiz has no slots: an instance names question categories in
@@ -499,19 +549,66 @@ class quiz_helper {
     }
 
     /**
-     * Check whether the current user has quiz management capability.
+     * Capability that authorises changing the editor configuration of an activity (#86).
+     *
+     * Configuring is a write action, so it is tied to a write capability of the module context:
+     *   - mod_quiz: mod/quiz:manage (edit the quiz);
+     *   - mod_adaptivequiz: moodle/course:manageactivities, as that module has no manage
+     *     capability of its own. mod/adaptivequiz:viewreport was used before; it is a read
+     *     capability and a role that may only see reports must not change the configuration.
+     * A plugin capability (local/stackmatheditor:configure) would need a version bump to be
+     * installed; the version is pinned for 1.3.0.
+     *
+     * Settings navigation, the configure links on the quiz edit page and configure.php all ask
+     * this method, so what is offered and what is allowed cannot drift apart.
+     *
+     * @param string $modname Module name of the activity.
+     * @return string|null Capability name, or null for modules without a configuration UI.
+     */
+    public static function configure_capability(string $modname): ?string {
+        switch ($modname) {
+            case 'quiz':
+                return 'mod/quiz:manage';
+            case 'adaptivequiz':
+                return 'moodle/course:manageactivities';
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * Whether the current user may configure the editor of the given activity.
      *
      * @param int $cmid Course module ID.
-     * @return bool True if the user can manage the quiz.
+     * @return bool True if the user holds the configure capability of that module.
      */
-    public static function can_manage_quiz(int $cmid): bool {
-        try {
-            $context = \context_module::instance($cmid);
-            return has_capability('mod/quiz:manage', $context);
-        } catch (\Throwable $e) {
-            self::caught($e, 'can_manage_quiz');
+    public static function can_configure(int $cmid): bool {
+        if ($cmid <= 0) {
             return false;
         }
+        try {
+            $cm = get_coursemodule_from_id('', $cmid, 0, false, IGNORE_MISSING);
+            $capability = $cm ? self::configure_capability($cm->modname) : null;
+            if ($capability === null) {
+                return false;
+            }
+            return has_capability($capability, \context_module::instance($cmid));
+        } catch (\moodle_exception $e) {
+            self::dbg('can_configure: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Check whether the current user may configure the given quiz.
+     *
+     * Kept for callers of earlier builds; it follows can_configure().
+     *
+     * @param int $cmid Course module ID.
+     * @return bool True if the user can configure the activity.
+     */
+    public static function can_manage_quiz(int $cmid): bool {
+        return self::can_configure($cmid);
     }
 
     /**

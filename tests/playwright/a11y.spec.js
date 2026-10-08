@@ -76,6 +76,11 @@ test('attempt page: editors and toolbars are accessible', async({browser}, info)
     await page.waitForFunction(() => document.querySelectorAll('.que.stack .mq-editable-field').length >= 10,
         null, {timeout: 30000});
 
+    // The mouse is still where "Start attempt" was clicked; on the next page a toolbar button can
+    // sit under it, and axe then measures that button in the middle of its hover transition.
+    // Measure the resting state.
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(300);
     const violations = await axe(page, ['.sme-toolbar', '.sme-mq-container', '.sme-equiv-wrap'], info, 'axe attempt');
     expect(violations, JSON.stringify(violations, null, 1)).toEqual([]);
 

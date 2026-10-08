@@ -23,6 +23,14 @@
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+/*
+ * Colours (#93). Every colour is a Bootstrap 5 variable first (--bs-*), with the value Moodle 4.5
+ * shows as fallback. Moodle 5.x defines the --bs-* variables and switches them in its dark colour
+ * mode (5.3+); Moodle 4.5 does not define them, so it keeps exactly the colours it had. The
+ * Bootstrap 4 names (--white, --gray-400, --primary ...) are not defined on 5.x, which is why they
+ * stay only as the inner fallback. Field edges use --bs-gray-500, the edge of Moodle's own inputs.
+ */
+
 /* ═══════════════════════════════════════════════════
    STACK MathEditor – Toolbar
    ═══════════════════════════════════════════════════ */
@@ -32,8 +40,8 @@
     flex-wrap: wrap;
     gap: 2px;
     padding: 4px;
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
+    background: var(--bs-tertiary-bg, #f8f9fa);
+    border: 1px solid var(--bs-border-color, #dee2e6);
     border-radius: 4px 4px 0 0;
     border-bottom: none;
     box-sizing: border-box;
@@ -48,11 +56,17 @@
  */
 .sme-tb-group {
     display: inline-flex;
-    flex-wrap: nowrap;
+    /*
+     * A group moves to the next line as a whole first: the toolbar breaks its lines by the
+     * groups' full widths. Only a group that is wider than the whole toolbar on its own - a
+     * five-button group in a very narrow container, e.g. Moodle 5.3's question layout at 420 px -
+     * breaks inside, instead of reaching out of the toolbar (#93).
+     */
+    flex-wrap: wrap;
     gap: 2px;
     margin-right: 6px;
     padding-right: 6px;
-    border-right: 1px solid #dee2e6;
+    border-right: 1px solid var(--bs-border-color, #dee2e6);
     min-width: 0;
     max-width: 100%;
 }
@@ -179,9 +193,9 @@
 }
 
 .sme-mq-container {
-    border: 1px solid #ced4da;
+    border: 1px solid var(--bs-gray-500, #ced4da);
     border-radius: 0 0 4px 4px;
-    background: #fff;
+    background: var(--bs-body-bg, #fff);
     padding: 4px 6px;
     cursor: text;
 }
@@ -202,9 +216,9 @@
 }
 
 .sme-equiv-rows {
-    border: 1px solid #ced4da;
+    border: 1px solid var(--bs-gray-500, #ced4da);
     border-radius: 0 0 4px 4px;
-    background: #fff;
+    background: var(--bs-body-bg, #fff);
     padding: 4px;
     max-height: 500px;
     overflow-y: auto;
@@ -215,7 +229,7 @@
     align-items: center;
     gap: 4px;
     padding: 1px 4px;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--bs-border-color-translucent, #f0f0f0);
 }
 
 .sme-equiv-row:last-child {
@@ -223,16 +237,16 @@
 }
 
 .sme-equiv-row-active {
-    background-color: #f8fbff;
+    background-color: var(--bs-tertiary-bg, #f8fbff);
     border-radius: 3px;
 }
 
 .sme-equiv-row:hover {
-    background-color: #f5f5f5;
+    background-color: var(--bs-secondary-bg, #f5f5f5);
 }
 
 .sme-equiv-row-active:hover {
-    background-color: #f8fbff;
+    background-color: var(--bs-tertiary-bg, #f8fbff);
 }
 
 .sme-equiv-num {
@@ -240,7 +254,7 @@
     min-width: 28px;
     text-align: right;
     padding-right: 8px;
-    color: #999;
+    color: var(--bs-secondary-color, #999);
     font-size: 0.82em;
     user-select: none;
     -webkit-user-select: none;
@@ -281,11 +295,11 @@
     display: block;
     width: 12px;
     flex: 0 0 8px;
-    border-left: 2px solid #444;
+    border-left: 2px solid var(--bs-body-color, #444);
 }
 
 .sme-equiv-system-brace::before {
-    border-top: 2px solid #444;
+    border-top: 2px solid var(--bs-body-color, #444);
     border-top-left-radius: 10px;
 }
 
@@ -293,11 +307,11 @@
     display: block;
     flex: 1 1 auto;
     width: 12px;
-    border-left: 2px solid #444;
+    border-left: 2px solid var(--bs-body-color, #444);
 }
 
 .sme-equiv-system-brace::after {
-    border-bottom: 2px solid #444;
+    border-bottom: 2px solid var(--bs-body-color, #444);
     border-bottom-left-radius: 10px;
 }
 
@@ -314,7 +328,7 @@
     align-items: center;
     gap: 4px;
     padding: 1px 0;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--bs-border-color-translucent, #f0f0f0);
 }
 
 .sme-equiv-line:last-child {
@@ -330,7 +344,7 @@
 .sme-equiv-subdel {
     flex: 0 0 auto;
     min-width: 2rem;
-    color: #666;
+    color: var(--bs-secondary-color, #666);
     text-decoration: none;
     opacity: 0;
     transition: opacity 0.12s;
@@ -345,7 +359,7 @@
 .sme-equiv-subdel:hover,
 .sme-equiv-subdel:focus {
     opacity: 1;
-    color: #111;
+    color: var(--bs-emphasis-color, #111);
 }
 
 .sme-equiv-step-controls {
@@ -427,11 +441,11 @@
     display: block;
     width: 12px;
     flex: 0 0 8px;
-    border-left: 2px solid #444;
+    border-left: 2px solid var(--bs-body-color, #444);
 }
 
 .sme-system-brace-top {
-    border-top: 2px solid #444;
+    border-top: 2px solid var(--bs-body-color, #444);
     border-top-left-radius: 10px;
 }
 
@@ -439,12 +453,12 @@
     display: block;
     flex: 1 1 auto;
     width: 12px;
-    border-left: 2px solid #444;
+    border-left: 2px solid var(--bs-body-color, #444);
     margin-left: 0;
 }
 
 .sme-system-brace-bottom {
-    border-bottom: 2px solid #444;
+    border-bottom: 2px solid var(--bs-body-color, #444);
     border-bottom-left-radius: 10px;
 }
 
@@ -458,7 +472,7 @@
     align-items: center;
     gap: 4px;
     padding: 1px 0;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--bs-border-color-translucent, #f0f0f0);
 }
 
 .sme-system-row:last-child {
@@ -466,7 +480,7 @@
 }
 
 .sme-system-row-active {
-    background: #f8fbff;
+    background: var(--bs-tertiary-bg, #f8fbff);
     border-radius: 3px;
 }
 
@@ -478,7 +492,7 @@
 
 .sme-system-del {
     flex: 0 0 auto;
-    color: #666;
+    color: var(--bs-secondary-color, #666);
     text-decoration: none;
 }
 
@@ -505,8 +519,8 @@
 
 /* Matrix and vector popups (#62). */
 .sme-structured-popup {
-    background: var(--white, #fff);
-    border: 1px solid var(--gray-400, #ced4da);
+    background: var(--bs-body-bg, var(--white, #fff));
+    border: 1px solid var(--bs-border-color, var(--gray-400, #ced4da));
     border-radius: 0.25rem;
     box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.2);
     padding: 0.5rem;
@@ -517,8 +531,8 @@
 }
 
 .sme-matrix-grid-cell {
-    background: var(--white, #fff);
-    border: 1px solid var(--gray-400, #ced4da);
+    background: var(--bs-body-bg, var(--white, #fff));
+    border: 1px solid var(--bs-gray-500, var(--gray-400, #ced4da));
     height: 1.4rem;
     margin: 1px;
     padding: 0;
@@ -526,12 +540,12 @@
 }
 
 .sme-matrix-grid-cell.sme-selected {
-    background: var(--primary, #0f6cbf);
-    border-color: var(--primary, #0f6cbf);
+    background: var(--bs-primary, var(--primary, #0f6cbf));
+    border-color: var(--bs-primary, var(--primary, #0f6cbf));
 }
 
 .sme-matrix-grid-cell:focus {
-    outline: 2px solid var(--warning, #f0ad4e);
+    outline: 2px solid var(--bs-warning, var(--warning, #f0ad4e));
     outline-offset: 1px;
 }
 
@@ -543,16 +557,16 @@
 
 .sme-vector-dimension,
 .sme-vector-orientation {
-    background: var(--white, #fff);
-    border: 1px solid var(--gray-400, #ced4da);
+    background: var(--bs-body-bg, var(--white, #fff));
+    border: 1px solid var(--bs-gray-500, var(--gray-400, #ced4da));
     border-radius: 0.2rem;
     padding: 0.1rem 0.4rem;
 }
 
 .sme-vector-dimension.sme-selected,
 .sme-vector-orientation.sme-selected {
-    background: var(--primary, #0f6cbf);
-    border-color: var(--primary, #0f6cbf);
+    background: var(--bs-primary, var(--primary, #0f6cbf));
+    border-color: var(--bs-primary, var(--primary, #0f6cbf));
     color: var(--white, #fff);
 }
 
@@ -588,9 +602,10 @@
 .sme-toggle .sme-toggle-label {
     /*
      * Not --gray-600: #6a737b on white is 4.46:1, just under the 4.5:1 that WCAG AA asks for
-     * text this size, and axe says so. --gray-700 is 7:1.
+     * text this size, and axe says so. --gray-700 is 7:1. On Moodle 5.x the secondary text
+     * colour of the colour mode: 7:1 in light, 9:1 in dark.
      */
-    color: var(--gray-700, #495057);
+    color: var(--bs-secondary-color, var(--gray-700, #495057));
     cursor: pointer;
     font-size: 0.85rem;
     margin: 0;
@@ -600,7 +615,7 @@
 .sme-toggle .sme-toggle-input {
     appearance: none;
     -webkit-appearance: none;
-    background: var(--gray-400, #ced4da);
+    background: var(--bs-gray-400, var(--gray-400, #ced4da));
     border: 0;
     border-radius: 0.65rem;
     cursor: pointer;
@@ -624,7 +639,7 @@
 }
 
 .sme-toggle .sme-toggle-input:checked {
-    background: var(--primary, #0f6cbf);
+    background: var(--bs-primary, var(--primary, #0f6cbf));
 }
 
 .sme-toggle .sme-toggle-input:checked::after {
@@ -632,7 +647,7 @@
 }
 
 .sme-toggle .sme-toggle-input:focus-visible {
-    outline: 2px solid var(--warning, #f0ad4e);
+    outline: 2px solid var(--bs-warning, var(--warning, #f0ad4e));
     outline-offset: 2px;
 }
 
@@ -670,16 +685,16 @@
 }
 
 .sme-vector-pad-cell {
-    background: var(--gray-200, #e9ecef);
-    border: 1px solid var(--gray-400, #ced4da);
+    background: var(--bs-secondary-bg, var(--gray-200, #e9ecef));
+    border: 1px solid var(--bs-gray-500, var(--gray-400, #ced4da));
     border-radius: 0.15rem;
     height: 1.4rem;
     width: 1.4rem;
 }
 
 .sme-vector-pad-cell.sme-selected {
-    background: var(--primary, #0f6cbf);
-    border-color: var(--primary, #0f6cbf);
+    background: var(--bs-primary, var(--primary, #0f6cbf));
+    border-color: var(--bs-primary, var(--primary, #0f6cbf));
 }
 
 .sme-vector-pad-column {

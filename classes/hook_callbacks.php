@@ -229,11 +229,11 @@ class hook_callbacks {
                 }
 
                 quiz_helper::dbg(
-                    'configure guard: can_manage='
-                    . (quiz_helper::can_manage_quiz($cmid) ? 'true' : 'false')
+                    'configure guard: can_configure='
+                    . (quiz_helper::can_configure($cmid) ? 'true' : 'false')
                 );
 
-                if (quiz_helper::can_manage_quiz($cmid)) {
+                if (quiz_helper::can_configure($cmid)) {
                     configure_injector::inject($cmid);
                 }
             } catch (\Throwable $e) {

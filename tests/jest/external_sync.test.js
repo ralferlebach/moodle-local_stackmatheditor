@@ -47,7 +47,8 @@ describe('adopting an external change (#77)', () => {
         return function(e) {
             const current = input.value;
 
-            if (state.syncingToInput || state.prefilling || current === state.lastwritten) {
+            if (state.syncingToInput || state.adopting || state.initialPending
+                || current === state.lastwritten) {
                 return;
             }
             if (editor.classList.contains('sme-hidden')) {
@@ -55,11 +56,18 @@ describe('adopting an external change (#77)', () => {
                 return;
             }
 
+            // prefilling only keeps the editor's own edit handler quiet; it is released a tick
+            // later and does not decide whether a value is adopted.
             state.prefilling = true;
-            adopted.push({value: current, type: e && e.type});
-            state.lastwritten = current;
-            // The editor is told, not asked: no write-back, so no second validation.
-            state.writes.push('none');
+            state.adopting = true;
+            try {
+                adopted.push({value: current, type: e && e.type});
+                state.lastwritten = current;
+                // The editor is told, not asked: no write-back, so no second validation.
+                state.writes.push('none');
+            } finally {
+                state.adopting = false;
+            }
             setTimeout(() => {
                 state.prefilling = false;
             }, 0);
@@ -74,7 +82,10 @@ describe('adopting an external change (#77)', () => {
         editor = document.createElement('div');
         document.body.append(editor, input);
 
-        state = {prefilling: false, syncingToInput: false, lastwritten: '1', writes: []};
+        state = {
+            prefilling: false, adopting: false, initialPending: false, syncingToInput: false,
+            lastwritten: '1', writes: [],
+        };
         adopted = [];
 
         const listener = makeListener();
@@ -106,8 +117,8 @@ describe('adopting an external change (#77)', () => {
         expect(adopted).toEqual([]);
     });
 
-    test('nothing is adopted while the editor is writing', () => {
-        state.prefilling = true;
+    test('nothing is adopted before the initial value is in the editor', () => {
+        state.initialPending = true;
         input.value = '7';
         input.dispatchEvent(new window.Event('change'));
 
@@ -142,22 +153,20 @@ describe('adopting an external change (#77)', () => {
         expect(input.value).toBe('11');
     });
 
-    test('a burst of external events in one tick is adopted once', async() => {
-        // A slider dragged quickly fires many events; the guard collapses them, and the last
-        // value wins because it is read at adoption time, not captured per event.
+    test('a burst of external events before the next tick ends on the last value', async() => {
+        // A slider dragged quickly: Chrome runs the pointer events before the timer that
+        // releases the prefilling flag, so several values arrive while it is still up. The last
+        // one used to be dropped and the editor stayed a step behind the input (#77). Each is
+        // adopted now, and the editor ends on the value the input ends on - without waiting for
+        // another event.
         for (const value of ['2', '3', '4']) {
             input.value = value;
             input.dispatchEvent(new window.Event('input'));
         }
+
+        expect(adopted.map((a) => a.value)).toEqual(['2', '3', '4']);
         await new Promise((resolve) => setTimeout(resolve, 0));
-
-        expect(adopted).toHaveLength(1);
-        expect(adopted[0].value).toBe('2');
-
-        // The value that arrived last is still in the input, and the next event adopts it.
-        input.value = '4';
-        input.dispatchEvent(new window.Event('change'));
-        expect(adopted[1].value).toBe('4');
+        expect(state.prefilling).toBe(false);
     });
 
 

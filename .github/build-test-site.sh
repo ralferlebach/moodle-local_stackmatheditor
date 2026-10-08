@@ -58,6 +58,10 @@ git clone --quiet --depth 1 --branch "$MOODLE_BRANCH" https://github.com/moodle/
 web=moodle
 if [[ -d moodle/public ]]; then
   web=moodle/public
+  # Moodle 5.1+ no longer ships its third-party PHP libraries; without them the routed API
+  # (r.php, e.g. saving a user preference such as the colour mode) fails with a missing class.
+  echo "Composer dependencies"
+  composer install --working-dir=moodle --no-dev --no-interaction --no-progress --quiet
 fi
 
 echo "Plugins:"
@@ -86,7 +90,7 @@ fi
 # install.php writes config.php itself and aborts when one exists. It needs an existing,
 # writable dataroot OUTSIDE the Moodle tree.
 mkdir -p "$MOODLE_DATAROOT"
-php "$web/admin/cli/install.php" \
+php moodle/admin/cli/install.php \
   --non-interactive --agree-license \
   --dbtype=pgsql --dbhost=127.0.0.1 --dbport=5432 --dbname="$DB_NAME" \
   --dbuser="$DB_USER" --dbpass="$DB_PASS" \

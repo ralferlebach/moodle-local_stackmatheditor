@@ -77,14 +77,9 @@ function local_stackmatheditor_extend_settings_navigation(
         return;
     }
 
-    // Require the module-specific management capability.
-    // Mod_adaptivequiz does not define a :manage capability; :viewreport is
-    // granted to editingteacher and manager and is the closest equivalent.
-    $capname = ($cm->modname === 'adaptivequiz')
-        ? 'mod/adaptivequiz:viewreport'
-        : 'mod/quiz:manage';
-
-    if (!has_capability($capname, $context)) {
+    // The same write capability configure.php requires (#86).
+    $capname = \local_stackmatheditor\quiz_helper::configure_capability($cm->modname);
+    if ($capname === null || !has_capability($capname, $context)) {
         return;
     }
 

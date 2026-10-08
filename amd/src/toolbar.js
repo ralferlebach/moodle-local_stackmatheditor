@@ -291,8 +291,8 @@ define([
         }
 
         if (preview.cellsLost > 0) {
-            var question = (strings.resize_confirm
-                || 'This removes {a} filled cells. Continue?').replace('{a}', preview.cellsLost);
+            // No English fallback (#92): a missing string shows as Moodle's "[[key]]" marker.
+            var question = (strings.resize_confirm || '[[resize_confirm]]').replace('{a}', preview.cellsLost);
             // eslint-disable-next-line no-alert
             if (!window.confirm(question)) {
                 return true;

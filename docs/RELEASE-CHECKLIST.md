@@ -30,8 +30,14 @@ the release archive and writes the checklist of what a human still has to confir
 Start these on the same commit **first**; the evidence workflow now checks them and fails when
 one is missing or not green, so it is run last rather than first:
 
-* `playwright.yml` - browser path, accessibility included
+* `moodle-plugin-ci-main.yml` - code gates across the support matrix, upgrade included
+* `playwright.yml` - browser path, accessibility included (200 and 400 per cent zoom)
+* `a11y-nvda.yml` - started by hand; the NVDA transcripts of this commit
 * `load-k6.yml` and `load-jmeter.yml` - performance smoke
+
+The evidence lists the commit, the SHA-256 of the release archive and the links of these runs,
+and leaves two lines to sign by hand: the NVDA judgement (section 5) and that exactly this
+archive is published (section 3).
 
 It also stops on a high or critical dependency finding. The audit itself still runs to
 completion, so the evidence records what was found either way.
@@ -58,8 +64,9 @@ It records what NVDA says about the editor, the switch, the toolbar and the matr
 fails when something a student depends on is silent. It cannot tell you whether what NVDA says
 is understandable, in what order it comes, or whether something is read twice.
 
-`a11y-zoom.spec.js` covers the measurable half in the normal run: 200 per cent zoom, a 380 pixel
-viewport, 24 by 24 pixel targets, keyboard reach and a visible focus.
+`a11y-zoom.spec.js` covers the measurable half in the normal run: 200 and 400 per cent zoom,
+each with the core workflow (type, toolbar, answer in STACK), a 380 pixel viewport, 24 by 24
+pixel targets, keyboard reach and a visible focus.
 
 ## 5. What no workflow can do for you
 

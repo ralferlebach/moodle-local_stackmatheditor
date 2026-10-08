@@ -95,7 +95,10 @@ class configure_form extends \moodleform {
                 $collapseid    = 'sme-question-preview';
                 $previewbutton =
                     '<a class="btn btn-outline-secondary btn-sm"'
-                    . ' data-toggle="collapse"'
+                    // Both attributes: Bootstrap 4 (Moodle 4.5) reads data-toggle, Bootstrap 5
+                    // (Moodle 5.x) data-bs-toggle; its compatibility layer for the old name is
+                    // deprecated (#93).
+                    . ' data-toggle="collapse" data-bs-toggle="collapse"'
                     . ' href="#' . $collapseid . '"'
                     . ' role="button" aria-expanded="false"'
                     . ' aria-controls="' . $collapseid . '">'
@@ -144,8 +147,8 @@ class configure_form extends \moodleform {
                 'static',
                 'enabled_info',
                 '',
-                '<span class="badge badge-secondary px-2 py-1">'
-                    . '<i class="fa fa-lock mr-1" aria-hidden="true"></i>'
+                '<span class="badge badge-secondary bg-secondary px-2 py-1">'
+                    . '<i class="fa fa-lock mr-1 me-1" aria-hidden="true"></i>'
                     . get_string('configure_enabled_locked_off', 'local_stackmatheditor')
                     . '</span>'
             );
@@ -155,8 +158,8 @@ class configure_form extends \moodleform {
                 'static',
                 'enabled_info',
                 '',
-                '<span class="badge badge-success px-2 py-1">'
-                    . '<i class="fa fa-lock mr-1" aria-hidden="true"></i>'
+                '<span class="badge badge-success bg-success px-2 py-1">'
+                    . '<i class="fa fa-lock mr-1 me-1" aria-hidden="true"></i>'
                     . get_string('configure_enabled_locked_on', 'local_stackmatheditor')
                     . '</span>'
             );
@@ -194,7 +197,7 @@ class configure_form extends \moodleform {
                 'enabled_hint',
                 '',
                 '<small class="text-muted">'
-                    . '<i class="fa fa-info-circle mr-1" aria-hidden="true"></i>'
+                    . '<i class="fa fa-info-circle mr-1 me-1" aria-hidden="true"></i>'
                     . $parenthint
                     . '</small>'
             );

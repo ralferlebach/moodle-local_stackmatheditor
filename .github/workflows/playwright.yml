@@ -45,7 +45,8 @@ jobs:
     timeout-minutes: 35
     services:
       postgres:
-        image: postgres:16
+        # 17: Moodle 5.3 requires it (the moodle_branch input can name 5.3), 4.5 accepts it.
+        image: postgres:17
         env:
           POSTGRES_USER: moodle
           POSTGRES_PASSWORD: moodle
@@ -99,6 +100,8 @@ jobs:
         env:
           SME_ADMIN_USER: admin
           SME_ADMIN_PASS: ${{ env.MOODLE_ADMIN_PASS }}
+          # The seed promises every fixture: a missing one fails instead of skipping (#89).
+          SME_STRICT_FIXTURES: '1'
         run: |
           # The web server is started inside THIS step (see serve-test-site.sh).
           . plugin/.github/serve-test-site.sh
@@ -106,13 +109,16 @@ jobs:
           cd "$web/local/stackmatheditor/tests/playwright"
           npm test
       # The run page shows this without a sign-in: totals, and every test that did not simply
-      # pass, with its first error.
-      - name: Summarise
+      # pass, with its first error. It is also the gate that what should have run did run: no
+      # spec without tests, no unexpected skip, no fixme (#89).
+      - name: Summarise and check the run is complete
         if: ${{ always() }}
+        env:
+          SME_STRICT_FIXTURES: '1'
         run: |
           web=moodle; [ -d moodle/public ] && web=moodle/public
           cd "$web/local/stackmatheditor/tests/playwright"
-          node run-summary.js "Playwright" >> "$GITHUB_STEP_SUMMARY" || true
+          node run-summary.js "Playwright" >> "$GITHUB_STEP_SUMMARY"
       - name: Collect report, videos and server log
         if: ${{ always() }}
         run: |

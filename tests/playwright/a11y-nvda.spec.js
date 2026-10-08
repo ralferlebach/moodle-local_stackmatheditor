@@ -38,7 +38,7 @@ const {expect} = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
 
-const {env, loginAs, open} = require('./helpers');
+const {env, loginAs, open, requireFixture} = require('./helpers');
 
 // Everything NVDA says after a command, not only its first utterance: role and state often come
 // as a second one ("check box", then "checked").
@@ -179,7 +179,7 @@ test.describe('NVDA reads the editor', () => {
         await listen(page, nvda);
 
         const toggle = page.locator('.sme-toggle input[type="checkbox"]').first();
-        test.skip(await toggle.count() === 0, 'the student switch is off on this site');
+        requireFixture(test, await toggle.count() > 0, 'the student switch (seed --all-groups sets allowstudenttoggle)');
 
         await focusOn(toggle);
         await nvda.clearSpokenPhraseLog();
@@ -258,7 +258,7 @@ test.describe('NVDA reads the editor', () => {
         await listen(page, nvda);
 
         const chooser = page.locator('.sme-tb-btn[data-command="matrix"]').first();
-        test.skip(await chooser.count() === 0, 'the matrix group is off on this site');
+        requireFixture(test, await chooser.count() > 0, 'the matrix chooser (seed --all-groups switches the group on)');
 
         await focusOn(chooser);
         await nvda.clearSpokenPhraseLog();

@@ -124,14 +124,22 @@ function measure(page) {
                 }
             });
 
+            const style = getComputedStyle(toolbar);
+            const room = toolbar.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+
             toolbar.querySelectorAll('.sme-tb-group').forEach((group) => {
                 const buttons = Array.from(group.querySelectorAll('button'));
                 if (buttons.length === 0 || buttons.length > 5) {
                     return;
                 }
-                // A group of five or fewer lives on one line: every button shares a top edge.
+                // A group of five or fewer lives on one line: every button shares a top edge -
+                // unless the group on its own is wider than the toolbar. Then breaking inside is
+                // the only alternative to reaching out of the toolbar (#93).
+                const gap = parseFloat(getComputedStyle(group).columnGap) || 0;
+                const width = buttons.reduce((sum, b) => sum + b.getBoundingClientRect().width, 0)
+                    + gap * (buttons.length - 1);
                 const tops = new Set(buttons.map((b) => Math.round(b.getBoundingClientRect().top)));
-                if (tops.size > 1) {
+                if (tops.size > 1 && width <= room) {
                     brokenGroups.push(group.getAttribute('data-group') + ' (' + buttons.length + ')');
                 }
             });

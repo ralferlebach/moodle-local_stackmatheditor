@@ -160,10 +160,14 @@ final class privacy_provider_test extends \advanced_testcase {
         $this->assertTrue($writer->has_any_data());
         $data = $writer->get_data([get_string('pluginname', 'local_stackmatheditor')]);
         $scopes = array_map(function ($item) {
-            return $item->scope;
+            return $item->scope_key;
         }, $data->configurations);
         sort($scopes);
         $this->assertSame(['question', 'quiz'], $scopes);
+        // The readable scope comes from the language pack, not from the code (#92).
+        foreach ($data->configurations as $item) {
+            $this->assertSame(get_string('privacy:scope_' . $item->scope_key, 'local_stackmatheditor'), $item->scope);
+        }
 
         // The other teacher's configuration in cm2 is not part of this export.
         $context2 = \context_module::instance($this->cm2->id);

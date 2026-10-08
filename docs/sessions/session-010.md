@@ -3039,3 +3039,120 @@ Tests: `tests/unit/review_2026_10_08_test.php`, nine tests - entry membership, t
 checks in `configure.php`, an attempt bound to its quiz, the adaptive-quiz query against a
 temporary table with the module's definition, the reporter, and the three code-wide scans.
 PHPUnit 189 green, Playwright 46 green and 1 skipped, PHPCS clean. Not run: Behat.
+
+## 78. Iteration 74 (2026100700, version unchanged): audit of 2026-10-08, issues #84-#95
+
+The audit came as fifteen files (overall audit with closing matrix, fourteen findings). The
+findings went into the repository as issues #84-#94, the overall audit as #95; the parts for #69,
+#71 and #72, which already existed, were added there as comments. Each was checked against the code, then worked through in order.
+Nothing was ticked or closed: acceptance criteria and DoD are checked afterwards, by the owner.
+
+The version stays pinned at 2026100700 / 1.3.0, so no upgrade step, no schema change and no new
+capability. Where an issue suggested one, the pinned-version alternative is named below.
+
+**#84 Configure IDOR (P0).** Done in iteration 73; covered by `configure_access_test` (real STACK
+questions, editing teacher: own question, foreign quiz, foreign course, missing entry, non-STACK,
+prohibited `view`) and `configure-access.spec.js` (foreign and missing give the same page).
+
+**#85 Rows of deleted course modules (P0).** `db/events.php` + `observer`: `course_module_deleted`
+removes the rows of that cmid; `course_content_deleted` (course deletion goes through
+`remove_course_contents()`, which deletes modules and contexts without the per-module event -
+checked in `lib/moodlelib.php`) removes every row whose module context is gone. The privacy
+provider reports such orphans in the user context of `usermodified`, exports them there, and
+deletion removes them. Historical orphans: `cli/repair_config.php` (dry run by default,
+`--execute`). Pinned version: the observers are read from the event cache, so a site that
+already runs a 2026100700 build picks them up after "Purge all caches" - a fresh install or an
+upgrade from 1.2 has them at once. Tests: `config_lifecycle_test` (module delete, course delete,
+orphan export/delete per user and per userlist, repair, observer registration).
+
+**#86 Adaptive quiz capability (P1).** `quiz_helper::configure_capability()`: `mod/quiz:manage`
+for quiz, `moodle/course:manageactivities` (write, editingteacher and manager) for adaptive quiz
+instead of the report capability. Navigation, edit-page links (`can_configure()`) and
+`configure.php` ask the same method. A plugin capability would need a version bump.
+Tests: `configure_capability_test` - mapping, capability metadata and archetypes, roles incl. a
+prohibit override, and the real `extend_settings_navigation` callback through
+`settings_navigation::initialise()` for editing and non-editing teacher.
+
+**#87 Scope uniqueness (P1).** No unique index possible while the version is pinned (and NULL
+semantics differ between databases anyway). Instead: one writer per scope through the Moodle lock
+API, read-write-collapse in one delegated transaction, total read order `timemodified DESC, id
+DESC` everywhere (single and batch reads take the newest row per scope instead of merging all of
+them), `collapse_scope()` after every write, `cli/repair_config.php --duplicates` for old data.
+Tests: `config_scope_integrity_test` incl. a held lock (database lock factory, not re-entrant in
+one process) that makes the writer fail with `locktimeout` and write nothing.
+
+**#88 Backup/restore/duplicate (P1).** `backup_local_stackmatheditor_plugin` /
+`restore_local_stackmatheditor_plugin` at the module connection point: new cmid, question bank
+entries through the `question_bank_entry` mapping (new or matched entry), rows for entries the
+restored quiz does not use dropped, `usermodified` only with user data. Tests:
+`backup_restore_test` - restore into a new course with and without users, duplicate_module.
+
+**#89 Required paths cannot skip (P1).** `helpers.requireFixture()` fails in CI
+(`SME_STRICT_FIXTURES=1`) and skips locally; `optionalSkip()` annotates a legitimate skip.
+`run-summary.js` is a gate in both browser workflows: a spec without tests, a skip without the
+annotation, or a fixme fails the job. Checked with a crafted result file (exit 1) and the real run.
+
+**#72 Android 229 (P1).** Patch to the fork's `saneKeyboardEvents`: the Ctrl-Shift-U guard
+matches the Unicode entry only, not a bare "Unidentified" with keyCode 229. Four new Mocha cases
+in the fork, two of them fail without the change; the fork suite runs 835/0 in Chromium. Built as
+0.10.1-sme.6, vendored, the patch file in `thirdparty/patches/` (the fork itself was not pushed),
+provenance and checksums updated, library URLs carry the build as cache key. The fixme in
+`android-input.spec.js` is gone; blink229 green in single- and multi-line, plus one Backspace.
+
+**#69 400 % and evidence (P1).** `a11y-zoom.spec.js` runs reflow and the core workflow at 200
+and 400 per cent. The evidence workflow requires main CI and the NVDA run on the commit as well
+and writes the archive SHA-256 into the signoff sheet; NVDA judgement and the publish signoff stay
+human lines.
+
+**#71 Documentation drift (P1).** README MathQuill version, adaptive quiz per-question = per
+activity (`context_resolver::supports_question_configuration()`, which `configure.php` uses now).
+`documentation_test` compares README, thirdpartylibs.xml, readme_moodle.txt, the cache key and
+the file checksums, and the support table against the runtime.
+
+**#90/#91/#94.** Navigation callback tested for real (above); the dev workflow runs both CLI
+scripts on the clean installation and fails on any PHP error; `.gitignore` has `*.py[cod]`, the
+tracked `.pyc` is removed from the index; the doubled assignment was already gone.
+
+**#92 i18n (P2).** Privacy export: `scope` from `privacy:scope_*`, `scope_key` machine-readable.
+JS: no English fallbacks; a missing string shows as `[[key]]`, the popup's defaults are markers.
+Jest (`i18n_contract.test.js`) and PHPUnit (`test_js_string_contract`) keep both sides in step.
+
+**#93 Moodle 5.3 dark mode / BS5 (P2).** Checked on a real Moodle 5.3 site built locally
+(`MOODLE_503_STABLE`, PostgreSQL 16 with the environment check relaxed locally - 5.3 asks for 17).
+Measured first, then fixed only what failed: toolbar buttons 1.41:1 (light toolbar background in
+dark mode), switch label 1.93:1 (`--gray-700` is not defined on 5.x, so its light fallback was
+used). All colours are now `--bs-*` variables with the 4.5 values as fallback. Collapse and badges
+carry the Bootstrap 5 attributes and classes next to the old ones. New `dark-mode.spec.js`
+switches through the colour mode menu and runs axe plus measured contrast (field edges 3:1,
+typed text 4.5:1, chooser cells 3:1); it skips as optional where there are no colour modes.
+
+The 5.3 site showed what a Playwright run with `moodle_branch: MOODLE_503_STABLE` would have hit
+in CI: `admin/cli` is outside `public/` (install, upgrade and purge paths fixed), the site needs
+`composer install` (the routed API failed with a missing class - that is why the colour mode was
+not saved), `seed.php` used the course question bank that 5.x no longer has, and the workflow's
+PostgreSQL 16 is too old for 5.3 (now 17). Two layout findings on 5.3 as well: a five-button
+group wider than a 420 px question reached out of the toolbar (groups may break inside now, but
+only when they alone are wider than the toolbar), and Bootstrap 5's smooth scrolling moved the
+JSXGraph board while the test read its position (instant scroll in the test). Two core
+observations are reported, not asserted: Moodle 5.3's header row is 4 px wider than a 640 px
+viewport, and MathJax 4 makes formulas in the question text tab stops.
+
+One more product defect turned up on 5.3 through the JSXGraph spec: after a fast slider drag the
+editor sometimes stayed one value behind the input. `adoptExternalValue()` ignored every value
+while the `prefilling` flag of the previous adoption was up - it is released one timer tick
+later, and Chrome runs pointer input before timers. The listener now has its own re-entrancy
+guard and a separate flag for the initial value; `prefilling` only keeps the edit handler quiet.
+The mirrored Jest case asserted the old behaviour (a burst adopted once, the last value waiting
+for another event) and was rewritten. The a11y spec measured a toolbar button mid hover transition
+when the mouse rested where "Start attempt" had been; it moves the mouse away before axe now.
+On 5.2+ the lifecycle and duplicate tests use the course format actions instead of the
+deprecated `course_delete_module()` / `duplicate_module()`.
+
+Runs, all on the final state:
+- PHPUnit 215/215 on 4.5 and on 5.3 (PostgreSQL; on 5.3 only PHPUnit 11's doc-comment metadata
+  deprecations remain, as in every test of the plugin);
+- Jest 1282/1282; PHPCS (moodle) clean; stylelint clean; AMD build fresh;
+- Playwright with `SME_STRICT_FIXTURES=1` and the summary gate: 4.5 52 passed + the two dark-mode
+  tests as optional skips, gate green; 5.3 54 passed, gate green;
+- the fork's Mocha suite 835/0.
+Not run here: Behat, MariaDB, NVDA, the k6/JMeter load runs.

@@ -85,7 +85,7 @@ jobs:
 
       # The gate #69 asks for: the other workflows have to have run on this very commit, and
       # green. A release that cites a Playwright run from three commits ago cites nothing.
-      - name: Require the browser, accessibility and load runs on this SHA
+      - name: Require the code, browser, screen reader and load runs on this SHA
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -93,7 +93,9 @@ jobs:
           missing=0
           {
             echo "required runs for $sha"
-            for wf in playwright.yml load-k6.yml load-jmeter.yml; do
+            # moodle-plugin-ci-main: code gates across the support matrix, upgrade included.
+            # a11y-nvda: started by hand; the screen reader transcripts of this commit.
+            for wf in moodle-plugin-ci-main.yml playwright.yml a11y-nvda.yml load-k6.yml load-jmeter.yml; do
               status=$(gh run list --workflow "$wf" --commit "$sha" \
                 --json conclusion --jq '.[0].conclusion' 2>/dev/null || true)
               link=$(gh run list --workflow "$wf" --commit "$sha" \
@@ -129,22 +131,29 @@ jobs:
 
       - name: What still needs a human
         run: |
+          zipsum=$(sha256sum evidence/stackmatheditor.zip | cut -d' ' -f1)
           {
-            echo "The following gates are not automated and have to be recorded by hand"
-            echo "before MATURITY_STABLE, with date, browser and screen reader:"
+            echo "Release candidate"
+            echo "  commit:          $(git rev-parse HEAD)"
+            echo "  archive SHA-256: $zipsum"
+            echo "  evidence run:    ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             echo ""
-            echo "  [ ] manual accessibility sample (NVDA with Firefox or Chrome)"
-            echo "  [ ] visible focus throughout the core flow"
-            echo "  [ ] 200% zoom without loss of function"
-            echo "  [ ] one narrow / mobile viewport"
+            echo "Required runs on this commit (all green, links in required-runs.txt):"
+            sed -n 's/^  /  /p' evidence/required-runs.txt
             echo ""
-            echo "Automated browser, accessibility and load runs are separate workflows"
-            echo "(playwright.yml, load-k6.yml, load-jmeter.yml). Start them on this same"
-            echo "commit and attach their run links here:"
+            echo "Measured automatically in playwright.yml (a11y-zoom.spec.js), no manual step:"
+            echo "  200 and 400 per cent zoom with the core workflow, a narrow viewport,"
+            echo "  24 x 24 targets, keyboard reach, visible focus."
             echo ""
-            echo "  playwright run: ____"
-            echo "  a11y run:       ____"
-            echo "  load run:       ____"
+            echo "Judgement a workflow cannot make - record it before MATURITY_STABLE:"
+            echo ""
+            echo "  [ ] NVDA transcripts of the a11y-nvda run read and understandable,"
+            echo "      in a sensible order, nothing read twice"
+            echo "      date: ____  browser: ____  NVDA version: ____  by: ____"
+            echo "  [ ] Release from this commit only. main is not branch-protected"
+            echo "      (docs/RELEASE-CHECKLIST.md, section 3): this line is the signoff that"
+            echo "      the archive above is the one published."
+            echo "      date: ____  by: ____"
           } | tee evidence/manual-checklist.txt
 
       - name: Upload the evidence

@@ -502,7 +502,8 @@ jobs:
         run: |
           web=moodle; [ -d moodle/public ] && web=moodle/public
           rsync -a --delete --exclude .git plugin-new/ "$web/local/stackmatheditor/"
-          php "$web/admin/cli/upgrade.php" --non-interactive
+          # admin/cli stays outside the web root on Moodle 5.1+, so it is moodle/admin/cli everywhere.
+          php moodle/admin/cli/upgrade.php --non-interactive
 
       - name: Check what the upgrade left behind
         run: |

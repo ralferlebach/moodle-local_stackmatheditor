@@ -20,6 +20,14 @@
  * NVDA run (#69) - every transcript. The run page shows it, so a red run can be read without
  * opening the log or downloading the artefact.
  *
+ * With SME_STRICT_FIXTURES=1 (the CI workflows) it is also a gate (#89) and exits with 1 when
+ *   - no result file was written or no test was collected,
+ *   - a spec file of this run collected no test,
+ *   - a test was skipped without the 'optional-skip' annotation (helpers.optionalSkip), or
+ *   - a test is marked fixme: a known-broken path does not pass as a skip.
+ * The process exit code of Playwright says that nothing failed; this says that what should have
+ * run did run.
+ *
  *   node run-summary.js "Playwright" >> "$GITHUB_STEP_SUMMARY"
  *
  * @copyright  2026 Ralf Erlebach
@@ -30,6 +38,8 @@ const fs = require('fs');
 const path = require('path');
 
 const out = [];
+const problems = [];
+const strict = process.env.SME_STRICT_FIXTURES === '1';
 const results = path.join(__dirname, 'test-results', 'results.json');
 const transcripts = path.join(__dirname, 'transcripts');
 
@@ -68,7 +78,19 @@ if (fs.existsSync(results)) {
     });
     if (!all.length) {
         out.push('No test was collected.', '');
+        problems.push('no test was collected');
     }
+
+    // Every spec file of this run has to contribute tests: the NVDA run has its own file, the
+    // default run all the others (see playwright.config.js).
+    const expectedfiles = fs.readdirSync(__dirname)
+        .filter((file) => file.endsWith('.spec.js'))
+        .filter((file) => (process.env.SME_NVDA ? file === 'a11y-nvda.spec.js' : file !== 'a11y-nvda.spec.js'));
+    expectedfiles.forEach((file) => {
+        if (!all.some((spec) => path.basename(spec.file || '') === file && (spec.tests || []).length)) {
+            problems.push(`${file} collected no test`);
+        }
+    });
     const stats = report.stats || {};
     out.push(`Passed ${stats.expected || 0}, failed ${stats.unexpected || 0}, `
         + `flaky ${stats.flaky || 0}, skipped ${stats.skipped || 0}.`, '');
@@ -79,6 +101,18 @@ if (fs.existsSync(results)) {
             // "expected" is a plain pass; everything else is worth a line.
             if (test.status === 'expected') {
                 return;
+            }
+            if (test.status === 'skipped') {
+                const annotations = (test.annotations || [])
+                    .concat(...runs.map((run) => run.annotations || []));
+                const types = annotations.map((annotation) => annotation.type);
+                if (types.includes('fixme')) {
+                    problems.push(`fixme: ${spec.file || ''} - ${spec.title}`);
+                } else if (!types.includes('optional-skip')) {
+                    const reason = (annotations.find((annotation) => annotation.type === 'skip') || {}).description;
+                    problems.push(`unexpected skip: ${spec.file || ''} - ${spec.title}`
+                        + (reason ? ` (${reason})` : ''));
+                }
             }
             out.push(`### ${test.status}: ${spec.file || ''} - ${spec.title}`, '');
             runs.forEach((run, index) => {
@@ -92,6 +126,15 @@ if (fs.existsSync(results)) {
     });
 } else {
     out.push('Playwright wrote no result file: the run ended before a test started.', '');
+    problems.push('no result file');
+}
+
+if (problems.length) {
+    out.push(strict ? '### Gate: failed' : '### Gate (informational, SME_STRICT_FIXTURES is not set)', '');
+    problems.forEach((problem) => out.push(`* ${problem}`));
+    out.push('');
+} else {
+    out.push('### Gate: every spec collected tests, no unexpected skip, no fixme', '');
 }
 
 if (fs.existsSync(transcripts)) {
@@ -104,3 +147,7 @@ if (fs.existsSync(transcripts)) {
 }
 
 process.stdout.write(out.join('\n') + '\n');
+if (strict && problems.length) {
+    process.stderr.write(`Run summary gate failed: ${problems.join('; ')}\n`);
+    process.exitCode = 1;
+}

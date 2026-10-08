@@ -40,19 +40,22 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
     var openPopup = null;
 
     /**
-     * Strings the popup shows. Replaced by the caller with language pack values.
+     * Strings the popup shows, replaced by the caller with the language pack values
+     * (definitions::get_popup_strings()). Until then each holds Moodle's marker for a missing
+     * string rather than English text, so a string that does not arrive is visible in every
+     * language instead of silently English (#92).
      *
      * @type {Object}
      */
     var strings = {
-        matrixTitle: 'Matrix',
-        vectorTitle: 'Vector',
-        size: '{a} × {b} matrix',
-        dimension: 'Dimension',
-        orientation: 'Orientation',
-        rowVector: 'Row vector',
-        columnVector: 'Column vector',
-        vectorSize: '{a}-dimensional {b}'
+        matrixTitle: '[[popup_matrix_title]]',
+        vectorTitle: '[[popup_vector_title]]',
+        size: '[[popup_matrix_size]]',
+        dimension: '[[popup_dimension]]',
+        orientation: '[[popup_orientation]]',
+        rowVector: '[[popup_row_vector]]',
+        columnVector: '[[popup_column_vector]]',
+        vectorSize: '[[popup_vector_size]]'
     };
 
     /**

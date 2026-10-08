@@ -236,6 +236,24 @@ jobs:
       - name: Gherkin lint (Behat features)
         if: ${{ always() }}
         run: moodle-plugin-ci grunt -t gherkinlint 2>&1 | tee ci-logs/gherkinlint.log
+      # The CLI scripts against the clean installation above (#91): exit code 0, and no PHP error
+      # in the output - diagnose_legacy_config.php once stopped at its first line because clilib
+      # was not loaded. repair_config.php runs as a dry run; neither may change anything.
+      - name: CLI scripts on a clean installation
+        if: ${{ always() }}
+        run: |
+          web=moodle; [ -d moodle/public ] && web=moodle/public
+          set -o pipefail
+          for script in diagnose_legacy_config.php repair_config.php; do
+            echo "=== $script"
+            php "$web/local/stackmatheditor/cli/$script" 2>&1 | tee "ci-logs/cli-$script.log"
+            if grep -qiE 'fatal error|undefined function|undefined method|warning:|notice:|exception' \
+                "ci-logs/cli-$script.log"; then
+              echo "::error::$script printed an error"
+              exit 1
+            fi
+          done
+          grep -q 'Dry run - nothing changed' ci-logs/cli-repair_config.php.log
       - name: Collect error summary
         if: ${{ always() }}
         run: |

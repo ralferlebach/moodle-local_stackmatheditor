@@ -67,47 +67,29 @@ $course = get_course($cm->course);
 $context = \context_module::instance($cmid);
 require_login($course, false, $cm);
 
-// Mod_adaptivequiz does not define a :manage capability; :viewreport is
-// granted to editingteacher and manager and is the closest equivalent.
-$capname = $isadaptivequiz ? 'mod/adaptivequiz:viewreport' : 'mod/quiz:manage';
-require_capability($capname, $context);
+// A write capability of the module, the same one the navigation asks (#86).
+require_capability(\local_stackmatheditor\quiz_helper::configure_capability($modname), $context);
 
 // Load the activity record (not needed for the login gate).
 $activity = $DB->get_record($modname, ['id' => $cm->instance], '*', MUST_EXIST);
 
 // Determine operating mode.
 // mod_adaptivequiz always uses quiz-mode (no per-question configuration).
-$quizmode = $isadaptivequiz || ($qbeid <= 0 && $questionid <= 0);
+$quizmode = !\local_stackmatheditor\context_resolver::supports_question_configuration($modname)
+    || ($qbeid <= 0 && $questionid <= 0);
 
-// Question resolution (mod_quiz question-mode only).
+// Question resolution (mod_quiz question-mode only). Managing the quiz given by cmid is
+// permission for the questions of that quiz, not for any question on the site: the entry has to
+// be one the quiz uses, and the user has to be allowed to view the question where it lives. Both
+// are checked before anything is shown, evaluated or saved (MDL Shield 2026-10-08, #84).
 $questionrecord = null;
 if (!$quizmode) {
-    if ($qbeid <= 0 && $questionid > 0) {
-        $qbeid = config_manager::resolve_qbeid($questionid);
-    }
-    // Managing the quiz given by cmid is permission for the questions of that quiz, not for any
-    // question on the site. The entry has to be one the quiz uses - checked before anything is
-    // read about it, with the same answer for "not in this quiz" and "does not exist", so the page
-    // can neither show nor confirm a question from another course (MDL Shield, 2026-10-08).
-    if (!$qbeid || !\local_stackmatheditor\quiz_helper::quiz_uses_entry((int) $activity->id, (int) $qbeid)) {
-        throw new \moodle_exception('cannotresolveqbeid', 'local_stackmatheditor');
-    }
-
-    $questionsql = "
-        SELECT q.id, q.name, q.qtype, qv.version
-          FROM {question} q
-          JOIN {question_versions} qv ON qv.questionid = q.id
-         WHERE qv.questionbankentryid = :qbeid
-      ORDER BY qv.version DESC";
-    $questionversions = $DB->get_records_sql($questionsql, ['qbeid' => $qbeid], 0, 1);
-    $questionrecord   = $questionversions ? reset($questionversions) : null;
-
-    if (!$questionrecord) {
-        throw new \moodle_exception('cannotresolveqbeid', 'local_stackmatheditor');
-    }
-    if ($questionrecord->qtype !== 'stack') {
-        throw new \moodle_exception('notstackquestion', 'local_stackmatheditor');
-    }
+    $questionrecord = \local_stackmatheditor\quiz_helper::require_configurable_question(
+        (int) $activity->id,
+        (int) $qbeid,
+        (int) $questionid
+    );
+    $qbeid      = (int) $questionrecord->qbeid;
     $questionid = (int) $questionrecord->id;
 }
 

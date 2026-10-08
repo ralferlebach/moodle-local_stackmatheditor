@@ -125,7 +125,7 @@ jobs:
           cfg=moodle/config.php
           sed -i "s#^\$CFG->wwwroot *=.*#\$CFG->wwwroot = '$url';\n\$CFG->sslproxy = true;#" "$cfg"
           grep -n "wwwroot\|sslproxy" "$cfg"
-          php "$web/admin/cli/purge_caches.php"
+          php moodle/admin/cli/purge_caches.php
 
           # Wait until the site answers through the tunnel, not only locally.
           for _ in $(seq 1 30); do
@@ -274,15 +274,17 @@ jobs:
         working-directory: tests/playwright
         env:
           SME_NVDA: '1'
+          SME_STRICT_FIXTURES: '1'
         run: npx playwright test --project=nvda
 
       # The run page shows this without opening a log: what failed and why, and what NVDA said.
-      - name: Summarise
+      - name: Summarise and check the run is complete
         if: ${{ always() }}
         working-directory: tests/playwright
         env:
           SME_NVDA: '1'
-        run: node run-summary.js "NVDA" >> "$GITHUB_STEP_SUMMARY" || true
+          SME_STRICT_FIXTURES: '1'
+        run: node run-summary.js "NVDA" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Collect the transcripts
         if: ${{ always() }}
