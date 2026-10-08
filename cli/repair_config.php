@@ -83,7 +83,7 @@ if ($options['orphans']) {
             '  id=%d cmid=%d qbeid=%s usermodified=%d',
             $row->id,
             $row->cmid,
-            $row->questionbankentryid === null ? 'NULL' : $row->questionbankentryid,
+            (int) $row->questionbankentryid === 0 ? 'default' : $row->questionbankentryid,
             $row->usermodified
         ));
     }
@@ -99,7 +99,7 @@ if ($options['duplicates']) {
         cli_writeln(sprintf(
             '  cmid=%d qbeid=%s records=%d',
             $scope->cmid,
-            $scope->questionbankentryid === null ? 'NULL' : $scope->questionbankentryid,
+            $scope->questionbankentryid === 0 ? 'default' : $scope->questionbankentryid,
             $scope->records
         ));
     }

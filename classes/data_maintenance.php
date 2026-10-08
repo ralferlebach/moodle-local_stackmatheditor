@@ -25,9 +25,10 @@ namespace local_stackmatheditor;
  * called orphans; they can stem from course deletions, which remove course modules without a
  * per-module event, or from sites on which the observer was not yet active.
  *
- * The same class repairs duplicate scope rows: one row per (cmid, questionbankentryid) is
- * kept by the application rather than a unique index (docs/DATA-INTEGRITY.md), and this class
- * restores that invariant on existing data. The upgrade to 2026100800 runs both repairs once.
+ * It also reports and repairs duplicate scope rows. One row per (cmid, questionbankentryid) is a
+ * unique index of the table (docs/DATA-INTEGRITY.md), so on a current schema there are none; the
+ * repair is for data a site holds while the index is not yet in place, and the upgrade runs the
+ * same repair before it creates the index.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
@@ -111,7 +112,7 @@ class data_maintenance {
     /**
      * Scopes (cmid, questionbankentryid) that hold more than one row.
      *
-     * @return \stdClass[] Objects with cmid, questionbankentryid (null for quiz defaults), records.
+     * @return \stdClass[] Objects with cmid, questionbankentryid (0 for quiz defaults), records.
      */
     public static function find_duplicate_scopes(): array {
         global $DB;
@@ -124,7 +125,7 @@ class data_maintenance {
         foreach ($DB->get_recordset_sql($sql) as $row) {
             $result[] = (object)[
                 'cmid'                => (int) $row->cmid,
-                'questionbankentryid' => $row->questionbankentryid === null ? null : (int) $row->questionbankentryid,
+                'questionbankentryid' => (int) $row->questionbankentryid,
                 'records'             => (int) $row->records,
             ];
         }

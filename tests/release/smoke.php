@@ -146,7 +146,7 @@ check(count($rows) === 2, 'quiz default and question configuration are restored'
 $used = local_stackmatheditor\quiz_helper::load_quiz_qbeids((int) $newcm->instance);
 $mapped = true;
 foreach ($rows as $row) {
-    if ($row->questionbankentryid !== null && !isset($used[(int) $row->questionbankentryid])) {
+    if ((int) $row->questionbankentryid !== 0 && !isset($used[(int) $row->questionbankentryid])) {
         $mapped = false;
     }
 }

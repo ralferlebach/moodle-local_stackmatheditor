@@ -68,7 +68,7 @@ final class backup_restore_test extends \advanced_testcase {
             $DB = $GLOBALS['DB'];
             $DB->insert_record(config_manager::TABLE, (object)[
                 'cmid'                => $this->cm->id,
-                'questionbankentryid' => $qbeid,
+                'questionbankentryid' => $qbeid ?? config_manager::QUIZ_DEFAULT,
                 'allowed_elements'    => json_encode($elements),
                 'usermodified'        => $this->teacher->id,
                 'timecreated'         => 1000,
@@ -96,7 +96,7 @@ final class backup_restore_test extends \advanced_testcase {
         $result = [];
         foreach ($DB->get_records(config_manager::TABLE, ['cmid' => $cmid]) as $row) {
             $name = 'quiz';
-            if ($row->questionbankentryid !== null) {
+            if ((int) $row->questionbankentryid !== config_manager::QUIZ_DEFAULT) {
                 $name = $DB->get_field_sql(
                     "SELECT q.name
                        FROM {question_versions} qv
@@ -127,7 +127,7 @@ final class backup_restore_test extends \advanced_testcase {
         $qbeids = $DB->get_fieldset_select(
             config_manager::TABLE,
             'questionbankentryid',
-            'cmid = ? AND questionbankentryid IS NOT NULL',
+            'cmid = ? AND questionbankentryid > 0',
             [$cmid]
         );
         foreach ($qbeids as $qbeid) {
@@ -200,7 +200,7 @@ final class backup_restore_test extends \advanced_testcase {
         $sourceqbeids = $DB->get_fieldset_select(
             config_manager::TABLE,
             'questionbankentryid',
-            'cmid = ? AND questionbankentryid IS NOT NULL',
+            'cmid = ? AND questionbankentryid > 0',
             [$this->cm->id]
         );
 
@@ -218,7 +218,7 @@ final class backup_restore_test extends \advanced_testcase {
         $newqbeids = $DB->get_fieldset_select(
             config_manager::TABLE,
             'questionbankentryid',
-            'cmid = ? AND questionbankentryid IS NOT NULL',
+            'cmid = ? AND questionbankentryid > 0',
             [$cm->id]
         );
         $this->assertSame([], array_intersect($sourceqbeids, $newqbeids));

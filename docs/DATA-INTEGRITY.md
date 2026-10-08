@@ -1,6 +1,7 @@
 # One configuration per scope - decision record (#87)
 
-**Decided:** 2026-10-08, build 2026100800. **Status:** in force.
+**Decided:** 2026-10-08, build 2026100801 (1.4.0). **Status:** in force. Replaces the decision of
+build 2026100800, which kept the invariant in the application only (see the end).
 
 ## The invariant
 
@@ -9,54 +10,66 @@ The table `local_stackmatheditor` holds the toolbar configuration per scope:
 | Scope | `cmid` | `questionbankentryid` |
 |---|---|---|
 | global question default | 0 | the entry |
-| quiz default | the quiz | `NULL` |
+| quiz default | the activity | `0` (`config_manager::QUIZ_DEFAULT`) |
 | question in a quiz | the quiz | the entry |
 
-There is exactly one row per scope. Every read returns one row per scope; which one, if there
-ever were more, is fixed by the order `timemodified DESC, id DESC`.
+There is exactly one row per scope.
 
-## Why not a unique index
+## How the database enforces it
 
-A unique index on `(cmid, questionbankentryid)` would not enforce the invariant where it
-matters. `questionbankentryid` is `NULL` for the quiz default, and in PostgreSQL and MariaDB
-`NULL`s never collide in a unique index - any number of quiz defaults would get through, while
-SQL Server would treat them as equal. Moodle advises against unique indexes on nullable columns
-for exactly this reason. Making the column `NOT NULL` with a stand-in value (0) would change the
-meaning of the column in every query, in backup files already written and in the privacy
-export, for a guarantee the application can give as well.
+* `questionbankentryid` is `NOT NULL` with default `0`. The quiz default is stored as `0`; no
+  question bank entry has id 0.
+* `(cmid, questionbankentryid)` is the unique index `cmid_qbeid_uix`. Every scope - the quiz
+  default included - takes part in it, on every database Moodle supports.
 
-## How the application enforces it
+With `NULL` for the quiz default the index could not be unique in a portable way: PostgreSQL and
+MariaDB never treat two `NULL`s as equal, so any number of quiz defaults would have passed. That
+was the reason the previous decision kept the rule in the application; the sentinel `0` removes it.
 
-`config_manager::upsert_record()` is the only write path for a scope:
+## What the application adds
 
-1. a Moodle lock per scope (`scope_<cmid>_<qbeid|default>`): writers of one scope run one
-   after the other, on every database and with every lock factory Moodle offers;
-2. read, write and the removal of surplus rows in one delegated transaction;
-3. after the write, `collapse_scope()` keeps the row a read returns and deletes the others - a
-   duplicate from an earlier build, or from a lock factory that does not serialise, is repaired
-   by the next write.
+`config_manager::upsert_record()` still takes a Moodle lock per scope and reads and writes in one
+delegated transaction. The index makes a second row impossible; the lock makes a concurrent second
+writer wait and then update the row the first one inserted, instead of failing on the index.
 
-Restore inserts through the restore plugin and collapses each restored scope the same way.
+Restore maps a backup's rows onto the new activity. A backup of an earlier version carries the
+quiz default without a question bank entry; it is read as `0`. Two rows the restore would put into
+one scope - possible only from a backup of a site that still had duplicates - become one: the
+newer configuration is kept.
 
-Existing data: the upgrade to 2026100800 removes duplicate rows (and rows of deleted activities)
-once; `cli/repair_config.php --duplicates` does the same on demand.
+## Existing data
+
+The upgrade to 2026100801 (after the repair of 2026100800, for sites coming from 1.3.0):
+
+1. drops the non-unique index of earlier versions;
+2. sets `NULL` to `0` and makes the column `NOT NULL` with default `0`;
+3. reduces every scope with more than one row to the row every read returned - newest
+   `timemodified`, then highest id - including an activity that had its default both as `NULL`
+   and as `0`;
+4. creates the unique index.
+
+Each part checks the state first; running the step again changes nothing.
 
 ## Evidence
 
-- `tests/unit/config_scope_integrity_test.php`: repeated saves keep one row; ties are broken by
-  id in single read, batch read and repair alike; a held scope lock makes a second writer fail
-  with `locktimeout` instead of writing.
+- `tests/unit/config_scope_integrity_test.php`: the schema (NOT NULL, default 0, unique index);
+  the database refuses a second row for a question scope, a global default and a quiz default;
+  repeated saves keep one row; a held scope lock makes a second writer fail with `locktimeout`.
+- `tests/unit/upgrade_step_test.php`: puts the table back into the shape of 1.3.0 (nullable
+  column, non-unique index), inserts the data 1.3.0 leaves behind - duplicates, an orphan, a
+  default both as `NULL` and as `0` - and upgrades: the result has the schema and the rows of a
+  fresh install; a second run from either earlier build changes nothing.
 - `tests/concurrency/concurrent_save.php`: several PHP processes write the same two scopes at the
-  same moment, many times, against a real site; afterwards there is exactly one row per scope.
-  Its control mode runs the same load through the previous release's write path (read, then
-  insert; no lock, no transaction) and reports the duplicates it produces - locally on
-  PostgreSQL 7 to 11 per run with 8 writers - which shows the load does race. The main CI runs it
-  on PostgreSQL and MariaDB (job *Concurrent writes*), the release artefact workflow against the
-  site installed from the release ZIP.
-- `tests/unit/upgrade_step_test.php` and `tests/upgrade/*`: the upgrade from the published
-  build leaves one row per scope.
+  same moment. With the plugin's write path no writer fails and each scope has one row. The
+  control run writes without lock and transaction; the database refuses every second row - 8 to 9
+  refusals per run locally with 8 writers, on PostgreSQL and MariaDB - and each scope still has
+  one row. Main CI job *Concurrent writes* (PostgreSQL, MariaDB) and the release workflow run it.
+- `tests/upgrade/*`: the upgrade from the build the plugins directory published, on PostgreSQL
+  and MariaDB, checks the schema and the rows afterwards.
 
-## Revisit when
+## The previous decision (build 2026100800)
 
-the table gets a column that can carry a non-null scope key anyway, or Moodle offers partial or
-expression indexes through XMLDB.
+It kept `questionbankentryid` nullable and enforced one row per scope with lock, transaction and
+a repair after each write, because a unique index on the nullable column would not have caught
+duplicate quiz defaults. It was accepted as residual risk R5 and replaced on 8 October 2026 at the
+maintainer's request by the enforcement in the database described above.

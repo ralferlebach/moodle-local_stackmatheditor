@@ -2897,3 +2897,430 @@ Still open for reasons that are not code: #69 items 10 and 26 (a person reads th
 transcripts), 12, 13, 18 (the new tests have to run in CI), 20, 22, 27, 30, 31; #71 items 24, 26;
 #72 items 3 and 5 (Opera, Firefox Klar on a device); #73 items 43-45, #76 items 50-51 and #81
 item 35 (main CI green, including the upgrade job).
+
+
+## 74. Iteration 70 (2026100700, version unchanged): NVDA tabs from its own cursor, not from the focus
+
+NVDA run 37678246346 on main (3670c5e): four tests passed, the matrix chooser among them for the
+first time - "Matrix, dialog. Matrix, table. ... 1 times 1 matrix, row 1, column 1", and after
+Escape the button again, "collapsed, opens dialog". One failed, twice: "toolbar buttons are
+announced by name". The focus was on the first toolbar button - the test had proved it - and
+after NVDA's Tab the second button did not have it.
+
+That is the behaviour the previous run had only hinted at with its transcript of the site
+navigation. In browse mode NVDA does not hand Tab to the browser as it is: when its own cursor is
+not inside the focused element, it tabs relative to that cursor. `navigateToWebContent` leaves
+the cursor at the top of the page, and a focus set by script does not reliably bring it along.
+The step into the editor field (last button, one Tab) happened to work; the same step from the
+first button did not.
+
+Whether NVDA is in browse or focus mode cannot be asked - Guidepup's configuration leaves the
+mode change to a sound - but it can be seen: the test presses Tab, looks where the focus went,
+and switches the mode once if it went elsewhere. The transcript records which mode it ended up
+in and, if the first Tab missed, where it landed and what NVDA said. A miss later on names the
+element that has the focus instead of reporting "inactive". The transcript is written when the
+test fails, too.
+
+Not verified: this cannot run outside Windows. If the second attempt misses as well, the
+transcript will say where the focus went.
+
+`tests/load/__pycache__/` had been committed; `__pycache__/` is in `.gitignore` now, the
+directory has to be deleted by hand.
+
+
+## 75. Iteration 71 (2026100700, version unchanged): two flaky jobs, one cause each
+
+**Upgrade job** (main CI 37683136764, commit 758c5e7): cancelled by its 20-minute limit in
+"Install Maxima (STACK)". The log shows the step starting at 20:41:11 and nothing until the
+cancellation at 21:00:50 - `apt-get update -qq && apt-get install -y -qq` waiting on a mirror
+that does not answer, with `-qq` hiding which of the two it was. One run earlier the same job
+passed in three and a half minutes. Nothing in the upgrade path itself failed.
+
+The same two lines were in nine steps of six workflows. They are replaced by
+`.github/install-maxima.sh`: timeouts on every download, apt's own retries, IPv4 only, no
+prompt that can wait, each phase under a hard limit of 150 seconds and tried three times, the
+phase and attempt printed, and the Maxima version checked everywhere, not only in two of the
+workflows. Worst case about eighteen minutes instead of the job's whole limit; the usual case is
+unchanged. Run in the session: both phases first try, Maxima 5.46.0.
+
+**JMeter** (run 37683262811): `POST login: 9/10`, one HTTP 404. The result file shows which one:
+thread 2's login, sent while thread 1's - the first login in the life of the site - was still
+being processed (783 ms; every later login took about 40 ms). The 404 is a Moodle error page,
+21 799 bytes, not a missing file; the eight logins after it succeeded. The stricter verdict in
+`check_jtl.py` forgives a failed login only if the thread logs in later, and this plan stops a
+thread that could not log in - correctly, it has nothing to measure.
+
+`.github/warm-up-site.sh` now takes the site through its first login before a load plan
+starts: one seeded student who is not part of the plans logs in alone and opens the dashboard
+and the quiz. Used by the JMeter and the k6 workflow. Tried in the session against the local
+site, including the refusal of a wrong password.
+
+Not established: which exception Moodle raised - the result file does not keep response bodies,
+and ten runs against the local site, warm and with purged caches, did not produce it. The
+attempt to reproduce it on a site restored to its never-logged-in state was not completed. The
+warm-up removes the condition the failure occurred under; it is not proof of the cause.
+
+
+## 76. Iteration 72 (2026100700, version unchanged): Playwright - browser contexts that were never closed
+
+Playwright run 37687306651 (commit 758c5e7): 40 passed, 1 failed, 1 flaky, 4 did not run. Both
+failures are in `permissions.spec.js` and both are the same thing: `browser.newContext` answered
+"Protocol error (Target.createBrowserContext): Failed to create browser context", or did not
+answer until the test's three minutes were over. Run 22 had shown it once before, as a single
+"flaky" line. The run before and the run after this code passed.
+
+No assertion about the plugin failed. What the specs did: wherever a second user was needed,
+`(await browser.newContext()).newPage()` - and later `page.close()`, or nothing. That closes the
+page and leaves the context; Playwright closes only the context it created itself. The browser
+is one process for the whole run, and with `video: 'on'` and `trace: 'on'` every context that is
+left keeps its recorders. Counted from the code, in the order the files run: two from the axe
+spec, one from JSXGraph, three from performance, four from the permissions spec itself - about
+ten open contexts when the eleventh was refused.
+
+`helpers.js` has `openPage()`, `closePage()` and `closeLeftovers()` now. Every one of the
+nineteen places goes through them; contexts are remembered when they are opened, closed with
+their page, and whatever a failed test left behind is closed in `afterEach` (in the settings
+spec, whose three pages live for the whole file, in `afterAll`). No `browser.newContext` is left
+in a spec.
+
+Run in the session, whole suite: 46 passed, 1 skipped.
+
+Not established: that the left-over contexts were the cause and not merely a burden. The
+session runs without video and trace, so the refusal could not be provoked here. The leak is
+real and removed either way; the next runs show whether the refusals go with it.
+
+
+## 77. Iteration 73 (2026100700, version unchanged): MDL Shield review of 2026-10-08
+
+Review of commit 758c5e7, grade C (pass): one medium finding, three low. All four were confirmed
+in the code and fixed; for each the same kind of mistake was then looked for in every file.
+
+**1. Configuration page, broken access control (medium).** `configure.php` checked
+`mod/quiz:manage` on the quiz from `cmid` and then rendered whatever question bank entry the
+request named. New: `quiz_helper::quiz_uses_entry()`, called before anything about the entry is
+read; an entry the quiz does not use gets the same error as one that does not exist, so the page
+can be used neither to view nor to probe questions elsewhere. Checked against the running local
+site as administrator: the own question renders, quiz 1's question requested through quiz 2 and
+a non-existent entry both end on the same error page.
+
+The same pattern elsewhere - an id taken from the request and trusted because a page check came
+before:
+- `editor_injector` and `configure_injector` read `attempt` from the request.
+  `load_attempt_stack_slots()` takes the quiz now and returns nothing for an attempt of another
+  quiz. Core has checked the attempt on these pages already; the injectors no longer rely on it.
+- `editor_injector` on the question preview reads `id`. It checks
+  `question_has_capability_on(..., 'use')` itself now, as the preview page does.
+- The external function was already fail-closed (`load_quiz_qbeids`), as the review notes.
+
+**2. Undefined method in `lib.php` (low).** `quiz_helper::adaptivequiz_has_stack_questions()`
+did not exist; the catch-all around the call turned the error into a configuration link that
+never appeared for adaptive quizzes. Implemented against mod_adaptivequiz's own schema
+(`adaptivequiz_question.instance`, `.questioncategory` - read from the module's `install.xml`),
+returning false where the module is not installed.
+
+The same pattern elsewhere: eleven catch-alls, all logging programming errors to a developer log
+at most. `quiz_helper::caught()` reports an `\Error` (undefined method or function, type error)
+through `debugging()` - a failure in PHPUnit and Behat, silent in production - and keeps runtime
+exceptions quiet as before; every catch-all uses it. A tokenizer scan of all PHP files resolving
+every static call to the plugin's own classes found this one method and nothing else (486 calls);
+it is a PHPUnit test now. A scan for functions that need a library outside the bootstrap found
+`stack_inputs` calling `question_has_capability_on()` inside a catch-all without loading
+`questionlib.php` - it worked only because the one caller happened to load it. It loads it now.
+
+**3. CLI script without `clilib.php` (low).** Fixed; the script was run against the local site.
+A test checks every file that defines `CLI_SCRIPT` and calls a `cli_*` helper.
+
+**4. Wrong `@package` in two tools (low).** Fixed; a test checks every docblock `@package`.
+
+**Note from the review, privacy provider:** the export read `allowed_elements` directly while the
+plugin reads and writes through its column helper. It uses the helper now.
+
+Tests: `tests/unit/review_2026_10_08_test.php`, nine tests - entry membership, the order of the
+checks in `configure.php`, an attempt bound to its quiz, the adaptive-quiz query against a
+temporary table with the module's definition, the reporter, and the three code-wide scans.
+PHPUnit 189 green, Playwright 46 green and 1 skipped, PHPCS clean. Not run: Behat.
+
+## 78. Iteration 74 (2026100700, version unchanged): audit of 2026-10-08, issues #84-#95
+
+The audit came as fifteen files (overall audit with closing matrix, fourteen findings). The
+findings went into the repository as issues #84-#94, the overall audit as #95; the parts for #69,
+#71 and #72, which already existed, were added there as comments. Each was checked against the code, then worked through in order.
+Nothing was ticked or closed: acceptance criteria and DoD are checked afterwards, by the owner.
+
+The version stays pinned at 2026100700 / 1.3.0, so no upgrade step, no schema change and no new
+capability. Where an issue suggested one, the pinned-version alternative is named below.
+
+**#84 Configure IDOR (P0).** Done in iteration 73; covered by `configure_access_test` (real STACK
+questions, editing teacher: own question, foreign quiz, foreign course, missing entry, non-STACK,
+prohibited `view`) and `configure-access.spec.js` (foreign and missing give the same page).
+
+**#85 Rows of deleted course modules (P0).** `db/events.php` + `observer`: `course_module_deleted`
+removes the rows of that cmid; `course_content_deleted` (course deletion goes through
+`remove_course_contents()`, which deletes modules and contexts without the per-module event -
+checked in `lib/moodlelib.php`) removes every row whose module context is gone. The privacy
+provider reports such orphans in the user context of `usermodified`, exports them there, and
+deletion removes them. Historical orphans: `cli/repair_config.php` (dry run by default,
+`--execute`). Pinned version: the observers are read from the event cache, so a site that
+already runs a 2026100700 build picks them up after "Purge all caches" - a fresh install or an
+upgrade from 1.2 has them at once. Tests: `config_lifecycle_test` (module delete, course delete,
+orphan export/delete per user and per userlist, repair, observer registration).
+
+**#86 Adaptive quiz capability (P1).** `quiz_helper::configure_capability()`: `mod/quiz:manage`
+for quiz, `moodle/course:manageactivities` (write, editingteacher and manager) for adaptive quiz
+instead of the report capability. Navigation, edit-page links (`can_configure()`) and
+`configure.php` ask the same method. A plugin capability would need a version bump.
+Tests: `configure_capability_test` - mapping, capability metadata and archetypes, roles incl. a
+prohibit override, and the real `extend_settings_navigation` callback through
+`settings_navigation::initialise()` for editing and non-editing teacher.
+
+**#87 Scope uniqueness (P1).** No unique index possible while the version is pinned (and NULL
+semantics differ between databases anyway). Instead: one writer per scope through the Moodle lock
+API, read-write-collapse in one delegated transaction, total read order `timemodified DESC, id
+DESC` everywhere (single and batch reads take the newest row per scope instead of merging all of
+them), `collapse_scope()` after every write, `cli/repair_config.php --duplicates` for old data.
+Tests: `config_scope_integrity_test` incl. a held lock (database lock factory, not re-entrant in
+one process) that makes the writer fail with `locktimeout` and write nothing.
+
+**#88 Backup/restore/duplicate (P1).** `backup_local_stackmatheditor_plugin` /
+`restore_local_stackmatheditor_plugin` at the module connection point: new cmid, question bank
+entries through the `question_bank_entry` mapping (new or matched entry), rows for entries the
+restored quiz does not use dropped, `usermodified` only with user data. Tests:
+`backup_restore_test` - restore into a new course with and without users, duplicate_module.
+
+**#89 Required paths cannot skip (P1).** `helpers.requireFixture()` fails in CI
+(`SME_STRICT_FIXTURES=1`) and skips locally; `optionalSkip()` annotates a legitimate skip.
+`run-summary.js` is a gate in both browser workflows: a spec without tests, a skip without the
+annotation, or a fixme fails the job. Checked with a crafted result file (exit 1) and the real run.
+
+**#72 Android 229 (P1).** Patch to the fork's `saneKeyboardEvents`: the Ctrl-Shift-U guard
+matches the Unicode entry only, not a bare "Unidentified" with keyCode 229. Four new Mocha cases
+in the fork, two of them fail without the change; the fork suite runs 835/0 in Chromium. Built as
+0.10.1-sme.6, vendored, the patch file in `thirdparty/patches/` (the fork itself was not pushed),
+provenance and checksums updated, library URLs carry the build as cache key. The fixme in
+`android-input.spec.js` is gone; blink229 green in single- and multi-line, plus one Backspace.
+
+**#69 400 % and evidence (P1).** `a11y-zoom.spec.js` runs reflow and the core workflow at 200
+and 400 per cent. The evidence workflow requires main CI and the NVDA run on the commit as well
+and writes the archive SHA-256 into the signoff sheet; NVDA judgement and the publish signoff stay
+human lines.
+
+**#71 Documentation drift (P1).** README MathQuill version, adaptive quiz per-question = per
+activity (`context_resolver::supports_question_configuration()`, which `configure.php` uses now).
+`documentation_test` compares README, thirdpartylibs.xml, readme_moodle.txt, the cache key and
+the file checksums, and the support table against the runtime.
+
+**#90/#91/#94.** Navigation callback tested for real (above); the dev workflow runs both CLI
+scripts on the clean installation and fails on any PHP error; `.gitignore` has `*.py[cod]`, the
+tracked `.pyc` is removed from the index; the doubled assignment was already gone.
+
+**#92 i18n (P2).** Privacy export: `scope` from `privacy:scope_*`, `scope_key` machine-readable.
+JS: no English fallbacks; a missing string shows as `[[key]]`, the popup's defaults are markers.
+Jest (`i18n_contract.test.js`) and PHPUnit (`test_js_string_contract`) keep both sides in step.
+
+**#93 Moodle 5.3 dark mode / BS5 (P2).** Checked on a real Moodle 5.3 site built locally
+(`MOODLE_503_STABLE`, PostgreSQL 16 with the environment check relaxed locally - 5.3 asks for 17).
+Measured first, then fixed only what failed: toolbar buttons 1.41:1 (light toolbar background in
+dark mode), switch label 1.93:1 (`--gray-700` is not defined on 5.x, so its light fallback was
+used). All colours are now `--bs-*` variables with the 4.5 values as fallback. Collapse and badges
+carry the Bootstrap 5 attributes and classes next to the old ones. New `dark-mode.spec.js`
+switches through the colour mode menu and runs axe plus measured contrast (field edges 3:1,
+typed text 4.5:1, chooser cells 3:1); it skips as optional where there are no colour modes.
+
+The 5.3 site showed what a Playwright run with `moodle_branch: MOODLE_503_STABLE` would have hit
+in CI: `admin/cli` is outside `public/` (install, upgrade and purge paths fixed), the site needs
+`composer install` (the routed API failed with a missing class - that is why the colour mode was
+not saved), `seed.php` used the course question bank that 5.x no longer has, and the workflow's
+PostgreSQL 16 is too old for 5.3 (now 17). Two layout findings on 5.3 as well: a five-button
+group wider than a 420 px question reached out of the toolbar (groups may break inside now, but
+only when they alone are wider than the toolbar), and Bootstrap 5's smooth scrolling moved the
+JSXGraph board while the test read its position (instant scroll in the test). Two core
+observations are reported, not asserted: Moodle 5.3's header row is 4 px wider than a 640 px
+viewport, and MathJax 4 makes formulas in the question text tab stops.
+
+One more product defect turned up on 5.3 through the JSXGraph spec: after a fast slider drag the
+editor sometimes stayed one value behind the input. `adoptExternalValue()` ignored every value
+while the `prefilling` flag of the previous adoption was up - it is released one timer tick
+later, and Chrome runs pointer input before timers. The listener now has its own re-entrancy
+guard and a separate flag for the initial value; `prefilling` only keeps the edit handler quiet.
+The mirrored Jest case asserted the old behaviour (a burst adopted once, the last value waiting
+for another event) and was rewritten. The a11y spec measured a toolbar button mid hover transition
+when the mouse rested where "Start attempt" had been; it moves the mouse away before axe now.
+On 5.2+ the lifecycle and duplicate tests use the course format actions instead of the
+deprecated `course_delete_module()` / `duplicate_module()`.
+
+Runs, all on the final state:
+- PHPUnit 215/215 on 4.5 and on 5.3 (PostgreSQL; on 5.3 only PHPUnit 11's doc-comment metadata
+  deprecations remain, as in every test of the plugin);
+- Jest 1282/1282; PHPCS (moodle) clean; stylelint clean; AMD build fresh;
+- Playwright with `SME_STRICT_FIXTURES=1` and the summary gate: 4.5 52 passed + the two dark-mode
+  tests as optional skips, gate green; 5.3 54 passed, gate green;
+- the fork's Mocha suite 835/0.
+Not run here: Behat, MariaDB, NVDA, the k6/JMeter load runs.
+
+## 79. Iteration 75 (2026100700, version unchanged): MathQuill fork commit, release artefact workflow
+
+The Android fix is committed to the fork as `d094d8a4` (on top of `9a6ebaf4`; source and tests
+identical to the delivered patch). Rebuilt from that commit: the three runtime files match the
+vendored sme.6 files byte for byte, so `thirdparty/readme_moodle.txt` names the commit now
+instead of "fork commit + patch", and `thirdparty/patches/` is gone. `documentation_test`
+requires a full commit id as the fork reference.
+
+`.github/workflows/release-artefact.yml`, taken over from moodle-mod_vimipad and adapted: on a
+`v1.*` tag (or by hand) it builds `moodle-local_stackmatheditor-<release>-<version>.zip` with
+root folder `stackmatheditor` via `git archive`, refuses a commit without green check-runs and
+without green main CI and release evidence, checks tag against `$plugin->release`, the build date
+(not newer than the commit - older is allowed while the version is pinned), the MathQuill
+checksums against the provenance file, a committed build for every AMD module, languages (en,
+de), development files, required runtime files and the stable maturity. The ZIP is then
+installed into fresh Moodle 4.5 and 5.3 sites with STACK (`build-test-site.sh`, PostgreSQL 17),
+the schema is checked and both CLI scripts run; only then is it published with
+`archive: false` and attached to the GitHub Release with its SHA-256. The build steps were run
+locally against the working tree: 166 files, one root, all checks green.
+
+Also in this iteration, from checking the open issues against the code:
+- #86: `can_configure()` requires access to the activity as well (course access, module visible),
+  as `configure.php` does with `require_login()`; tested with a capability granted to a user
+  outside the course and on a hidden module.
+- #90: the navigation callback is tested end to end for mod_adaptivequiz too (real instances
+  from vtos/moodle-mod_adaptivequiz: STACK question in the pool → link, none → no link, a role
+  with `viewreport` only → no link). The main CI installs the module in its 4.5 rows; elsewhere
+  the test skips.
+- #88: course duplication (`core_course_external::duplicate_course`) has its own test.
+- Main CI on 7781a9d: the PHPDoc checker (local_moodlecheck) rejected two inline mentions of
+  `@package` in the text of `review_2026_10_08_test.php` - reworded, moodlecheck is clean. The
+  5.3/pgsql row failed in apt: the Azure mirror delivered maxima at about 17 MB per 150 s, three
+  attempts were not enough. `install-maxima.sh` now downloads first, resumably, with six
+  attempts of 300 s, and installs from the cache.
+
+Issues: #86, #88, #89, #90, #91, #92, #93 ticked and closed. #84, #85, #87, #94 ticked except the
+CI items (green main CI incl. browser runs on the fix commit; static gates), which wait for this
+delivery to be pushed and run. #69 (manual NVDA judgement), #71 (open P1, tag and release
+metadata) and #72 (Opera and Firefox Klar on devices) keep their human items.
+
+## 80. Iteration 76 (2026100800): version, upgrade step, concurrency, release smoke, RTL
+
+Re-audit of 2026-10-08 (on 7781a9d) worked through; the release name stays 1.3.0 by decision of
+the maintainer (the review proposed 1.3.1), the build becomes 2026100800, so every site with the
+published 2026100700 is offered the upgrade.
+
+- **Upgrade step** (`db/upgrade.php`, savepoint 2026100800), written against the table rather than
+  the plugin classes: removes configurations of course modules whose context no longer exists
+  (chunks of 500) and collapses duplicate scopes to the row every read returns (newest, then
+  highest id). Idempotent. `tests/unit/upgrade_step_test.php`; checked by hand on MariaDB.
+  `tests/upgrade/seed_before.php` now leaves what 2026100700 leaves behind - a quiz deleted with
+  its rows still there, an orphan, a duplicate pair - and `verify_after.php` checks that the
+  upgrade removed exactly those, that the observer works right after it and that a second repair
+  finds nothing. Run locally from the ZIP published on moodle.org to the working tree: green.
+- **One row per scope:** decision record `docs/DATA-INTEGRITY.md` - no unique index (NULL quiz
+  defaults never collide on PostgreSQL/MariaDB), lock + transaction + collapse instead.
+  `tests/concurrency/concurrent_save.php` starts N PHP processes writing the same two scopes at the
+  same moment; its control mode runs the old read-then-insert path and shows the race (5-12
+  duplicates per run on PostgreSQL and MariaDB), the real path always leaves 1/1 (4.5 PG, 5.3 PG,
+  4.5 MariaDB, 16 x 40 stress). Main CI job *Concurrent writes* (pgsql, mariadb);
+  `build-test-site.sh` takes `DB_TYPE`/`DB_PORT`.
+- **Release ZIP tested as shipped** (`release-artefact.yml`): required files extended (events,
+  observer, data_maintenance, backup, upgrade, repair CLI, fixture); the installed ZIP runs
+  `tests/release/smoke.php` (import, configure, override, backup/restore into a new course,
+  deletion, invariants) and the concurrency script; job `upgrade` installs the previously
+  published build, seeds, replaces it with the ZIP, upgrades and verifies (4.5 and 5.3); job
+  `archive-tests` runs PHPUnit (`--fail-on-warning`) and Behat from the unpacked ZIP; publish
+  needs all of them. Fixture tests that need `tests/jest` skip in the archive.
+- **Release guard:** `release-guard.yml` turns a GitHub release published by hand back into a draft
+  and fails. RELEASE-CHECKLIST section 3 describes the gate; the moodle.org upload by hand is the
+  remaining path, accepted as R2 in the new `docs/RESIDUAL-RISKS.md`.
+- **Manual acceptance:** `docs/MANUAL-ACCEPTANCE.md` with the NVDA judgement (#69) and the Android
+  device table (#72); the release evidence asks for both, for the SHA-256 of the uploaded
+  archive and for the residual-risk acceptance.
+- **RTL:** the seed writes a minimal `he` language pack (`thisdirection = rtl`) into the dataroot;
+  `rtl.spec.js` (toolbar, both choosers, switch, configure page, focus order, overflow, axe).
+  Found and fixed: button symbols and labels such as ∂²/∂x∂y or ∠ABC were rearranged by the page
+  direction, the matrix grid was mirrored, the choosers anchored to the left of their button, and
+  STACK's hidden input sat 9999 px outside the window on the right (RTLCSS flips `left`). Math
+  elements keep `direction: ltr` (`/*rtl:ignore*/`), the choosers anchor by the toolbar's
+  direction and are clamped to the viewport, the hidden input is clipped to one pixel without a
+  side offset (with a `max-width` above STACK's `.que.stack input[type=text]`). No other physical
+  properties needed changing.
+- **CI:** `install-maxima.sh` downloads first with retries (the 5.3/pgsql failure of 7781a9d);
+  release metadata test (`documentation_test::test_release_metadata_agrees`).
+
+Note for the push: `thirdparty/patches/` was removed in iteration 75 but is still in 756f540
+(unpacking a ZIP does not delete) - `git rm -r thirdparty/patches`.
+
+## 81. Iteration 77 (2026100800, version unchanged): remaining work after the re-audit of bdc4a19
+
+Version stays 1.3.0 / 2026100800 by decision of the maintainer. Pushed state bdc4a19 was identical
+to the delivered tree.
+
+- **P0 false green of the release evidence:** run 37797946872 ended green although main CI was
+  still running and Playwright had not run - `missing=1` was set inside `{ ... } | tee`, a
+  subshell. The check is now `.github/required-runs.sh`: per workflow the newest run whose
+  `head_sha` is the commit, completed and successful, for main CI the job "CI complete" and for
+  Playwright one green job each for Moodle 4.5 and 5.3; the result is the exit code and the last
+  line of `required-runs.txt`. Tested against the real repository (bdc4a19: FAIL on Playwright;
+  758c5e7: FAIL, the green Playwright run has no 4.5/5.3 jobs; unknown commit: FAIL everywhere)
+  and with a stub (PASS, still running, missing job). `release-artefact.yml` calls it directly
+  for a tag, with `release-evidence.yml` as an additional requirement, so an evidence run made
+  too early does not carry a release. Run 37797946872 is named in RELEASE-CHECKLIST as not
+  citable.
+- **Playwright red on CI (toolbar_layout, "matrix_operators (5)" broken at 420 px):** reproduced
+  with a width sweep - every group broke within a band of about 7 px above its own width,
+  because the group's separator (padding-right 6 + border 1, margin 6) counted towards the line.
+  Separators are now `::after` elements in the column gap (no layout), so a group breaks only
+  when its buttons do not fit. Clusters of large groups may break when they alone are wider than
+  the toolbar (before they reached out of it below ~350 px). New test: sweep 700-300 px in 4 px
+  steps; it fails with the old CSS (424/428 px matrix_operators, 352-360 px
+  differential_operators, buttons outside at 344/348 px) and passes with the new one.
+- **Playwright 4.5 + 5.3:** `playwright.yml` runs both by default (`moodle_branch: all`, jobs
+  "Playwright / MOODLE_405_STABLE" and "/ MOODLE_503_STABLE"); the 5.3 job sets
+  `SME_NO_OPTIONAL_SKIPS=1`, so the dark mode tests must run there (optionalSkip throws,
+  run-summary counts every skip).
+- **Upgrade on MariaDB:** main CI upgrade job and the release workflow's upgrade job run on
+  PostgreSQL and MariaDB; `check_database_schema.php` in both; `verify_after.php` compares every
+  setting of the settings page with the fresh-install default (13 settings). Replayed locally from
+  the published 2026100700 on PostgreSQL and MariaDB: green.
+- **Adaptive quiz backup/restore/duplicate:** `backup_restore_adaptivequiz_test.php` (with users,
+  without users, duplicate; question rows of an adaptive quiz do not travel).
+- **Manual sign-off as a gate:** `docs/RELEASE-SIGNOFF.json` (status/date/by per item, R1-R6),
+  `.github/check-signoff.py`: format in main CI, `--complete` refuses a stable tag in
+  `release-artefact.yml`. R4 and R6 accepted, R1/R2/R3/R5 open - the tag waits for them.
+  GitHub release and moodle.org upload described as two steps, SHA-256 check before the upload.
+- **Comments:** issue numbers, audit markers and bug narratives removed from production PHP,
+  `amd/src` and `styles.css`; reasons kept as present-tense rules. Checked mechanically: `php -w`
+  identical for every PHP file, identical JS token streams, CSS identical without comments,
+  minified builds identical apart from their docblock.
+- **Inline JS:** the size-field logic of `configure.php` is `amd/src/configure_form.js` with Jest
+  tests; the remaining inline script (`page_helper::inject_json_element`) carries JSON only.
+- **Catch-alls:** lookups catch `\moodle_exception` only; `\Throwable` only at four page
+  boundaries; `caught()` reports `\Error`, `coding_exception` and SQL errors through
+  `debugging()`. `error_handling_test.php` fails on a new catch-all or a silent catch;
+  `preview_config_test.php` covers the positive path of the preview lookup.
+  `docs/ERROR-HANDLING.md`.
+
+## 82. Iteration 78 (2026100801, 1.4.0): remaining issue items, one row per scope in the database
+
+Release name 1.4.0 (maintainer), build 2026100801.
+
+- **R5 solved technically instead of accepted:** the quiz-level default is stored with
+  `questionbankentryid = 0` (`config_manager::QUIZ_DEFAULT`), the column is NOT NULL with default
+  0, and `(cmid, questionbankentryid)` is the unique index `cmid_qbeid_uix`. Upgrade step
+  2026100801 (idempotent, checks state): drop the old index, NULL -> 0, NOT NULL + default, collapse
+  duplicates (also NULL+0 of one activity), add the unique index. Reads use `= 0`; upsert keeps
+  lock + transaction (a second writer waits and updates); restore reads empty/0 as the quiz
+  default and merges two rows of one scope (newer wins); privacy export still shows null for the
+  quiz default's entry; CLI output says "default". `docs/DATA-INTEGRITY.md` rewritten.
+- **Tests:** integrity test checks the schema and that the database refuses a second row (question,
+  global and quiz default); upgrade test rebuilds the 1.3.0 schema (nullable, non-unique), inserts
+  the old data incl. a NULL and a 0 default of one quiz, upgrades and checks schema, rows and a
+  second run from 2026100700 and 2026100800; fixtures map null to QUIZ_DEFAULT; the concurrency
+  control run now writes without lock and must see the database refuse the second rows (8-9
+  refusals locally on PostgreSQL and MariaDB, one row per scope). `verify_after.php` checks schema
+  and the one default row.
+- **Replays:** published 2026100700 -> working tree on PostgreSQL and MariaDB (verify_after green)
+  and build 2026100800 -> working tree on both (NULL and 0 defaults merged, newest kept, schema ok).
+- **Sign-off:** R1, R2, R3 accepted by Ralf Erlebach on 2026-10-08 (his answer in the session);
+  R4 accepted earlier; R5 closed by the unique index; R6 gone with the new release name.
+  `check-signoff.py --complete` passes, so the tag v1.4.0 is no longer blocked by the sign-off.
+- **CHANGES:** section 1.4.0 (2026100801) with the fixes after the published 1.3.0; the 1.3.0
+  section is again the one that was published.
+- GitHub was not reachable from the session (connector unlinked, the read-only token refused by
+  the sandbox), so issues could not be read or updated; the texts are delivered separately.

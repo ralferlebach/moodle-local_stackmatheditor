@@ -47,8 +47,8 @@ the workflow cannot disagree.
 
 **Do not cite release evidence run 37797946872** (commit bdc4a19, 8 October 2026). It ended
 green although main CI was still running and Playwright had not run: the old check set its
-result inside a `{ ... } | tee` block, a subshell, and lost it. Evidence for build 2026100800
-has to be produced again with the corrected workflow.
+result inside a `{ ... } | tee` block, a subshell, and lost it. Evidence for 1.4.0 is produced
+with the corrected workflow.
 
 The evidence lists the commit, the SHA-256 of the release archive and the links of these runs,
 and the state of the manual sign-off (section 5).
@@ -130,9 +130,8 @@ explicitly (#69, item 32): a stable release whose browser, accessibility and loa
 collected after the flag, not before it. The evidence still has to be produced; what was given up
 is only that it gated the flag.
 
-Build 2026100800 keeps the release name 1.3.0 and the stable flag of 2026100700; what it changes
-is that its archive is published by the gate in section 3, so it is tested before anyone can
-download it.
+1.4.0 (build 2026100801) is the first release published through the gate of section 3: its
+archive is tested before anyone can download it, and its tag waits for the sign-off.
 
 Atomically, in one commit:
 

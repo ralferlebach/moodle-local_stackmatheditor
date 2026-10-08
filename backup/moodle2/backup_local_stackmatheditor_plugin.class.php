@@ -25,8 +25,8 @@
 /**
  * Adds the configurations of a quiz or adaptive quiz to its module backup.
  *
- * The rows are written below the module element: the quiz-level default (questionbankentryid
- * empty) and one row per configured question bank entry. The ids are the ones of the source site;
+ * The rows are written below the module element: the quiz-level default (questionbankentryid 0)
+ * and one row per configured question bank entry. The ids are the ones of the source site;
  * the restore maps them to the new course module and question bank entries.
  *
  * usermodified is a personal reference and travels only with user data; without it the restored

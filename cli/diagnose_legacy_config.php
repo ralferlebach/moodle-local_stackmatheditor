@@ -67,7 +67,7 @@ if ($duplicates) {
         cli_writeln(sprintf(
             '  cmid=%d qbeid=%s records=%d',
             $row->cmid,
-            $row->questionbankentryid === null ? 'NULL' : $row->questionbankentryid,
+            (int) $row->questionbankentryid === 0 ? 'default' : $row->questionbankentryid,
             $row->records
         ));
     }
@@ -95,7 +95,7 @@ if (isset($columns['questionid'])) {
 // the removed layer leaked one quiz's configuration into another.
 $sql = "SELECT questionbankentryid, COUNT(DISTINCT cmid) AS quizzes
           FROM {" . $table . "}
-         WHERE questionbankentryid IS NOT NULL AND cmid > 0
+         WHERE questionbankentryid > 0 AND cmid > 0
       GROUP BY questionbankentryid
         HAVING COUNT(DISTINCT cmid) > 1";
 $shared = $DB->get_records_sql($sql);

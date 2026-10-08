@@ -90,5 +90,66 @@ function xmldb_local_stackmatheditor_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026100800, 'local', 'stackmatheditor');
     }
 
+    if ($oldversion < 2026100801) {
+        // One configuration per scope, enforced by the database: the quiz-level default is stored
+        // with questionbankentryid = 0 instead of NULL, the column becomes NOT NULL, and the index
+        // on (cmid, questionbankentryid) becomes unique. With NULL the index could not be unique
+        // in a portable way - PostgreSQL and MariaDB never treat two NULLs as equal. Written
+        // against the table; every part checks the state first, so running it again changes
+        // nothing.
+        $dbman = $DB->get_manager();
+        $table = new xmldb_table('local_stackmatheditor');
+        $tablename = 'local_stackmatheditor';
+        $unique = new xmldb_index('cmid_qbeid_uix', XMLDB_INDEX_UNIQUE, ['cmid', 'questionbankentryid']);
+
+        // The non-unique index of earlier versions goes; a column with an index cannot change.
+        $oldindex = new xmldb_index('cmid_qbeid_ix', XMLDB_INDEX_NOTUNIQUE, ['cmid', 'questionbankentryid']);
+        if ($dbman->index_exists($table, $oldindex)) {
+            $dbman->drop_index($table, $oldindex);
+        }
+
+        // 1. NULL becomes 0, the value of the quiz-level default from now on; then the column
+        // gets default 0 and NOT NULL.
+        $column = $DB->get_columns($tablename, false)['questionbankentryid'];
+        if (!$column->not_null) {
+            if ($dbman->index_exists($table, $unique)) {
+                $dbman->drop_index($table, $unique);
+            }
+            $DB->execute("UPDATE {" . $tablename . "} SET questionbankentryid = 0 WHERE questionbankentryid IS NULL");
+            $field = new xmldb_field('questionbankentryid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'cmid');
+            $dbman->change_field_default($table, $field);
+            $dbman->change_field_notnull($table, $field);
+        }
+
+        // 2. A scope with more than one row - from the conversion (a NULL and a 0 row of the same
+        // activity) or left over - keeps the row every read returned: newest, then highest id.
+        $scopes = $DB->get_records_sql(
+            "SELECT " . $DB->sql_concat('cmid', "'/'", 'questionbankentryid') . " AS scopekey,
+                    cmid, questionbankentryid
+               FROM {" . $tablename . "}
+           GROUP BY cmid, questionbankentryid
+             HAVING COUNT(1) > 1"
+        );
+        foreach ($scopes as $scope) {
+            $ids = $DB->get_fieldset_sql(
+                "SELECT id FROM {" . $tablename . "}
+                  WHERE cmid = :cmid AND questionbankentryid = :qbeid
+               ORDER BY timemodified DESC, id DESC",
+                ['cmid' => $scope->cmid, 'qbeid' => $scope->questionbankentryid]
+            );
+            $surplus = array_slice($ids, 1);
+            if ($surplus) {
+                $DB->delete_records_list($tablename, 'id', $surplus);
+            }
+        }
+
+        // 3. The unique index.
+        if (!$dbman->index_exists($table, $unique)) {
+            $dbman->add_index($table, $unique);
+        }
+
+        upgrade_plugin_savepoint(true, 2026100801, 'local', 'stackmatheditor');
+    }
+
     return true;
 }

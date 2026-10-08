@@ -1,7 +1,9 @@
-# Dependency audit - 1.3.0
+# Dependency audit - 1.4.0
 
 Recorded 6 October 2026 against version 2026100603, with `npm audit` on the two lock files the
-repository carries (#69). Neither package is part of the plugin a site installs: everything under
+repository carries (#69). Re-run on 8 October 2026 for 1.4.0 (build 2026100801): the same result -
+no runtime finding, `tests/playwright` without findings, the same 34 accepted findings in
+`tests/jest`. The vendored MathQuill build is unchanged (0.10.1-sme.6). Neither package is part of the plugin a site installs: everything under
 `tests/` is excluded from the release archive by `.gitattributes`.
 
 ## What would ship

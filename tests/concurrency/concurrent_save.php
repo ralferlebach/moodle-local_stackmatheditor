@@ -15,16 +15,19 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * Real concurrent writes to one configuration scope, from separate PHP processes (#87).
+ * Real concurrent writes to one configuration scope, from separate PHP processes.
  *
- * The unit tests can only hold a lock and see a second writer wait; they run in one process and
- * one database transaction. This script starts several processes that write the same two scopes
- * (a question override and a quiz default) at the same moment, many times, through the
- * plugin's own write path, and then counts the rows: there must be exactly one per scope.
+ * The unit tests run in one process. This script starts several processes that write the same
+ * two scopes (a question override and a quiz default) at the same moment, many times, and then
+ * counts the rows: there must be exactly one per scope.
  *
- * --control runs the same load through the write path of the previous release (read, then
- * insert, no lock, no transaction) and only reports. It shows that the load really produces the
- * race the lock prevents; how many duplicates it gets depends on the machine.
+ * Without --control the writers use the plugin's write path (lock, transaction, unique index):
+ * no writer may fail.
+ *
+ * --control writes through a naive path instead - read, then insert, no lock, no transaction -
+ * the path that left duplicates behind before the unique index existed. Now the database has to
+ * refuse every second row: the writers count the refused inserts, and the run fails if a scope
+ * ends with more than one row. The number of refusals shows that the load really races.
  *
  * Usage: php concurrent_save.php /path/to/moodle [--workers=8] [--rounds=25] [--control]
  *
@@ -66,43 +69,50 @@ if (!empty($options['child'])) {
     }
     $rounds = (int) ($options['rounds'] ?? 25);
     $id = (int) ($options['id'] ?? 0);
+    $refused = 0;
     for ($round = 0; $round < $rounds; $round++) {
         $config = ['_enabled' => (bool) (($id + $round) % 2), 'writer' => $id, 'round' => $round];
         if ($control) {
-            local_stackmatheditor_concurrency_old_upsert(SME_CONCURRENCY_CMID, SME_CONCURRENCY_QBEID, $config);
-            local_stackmatheditor_concurrency_old_upsert(SME_CONCURRENCY_CMID, null, $config);
+            $refused += local_stackmatheditor_concurrency_naive_upsert(SME_CONCURRENCY_CMID, SME_CONCURRENCY_QBEID, $config);
+            $refused += local_stackmatheditor_concurrency_naive_upsert(SME_CONCURRENCY_CMID, config_manager::QUIZ_DEFAULT, $config);
         } else {
             config_manager::save_config(SME_CONCURRENCY_CMID, SME_CONCURRENCY_QBEID, $config);
             config_manager::save_quiz_default(SME_CONCURRENCY_CMID, $config);
         }
     }
+    echo "REFUSED {$refused}\n";
     exit(0);
 }
 
 /**
- * The write path of the previous release: read, then update or insert - no lock, no transaction.
+ * A naive write: read, then update or insert - no lock, no transaction.
  *
  * @param int $cmid Course module id.
- * @param int|null $qbeid Question bank entry id, null for the quiz default.
+ * @param int $qbeid Question bank entry id, 0 for the quiz default.
  * @param array $elements Configuration.
- * @return void
+ * @return int 1 when the database refused the insert as a second row of the scope, else 0.
  */
-function local_stackmatheditor_concurrency_old_upsert(int $cmid, ?int $qbeid, array $elements): void {
+function local_stackmatheditor_concurrency_naive_upsert(int $cmid, int $qbeid, array $elements): int {
     global $DB;
-    $where = $qbeid === null ? 'cmid = :cmid AND questionbankentryid IS NULL' : 'cmid = :cmid AND questionbankentryid = :qbeid';
-    $params = ['cmid' => $cmid, 'qbeid' => $qbeid];
-    $records = $DB->get_records_select('local_stackmatheditor', $where, $params, 'timemodified DESC');
+    $params = ['cmid' => $cmid, 'questionbankentryid' => $qbeid];
+    $records = $DB->get_records('local_stackmatheditor', $params, 'timemodified DESC');
     if ($records) {
         $keep = array_shift($records);
         $keep->allowed_elements = json_encode($elements);
         $keep->timemodified = time();
         $DB->update_record('local_stackmatheditor', $keep);
-        return;
+        return 0;
     }
-    $DB->insert_record('local_stackmatheditor', (object) [
-        'cmid' => $cmid, 'questionbankentryid' => $qbeid, 'allowed_elements' => json_encode($elements),
-        'usermodified' => 0, 'timecreated' => time(), 'timemodified' => time(),
-    ]);
+    try {
+        $DB->insert_record('local_stackmatheditor', (object) [
+            'cmid' => $cmid, 'questionbankentryid' => $qbeid, 'allowed_elements' => json_encode($elements),
+            'usermodified' => 0, 'timecreated' => time(), 'timemodified' => time(),
+        ]);
+    } catch (dml_write_exception $e) {
+        // Another writer inserted the row between our read and our insert.
+        return 1;
+    }
+    return 0;
 }
 
 /**
@@ -117,10 +127,9 @@ function local_stackmatheditor_concurrency_count(): array {
             'local_stackmatheditor',
             ['cmid' => SME_CONCURRENCY_CMID, 'questionbankentryid' => SME_CONCURRENCY_QBEID]
         ),
-        'default' => $DB->count_records_select(
+        'default' => $DB->count_records(
             'local_stackmatheditor',
-            'cmid = ? AND questionbankentryid IS NULL',
-            [SME_CONCURRENCY_CMID]
+            ['cmid' => SME_CONCURRENCY_CMID, 'questionbankentryid' => config_manager::QUIZ_DEFAULT]
         ),
     ];
 }
@@ -146,11 +155,15 @@ for ($i = 0; $i < $workers; $i++) {
 }
 
 $failed = 0;
+$refused = 0;
 foreach ($processes as $i => [$process, $pipes]) {
     $output = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
     fclose($pipes[1]);
     fclose($pipes[2]);
     $code = proc_close($process);
+    if (preg_match('/^REFUSED (\d+)$/m', $output, $m)) {
+        $refused += (int) $m[1];
+    }
     if ($code !== 0) {
         $failed++;
         echo "Writer {$i} ended with exit code {$code}:\n" . trim($output) . "\n";
@@ -160,7 +173,7 @@ foreach ($processes as $i => [$process, $pipes]) {
 $counts = local_stackmatheditor_concurrency_count();
 $DB->delete_records('local_stackmatheditor', ['cmid' => SME_CONCURRENCY_CMID]);
 
-$mode = $control ? 'previous write path (control, no lock)' : 'current write path';
+$mode = $control ? 'naive write path (control: no lock, no transaction)' : 'plugin write path';
 printf("%s: %d writers x %d rounds x 2 scopes on %s\n", $mode, $workers, $rounds, $DB->get_dbfamily());
 printf("  rows for the question scope: %d\n  rows for the quiz default:   %d\n", $counts['question'], $counts['default']);
 
@@ -170,11 +183,9 @@ if ($failed) {
 }
 
 if ($control) {
-    $extra = $counts['question'] + $counts['default'] - 2;
-    echo $extra > 0
-        ? "  the load produced {$extra} duplicate row(s) without the lock - the race is real.\n"
-        : "  no duplicate this time - the race did not show on this machine.\n";
-    exit(0);
+    echo $refused > 0
+        ? "  the database refused {$refused} second row(s) - the race is real, the unique index stops it.\n"
+        : "  no insert was refused this time - the race did not show on this machine.\n";
 }
 
 if ($counts['question'] !== 1 || $counts['default'] !== 1) {

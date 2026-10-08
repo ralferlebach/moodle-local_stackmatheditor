@@ -24,7 +24,7 @@ use local_stackmatheditor\definitions;
  * Operates in two modes depending on $customdata['mode']:
  *   'question' – configure a single STACK question (cmid + qbeid)
  *                (mod_quiz only)
- *   'quiz'     – configure activity-level defaults  (cmid only, qbeid IS NULL)
+ *   'quiz'     – configure activity-level defaults  (cmid only, qbeid = 0)
  *                (mod_quiz and mod_adaptivequiz)
  *
  * The 'modname' customdata value distinguishes the parent activity:

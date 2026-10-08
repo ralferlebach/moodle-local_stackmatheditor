@@ -21,14 +21,15 @@ namespace local_stackmatheditor;
  *
  * Lookup priority for get_config():
  *   1. Exact:      cmid + qbeid          (question-level)
- *   2. Quiz-def.:  cmid + qbeid IS NULL  (quiz-level default)
+ *   2. Quiz-def.:  cmid + qbeid = 0      (quiz-level default)
  *   3. Global:     cmid=0 + qbeid        (cross-quiz question default)
  *   4. questionid: questionid column, same quiz or global only
  *                  (records keyed by question id instead of question bank entry)
  *   5. Instance defaults                 (settings.php)
  *
- * Quiz-level defaults are stored with questionbankentryid = NULL.
+ * Quiz-level defaults are stored with questionbankentryid = 0 (QUIZ_DEFAULT).
  * Question-level configs use a concrete questionbankentryid integer.
+ * The database holds one row per scope: (cmid, questionbankentryid) is a unique index.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
@@ -37,6 +38,9 @@ namespace local_stackmatheditor;
 class config_manager {
     /** @var string Database table name. */
     public const TABLE = 'local_stackmatheditor';
+
+    /** @var int questionbankentryid of the quiz-level default; no question bank entry has id 0. */
+    public const QUIZ_DEFAULT = 0;
 
     /** @var string Total read order of a scope: newest first, id breaks ties within a second. */
     public const READ_ORDER = 'timemodified DESC, id DESC';
@@ -270,7 +274,7 @@ class config_manager {
      *
      * Lookup order:
      *   1. cmid + qbeid          (question-level)
-     *   2. cmid + NULL           (quiz-level default)
+     *   2. cmid + 0              (quiz-level default)
      *   3. cmid=0 + qbeid        (global question default)
      *   4. questionid field      (records keyed by question id, same quiz or global only)
      *   5. instance defaults     (settings.php)
@@ -331,7 +335,7 @@ class config_manager {
         // Quiz-level defaults override instance/global fallbacks.
         if ($cmid > 0) {
             $rec = self::get_one(
-                "cmid = :cmid AND questionbankentryid IS NULL",
+                "cmid = :cmid AND questionbankentryid = 0",
                 ['cmid' => $cmid]
             );
             if ($rec) {
@@ -381,7 +385,7 @@ class config_manager {
             );
         } else {
             $rec = self::get_one(
-                "cmid = :cmid AND questionbankentryid IS NULL",
+                "cmid = :cmid AND questionbankentryid = 0",
                 ['cmid' => $cmid]
             );
         }
@@ -400,7 +404,7 @@ class config_manager {
         $col = self::get_config_column();
 
         $rec = self::get_one(
-            "cmid = :cmid AND questionbankentryid IS NULL",
+            "cmid = :cmid AND questionbankentryid = 0",
             ['cmid' => $cmid]
         );
         if (!$rec) {
@@ -501,7 +505,7 @@ class config_manager {
         // 3. Quiz-level default overrides lower layers for all slots.
         if ($cmid > 0) {
             $quizrec = self::get_one(
-                "cmid = :cmid AND questionbankentryid IS NULL",
+                "cmid = :cmid AND questionbankentryid = 0",
                 ['cmid' => $cmid]
             );
             if ($quizrec) {
@@ -540,10 +544,10 @@ class config_manager {
 
 
     /**
-     * Keep only the first (newest) record per question bank entry of a READ_ORDER result.
+     * Key a READ_ORDER result by question bank entry id, one record per entry.
      *
-     * Without a unique index a scope may hold more than one row; merging all of them would mix
-     * an older configuration into the newer one. The runtime reads exactly one row per scope.
+     * The unique index allows one row per scope; the first record wins should a database ever
+     * return more, so a read never mixes two configurations.
      *
      * @param \stdClass[] $records Records ordered by READ_ORDER.
      * @return \stdClass[] Records keyed by question bank entry id.
@@ -582,7 +586,7 @@ class config_manager {
     }
 
     /**
-     * Save quiz-level default config (cmid, questionbankentryid IS NULL).
+     * Save quiz-level default config (cmid, questionbankentryid = 0).
      *
      * @param int   $cmid
      * @param array $elements Config array.
@@ -595,14 +599,11 @@ class config_manager {
     /**
      * Internal upsert. Handles both question-level (qbeid int) and quiz-level (qbeid null) records.
      *
-     * The scope is made unique by the application, not by a unique index (decision recorded in
-     * docs/DATA-INTEGRITY.md): questionbankentryid is NULL for the quiz-level default, and
-     * databases disagree on whether NULLs collide in a unique index - PostgreSQL and MariaDB
-     * would let any number of quiz defaults through, which is the case that matters. Instead:
-     *   - writers of the same scope are serialised with the Moodle lock API;
-     *   - read, write and the removal of surplus rows run in one database transaction;
-     *   - after the write the scope is collapsed to the row every read returns, which also repairs
-     *     duplicates already in the table or caused by a lock factory that does not serialise.
+     * One row per scope is guaranteed by the database: (cmid, questionbankentryid) is a unique
+     * index, and the quiz-level default is stored with questionbankentryid = 0 so that it takes
+     * part in it (docs/DATA-INTEGRITY.md). Writers of the same scope are additionally serialised
+     * with the Moodle lock API and read and write in one transaction, so a concurrent second
+     * writer updates the row the first one inserted instead of failing on the index.
      *
      * @param int      $cmid
      * @param int|null $qbeid  null for quiz-level default.
@@ -644,7 +645,7 @@ class config_manager {
             } else {
                 $record                      = new \stdClass();
                 $record->cmid                = $cmid;
-                $record->questionbankentryid = $qbeid; // Null for quiz-level defaults.
+                $record->questionbankentryid = $qbeid ?? self::QUIZ_DEFAULT;
                 $record->$col                = $json;
                 $record->usermodified        = $userid;
                 $record->timecreated         = $now;
@@ -652,7 +653,6 @@ class config_manager {
                 $DB->insert_record(self::TABLE, $record);
             }
 
-            self::collapse_scope($cmid, $qbeid);
             $transaction->allow_commit();
         } finally {
             $lock->release();
@@ -662,8 +662,11 @@ class config_manager {
     /**
      * Reduce one scope to the row every read returns and delete the others.
      *
+     * With the unique index a scope cannot hold more than one row; this is the repair for data
+     * written before it existed (data_maintenance, the CLI) and finds nothing otherwise.
+     *
      * @param int      $cmid  Course module id (0 = global scope).
-     * @param int|null $qbeid Question bank entry id, null for the quiz-level default.
+     * @param int|null $qbeid Question bank entry id; null or 0 for the quiz-level default.
      * @return int Number of deleted rows.
      */
     public static function collapse_scope(int $cmid, ?int $qbeid): int {
@@ -684,25 +687,22 @@ class config_manager {
      * SQL condition for one scope.
      *
      * @param int      $cmid  Course module id.
-     * @param int|null $qbeid Question bank entry id, null for the quiz-level default.
+     * @param int|null $qbeid Question bank entry id; null or 0 for the quiz-level default.
      * @return array [where, params]
      */
     private static function scope_condition(int $cmid, ?int $qbeid): array {
-        if ($qbeid === null) {
-            return ['cmid = :cmid AND questionbankentryid IS NULL', ['cmid' => $cmid]];
-        }
-        return ['cmid = :cmid AND questionbankentryid = :qbeid', ['cmid' => $cmid, 'qbeid' => $qbeid]];
+        return ['cmid = :cmid AND questionbankentryid = :qbeid', ['cmid' => $cmid, 'qbeid' => $qbeid ?? self::QUIZ_DEFAULT]];
     }
 
     /**
      * Lock resource name of one scope.
      *
      * @param int      $cmid  Course module id.
-     * @param int|null $qbeid Question bank entry id, null for the quiz-level default.
+     * @param int|null $qbeid Question bank entry id; null or 0 for the quiz-level default.
      * @return string Resource key.
      */
     public static function scope_lock_key(int $cmid, ?int $qbeid): string {
-        return 'scope_' . $cmid . '_' . ($qbeid === null ? 'default' : $qbeid);
+        return 'scope_' . $cmid . '_' . ($qbeid ? $qbeid : 'default');
     }
 
 

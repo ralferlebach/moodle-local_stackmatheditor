@@ -17,7 +17,7 @@
 namespace local_stackmatheditor;
 
 /**
- * One configuration row per scope, deterministic reads and repair of old duplicates (#87).
+ * One configuration row per scope, enforced by the database, and the lock that makes writers wait.
  *
  * @package    local_stackmatheditor
  * @copyright  2026 Ralf Erlebach
@@ -27,28 +27,70 @@ namespace local_stackmatheditor;
  */
 final class config_scope_integrity_test extends \advanced_testcase {
     /**
-     * Insert one raw row, bypassing the application write path (simulates historical data).
+     * Insert one raw row, bypassing the application write path.
      *
      * @param int $cmid Course module id.
-     * @param int|null $qbeid Question bank entry id or null.
-     * @param array $config Stored configuration.
-     * @param int $timemodified Modification time.
+     * @param int $qbeid Question bank entry id, 0 for the quiz-level default.
      * @return int Record id.
      */
-    private function raw(int $cmid, ?int $qbeid, array $config, int $timemodified): int {
+    private function raw(int $cmid, int $qbeid): int {
         global $DB;
         return (int) $DB->insert_record(config_manager::TABLE, (object)[
             'cmid'                => $cmid,
             'questionbankentryid' => $qbeid,
-            'allowed_elements'    => json_encode($config),
+            'allowed_elements'    => '{}',
             'usermodified'        => 2,
-            'timecreated'         => $timemodified,
-            'timemodified'        => $timemodified,
+            'timecreated'         => 100,
+            'timemodified'        => 100,
         ]);
     }
 
     /**
-     * Repeated saves keep exactly one row per question scope and per quiz-default scope.
+     * The schema carries the invariant: questionbankentryid is NOT NULL with default 0, and
+     * (cmid, questionbankentryid) is a unique index.
+     *
+     * @return void
+     */
+    public function test_schema_enforces_one_row_per_scope(): void {
+        global $DB;
+        $column = $DB->get_columns(config_manager::TABLE)['questionbankentryid'];
+        $this->assertTrue($column->not_null);
+        $this->assertSame('0', (string) $column->default_value);
+
+        $table = new \xmldb_table(config_manager::TABLE);
+        $index = new \xmldb_index('cmid_qbeid_uix', XMLDB_INDEX_UNIQUE, ['cmid', 'questionbankentryid']);
+        $this->assertTrue($DB->get_manager()->index_exists($table, $index));
+    }
+
+    /**
+     * The database refuses a second row for a scope - the quiz-level default included, which a
+     * nullable column could not protect - and keeps different scopes apart.
+     *
+     * @return void
+     */
+    public function test_database_refuses_a_second_row(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->raw(500, 0);
+        $this->raw(500, 77);
+        $this->raw(0, 77);
+        $this->raw(501, 0);
+        $this->assertSame(4, $DB->count_records(config_manager::TABLE));
+
+        foreach ([[500, 0], [500, 77], [0, 77]] as [$cmid, $qbeid]) {
+            try {
+                $this->raw($cmid, $qbeid);
+                $this->fail("a second row for ({$cmid}, {$qbeid}) was accepted");
+            } catch (\dml_write_exception $e) {
+                $this->assertSame(4, $DB->count_records(config_manager::TABLE), "({$cmid}, {$qbeid})");
+            }
+        }
+        $this->assertSame([], data_maintenance::find_duplicate_scopes());
+        $this->assertSame(0, data_maintenance::repair_duplicates());
+    }
+
+    /**
+     * Repeated saves update the one row of each scope; the quiz-level default is stored as 0.
      *
      * @return void
      */
@@ -62,79 +104,13 @@ final class config_scope_integrity_test extends \advanced_testcase {
             config_manager::save_quiz_default(500, ['_enabled' => (bool) ($i % 2)]);
         }
         $this->assertSame(1, $DB->count_records(config_manager::TABLE, ['cmid' => 500, 'questionbankentryid' => 77]));
-        $this->assertSame(1, $DB->count_records_select(
+        $this->assertSame(1, $DB->count_records(
             config_manager::TABLE,
-            'cmid = ? AND questionbankentryid IS NULL',
-            [500]
+            ['cmid' => 500, 'questionbankentryid' => config_manager::QUIZ_DEFAULT]
         ));
-        $this->assertSame([], data_maintenance::find_duplicate_scopes());
-    }
-
-    /**
-     * Two rows with the same timemodified: single and batch read pick the higher id, and so does
-     * the repair, so reading before and after the repair gives the same configuration.
-     *
-     * @return void
-     */
-    public function test_tie_is_broken_by_id_everywhere(): void {
-        global $DB;
-        $this->resetAfterTest();
-        $time = time() - 100;
-        $this->raw(600, 88, ['basic_operators' => false, 'onlyold' => true], $time);
-        $newer = $this->raw(600, 88, ['basic_operators' => true], $time);
-
-        $single = config_manager::get_config(600, 88);
-        $batch = config_manager::get_configs(600, [88])[88];
-        $this->assertTrue($single['basic_operators']);
-        $this->assertSame($single, $batch);
-        // The older duplicate is not merged into the read.
-        $this->assertArrayNotHasKey('onlyold', $batch);
-
-        $this->assertSame(1, data_maintenance::repair_duplicates());
-        $this->assertSame([$newer], array_map('intval', array_keys(
-            $DB->get_records(config_manager::TABLE, ['cmid' => 600, 'questionbankentryid' => 88])
-        )));
-        $this->assertSame($single, config_manager::get_config(600, 88));
-    }
-
-    /**
-     * Duplicate quiz defaults (NULL qbeid) are found and repaired too; other scopes stay.
-     *
-     * @return void
-     */
-    public function test_repair_handles_null_scope(): void {
-        global $DB;
-        $this->resetAfterTest();
-        $this->raw(700, null, ['_enabled' => false], 100);
-        $keep = $this->raw(700, null, ['_enabled' => true], 200);
-        $this->raw(700, 1, ['_enabled' => true], 100);
-
-        $scopes = data_maintenance::find_duplicate_scopes();
-        $this->assertCount(1, $scopes);
-        $this->assertNull($scopes[0]->questionbankentryid);
-        $this->assertSame(2, $scopes[0]->records);
-
-        $this->assertSame(1, data_maintenance::repair_duplicates());
-        $this->assertTrue($DB->record_exists(config_manager::TABLE, ['id' => $keep]));
-        $this->assertSame(2, $DB->count_records(config_manager::TABLE, ['cmid' => 700]));
-    }
-
-    /**
-     * A save onto a scope with historical duplicates updates the row reads return and drops the rest.
-     *
-     * @return void
-     */
-    public function test_save_collapses_historical_duplicates(): void {
-        global $DB;
-        $this->resetAfterTest();
-        $this->setAdminUser();
-        $this->raw(800, 9, ['a' => 1], 100);
-        $winner = $this->raw(800, 9, ['a' => 2], 100);
-
-        config_manager::save_config(800, 9, ['_enabled' => true]);
-
-        $rows = $DB->get_records(config_manager::TABLE, ['cmid' => 800, 'questionbankentryid' => 9]);
-        $this->assertSame([$winner], array_map('intval', array_keys($rows)));
+        $this->assertSame(2, $DB->count_records(config_manager::TABLE));
+        $this->assertSame(['_enabled' => false], config_manager::get_own_config(500));
+        $this->assertSame(['_enabled' => false], config_manager::get_own_config(500, 77));
     }
 
     /**

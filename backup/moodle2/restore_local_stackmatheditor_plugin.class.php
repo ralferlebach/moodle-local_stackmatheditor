@@ -30,6 +30,8 @@
  *   - a question bank entry goes through the restore mapping (new entry, or the existing one the
  *     restore matched); a row whose entry the restored quiz does not use is dropped, so no row
  *     points into another course or at an entry that does not exist;
+ *   - the quiz-level default is stored with questionbankentryid 0, also from backups that carry
+ *     it empty; a second row for a scope updates the first when it is newer (unique index);
  *   - usermodified is mapped to the restored user, or 0 when users are not part of the restore.
  *
  * @package    local_stackmatheditor
@@ -63,9 +65,12 @@ class restore_local_stackmatheditor_plugin extends restore_local_plugin {
     public function process_stackmatheditor_config($data) {
         global $DB;
         $data = (object) $data;
+        $table = \local_stackmatheditor\config_manager::TABLE;
 
-        $qbeid = null;
-        if ($data->questionbankentryid !== null && $data->questionbankentryid !== '') {
+        // Quiz-level default: 0 in backups of this version, empty in backups of versions that
+        // stored it as NULL.
+        $qbeid = \local_stackmatheditor\config_manager::QUIZ_DEFAULT;
+        if (!empty($data->questionbankentryid)) {
             $old = (int) $data->questionbankentryid;
             $qbeid = (int) $this->get_mappingid('question_bank_entry', $old, $old);
         }
@@ -80,12 +85,23 @@ class restore_local_stackmatheditor_plugin extends restore_local_plugin {
             'timecreated'         => (int) $data->timecreated,
             'timemodified'        => (int) $data->timemodified,
         ];
-        $this->restoredids[] = (int) $DB->insert_record(\local_stackmatheditor\config_manager::TABLE, $record);
+
+        // One row per scope is a unique index. A backup of a site that still had two rows for a
+        // scope, or two entries the restore maps onto the same one, keeps the newer configuration
+        // - the one the source site showed.
+        $existing = $DB->get_record($table, ['cmid' => $record->cmid, 'questionbankentryid' => $qbeid]);
+        if ($existing) {
+            if ((int) $record->timemodified >= (int) $existing->timemodified) {
+                $record->id = $existing->id;
+                $DB->update_record($table, $record);
+            }
+            return;
+        }
+        $this->restoredids[] = (int) $DB->insert_record($table, $record);
     }
 
     /**
-     * After the whole restore: drop rows whose question the restored activity does not use and
-     * keep one row per scope.
+     * After the whole restore: drop rows whose question the restored activity does not use.
      *
      * Runs after the restore because only then are the quiz slots and question references of
      * the new activity in place.
@@ -103,24 +119,18 @@ class restore_local_stackmatheditor_plugin extends restore_local_plugin {
 
         [$insql, $params] = $DB->get_in_or_equal($this->restoredids);
         $rows = $DB->get_records_select($table, "id {$insql}", $params);
-        $scopes = [];
         foreach ($rows as $row) {
-            $qbeid = $row->questionbankentryid === null ? null : (int) $row->questionbankentryid;
+            $qbeid = (int) $row->questionbankentryid;
             $keep = $cm && (
-                $qbeid === null
+                $qbeid === \local_stackmatheditor\config_manager::QUIZ_DEFAULT
                 || ($cm->modname === 'quiz'
                     && \local_stackmatheditor\quiz_helper::quiz_uses_entry((int) $cm->instance, $qbeid))
             );
             if (!$keep) {
                 $DB->delete_records($table, ['id' => $row->id]);
                 $this->task->log('local_stackmatheditor: configuration of question bank entry '
-                    . ($qbeid ?? 'default') . ' dropped, the restored activity does not use it', backup::LOG_INFO);
-                continue;
+                    . $qbeid . ' dropped, the restored activity does not use it', backup::LOG_INFO);
             }
-            $scopes[$qbeid ?? 'default'] = $qbeid;
-        }
-        foreach ($scopes as $qbeid) {
-            \local_stackmatheditor\config_manager::collapse_scope($cmid, $qbeid);
         }
         $this->restoredids = [];
     }

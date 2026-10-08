@@ -73,7 +73,7 @@ final class backup_restore_adaptivequiz_test extends \advanced_testcase {
         $insert = function (?int $qbeid, string $marker) use ($DB) {
             $DB->insert_record(config_manager::TABLE, (object) [
                 'cmid'                => $this->cm->id,
-                'questionbankentryid' => $qbeid,
+                'questionbankentryid' => $qbeid ?? config_manager::QUIZ_DEFAULT,
                 'allowed_elements'    => json_encode(['_enabled' => true, 'marker' => $marker]),
                 'usermodified'        => $this->teacher->id,
                 'timecreated'         => 1000,
@@ -98,7 +98,7 @@ final class backup_restore_adaptivequiz_test extends \advanced_testcase {
         foreach ($DB->get_records(config_manager::TABLE, ['cmid' => $cmid]) as $row) {
             $result[] = [
                 json_decode($row->allowed_elements, true)['marker'] ?? null,
-                $row->questionbankentryid === null ? null : (int) $row->questionbankentryid,
+                (int) $row->questionbankentryid,
                 (int) $row->usermodified,
             ];
         }
@@ -161,7 +161,7 @@ final class backup_restore_adaptivequiz_test extends \advanced_testcase {
         $cm = $this->backup_and_restore(true);
 
         $this->assertNotEquals($this->cm->id, $cm->id);
-        $this->assertSame([['activity', null, (int) $this->teacher->id]], $this->rows($cm->id));
+        $this->assertSame([['activity', 0, (int) $this->teacher->id]], $this->rows($cm->id));
         $this->assertTrue(config_manager::get_effective_enabled((int) $cm->id));
         // The source is untouched.
         $this->assertSame($before, $this->rows($this->cm->id));
@@ -176,7 +176,7 @@ final class backup_restore_adaptivequiz_test extends \advanced_testcase {
      */
     public function test_course_restore_without_users(): void {
         $cm = $this->backup_and_restore(false);
-        $this->assertSame([['activity', null, 0]], $this->rows($cm->id));
+        $this->assertSame([['activity', 0, 0]], $this->rows($cm->id));
     }
 
     /**
@@ -194,7 +194,7 @@ final class backup_restore_adaptivequiz_test extends \advanced_testcase {
 
         $this->assertNotEquals($this->cm->id, $newcm->id);
         // Duplication is a backup without user data, so the copy has no author.
-        $this->assertSame([['activity', null, 0]], $this->rows((int) $newcm->id));
+        $this->assertSame([['activity', 0, 0]], $this->rows((int) $newcm->id));
         // The original keeps both of its rows.
         $this->assertCount(2, $this->rows($this->cm->id));
     }

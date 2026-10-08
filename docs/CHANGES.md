@@ -4,38 +4,16 @@ Changes
 All notable changes to **local_stackmatheditor**, newest first. The short version is in the
 README under *Motivation for this plugin*; this file is the full record, version by version.
 
-Version numbers follow `version.php`: the release name (`1.3.0`) and the build
+Version numbers follow `version.php`: the release name (`1.4.0`) and the build
 (`YYYYMMDDNN`).
 
 
-1.3.0 (2026100800) - stable
+1.4.0 (2026100801) - stable
 ----------------------------
 
-Build 2026100700 was published on 7 October 2026. Build 2026100800 keeps the release name and adds
-the security, privacy, lifecycle, backup and integrity fixes listed under *Fixed*, together with an
-upgrade step: on a site with 2026100700 or older, configurations of deleted activities and
-duplicate configurations are removed once during the upgrade.
-
-### New
-
-* Structured matrices and vectors, entered through choosers rather than by writing LaTeX.
-* Elementary geometry in school notation: points, distance, angle, length of a segment.
-* Determinant, identity matrix, transpose, and a norm that becomes the Maxima function the site
-  names.
-* Vector differential operators, per-site configurable and package-aware.
-* Toolbar groups declare the CAS packages they need. A group whose packages the question does not
-  load is not rendered for students; the configuration page says which line to add.
-* A typed space reaches STACK as a space.
-* Students can switch the editor off and back on; the answer travels with it. Site, quiz and
-  question decide whether they may: any level can take the permission away, none can give it back.
-* The editor attaches to any editable STACK input the question engine renders.
-* A cross product button writes `express(a ~ b)`; the question only has to load `vect`.
-* Matrix and vector choosers work with mouse, finger and pen, and with the cursor in an existing
-  matrix they change its size. The largest size is configurable per site, quiz and question.
-* The toolbar follows the width of the editor rather than the window, and a group of up to five
-  buttons is never torn apart.
-* A script that writes into the STACK input - a JSXGraph slider, for example - is picked up by the
-  editor at once.
+1.3.0 (build 2026100700) was published on 7 October 2026. 1.4.0 adds the security, privacy,
+lifecycle, backup and data integrity fixes below, found in the reviews of 8 October 2026. A
+build 2026100800 with these fixes under the release name 1.3.0 existed for testing only.
 
 ### Fixed
 
@@ -78,10 +56,52 @@ duplicate configurations are removed once during the upgrade.
   page direction and the grid was mirrored. The choosers open under their button on the side the
   page reads from, and STACK's hidden input no longer sits outside the window on the right. The
   toolbar itself follows the page.
+* A soft keyboard that announces each character with an "Unidentified" key (keyCode 229) no longer
+  loses its input. MathQuill 0.10.1-sme.6 ignores only Chrome's Ctrl-Shift-U Unicode entry, which
+  the old guard was meant for.
 * Two teachers saving the same quiz or question at the same moment no longer leave two
-  configurations behind. Writes of one scope are serialised by a lock and run in one transaction;
-  when duplicates from earlier builds exist, every read picks the same one (newest, then highest
-  id), and the next save or `cli/repair_config.php` removes the others.
+  configurations behind. The database itself now holds one configuration per quiz, question and
+  quiz default: the quiz default is stored with question bank entry 0 instead of an empty value,
+  and (activity, question bank entry) is a unique index. Writes of one scope are additionally
+  serialised by a lock, so a second writer waits instead of failing.
+
+### For administrators
+
+* The upgrade removes configurations of deleted activities and duplicate configurations once,
+  converts the quiz defaults to question bank entry 0 and makes the scope index unique. Nothing a
+  site shows changes: of duplicates, the configuration every page read before is kept.
+* `cli/repair_config.php` reports and removes configurations of deleted activities; on an
+  upgraded site it finds no duplicates, the database no longer allows them.
+* A restore of a backup made with an earlier version reads its quiz defaults, which carry no
+  question bank entry, as the quiz default.
+
+
+1.3.0 (2026100700) - stable
+----------------------------
+
+### New
+
+* Structured matrices and vectors, entered through choosers rather than by writing LaTeX.
+* Elementary geometry in school notation: points, distance, angle, length of a segment.
+* Determinant, identity matrix, transpose, and a norm that becomes the Maxima function the site
+  names.
+* Vector differential operators, per-site configurable and package-aware.
+* Toolbar groups declare the CAS packages they need. A group whose packages the question does not
+  load is not rendered for students; the configuration page says which line to add.
+* A typed space reaches STACK as a space.
+* Students can switch the editor off and back on; the answer travels with it. Site, quiz and
+  question decide whether they may: any level can take the permission away, none can give it back.
+* The editor attaches to any editable STACK input the question engine renders.
+* A cross product button writes `express(a ~ b)`; the question only has to load `vect`.
+* Matrix and vector choosers work with mouse, finger and pen, and with the cursor in an existing
+  matrix they change its size. The largest size is configurable per site, quiz and question.
+* The toolbar follows the width of the editor rather than the window, and a group of up to five
+  buttons is never torn apart.
+* A script that writes into the STACK input - a JSXGraph slider, for example - is picked up by the
+  editor at once.
+
+### Fixed
+
 * Nested structures survive the conversion in both directions: a root inside a root, a function
   inside itself, absolute values and binomial coefficients within one another, at any depth. What
   cannot be converted is reported instead of being passed on as a plausible-looking but different
@@ -93,9 +113,6 @@ duplicate configurations are removed once during the upgrade.
   question; only the explicit global default crosses quizzes.
 * On Android Chrome and Opera, a freshly focused field accepts the first soft-keyboard character
   immediately. It used to drop everything until Enter had been pressed once.
-* A soft keyboard that announces each character with an "Unidentified" key (keyCode 229) no longer
-  loses its input. MathQuill 0.10.1-sme.6 ignores only Chrome's Ctrl-Shift-U Unicode entry, which
-  the old guard was meant for.
 * `Umax` reaches STACK as `Umax`, not as `U max`, and `U_max` keeps its whole subscript in both
   directions.
 * The external service authorises: the course module has to be a quiz, the user has to be allowed
@@ -157,7 +174,6 @@ duplicate configurations are removed once during the upgrade.
 * The editor attaches to any editable STACK input the question engine renders - quiz, adaptive
   quiz, question preview, CAPQuiz, StudentQuiz, embedded questions - and to questions that arrive
   after page load. Read-only inputs keep their plain rendering.
-
 
 1.2.2 (2026091500) - stable
 ----------------------------

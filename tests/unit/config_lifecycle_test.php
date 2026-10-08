@@ -45,7 +45,7 @@ final class config_lifecycle_test extends \advanced_testcase {
         global $DB;
         return (int) $DB->insert_record(config_manager::TABLE, (object)[
             'cmid'                => $cmid,
-            'questionbankentryid' => $qbeid,
+            'questionbankentryid' => $qbeid ?? config_manager::QUIZ_DEFAULT,
             'allowed_elements'    => '{"basic_operators":true}',
             'usermodified'        => $userid,
             'timecreated'         => time(),

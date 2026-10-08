@@ -165,7 +165,8 @@ class provider implements core_userlist_provider, metadata_provider, request_pro
                     'scope'               => get_string('privacy:scope_' . $scope, 'local_stackmatheditor'),
                     'scope_key'           => $scope,
                     'cmid'                => (int) $record->cmid,
-                    'questionbankentryid' => $record->questionbankentryid === null
+                    // The quiz-level default has no question: exported as null, not as entry 0.
+                    'questionbankentryid' => (int) $record->questionbankentryid === 0
                         ? null
                         : (int) $record->questionbankentryid,
                     // Read through the same column helper the plugin writes with.
@@ -300,6 +301,6 @@ class provider implements core_userlist_provider, metadata_provider, request_pro
         if ((int) $record->cmid === 0) {
             return 'global';
         }
-        return $record->questionbankentryid === null ? 'quiz' : 'question';
+        return (int) $record->questionbankentryid === 0 ? 'quiz' : 'question';
     }
 }

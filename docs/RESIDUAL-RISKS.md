@@ -1,4 +1,4 @@
-# Residual risks of 1.3.0 (build 2026100800)
+# Residual risks of 1.4.0 (build 2026100801)
 
 #71: "open P1 are closed or formally accepted as a residual risk". This file describes every
 point a release of this build goes out with although it is not closed, why it is tolerable and
@@ -12,8 +12,6 @@ publish.
 | R2 | A release can still be made outside the gate by uploading an archive to the Moodle plugins directory by hand | #69 | GitHub releases cannot: `release-artefact.yml` publishes only a tested ZIP of a green commit, and `release-guard.yml` turns any release published by hand back into a draft. The plugins directory has no API a workflow could guard | The upload is one person's step; the evidence (`manual-checklist.txt`) asks for the SHA-256 of the uploaded archive to be compared with the one the release publishes | Accepted permanently while the plugins directory offers no upload hook |
 | R3 | Android Opera and Firefox Klar have not been tried on a real device | #72 | The cause was in MathQuill's keyboard layer, shared by every engine; the fix is tested with the exact event sequence Android sends (keyCode 229, key "Unidentified") in Chromium, one-line and multi-line, Backspace included. Opera is Blink like Chrome, Firefox Klar is Gecko like Firefox, and both of those were confirmed on devices | A failure would show as the old symptom (first characters lost until Enter) with a known workaround, not as wrong answers being submitted | Section 2 of `docs/MANUAL-ACCEPTANCE.md`, comment in #72 |
 | R4 | The test bed installs STACK from its moving branches, so a green run cannot be repeated exactly | #70 | Deliberate: the matrix is meant to notice when STACK changes (`docs/RELEASE-CHECKLIST.md`, section 7) | Each run writes the STACK revisions it tested into `ci-logs/dependency-revisions.txt` | Accepted permanently, 27 September 2026 |
-| R5 | One configuration per scope is enforced by the plugin, not by a unique index | #87 | A unique index cannot express the rule on the nullable column (`docs/DATA-INTEGRITY.md`); the lock and transaction are tested with concurrent processes on PostgreSQL and MariaDB in every main CI run and against the release ZIP | Reads are deterministic even with duplicates, and every write and the upgrade repair them | Decision record `docs/DATA-INTEGRITY.md` |
-| R6 | Two builds carry the release name 1.3.0: 2026100700, already published, and 2026100800 | - | The release name was kept on purpose; Moodle decides upgrades by the build number, which is higher, so every site with 2026100700 is offered the upgrade and runs its repair step | `docs/CHANGES.md` names both builds; the release page and the archive name carry the build number | Decision by the maintainer, 8 October 2026 |
 
 ## Acceptance
 
@@ -23,7 +21,10 @@ checks the file's format; `release-artefact.yml` refuses a stable tag while any 
 (`.github/check-signoff.py --complete`). So a risk without a name and a date does not only wait
 on paper - the release cannot be published.
 
-State of build 2026100800: R4 and R6 accepted; R1, R2, R3 and R5 open.
+State of build 2026100801: R1, R2, R3 and R4 accepted by Ralf Erlebach. Closed since build
+2026100800: R5 (one configuration per scope was enforced by the application only) - the database
+enforces it now with a unique index (`docs/DATA-INTEGRITY.md`); R6 (two builds with the release
+name 1.3.0) - this release is 1.4.0.
 
 Once a risk is closed (R1 and R3 by the manual acceptance), its row moves to the change log of
 the next release, and this file keeps only what is still open.

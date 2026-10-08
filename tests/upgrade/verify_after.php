@@ -92,6 +92,18 @@ check(!$DB->record_exists('local_stackmatheditor', ['id' => $state['older'] ?? -
 
 // The invariants a fresh install keeps by itself.
 check(data_maintenance::find_orphans() === [], 'no row without a module context');
+// The schema of a fresh install: the quiz default stored as 0, one row per scope enforced by a
+// unique index.
+$smecolumn = $DB->get_columns('local_stackmatheditor', false)['questionbankentryid'];
+check($smecolumn->not_null && (string) $smecolumn->default_value === '0', 'questionbankentryid is NOT NULL, default 0');
+check(
+    $DB->get_manager()->index_exists(
+        new xmldb_table('local_stackmatheditor'),
+        new xmldb_index('cmid_qbeid_uix', XMLDB_INDEX_UNIQUE, ['cmid', 'questionbankentryid'])
+    ),
+    'the scope index is unique'
+);
+check($DB->count_records('local_stackmatheditor', ['questionbankentryid' => 0]) === 1, 'quiz A keeps its one default (0)');
 check(data_maintenance::find_duplicate_scopes() === [], 'one row per scope');
 check($DB->count_records('local_stackmatheditor') === 3, 'quiz default, question override, global default: three rows');
 
@@ -103,7 +115,7 @@ $quizc = get_coursemodule_from_instance(
     $gen->create_module('quiz', ['course' => $state['course'] ?? SITEID])->id
 );
 $DB->insert_record('local_stackmatheditor', (object) [
-    'cmid' => $quizc->id, 'questionbankentryid' => null, 'allowed_elements' => '{"_enabled":true}',
+    'cmid' => $quizc->id, 'questionbankentryid' => config_manager::QUIZ_DEFAULT, 'allowed_elements' => '{"_enabled":true}',
     'usermodified' => 2, 'timecreated' => time(), 'timemodified' => time(),
 ]);
 course_delete_module((int) $quizc->id);

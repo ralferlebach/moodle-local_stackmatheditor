@@ -67,7 +67,7 @@ final class privacy_provider_test extends \advanced_testcase {
         $this->write_record($this->cm1->id, null, $this->teacher->id);
         $this->write_record($this->cm1->id, 4711, $this->teacher->id);
         $this->write_record($this->cm2->id, null, $this->teacher->id);
-        $this->write_record($this->cm2->id, null, $this->other->id);
+        $this->write_record($this->cm2->id, 4712, $this->other->id);
         $this->write_record(0, null, $this->teacher->id);
     }
 
@@ -83,7 +83,7 @@ final class privacy_provider_test extends \advanced_testcase {
         global $DB;
         return (int) $DB->insert_record('local_stackmatheditor', (object)[
             'cmid'                => $cmid,
-            'questionbankentryid' => $qbeid,
+            'questionbankentryid' => $qbeid ?? config_manager::QUIZ_DEFAULT,
             'allowed_elements'    => '{"basic_operators":true}',
             'usermodified'        => $userid,
             'timecreated'         => time(),
