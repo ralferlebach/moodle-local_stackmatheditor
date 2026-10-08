@@ -91,8 +91,9 @@ final class configure_capability_test extends \advanced_testcase {
     }
 
     /**
-     * Editing teacher may, non-editing teacher (who can see the reports) may not, and a prohibit
-     * on the module takes the right away again.
+     * Editing teacher may, non-editing teacher (who can see the reports) may not, a prohibit on
+     * the module takes the right away again, and the capability without access to the activity
+     * (not enrolled, or the activity hidden) is not enough.
      *
      * @return void
      */
@@ -113,6 +114,25 @@ final class configure_capability_test extends \advanced_testcase {
         assign_capability('mod/quiz:manage', CAP_PROHIBIT, $roleid, $context->id, true);
         $this->setUser($editor);
         $this->assertFalse(quiz_helper::can_configure((int) $this->cm->id));
+
+        // The capability without access to the activity: not enrolled in the course.
+        $outsider = $this->getDataGenerator()->create_user();
+        $managerole = (int) $this->getDataGenerator()->create_role();
+        assign_capability('mod/quiz:manage', CAP_ALLOW, $managerole, $context->id, true);
+        $this->getDataGenerator()->role_assign($managerole, $outsider->id, $context->id);
+        $this->setUser($outsider);
+        $this->assertTrue(has_capability('mod/quiz:manage', $context), 'precondition: capability');
+        $this->assertFalse(quiz_helper::can_configure((int) $this->cm->id), 'no access to the course');
+
+        // Enrolled with the capability, but the activity is hidden from them.
+        $student = $this->enrol('student');
+        $this->getDataGenerator()->role_assign($managerole, $student->id, $context->id);
+        set_coursemodule_visible((int) $this->cm->id, 0);
+        $this->setUser($student);
+        $this->assertTrue(has_capability('mod/quiz:manage', $context), 'precondition: capability');
+        $this->assertFalse(quiz_helper::can_configure((int) $this->cm->id), 'hidden activity');
+        set_coursemodule_visible((int) $this->cm->id, 1);
+        $this->assertTrue(quiz_helper::can_configure((int) $this->cm->id), 'visible again');
 
         $this->setAdminUser();
         $this->assertFalse(quiz_helper::can_configure(0));
@@ -183,5 +203,87 @@ final class configure_capability_test extends \advanced_testcase {
         }
         $hooks = file_get_contents($root . 'classes/hook_callbacks.php');
         $this->assertStringContainsString('quiz_helper::can_configure(', $hooks);
+    }
+
+    /**
+     * Build the settings navigation of any module page as the current user.
+     *
+     * @param \stdClass $cm Course module.
+     * @return \settings_navigation Initialised settings navigation.
+     */
+    private function module_navigation(\stdClass $cm): \settings_navigation {
+        global $PAGE;
+        $PAGE = new \moodle_page();
+        $PAGE->set_url('/mod/' . $cm->modname . '/view.php', ['id' => $cm->id]);
+        $PAGE->set_cm($cm, $this->course);
+        $PAGE->set_context(\context_module::instance($cm->id));
+        $PAGE->set_pagelayout('incourse');
+        $nav = new \settings_navigation($PAGE);
+        $nav->initialise();
+        return $nav;
+    }
+
+    /**
+     * mod_adaptivequiz, end to end through the real callback (#86, #90): the link appears for an
+     * editing teacher when the question pool holds a STACK question, not without one, and not
+     * for a role that may only see the reports.
+     *
+     * Runs where mod_adaptivequiz is installed (the CI job for Moodle 4.5 installs it); elsewhere
+     * it skips with that reason.
+     *
+     * @return void
+     */
+    public function test_adaptivequiz_navigation_link(): void {
+        global $CFG;
+        if (!file_exists($CFG->dirroot . '/mod/adaptivequiz/version.php')) {
+            $this->markTestSkipped('mod_adaptivequiz is not installed on this site');
+        }
+        set_config('enabled', 3, 'local_stackmatheditor');
+
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+        $questions = $generator->get_plugin_generator('core_question');
+        $context = \context_course::instance($this->course->id);
+        $withstack = $questions->create_question_category(['contextid' => $context->id]);
+        $without = $questions->create_question_category(['contextid' => $context->id]);
+        $questions->create_question('stack', 'test3', ['category' => $withstack->id]);
+        $questions->create_question('truefalse', null, ['category' => $without->id]);
+
+        $make = function (array $pool): \stdClass {
+            $instance = $this->getDataGenerator()->create_module('adaptivequiz', [
+                'course' => $this->course->id,
+                'questionpool' => $pool,
+            ]);
+            return get_coursemodule_from_instance('adaptivequiz', $instance->id);
+        };
+        $stackcm = $make([(int) $withstack->id]);
+        $plaincm = $make([(int) $without->id]);
+        $this->assertTrue(quiz_helper::adaptivequiz_has_stack_questions((int) $stackcm->instance));
+        $this->assertFalse(quiz_helper::adaptivequiz_has_stack_questions((int) $plaincm->instance));
+
+        $teacher = $this->enrol('editingteacher');
+        $this->setUser($teacher);
+        $this->assertTrue(quiz_helper::can_configure((int) $stackcm->id));
+        $node = $this->module_navigation($stackcm)->find('stackmatheditor_configure', \navigation_node::TYPE_SETTING);
+        $this->assertNotFalse($node, 'editing teacher, STACK question in the pool: link');
+        $this->assertEquals($stackcm->id, $node->action->get_param('cmid'));
+        $this->assertFalse(
+            $this->module_navigation($plaincm)->find('stackmatheditor_configure', \navigation_node::TYPE_SETTING),
+            'no STACK question in the pool: no link'
+        );
+
+        // A role that may see the reports but not manage activities.
+        $reporter = $this->enrol('student');
+        $roleid = (int) $generator->create_role();
+        $modulecontext = \context_module::instance($stackcm->id);
+        assign_capability('mod/adaptivequiz:viewreport', CAP_ALLOW, $roleid, $modulecontext->id, true);
+        $generator->role_assign($roleid, $reporter->id, $modulecontext->id);
+        $this->setUser($reporter);
+        $this->assertTrue(has_capability('mod/adaptivequiz:viewreport', $modulecontext), 'precondition');
+        $this->assertFalse(quiz_helper::can_configure((int) $stackcm->id));
+        $this->assertFalse(
+            $this->module_navigation($stackcm)->find('stackmatheditor_configure', \navigation_node::TYPE_SETTING),
+            'report access alone: no link'
+        );
     }
 }

@@ -577,7 +577,8 @@ class quiz_helper {
     }
 
     /**
-     * Whether the current user may configure the editor of the given activity.
+     * Whether the current user may configure the editor of the given activity: the configure
+     * capability of the module and access to it, as configure.php requires.
      *
      * @param int $cmid Course module ID.
      * @return bool True if the user holds the configure capability of that module.
@@ -592,7 +593,17 @@ class quiz_helper {
             if ($capability === null) {
                 return false;
             }
-            return has_capability($capability, \context_module::instance($cmid));
+            if (!has_capability($capability, \context_module::instance($cmid))) {
+                return false;
+            }
+            // The capability alone is not access: configure.php runs require_login() for the
+            // course module, so a link is only offered to someone who can open the activity -
+            // in the course, and seeing the module (#86).
+            $course = get_course((int) $cm->course);
+            if (!can_access_course($course)) {
+                return false;
+            }
+            return get_fast_modinfo($course)->get_cm($cmid)->uservisible;
         } catch (\moodle_exception $e) {
             self::dbg('can_configure: ' . $e->getMessage());
             return false;

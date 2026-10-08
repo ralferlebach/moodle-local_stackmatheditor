@@ -260,10 +260,8 @@ final class documentation_test extends \advanced_testcase {
                 "SHA-256 of {$file} in thirdparty/readme_moodle.txt"
             );
         }
-        if (preg_match('/Patch applied:\s+(\S+)\s+SHA-256 ([0-9a-f]{64})/', $provenance, $patch)) {
-            $this->assertFileExists($root . $patch[1]);
-            $this->assertSame($patch[2], hash_file('sha256', $root . $patch[1]), 'SHA-256 of the patch');
-        }
+        // The build is identified by a commit, not by a branch or a patch on top of one.
+        $this->assertMatchesRegularExpression('/^\s+Fork commit:\s+[0-9a-f]{40}\s*$/m', $provenance);
     }
 
     /**

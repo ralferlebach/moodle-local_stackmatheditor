@@ -120,6 +120,12 @@ jobs:
           moodle-plugin-ci add-plugin --branch "$DFEXPLICITVAILDATE_BRANCH" maths/moodle-qbehaviour_dfexplicitvaildate
           moodle-plugin-ci add-plugin --branch "$DFCBMEXPLICITVAILDATE_BRANCH" maths/moodle-qbehaviour_dfcbmexplicitvaildate
           moodle-plugin-ci add-plugin --branch "$IMPORTASVERSION_BRANCH" maths/moodle-qbank_importasversion
+          # mod_adaptivequiz on the 4.5 rows: the adaptive quiz navigation test (#86, #90) runs
+          # the real callback against a real instance there and skips where the module is absent.
+          # Its master branch declares Moodle 4.4 as minimum and is not tested beyond 4.5.
+          if [ "$MOODLE_BRANCH" = "MOODLE_405_STABLE" ]; then
+            moodle-plugin-ci add-plugin --branch master vtos/moodle-mod_adaptivequiz
+          fi
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
         env:
           DB: ${{ matrix.database }}

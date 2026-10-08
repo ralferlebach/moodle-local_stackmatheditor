@@ -15,11 +15,9 @@ MathQuill is included here as a build of a fork, not as an upstream release.
           (the build banner still reads "v0.10.1"; upstream has not tagged a
           release since 2017, so the banner is not a usable version marker.)
   Fork:   ralferlebach/mathquill
-  Fork commit: 9a6ebaf4eb522cc49d2886a33531ec4142beca5b
+  Fork commit: d094d8a418696ab8b3e4201a2cace40e3f5ce2c6
           (branch main - informative only; the commit is what identifies this
            build, a branch moves)
-          plus patches/mathquill-0001-android-229-unidentified.patch (sme.6,
-          see below)
   Change: editable LaTeX matrix environments (matrix, pmatrix, bmatrix,
           Bmatrix, vmatrix, Vmatrix), the public API insertMatrix /
           insertColumnVector / insertRowVector, the configuration option
@@ -65,19 +63,18 @@ Build provenance of 0.10.1-sme.6
   Upstream repository: https://github.com/mathquill/mathquill
   Upstream base:       bb9974ab
   Fork repository:     https://github.com/ralferlebach/mathquill
-  Fork commit:         9a6ebaf4eb522cc49d2886a33531ec4142beca5b
-  Patch applied:       thirdparty/patches/mathquill-0001-android-229-unidentified.patch
-                       SHA-256 64dfb4cef6d5601cf3f38bf626d9302b2f6036ddeefc9b280d014730e0c299fe
-                       (one commit on top of the fork commit; it is to be pushed
-                       to the fork, after which the resulting commit replaces
-                       "fork commit + patch" here)
+  Fork commit:         d094d8a418696ab8b3e4201a2cace40e3f5ce2c6
+                       ("fix android soft keyboard glitch", on top of 9a6ebaf4;
+                       besides the change it carries the patch file and a README
+                       in the repository root, which the build does not read)
   Built with:          Node 22.22.0, npm 10.9.x
   Build command:       npm ci && make
   Imported:            2026-10-08
-  Verified:            the fork's Mocha suite (test/unit.html) in Chromium:
-                       835 passing, 0 failing; mathquill.css and the fonts are
-                       byte-identical to sme.5, mathquill.js differs from sme.5
-                       only in the patched guard
+  Verified:            rebuilt from d094d8a4; the three files below match byte
+                       for byte. The fork's Mocha suite (test/unit.html) in
+                       Chromium: 835 passing, 0 failing. mathquill.css and the
+                       fonts are byte-identical to sme.5, mathquill.js differs
+                       from sme.5 only in the changed guard
   License:             MPL-2.0
 
   SHA-256 of the imported runtime files:
@@ -88,8 +85,7 @@ Build provenance of 0.10.1-sme.6
   Reproduce with:
     git clone https://github.com/ralferlebach/mathquill
     cd mathquill
-    git checkout 9a6ebaf4eb522cc49d2886a33531ec4142beca5b
-    git am <plugin>/thirdparty/patches/mathquill-0001-android-229-unidentified.patch
+    git checkout d094d8a418696ab8b3e4201a2cace40e3f5ce2c6
     npm ci
     make
 

@@ -38,6 +38,12 @@ set -euo pipefail
 PACKAGES="${PACKAGES:-maxima gnuplot-nox}"
 MIN_MAXIMA="${MIN_MAXIMA:-5.46}"
 PHASE_LIMIT="${PHASE_LIMIT:-150}"
+# The download gets more and longer attempts than the other phases: apt keeps what it fetched in
+# /var/cache/apt/archives/partial and resumes there, so a slow mirror still makes progress from
+# attempt to attempt. On 2026-10-08 the Azure mirror delivered about 17 MB per 150 s; three
+# attempts ended 20 MB short of the 54 MB maxima needs, and the job failed.
+DOWNLOAD_ATTEMPTS="${DOWNLOAD_ATTEMPTS:-6}"
+DOWNLOAD_LIMIT="${DOWNLOAD_LIMIT:-300}"
 
 SUDO=sudo
 [[ $(id -u) -eq 0 ]] && SUDO=
@@ -52,17 +58,18 @@ APT_OPTIONS=(
 )
 
 # Run one apt phase under a hard limit, up to three times.
+# phase NAME ATTEMPTS LIMIT apt-get-arguments...
 phase () {
-  local name="$1"; shift
+  local name="$1" attempts="$2" limit="$3"; shift 3
   local attempt
-  for attempt in 1 2 3; do
-    echo "apt: $name, attempt $attempt of 3 (limit ${PHASE_LIMIT}s)"
+  for attempt in $(seq 1 "$attempts"); do
+    echo "apt: $name, attempt $attempt of $attempts (limit ${limit}s)"
     # --kill-after: a process that ignores the first signal does not get to wait out the job.
     if $SUDO env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a \
-        timeout --kill-after=15 "$PHASE_LIMIT" apt-get "${APT_OPTIONS[@]}" "$@"; then
+        timeout --kill-after=15 "$limit" apt-get "${APT_OPTIONS[@]}" "$@"; then
       return 0
     fi
-    echo "::warning::apt: $name failed or ran into its ${PHASE_LIMIT}s limit (attempt $attempt)"
+    echo "::warning::apt: $name failed or ran into its ${limit}s limit (attempt $attempt)"
     sleep $((attempt * 10))
   done
   return 1
@@ -70,11 +77,16 @@ phase () {
 
 # A stale package list is not fatal by itself: the runner image ships one, and the install below
 # says clearly if it is not good enough.
-phase "update package lists" update -q \
+phase "update package lists" 3 "$PHASE_LIMIT" update -q \
   || echo "::warning::apt: the package lists could not be updated; trying with the lists on the image"
 
+# Download first, resumable, then install from the local cache - the install phase no longer
+# depends on the mirror's speed.
 # shellcheck disable=SC2086
-phase "install $PACKAGES" install -y -q $PACKAGES \
+phase "download $PACKAGES" "$DOWNLOAD_ATTEMPTS" "$DOWNLOAD_LIMIT" install -y -q --download-only $PACKAGES \
+  || { echo "::error::apt: $PACKAGES could not be downloaded after $DOWNLOAD_ATTEMPTS attempts."; exit 1; }
+# shellcheck disable=SC2086
+phase "install $PACKAGES" 3 "$PHASE_LIMIT" install -y -q --no-download $PACKAGES \
   || { echo "::error::apt: $PACKAGES could not be installed after three attempts."; exit 1; }
 
 version=$(maxima --version 2>&1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)

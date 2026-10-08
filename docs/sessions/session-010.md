@@ -3156,3 +3156,43 @@ Runs, all on the final state:
   tests as optional skips, gate green; 5.3 54 passed, gate green;
 - the fork's Mocha suite 835/0.
 Not run here: Behat, MariaDB, NVDA, the k6/JMeter load runs.
+
+## 79. Iteration 75 (2026100700, version unchanged): MathQuill fork commit, release artefact workflow
+
+The Android fix is committed to the fork as `d094d8a4` (on top of `9a6ebaf4`; source and tests
+identical to the delivered patch). Rebuilt from that commit: the three runtime files match the
+vendored sme.6 files byte for byte, so `thirdparty/readme_moodle.txt` names the commit now
+instead of "fork commit + patch", and `thirdparty/patches/` is gone. `documentation_test`
+requires a full commit id as the fork reference.
+
+`.github/workflows/release-artefact.yml`, taken over from moodle-mod_vimipad and adapted: on a
+`v1.*` tag (or by hand) it builds `moodle-local_stackmatheditor-<release>-<version>.zip` with
+root folder `stackmatheditor` via `git archive`, refuses a commit without green check-runs and
+without green main CI and release evidence, checks tag against `$plugin->release`, the build date
+(not newer than the commit - older is allowed while the version is pinned), the MathQuill
+checksums against the provenance file, a committed build for every AMD module, languages (en,
+de), development files, required runtime files and the stable maturity. The ZIP is then
+installed into fresh Moodle 4.5 and 5.3 sites with STACK (`build-test-site.sh`, PostgreSQL 17),
+the schema is checked and both CLI scripts run; only then is it published with
+`archive: false` and attached to the GitHub Release with its SHA-256. The build steps were run
+locally against the working tree: 166 files, one root, all checks green.
+
+Also in this iteration, from checking the open issues against the code:
+- #86: `can_configure()` requires access to the activity as well (course access, module visible),
+  as `configure.php` does with `require_login()`; tested with a capability granted to a user
+  outside the course and on a hidden module.
+- #90: the navigation callback is tested end to end for mod_adaptivequiz too (real instances
+  from vtos/moodle-mod_adaptivequiz: STACK question in the pool → link, none → no link, a role
+  with `viewreport` only → no link). The main CI installs the module in its 4.5 rows; elsewhere
+  the test skips.
+- #88: course duplication (`core_course_external::duplicate_course`) has its own test.
+- Main CI on 7781a9d: the PHPDoc checker (local_moodlecheck) rejected two inline mentions of
+  `@package` in the text of `review_2026_10_08_test.php` - reworded, moodlecheck is clean. The
+  5.3/pgsql row failed in apt: the Azure mirror delivered maxima at about 17 MB per 150 s, three
+  attempts were not enough. `install-maxima.sh` now downloads first, resumably, with six
+  attempts of 300 s, and installs from the cache.
+
+Issues: #86, #88, #89, #90, #91, #92, #93 ticked and closed. #84, #85, #87, #94 ticked except the
+CI items (green main CI incl. browser runs on the fix commit; static gates), which wait for this
+delivery to be pushed and run. #69 (manual NVDA judgement), #71 (open P1, tag and release
+metadata) and #72 (Opera and Firefox Klar on devices) keep their human items.

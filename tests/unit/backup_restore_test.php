@@ -267,4 +267,33 @@ final class backup_restore_test extends \advanced_testcase {
         // The original keeps its rows, including the stale one, untouched by the duplicate.
         $this->assertCount(4, $GLOBALS['DB']->get_records(config_manager::TABLE, ['cmid' => $this->cm->id]));
     }
+
+    /**
+     * Duplicating the whole course (core_course_external::duplicate_course, the "Copy course"
+     * path) carries the configuration into the new course, on its own question entries.
+     *
+     * @return void
+     */
+    public function test_duplicate_course(): void {
+        global $CFG;
+        require_once($CFG->dirroot . '/course/externallib.php');
+
+        $result = \core_course_external::duplicate_course(
+            $this->course->id,
+            'Duplicate',
+            'DUPLICATE',
+            $this->course->category,
+            1,
+            [['name' => 'users', 'value' => 1]]
+        );
+        $cm = $this->restored_cm((int) $result['id']);
+
+        $teacher = (int) $this->teacher->id;
+        $this->assertSame([
+            'Q1'   => ['Q1', $teacher],
+            'Q2'   => ['Q2', $teacher],
+            'quiz' => ['quiz', $teacher],
+        ], $this->configs_by_name($cm->id));
+        $this->assert_rows_point_into_quiz($cm->id);
+    }
 }

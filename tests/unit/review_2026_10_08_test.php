@@ -22,7 +22,7 @@ namespace local_stackmatheditor;
  * 1. The configuration page accepted any question bank entry from the request.
  * 2. A method called in lib.php did not exist; a catch-all hid the error.
  * 3. A CLI script used cli_writeln() without loading clilib.php.
- * 4. Two files carried the @package tag of another plugin.
+ * 4. Two files carried the package tag of another plugin.
  *
  * Each has a test of its own here, and each a guard that looks for the same mistake in every
  * file of the plugin, so that the next one is not found by a reviewer either.
@@ -302,7 +302,7 @@ final class review_2026_10_08_test extends \advanced_testcase {
     }
 
     /**
-     * Finding 4, everywhere: every @package tag names this plugin.
+     * Finding 4, everywhere: every package tag names this plugin.
      *
      * @return void
      */
