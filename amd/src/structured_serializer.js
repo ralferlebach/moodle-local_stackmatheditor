@@ -14,7 +14,7 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * Serializer between the structured model and Maxima syntax (#62).
+ * Serializer between the structured model and Maxima syntax.
  *
  * Matrices are canonically matrix([a,b],[c,d]). A vector uses the same call, because that is
  * what STACK questions compare against; the plugin setting "vectorformat" can write a list
@@ -213,7 +213,7 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
      * Turn rows into the model they describe.
      *
      * A single row or a single column becomes a vector: that is what the editor offers, and
-     * matrix([a],[b]) is how it wrote one.
+     * matrix([a],[b]) is how it writes one.
      *
      * @param {Array} rows Rows of raw cells.
      * @returns {?Object} Structured model or null.
@@ -248,7 +248,7 @@ define(['local_stackmatheditor/structured_input'], function(Model) {
      * Read a Maxima expression back into a structured model.
      *
      * Returns null when the expression is not a structure this module owns. The caller then
-     * keeps the generic editor behaviour rather than discarding anything (#62 §13).
+     * keeps the generic editor behaviour rather than discarding anything.
      *
      * @param {string} maxima Maxima expression.
      * @returns {?Object} Structured model or null.

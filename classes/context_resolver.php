@@ -17,7 +17,7 @@
 namespace local_stackmatheditor;
 
 /**
- * Which pages may host an editable STACK input (#50).
+ * Which pages may host an editable STACK input.
  *
  * The editor extends STACK questions, not a module name. Whether a page carries a STACK input is
  * decided in the browser, where the rendered input either exists or does not; this class only
@@ -115,5 +115,20 @@ class context_resolver {
      */
     public static function has_configuration_ui(string $modname): bool {
         return self::can_resolve_question_context($modname);
+    }
+
+    /**
+     * Return true when the configuration page offers a configuration per question for this module.
+     *
+     * mod_quiz has slots with a fixed question each, so a question can be configured within the
+     * quiz. mod_adaptivequiz draws its questions from categories at attempt time; it has one
+     * configuration for the whole activity. configure.php and the README support table follow
+     * this method.
+     *
+     * @param string $modname Module name.
+     * @return bool
+     */
+    public static function supports_question_configuration(string $modname): bool {
+        return $modname === 'quiz';
     }
 }

@@ -42,10 +42,10 @@ namespace local_stackmatheditor;
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class definitions {
-    /** Legacy single-character variable mode identifier. */
+    /** Short stored form of IMPLICIT_EXPLICIT_SINGLE (single-character variables). */
     const VAR_SINGLE = 'single';
 
-    /** Legacy multi-character variable mode identifier. */
+    /** Short stored form of IMPLICIT_EXPLICIT_MULTI (multi-character variables). */
     const VAR_MULTI = 'multi';
 
     /** Explicit multiplication, assume single-character variables. */
@@ -66,7 +66,7 @@ class definitions {
     /**
      * Normalise stored implicit multiplication mode values.
      *
-     * Supports legacy values 'single' and 'multi'.
+     * Also accepts the short forms 'single' and 'multi', which map to the explicit modes.
      *
      * @param string $mode Raw mode.
      * @return string Normalised mode.
@@ -233,7 +233,7 @@ class definitions {
                 ],
             ],
 
-            // Differential calculus (#46): three structured templates, canonical ∂ (diff(...) does
+            // Differential calculus: three structured templates, canonical ∂ (diff(...) does
             // not record d vs. ∂). The operand bracket is part of the template; the cursor
             // starts inside it. The total order is checked against the denominator orders.
             'differential_operators' => [
@@ -250,7 +250,7 @@ class definitions {
                 ],
             ],
 
-            // Integral calculus (#44): one structured template - limits (leave empty for an
+            // Integral calculus: one structured template - limits (leave empty for an
             // indefinite integral), integrand in brackets, atomic variable after d. The cursor
             // starts in the integrand. The contour integral has no STACK semantics and is not
             // offered.
@@ -297,7 +297,7 @@ class definitions {
             'geometry' => [
                 'label'           => get_string('group_geometry', $p),
                 'default_enabled' => false,
-                // Distance, Angle and Length come from STACK's own geometry.mac (#66): core,
+                // Distance, Angle and Length come from STACK's own geometry.mac: core,
                 // so the group is available wherever STACK is.
                 'requires'        => [
                     ['type' => 'stack_core', 'package' => 'geometry.mac'],
@@ -308,7 +308,7 @@ class definitions {
                         'tooltip' => get_string('btn_overline', $p)],
                     // The degree sign, the bare angle symbol and the perpendicular sign have no
                     // Maxima counterpart - "90circ", "angle" and "a perp b" are not expressions
-                    // (#34). The angle itself is among the structured entries above.
+                    // The angle itself is among the structured entries above.
                 ]),
             ],
 
@@ -333,9 +333,9 @@ class definitions {
             ],
 
             // 15. Vectors.
-            // 15b. Vector products (#34): their own group, because the cross product needs
-            // Maxima's vect package and the arrow, the dot and the norm do not. With #66 the
-            // group is simply not rendered where the question does not load it.
+            // 15b. Vector products: their own group, because the cross product needs Maxima's
+            // vect package and the arrow, the dot and the norm do not. The group is not rendered
+            // where the question does not load that package.
             'vector_products' => [
                 'label'           => get_string('group_vector_products', $p),
                 'default_enabled' => false,
@@ -356,7 +356,7 @@ class definitions {
                 'label'           => get_string('group_vector_operators', $p),
                 'default_enabled' => false,
                 // The cross product is not here: LaTeX's times sign is multiplication, and
-                // Maxima needs express(a ~ b) from the vect package for a cross product (#34).
+                // Maxima needs express(a ~ b) from the vect package for a cross product.
                 'elements'        => self::get_vector_elements($p),
             ],
 
@@ -364,7 +364,7 @@ class definitions {
             'vector_differential' => [
                 'label'           => get_string('group_vector_differential', $p),
                 'default_enabled' => false,
-                // The vect package provides grad, div and curl, and they need express() (#66).
+                // The vect package provides grad, div and curl, and they need express().
                 'requires'        => [
                     ['type' => 'maxima_share', 'package' => 'vect'],
                 ],
@@ -405,7 +405,7 @@ class definitions {
                         'tooltip' => get_string('btn_transpose', $p),
                     ],
                     // A* and A-dagger are not here: "A^(*)" is not an expression Maxima
-                    // accepts, and there is no verified mapping for them (#34).
+                    // accepts, and there is no verified mapping for them.
                 ],
             ],
 
@@ -621,7 +621,7 @@ class definitions {
             'sinh', 'cosh', 'tanh',
             'exp', 'log', 'ln',
             'sqrt', 'abs', 'sgn',
-            // Complete-token functions (#61): max(x,y) and min(x,y) are function calls,
+            // Complete-token functions: max(x,y) and min(x,y) are function calls,
             // while max inside Umax or argmax is just part of the identifier.
             'max', 'min',
             // Structural operators: without them, "det" and "norm" are split into single
@@ -680,7 +680,7 @@ class definitions {
     }
 
     /**
-     * Toolbar entries for vector operations (#34).
+     * Toolbar entries for vector operations.
      *
      * Only what the converter can map: the arrow is decoration and disappears, the dot is
      * multiplication. The norm needs a Maxima function, so its button appears only once the site
@@ -717,7 +717,7 @@ class definitions {
     }
 
     /**
-     * Toolbar entries for elementary geometry (#63).
+     * Toolbar entries for elementary geometry.
      *
      * School notation on the surface, STACK's geometry.mac underneath. Only the constructs with
      * a documented STACK counterpart are offered: a point is a list of coordinates, a distance
@@ -769,7 +769,7 @@ class definitions {
     }
 
     /**
-     * Separator between the coordinates of a point (#63).
+     * Separator between the coordinates of a point.
      *
      * Display only: it changes what a student sees and types, never the meaning. STACK receives
      * a list either way.
@@ -783,7 +783,7 @@ class definitions {
     }
 
     /**
-     * Toolbar entries for the vector differential operators (#45).
+     * Toolbar entries for the vector differential operators.
      *
      * A LaTeX symbol is not a CAS operation. Maxima has no gradient, divergence or curl that
      * works everywhere: those functions live in the vect package, need express() and depend on
@@ -843,7 +843,7 @@ class definitions {
     }
 
     /**
-     * CAS function names for the differential operators, from the site settings (#45).
+     * CAS function names for the differential operators, from the site settings.
      *
      * An empty value means the operator is not available on this site.
      *
@@ -861,7 +861,7 @@ class definitions {
     }
 
     /**
-     * Every button the toolbar offers, with the LaTeX it writes (#34).
+     * Every button the toolbar offers, with the LaTeX it writes.
      *
      * The catalogue behind the contract test: a visible button has to have a mapping, and the
      * mapping is the template - not the label, which is why no language strings are in here.
@@ -905,7 +905,7 @@ class definitions {
     }
 
     /**
-     * Smallest and largest value the dimension setting accepts (#76).
+     * Smallest value the dimension setting accepts.
      */
     public const MIN_STRUCTURED_DIMENSION = 2;
 
@@ -922,7 +922,7 @@ class definitions {
     public const DEFAULT_STRUCTURED_DIMENSION = 5;
 
     /**
-     * Read a stored dimension, or null when there is none (#76).
+     * Read a stored dimension, or null when there is none.
      *
      * 0, null and '' are not dimensions - they mean the level said nothing, and the question has
      * to be passed up. Anything outside the range is clamped rather than discarded: a value that
@@ -948,7 +948,7 @@ class definitions {
     }
 
     /**
-     * Validate what a teacher typed into the dimension field (#76).
+     * Validate what a teacher typed into the dimension field.
      *
      * Different from clean_max_dimension(), and deliberately so: a stored value is read as
      * generously as possible, because it is already there and something once meant it. A value
@@ -982,7 +982,7 @@ class definitions {
     }
 
     /**
-     * The site-wide maximum (#76).
+     * The site-wide maximum.
      *
      * @return int Dimension between MIN_STRUCTURED_DIMENSION and MAX_STRUCTURED_DIMENSION.
      */
@@ -995,7 +995,7 @@ class definitions {
     }
 
     /**
-     * Do the structured choosers exist in this configuration at all? (#76)
+     * Do the structured choosers exist in this configuration at all?
      *
      * The dimension setting has no meaning without them, which is why the form disables it.
      *
@@ -1007,7 +1007,7 @@ class definitions {
     }
 
     /**
-     * Labels for the matrix and vector popups (#62).
+     * Labels for the matrix and vector popups.
      *
      * The popup runs in JavaScript and cannot call get_string(), so the strings travel with the
      * definitions export.

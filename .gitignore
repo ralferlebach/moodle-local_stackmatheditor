@@ -90,3 +90,7 @@ tests/a11y-nvda/test-results/
 tests/a11y-nvda/transcripts/
 tests/a11y-nvda/nvda-results.json
 tests/playwright/transcripts/
+
+# Python byte code of the load-test helper
+__pycache__/
+*.py[cod]

@@ -27,48 +27,100 @@ from". It records what is being
 certified (commit, version, vendored MathQuill with checksums), runs a dependency audit, builds
 the release archive and writes the checklist of what a human still has to confirm.
 
-Start these on the same commit **first**; the evidence workflow now checks them and fails when
-one is missing or not green, so it is run last rather than first:
+Start these on the same commit **first and wait until they have finished**; the evidence
+workflow checks them and fails when one is missing, still running or not green, so it is run
+last rather than first:
 
-* `playwright.yml` - browser path, accessibility included
+* `moodle-plugin-ci-main.yml` - code gates across the support matrix, upgrade from the
+  published build on PostgreSQL and MariaDB included; its job "CI complete" has to be green
+* `playwright.yml` - browser path, accessibility included (200 and 400 per cent zoom), started
+  with the default `moodle_branch: all`: one job for Moodle 4.5 and one for 5.3, both have to be
+  green. On 5.3 the dark colour mode exists, so its tests run there and may not skip
+* `a11y-nvda.yml` - the NVDA transcripts of this commit
 * `load-k6.yml` and `load-jmeter.yml` - performance smoke
+
+The check is `.github/required-runs.sh`: per workflow the newest run whose `head_sha` is exactly
+this commit; it has to be completed with conclusion success, and for main CI and Playwright the
+named jobs have to be among its green jobs. The result is the script's exit code and the last
+line of `required-runs.txt` (`RESULT: PASS` or `RESULT: FAIL`), so the file and the outcome of
+the workflow cannot disagree.
+
+**Do not cite release evidence run 37797946872** (commit bdc4a19, 8 October 2026). It ended
+green although main CI was still running and Playwright had not run: the old check set its
+result inside a `{ ... } | tee` block, a subshell, and lost it. Evidence for build 2026100800
+has to be produced again with the corrected workflow.
+
+The evidence lists the commit, the SHA-256 of the release archive and the links of these runs,
+and the state of the manual sign-off (section 5).
 
 It also stops on a high or critical dependency finding. The audit itself still runs to
 completion, so the evidence records what was found either way.
 
-## 3. Branch protection: deliberately not used
+## 3. Branch protection: deliberately not used - the release is gated instead
 
 `main` is not branch-protected, and that is a decision: a failing check stops the work and gets
 fixed, or knowingly does not, but it does not block the merge mechanically. `ci-complete` stays
 the honest signal, not a gate with a key.
 
-What that means in practice: nothing prevents a release from being tagged on a red run, so the
-evidence below is the only thing that shows a stable release was actually green. Do not skip it
-on the grounds that CI "usually passes".
+The gate sits where a release is made:
+
+* `release-artefact.yml` runs on a pushed tag `v<release>`. It refuses a tag that does not match
+  `$plugin->release`, a stable tag on a build that is not declared stable, a commit whose
+  check-runs are not all green, a commit without the green gates of section 2 and a green
+  release evidence (checked directly with `.github/required-runs.sh`, not only through the
+  evidence), and a stable tag while an item of `docs/RELEASE-SIGNOFF.json` is open. It then
+  builds the ZIP and tests exactly that file - installed into fresh 4.5 and 5.3 sites and
+  smoked (configuration, backup and restore, deletion, concurrent writes, CLI), installed as an
+  upgrade over the build the plugins directory published before (4.5 on PostgreSQL and MariaDB,
+  5.3 on PostgreSQL), PHPUnit and Behat run from the archive - and only then publishes it with
+  its SHA-256.
+* `release-guard.yml` turns a GitHub release that was published by hand back into a draft and
+  fails, so a release cannot appear past the gate by accident.
+
+Two separate steps, in this order:
+
+1. **GitHub release** - automatic, by the tag, through the gate above.
+2. **Moodle plugins directory** - by hand, after step 1. Download the ZIP and its `.sha256` from
+   the GitHub release, run `sha256sum -c <zip>.sha256`, upload exactly that ZIP, and note the
+   SHA-256 in the release issue. No other archive - not one built locally, not GitHub's
+   automatic source archive.
+
+No workflow can see step 2; that is residual risk R2 in `docs/RESIDUAL-RISKS.md`, to be accepted
+in `docs/RELEASE-SIGNOFF.json` before the tag.
 
 ## 4. Screen reader evidence
 
-`tests/playwright/a11y-nvda.spec.js`, run from Windows against the development site - the same
-seed, the same accounts and the same helpers as every other browser spec, with NVDA listening.
-`tests/playwright/README.md` has the three commands. It is not in CI: NVDA exists only on
-Windows, and a Windows runner cannot host Moodle with Maxima.
+`tests/playwright/a11y-nvda.spec.js` - the same seed, the same accounts and the same helpers as
+every other browser spec, with NVDA listening. `a11y-nvda.yml` runs it inside GitHub Actions:
+a Linux job builds and serves the site (Windows cannot host Moodle with Maxima), a Windows job
+runs NVDA against it through a tunnel. It is started by hand, and the release evidence requires
+a green run on the commit. `tests/playwright/README.md` has the commands for a local run from
+Windows.
 
 It records what NVDA says about the editor, the switch, the toolbar and the matrix chooser into
 `tests/playwright/transcripts/`, one file per flow with the commit and the time at the top, and
 fails when something a student depends on is silent. It cannot tell you whether what NVDA says
 is understandable, in what order it comes, or whether something is read twice.
 
-`a11y-zoom.spec.js` covers the measurable half in the normal run: 200 per cent zoom, a 380 pixel
-viewport, 24 by 24 pixel targets, keyboard reach and a visible focus.
+`a11y-zoom.spec.js` covers the measurable half in the normal run: 200 and 400 per cent zoom,
+each with the core workflow (type, toolbar, answer in STACK), a 380 pixel viewport, 24 by 24
+pixel targets, keyboard reach and a visible focus.
 
 ## 5. What no workflow can do for you
 
+`docs/MANUAL-ACCEPTANCE.md` has the steps and the tables to fill in; the result goes into
+`docs/RELEASE-SIGNOFF.json` (status `done` or `accepted`, `date`, `by`), which
+`release-artefact.yml` checks before it publishes a stable release.
+
 * The judgement half of the accessibility sample: read the transcripts from section 4 and say
   whether they describe something a person can work with. Record date, browser and NVDA version.
-  Zoom, viewport width, keyboard reach and focus visibility are measured by that same run and do
-  not need repeating by hand.
-* The decision on every open P0 and P1: closed, or accepted as a residual risk with a reason.
-  An open, unexplained P1 must not sit quietly next to a stable release.
+  Zoom, viewport width, keyboard reach and focus visibility are measured by `playwright.yml`
+  and do not need repeating by hand.
+* Real Android devices: the first soft-keyboard input in a fresh field, in Chrome, Opera,
+  Firefox and Firefox Klar, and with a keyboard other than Gboard.
+* The decision on every open P0 and P1: closed, or accepted as a residual risk - the reason in
+  `docs/RESIDUAL-RISKS.md`, the name and the date in `docs/RELEASE-SIGNOFF.json`. An open,
+  unexplained P1 cannot sit next to a stable release: the tag is refused.
 
 ## 6. Only then: flip the release metadata
 
@@ -77,6 +129,10 @@ before the evidence runs had completed on the release commit. Ralf Erlebach acce
 explicitly (#69, item 32): a stable release whose browser, accessibility and load evidence was
 collected after the flag, not before it. The evidence still has to be produced; what was given up
 is only that it gated the flag.
+
+Build 2026100800 keeps the release name 1.3.0 and the stable flag of 2026100700; what it changes
+is that its archive is published by the gate in section 3, so it is tested before anyone can
+download it.
 
 Atomically, in one commit:
 

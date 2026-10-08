@@ -3050,6 +3050,26 @@ var __assign = (this && this.__assign) || function () {
             Escape: 'Esc',
             ' ': 'Spacebar'
         };
+        /**
+         * Whether a keydown belongs to Chrome's Ctrl-Shift-U Unicode entry (Linux, ChromeOS), whose
+         * input event must not be taken as typed text.
+         *
+         * keyCode 229 marks a key an IME is processing - the keydown an Android soft keyboard sends
+         * before every character. It is never part of the Unicode entry, so such a keydown is not
+         * matched even when its key is "Unidentified".
+         */
+        function isUnicodeEntryKeydown(keydown) {
+            if (!keydown.altKey &&
+                keydown.ctrlKey &&
+                !keydown.metaKey &&
+                keydown.shiftKey &&
+                (keydown.key === 'U' ||
+                    keydown.key === 'Process' ||
+                    keydown.key === 'Unidentified')) {
+                return true;
+            }
+            return keydown.key === 'Unidentified' && keydown.keyCode !== 229;
+        }
         function isArrowKey(e) {
             // The keyPress event in FF reports which=0 for some reason. The new
             // .key property seems to report reasonable results, so we're using that
@@ -3244,13 +3264,14 @@ var __assign = (this && this.__assign) || function () {
                 // Furthermore, an input event with the value "u" is still processed in Linux and Chrome OS due to the down/up mismatch.
                 // The end result is that a spurious "u" is sent followed by the intended character.
                 // Due to how this feature works, it's vital to completely ignore Ctrl-Shift-U no matter how the input event appears to Mathquill as clearing the textarea by mistake breaks the expected input flow.
-                if (keydown &&
-                    (keydown.key === 'Unidentified' ||
-                        (!keydown.altKey &&
-                            keydown.ctrlKey &&
-                            !keydown.metaKey &&
-                            keydown.shiftKey &&
-                            (keydown.key === 'U' || keydown.key === 'Process'))))
+                //
+                // A bare "Unidentified" keydown is not only that ChromeOS quirk, though: soft keyboards on
+                // Android send keydown key="Unidentified" with keyCode 229 ("the IME is processing this
+                // key") before every character they deliver. Ignoring those dropped the character and left
+                // it in the textarea, where the next character turned it into a two-character value that
+                // was never inserted either. keyCode 229 is the IME marker and never part of the
+                // Ctrl-Shift-U sequence, so a bare "Unidentified" is ignored only without it.
+                if (keydown && isUnicodeEntryKeydown(keydown))
                     return;
                 if (text.length === 1) {
                     textarea.value = '';

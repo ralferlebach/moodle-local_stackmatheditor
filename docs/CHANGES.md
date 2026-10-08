@@ -8,8 +8,13 @@ Version numbers follow `version.php`: the release name (`1.3.0`) and the build
 (`YYYYMMDDNN`).
 
 
-1.3.0 (2026100700) - stable
+1.3.0 (2026100800) - stable
 ----------------------------
+
+Build 2026100700 was published on 7 October 2026. Build 2026100800 keeps the release name and adds
+the security, privacy, lifecycle, backup and integrity fixes listed under *Fixed*, together with an
+upgrade step: on a site with 2026100700 or older, configurations of deleted activities and
+duplicate configurations are removed once during the upgrade.
 
 ### New
 
@@ -34,6 +39,49 @@ Version numbers follow `version.php`: the release name (`1.3.0`) and the build
 
 ### Fixed
 
+* Security: the configuration page shows and saves only questions of the quiz it is opened for. A
+  user who could manage one quiz could open the preview and the input semantics of any STACK
+  question on the site by changing the question id in the address (MDL Shield review,
+  2026-10-08).
+* The configuration link appears in the settings menu of an adaptive quiz whose question
+  categories contain a STACK question. The check behind it called a method that did not exist,
+  so the link never appeared.
+* The diagnostic script `cli/diagnose_legacy_config.php` runs; it stopped at its first line of
+  output.
+* Deleting a quiz or a course deletes its editor configurations. They used to stay behind with the
+  "last modified by" reference, out of reach of privacy requests. Rows left over from earlier
+  builds are reported in the user's own context for export and deletion, and
+  `cli/repair_config.php` removes them.
+* Configuring an adaptive quiz requires `moodle/course:manageactivities`, a write capability. The
+  report capability `mod/adaptivequiz:viewreport` used before let a role that may only see reports
+  change the configuration. Navigation, edit-page links and the configuration page share one check.
+* Backup, restore, import and duplication of a quiz keep its editor configuration, mapped onto the
+  new activity and the restored questions. It used to fall back to the defaults.
+* The privacy export names the scope of a configuration in the language of the export, next to a
+  stable key. The editor switch, the matrix and vector choosers and the resize confirmation have
+  no English fallback text any more: their strings come from the language pack only.
+* Moodle 5.3 dark colour mode: toolbar, editor fields, switch and choosers take their colours from
+  the theme instead of fixed light ones, and the question preview on the configuration page opens
+  with Bootstrap 5's attribute. Moodle 4.5 looks as before.
+* After a fast drag of a JSXGraph slider the editor shows the value the input ends on. It could
+  stay one step behind, because values arriving within the same tick as the previous one were
+  ignored.
+* A toolbar group that is wider on its own than a very narrow editor breaks inside instead of
+  reaching out of the toolbar.
+* A toolbar group that fits on a line stays on one line at every editor width. Its separator
+  took a few pixels of the line, so at some widths - which ones depended on the fonts - a group
+  of five broke apart although its buttons fitted. The separator now sits in the gap between the
+  groups and takes no room. A cluster of a large group that is wider than a very narrow toolbar
+  breaks inside instead of reaching out of it.
+* Right-to-left pages (Hebrew, Arabic, Persian): formula, button symbols and the rows and columns of
+  the matrix chooser stay left to right - labels like ∂²/∂x∂y or ∠ABC were rearranged by the
+  page direction and the grid was mirrored. The choosers open under their button on the side the
+  page reads from, and STACK's hidden input no longer sits outside the window on the right. The
+  toolbar itself follows the page.
+* Two teachers saving the same quiz or question at the same moment no longer leave two
+  configurations behind. Writes of one scope are serialised by a lock and run in one transaction;
+  when duplicates from earlier builds exist, every read picks the same one (newest, then highest
+  id), and the next save or `cli/repair_config.php` removes the others.
 * Nested structures survive the conversion in both directions: a root inside a root, a function
   inside itself, absolute values and binomial coefficients within one another, at any depth. What
   cannot be converted is reported instead of being passed on as a plausible-looking but different
@@ -45,6 +93,9 @@ Version numbers follow `version.php`: the release name (`1.3.0`) and the build
   question; only the explicit global default crosses quizzes.
 * On Android Chrome and Opera, a freshly focused field accepts the first soft-keyboard character
   immediately. It used to drop everything until Enter had been pressed once.
+* A soft keyboard that announces each character with an "Unidentified" key (keyCode 229) no longer
+  loses its input. MathQuill 0.10.1-sme.6 ignores only Chrome's Ctrl-Shift-U Unicode entry, which
+  the old guard was meant for.
 * `Umax` reaches STACK as `Umax`, not as `U max`, and `U_max` keeps its whole subscript in both
   directions.
 * The external service authorises: the course module has to be a quiz, the user has to be allowed

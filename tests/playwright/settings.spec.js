@@ -30,7 +30,7 @@
 
 const {test, expect} = require('@playwright/test');
 const {execFileSync} = require('child_process');
-const {env, loginAs} = require('./helpers');
+const {env, loginAs, openPage, closeLeftovers} = require('./helpers');
 
 // Read when the suite starts, not when the file is loaded: a missing variable then fails this
 // suite with a clear message instead of aborting the whole Playwright run.
@@ -157,9 +157,9 @@ test.describe('settings matrix: level x setting -> result', () => {
         CMID = env('SME_SETTINGS_CMID');
         QBE = [env('SME_SETTINGS_QBE1'), env('SME_SETTINGS_QBE2')];
         USERPASS = env('SME_USER_PASS');
-        admin = await (await browser.newContext()).newPage();
-        teacher = await (await browser.newContext()).newPage();
-        student = await (await browser.newContext()).newPage();
+        admin = await openPage(browser);
+        teacher = await openPage(browser);
+        student = await openPage(browser);
         await loginAs(admin, env('SME_ADMIN_USER', 'admin'), env('SME_ADMIN_PASS'));
         await loginAs(teacher, 'sme_teacher', USERPASS);
         await loginAs(student, 'sme_student01', USERPASS);
@@ -186,6 +186,8 @@ test.describe('settings matrix: level x setting -> result', () => {
         if (siteBefore) {
             await adminSettings(admin, siteBefore);
         }
+        // The three pages live for the whole file; their contexts end with it.
+        await closeLeftovers();
     });
 
     test('admin: on/off', async({}, info) => {

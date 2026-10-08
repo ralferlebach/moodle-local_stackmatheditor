@@ -95,7 +95,10 @@ class configure_form extends \moodleform {
                 $collapseid    = 'sme-question-preview';
                 $previewbutton =
                     '<a class="btn btn-outline-secondary btn-sm"'
-                    . ' data-toggle="collapse"'
+                    // Both attributes: Bootstrap 4 (Moodle 4.5) reads data-toggle, Bootstrap 5
+                    // (Moodle 5.x) data-bs-toggle; its compatibility layer for the old name is
+                    // deprecated.
+                    . ' data-toggle="collapse" data-bs-toggle="collapse"'
                     . ' href="#' . $collapseid . '"'
                     . ' role="button" aria-expanded="false"'
                     . ' aria-controls="' . $collapseid . '">'
@@ -144,8 +147,8 @@ class configure_form extends \moodleform {
                 'static',
                 'enabled_info',
                 '',
-                '<span class="badge badge-secondary px-2 py-1">'
-                    . '<i class="fa fa-lock mr-1" aria-hidden="true"></i>'
+                '<span class="badge badge-secondary bg-secondary px-2 py-1">'
+                    . '<i class="fa fa-lock mr-1 me-1" aria-hidden="true"></i>'
                     . get_string('configure_enabled_locked_off', 'local_stackmatheditor')
                     . '</span>'
             );
@@ -155,8 +158,8 @@ class configure_form extends \moodleform {
                 'static',
                 'enabled_info',
                 '',
-                '<span class="badge badge-success px-2 py-1">'
-                    . '<i class="fa fa-lock mr-1" aria-hidden="true"></i>'
+                '<span class="badge badge-success bg-success px-2 py-1">'
+                    . '<i class="fa fa-lock mr-1 me-1" aria-hidden="true"></i>'
                     . get_string('configure_enabled_locked_on', 'local_stackmatheditor')
                     . '</span>'
             );
@@ -194,16 +197,15 @@ class configure_form extends \moodleform {
                 'enabled_hint',
                 '',
                 '<small class="text-muted">'
-                    . '<i class="fa fa-info-circle mr-1" aria-hidden="true"></i>'
+                    . '<i class="fa fa-info-circle mr-1 me-1" aria-hidden="true"></i>'
                     . $parenthint
                     . '</small>'
             );
         }
 
-        // The student switch (#73). Not only in the override modes: with the editor on
-        // everywhere (mode 1) a quiz or a question must still be able to take the switch away,
-        // which is what the issue asks for - and in mode 1 there is no activation checkbox for it
-        // to sit under. Mode 0 has no editor, so there is no switch to allow.
+        // The student switch. Not only in the override modes: with the editor on everywhere
+        // (mode 1) a quiz or a question must still be able to take the switch away - and in
+        // mode 1 there is no activation checkbox for it to sit under. Mode 0 has no editor, so there is no switch to allow.
         if ($instancemode !== 0) {
             $mform->addElement(
                 'advcheckbox',
@@ -248,7 +250,7 @@ class configure_form extends \moodleform {
             'local_stackmatheditor'
         );
 
-        // The chooser limit (#76). It only means something with a structured group, so the field
+        // The chooser limit. It only means something with a structured group, so the field
         // is disabled without one - visible, so that the dependency is visible too. An empty
         // value inherits from the level above.
         $mform->addElement(
@@ -260,7 +262,7 @@ class configure_form extends \moodleform {
         $mform->setType('maxdimension', PARAM_RAW_TRIMMED);
         $mform->addHelpButton('maxdimension', 'setting_maxstructureddimension', 'local_stackmatheditor');
 
-        // Groups whose CAS packages this question does not load (#66). The choice can still be
+        // Groups whose CAS packages this question does not load. The choice can still be
         // made and saved: the author configures the group now and loads the package afterwards.
         // Until then the group stays hidden from learners, and here is what to add.
         $dependencies = $customdata['dependencies'] ?? [];
@@ -304,7 +306,7 @@ class configure_form extends \moodleform {
             );
         }
 
-        // STACK input semantics (#65). Read-only: STACK stores "insert stars" per input, and
+        // STACK input semantics. Read-only: STACK stores "insert stars" per input, and
         // that is where it is edited. The editor only makes the value visible where the toolbar
         // is configured.
         $semantics = $customdata['stacksemantics'] ?? ['inputs' => [], 'editurl' => null];
@@ -370,7 +372,7 @@ class configure_form extends \moodleform {
     }
 
     /**
-     * Refuse a dimension the plugin cannot honour (#76).
+     * Refuse a dimension the plugin cannot honour.
      *
      * @param array $data Submitted data.
      * @param array $files Submitted files.

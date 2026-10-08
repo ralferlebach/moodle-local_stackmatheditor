@@ -190,6 +190,18 @@ describe('roundtrip', () => {
     });
 });
 
+// What definitions::get_popup_strings() delivers in English.
+const POPUP_STRINGS = {
+    matrixTitle: 'Matrix',
+    vectorTitle: 'Vector',
+    size: '{a} × {b} matrix',
+    dimension: 'Dimension',
+    orientation: 'Orientation',
+    rowVector: 'Row vector',
+    columnVector: 'Column vector',
+    vectorSize: '{a}-dimensional {b}',
+};
+
 describe('popup', () => {
     let Popup;
     let owner;
@@ -202,6 +214,9 @@ describe('popup', () => {
     beforeEach(() => {
         jest.resetModules();
         Popup = loadAmd('structured_popup');
+        // The strings the toolbar passes in from definitions::get_popup_strings(); the popup
+        // itself has no English defaults (#92).
+        Popup.setStrings(POPUP_STRINGS);
         document.body.innerHTML = '';
         owner = document.createElement('button');
         document.body.appendChild(owner);
@@ -399,6 +414,9 @@ describe('the configured maximum (#76)', () => {
     beforeEach(() => {
         jest.resetModules();
         Popup = loadAmd('structured_popup');
+        // The strings the toolbar passes in from definitions::get_popup_strings(); the popup
+        // itself has no English defaults (#92).
+        Popup.setStrings(POPUP_STRINGS);
         document.body.innerHTML = '';
         owner = document.createElement('button');
         document.body.appendChild(owner);
@@ -474,6 +492,9 @@ describe('pointer selection (#75)', () => {
     beforeEach(() => {
         jest.resetModules();
         Popup = loadAmd('structured_popup');
+        // The strings the toolbar passes in from definitions::get_popup_strings(); the popup
+        // itself has no English defaults (#92).
+        Popup.setStrings(POPUP_STRINGS);
         document.body.innerHTML = '';
         owner = document.createElement('button');
         document.body.appendChild(owner);

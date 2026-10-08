@@ -17,7 +17,7 @@
 namespace local_stackmatheditor;
 
 /**
- * Read-only view of STACK's input semantics (#65).
+ * Read-only view of STACK's input semantics.
  *
  * STACK stores "insert stars" per input in qtype_stack_inputs, so one question can have several
  * inputs with different settings. This class reads that value and nothing else: the editor never
@@ -129,12 +129,19 @@ class stack_inputs {
             return null;
         }
 
+        // The page that calls this happens to load the question library; this method does not
+        // rely on it. A missing function inside the catch-all below would otherwise mean a link
+        // that silently never appears.
+        global $CFG;
+        require_once($CFG->libdir . '/questionlib.php');
+
         try {
             if (!question_has_capability_on($questionid, 'edit')) {
                 return null;
             }
-        } catch (\Throwable $e) {
+        } catch (\moodle_exception $e) {
             // No category, no context, no answer: no link.
+            quiz_helper::caught($e, 'stack_inputs edit link');
             return null;
         }
 

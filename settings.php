@@ -76,7 +76,7 @@ if ($hassiteconfig) {
         PARAM_ALPHANUMEXT
     ));
 
-    // Largest structure the matrix and vector choosers offer (#76). Only has an effect where
+    // Largest structure the matrix and vector choosers offer. Only has an effect where
     // one of those groups is active; the value is kept either way.
     $settings->add(new admin_setting_configtext(
         'local_stackmatheditor/maxstructureddimension',
@@ -86,7 +86,7 @@ if ($hassiteconfig) {
         PARAM_INT
     ));
 
-    // May students switch the editor off while answering? (#73) Subordinate to the activation
+    // May students switch the editor off while answering? Subordinate to the activation
     // above: with no editor there is no switch, whatever this says.
     $settings->add(new admin_setting_configcheckbox(
         'local_stackmatheditor/allowstudenttoggle',
@@ -95,7 +95,7 @@ if ($hassiteconfig) {
         1
     ));
 
-    // CAS function names for the differential operators (#45). Empty means the operator is not
+    // CAS function names for the differential operators. Empty means the operator is not
     // offered: Maxima's gradient, divergence and curl live in the vect package and depend on the
     // coordinate system, so the name has to come from whoever knows this installation.
     foreach (['gradient', 'divergence', 'curl', 'laplacian'] as $smediffop) {
@@ -108,7 +108,7 @@ if ($hassiteconfig) {
         ));
     }
 
-    // Page types of further question-engine consumers (#50). The editor already runs on the
+    // Page types of further question-engine consumers. The editor already runs on the
     // pages it knows; this is for a module it does not.
     $settings->add(new admin_setting_configtextarea(
         'local_stackmatheditor/extrapagetypes',
@@ -118,7 +118,7 @@ if ($hassiteconfig) {
         PARAM_RAW
     ));
 
-    // Coordinate separator for points (#63). Display only.
+    // Coordinate separator for points. Display only.
     $settings->add(new admin_setting_configselect(
         'local_stackmatheditor/coordinateseparator',
         get_string('setting_coordinateseparator', 'local_stackmatheditor'),
@@ -127,7 +127,7 @@ if ($hassiteconfig) {
         ['|' => 'P(2 | 3)', ';' => 'P(2; 3)', ',' => 'P(2, 3)']
     ));
 
-    // Whether a stored list is drawn as a point again (#63).
+    // Whether a stored list is drawn as a point again.
     $settings->add(new admin_setting_configcheckbox(
         'local_stackmatheditor/pointnotation',
         get_string('setting_pointnotation', 'local_stackmatheditor'),

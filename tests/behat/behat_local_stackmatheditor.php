@@ -1608,7 +1608,7 @@ JS;
                         continue;
                     }
                     // The plugin hides the original input off-screen
-                    // (position:absolute; left:-9999px) and clips it to ~1px,
+                    // (position:absolute, clipped to 1px),
                     // so MathQuill can still sync values to it.  Treat that as hidden.
                     var rect = el.getBoundingClientRect();
                     if ((rect.left + rect.width) < 1) {

@@ -118,8 +118,21 @@ Capabilities
 
 This plugin does not add any additional capabilities.
 
-Configuring a quiz or question requires `mod/quiz:manage` (for mod_adaptivequiz:
-`mod/adaptivequiz:viewreport`, as that module has no manage capability).
+Configuring a quiz or question is a write action and requires a write capability of the activity:
+`mod/quiz:manage` for a quiz, `moodle/course:manageactivities` for an adaptive quiz (that module
+has no manage capability of its own; a role that may only view its reports cannot change the
+configuration). The settings menu link, the links on the quiz edit page and the configuration page
+itself check the same capability.
+
+
+Backup, restore and duplication
+-------------------------------
+
+The editor configuration of a quiz or adaptive quiz is part of the activity backup. Restore,
+import and "Duplicate" put it onto the new activity: the quiz-level setting as it was, each
+question setting on the question as the restored quiz uses it. A setting for a question the
+restored quiz does not contain is not restored. Who last changed a setting travels only with user
+data; without it the restored setting has no "last modified by".
 
 
 Scheduled Tasks
@@ -173,7 +186,7 @@ renders an editable `qtype_stack` input, the editor attaches itself to it.
 | Quiz attempt | yes | yes |
 | Quiz review, where the answer is still editable | yes | yes |
 | Question preview | yes | yes |
-| Adaptive Quiz (`mod_adaptivequiz`) | yes | yes |
+| Adaptive Quiz (`mod_adaptivequiz`) | yes | per activity - one setting for all its questions |
 | CAPQuiz (`mod_capquiz`) | yes | site defaults |
 | Embedded questions (`filter_embedquestion`), including Page, Book and Lesson content | yes | site defaults |
 | StudentQuiz (`mod_studentquiz`) | yes, where STACK is an allowed question type | site defaults |
@@ -297,6 +310,10 @@ Theme support
 This plugin is developed and tested on Moodle Core's Boost theme.
 It should also work with Boost child themes, including Moodle Core's Classic theme. However, we can't support any other theme than Boost.
 
+On Moodle 5.3 and later the editor follows Boost's dark colour mode: toolbar, editor fields, the
+on/off switch and the matrix and vector choosers take their colours from the theme. A browser test
+switches to dark mode and checks their contrast.
+
 
 Plugin repositories
 -------------------
@@ -373,16 +390,23 @@ answers remain in STACK.
 
 The Moodle privacy API is fully supported: a data request reports and exports that "last modified
 by" reference and anonymises it on deletion. The configurations themselves are course data and
-are kept.
+are kept as long as the activity exists.
+
+Deleting a quiz or a whole course deletes its configurations as well. Rows left over from an
+installation that did not do this yet are reported in the user context of the person who last
+changed them, so a data request still finds them; deleting that user's data removes them.
+`cli/repair_config.php` reports such rows and, with `--execute`, deletes them; it also reduces any
+duplicate configuration of one quiz or question to the one in use.
 
 
 Third-party libraries
 ---------------------
 
-MathQuill 0.10.1-sme.1 (https://mathquill.com), Mozilla Public License 2.0 – see
+MathQuill 0.10.1-sme.6 (https://mathquill.com), Mozilla Public License 2.0 – see
 `thirdpartylibs.xml`. This is a build of the fork
 https://github.com/ralferlebach/mathquill, which adds editable matrix and vector
-environments; `thirdparty/readme_moodle.txt` records the base commit and the build steps.
+environments and keeps soft-keyboard input on Android; `thirdparty/readme_moodle.txt` records the
+base commit, the patch on top of it, the build steps and the checksums.
 
 
 Development

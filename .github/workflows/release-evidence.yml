@@ -83,32 +83,21 @@ jobs:
           unzip -l evidence/stackmatheditor.zip | tee evidence/artefact-contents.txt
           sha256sum evidence/stackmatheditor.zip | tee -a evidence/artefact.txt
 
-      # The gate #69 asks for: the other workflows have to have run on this very commit, and
-      # green. A release that cites a Playwright run from three commits ago cites nothing.
-      - name: Require the browser, accessibility and load runs on this SHA
+      # The other workflows have to have run on this very commit, finished, and green; the
+      # Playwright run with one green job each for Moodle 4.5 and 5.3. A release that cites a
+      # run from three commits ago, or one still running, cites nothing. The check lives in a
+      # script so that its result is its exit code - no status variable set inside a pipeline.
+      - name: Require the code, browser, screen reader and load runs on this SHA
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           sha=$(git rev-parse HEAD)
-          missing=0
-          {
-            echo "required runs for $sha"
-            for wf in playwright.yml load-k6.yml load-jmeter.yml; do
-              status=$(gh run list --workflow "$wf" --commit "$sha" \
-                --json conclusion --jq '.[0].conclusion' 2>/dev/null || true)
-              link=$(gh run list --workflow "$wf" --commit "$sha" \
-                --json url --jq '.[0].url' 2>/dev/null || true)
-              case "$status" in
-                success) echo "  $wf: success  $link" ;;
-                "")      echo "  $wf: NEVER RAN on this commit"; missing=1 ;;
-                *)       echo "  $wf: $status  $link"; missing=1 ;;
-              esac
-            done
-          } | tee evidence/required-runs.txt
-
-          if [ "$missing" -ne 0 ]; then
-            echo "::error::A required run is missing or not green for $sha."
-            echo "Start the missing workflows on this commit and run this again." \
+          rc=0
+          bash .github/required-runs.sh "${{ github.repository }}" "$sha" > evidence/required-runs.txt || rc=$?
+          cat evidence/required-runs.txt
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::A required run is missing, unfinished or not green for $sha."
+            echo "Start the missing workflows on this commit, wait for them, and run this again." \
               | tee -a evidence/required-runs.txt
             exit 1
           fi
@@ -129,22 +118,34 @@ jobs:
 
       - name: What still needs a human
         run: |
+          # The sign-off file as it stands on this commit; release-artefact.yml refuses a stable
+          # tag while an item is open.
+          python3 .github/check-signoff.py . > evidence/signoff.txt || true
+          cat evidence/signoff.txt
+          zipsum=$(sha256sum evidence/stackmatheditor.zip | cut -d' ' -f1)
           {
-            echo "The following gates are not automated and have to be recorded by hand"
-            echo "before MATURITY_STABLE, with date, browser and screen reader:"
+            echo "Release candidate"
+            echo "  commit:          $(git rev-parse HEAD)"
+            echo "  archive SHA-256: $zipsum"
+            echo "  evidence run:    ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             echo ""
-            echo "  [ ] manual accessibility sample (NVDA with Firefox or Chrome)"
-            echo "  [ ] visible focus throughout the core flow"
-            echo "  [ ] 200% zoom without loss of function"
-            echo "  [ ] one narrow / mobile viewport"
+            echo "Required runs on this commit (all green, links in required-runs.txt):"
+            sed -n 's/^  /  /p' evidence/required-runs.txt
             echo ""
-            echo "Automated browser, accessibility and load runs are separate workflows"
-            echo "(playwright.yml, load-k6.yml, load-jmeter.yml). Start them on this same"
-            echo "commit and attach their run links here:"
+            echo "Measured automatically in playwright.yml (a11y-zoom.spec.js), no manual step:"
+            echo "  200 and 400 per cent zoom with the core workflow, a narrow viewport,"
+            echo "  24 x 24 targets, keyboard reach, visible focus."
             echo ""
-            echo "  playwright run: ____"
-            echo "  a11y run:       ____"
-            echo "  load run:       ____"
+            echo "Judgement a workflow cannot make, and the risks accepted instead:"
+            echo "  recorded in docs/RELEASE-SIGNOFF.json (status, date, by); state on this commit:"
+            sed 's/^/  /' evidence/signoff.txt
+            echo "  How to make the checks: docs/MANUAL-ACCEPTANCE.md. A stable tag is refused"
+            echo "  while an item is open."
+            echo ""
+            echo "After the GitHub release (docs/RELEASE-CHECKLIST.md, section 3):"
+            echo "  upload exactly the ZIP of the GitHub release to the Moodle plugins directory,"
+            echo "  check it with 'sha256sum -c <zip>.sha256' first, and note the SHA-256 in the"
+            echo "  release issue."
           } | tee evidence/manual-checklist.txt
 
       - name: Upload the evidence

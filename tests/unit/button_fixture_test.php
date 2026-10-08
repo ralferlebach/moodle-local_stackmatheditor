@@ -41,6 +41,10 @@ final class button_fixture_test extends \advanced_testcase {
         global $CFG;
 
         $path = $CFG->dirroot . '/local/stackmatheditor/tests/jest/fixtures/buttons.json';
+        if (!is_dir($CFG->dirroot . '/local/stackmatheditor/tests/jest')) {
+            // The release archive leaves tests/jest out (.gitattributes); the repository has it.
+            $this->markTestSkipped('tests/jest is not part of the release archive');
+        }
         $fixture = json_decode(file_get_contents($path), true);
 
         $this->assertIsArray($fixture, 'the button fixture must be readable JSON');

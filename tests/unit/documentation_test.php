@@ -222,4 +222,119 @@ final class documentation_test extends \advanced_testcase {
 
         return $keys;
     }
+
+    /**
+     * The MathQuill build is named the same everywhere, and the checksums are those of the files.
+     *
+     * #71: the README named 0.10.1-sme.1 while sme.5 was vendored.
+     *
+     * @return void
+     */
+    public function test_mathquill_version_and_checksums_agree(): void {
+        global $CFG;
+        $root = $CFG->dirroot . '/local/stackmatheditor/';
+
+        $xml = simplexml_load_file($root . 'thirdpartylibs.xml');
+        $this->assertNotFalse($xml);
+        $version = (string) $xml->library[0]->version;
+        $this->assertMatchesRegularExpression('/^0\.10\.1-sme\.\d+$/', $version);
+
+        $readme = file_get_contents($root . 'README.md');
+        $this->assertStringContainsString("MathQuill {$version} ", $readme, 'README third-party section');
+        preg_match_all('/MathQuill (0\.10\.1-sme\.\d+)/', $readme, $named);
+        $this->assertSame([$version], array_values(array_unique($named[1])), 'README names one build');
+
+        $provenance = file_get_contents($root . 'thirdparty/readme_moodle.txt');
+        $this->assertStringContainsString("Version: {$version}", $provenance);
+        $this->assertStringContainsString("Build provenance of {$version}", $provenance);
+        $this->assertSame(
+            $version,
+            \local_stackmatheditor\output\editor_injector::MATHQUILL_VERSION,
+            'the cache key of the library URLs'
+        );
+
+        foreach (['mathquill.js', 'mathquill.min.js', 'mathquill.css'] as $file) {
+            $this->assertMatchesRegularExpression(
+                '/^\s+' . preg_quote($file, '/') . '\s+' . hash_file('sha256', $root . 'thirdparty/mathquill/' . $file) . '$/m',
+                $provenance,
+                "SHA-256 of {$file} in thirdparty/readme_moodle.txt"
+            );
+        }
+        // The build is identified by a commit, not by a branch or a patch on top of one.
+        $this->assertMatchesRegularExpression('/^\s+Fork commit:\s+[0-9a-f]{40}\s*$/m', $provenance);
+    }
+
+    /**
+     * The README support table says per-question configuration exactly where the configuration
+     * page offers it.
+     *
+     * #71: the table said "yes" for the adaptive quiz, whose configuration page has quiz mode only.
+     *
+     * @return void
+     */
+    public function test_support_table_matches_runtime(): void {
+        global $CFG;
+        $readme = file_get_contents($CFG->dirroot . '/local/stackmatheditor/README.md');
+        $rows = [
+            'quiz' => '| Quiz attempt |',
+            'adaptivequiz' => '| Adaptive Quiz (',
+        ];
+        foreach ($rows as $modname => $prefix) {
+            $line = null;
+            foreach (explode("\n", $readme) as $candidate) {
+                if (strpos($candidate, $prefix) === 0) {
+                    $line = $candidate;
+                }
+            }
+            $this->assertNotNull($line, "README support table row for {$modname}");
+            $cells = array_map('trim', explode('|', trim($line, " |")));
+            $perquestion = strpos($cells[2], 'yes') === 0;
+            $this->assertSame(
+                context_resolver::supports_question_configuration($modname),
+                $perquestion,
+                "per-question configuration of {$modname}: README says '{$cells[2]}'"
+            );
+            $this->assertTrue(context_resolver::has_configuration_ui($modname), $modname);
+        }
+        // The configuration page decides its mode by the same method.
+        $configure = file_get_contents($CFG->dirroot . '/local/stackmatheditor/configure.php');
+        $this->assertStringContainsString('context_resolver::supports_question_configuration($modname)', $configure);
+    }
+
+    /**
+     * version.php, the change log and the README describe the same release.
+     *
+     * #71: README, version.php, tag and release metadata are set consistently for stable. The
+     * tag is checked where it is made - release-artefact.yml refuses a tag other than
+     * "v" plus the release name and a stable tag on a build that is not declared stable. This
+     * test covers what is in the repository: the newest change-log entry names the release, the
+     * build and the maturity of version.php, and the README does not call a stable build
+     * "in development".
+     *
+     * @return void
+     */
+    public function test_release_metadata_agrees(): void {
+        global $CFG;
+        $plugin = new \stdClass();
+        require($CFG->dirroot . '/local/stackmatheditor/version.php');
+
+        $changes = file_get_contents($CFG->dirroot . '/local/stackmatheditor/docs/CHANGES.md');
+        $found = preg_match('/^(\d+\.\d+\.\d+) \((\d{10})\) - ([a-z]+)$/m', $changes, $heading);
+        $this->assertSame(1, $found, 'the change log starts its newest entry with "<release> (<build>) - <maturity>"');
+        $maturities = [
+            MATURITY_ALPHA => 'alpha',
+            MATURITY_BETA => 'beta',
+            MATURITY_RC => 'rc',
+            MATURITY_STABLE => 'stable',
+        ];
+        $this->assertSame($plugin->release, $heading[1], 'release name in the change log');
+        $this->assertSame((string) $plugin->version, $heading[2], 'build in the change log');
+        $this->assertSame($maturities[$plugin->maturity], $heading[3], 'maturity in the change log');
+
+        if ($plugin->maturity === MATURITY_STABLE) {
+            $readme = file_get_contents($CFG->dirroot . '/local/stackmatheditor/README.md');
+            $this->assertStringNotContainsStringIgnoringCase('in development', $readme);
+            $this->assertStringNotContainsString('-dev', $plugin->release);
+        }
+    }
 }

@@ -206,7 +206,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
                 break;
             }
             // Part of a longer identifier (asqrt(, x_1sqrt() - not this function.
-            // A preceding pure number is a coefficient: 2sqrt(x) is 2*sqrt(x) (#39).
+            // A preceding pure number is a coefficient: 2sqrt(x) is 2*sqrt(x).
             if (idx > 0 && /[a-zA-Z0-9_]/.test(s[idx - 1])
                     && !/(^|[^a-zA-Z0-9_])[0-9]+$/.test(s.substring(0, idx))) {
                 result += s.substring(i, idx + 1);
@@ -265,9 +265,9 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // First: _(content) -> _{content}.
         s = fixpoint(s, /_\(([^()]*?)\)/, '_{$1}');
         // Then: _x (single char not already in braces) -> _{x}.
-        // Group the whole subscript, not just its first character (#59): U_max is one
-        // identifier and has to be drawn as U_{max}. Grouping only the first character produced
-        // U_{m}ax, which means something else entirely and does not survive a roundtrip.
+        // Group the whole subscript, not just its first character: U_max is one identifier and
+        // has to be drawn as U_{max}. Grouping only the first character would produce U_{m}ax,
+        // which means something else entirely and does not survive a roundtrip.
         s = s.replace(/_([a-zA-Z0-9]+)(?!\{)(?!\()/g, '_{$1}');
         return s;
     }
@@ -394,7 +394,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Render STACK's set functions as infix operator markers (#35).
+     * Render STACK's set functions as infix operator markers.
      *
      * union(A,B) → A ∪ B, intersection → ∩, setdifference → ∖, elementp → ∈,
      * not elementp → ∉, subsetp → ⊆, and the proper-subset form
@@ -466,7 +466,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Replace integral calls by placeholders holding their LaTeX (#44).
+     * Replace integral calls by placeholders holding their LaTeX.
      *
      * Reads the evaluated form integrate(…) / int(…) and the noun forms 'int(…), 'integrate(…)
      * and nounint(…) - with 2 arguments (indefinite) or 4 (definite). Other arities are left
@@ -790,10 +790,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * LaTeX of a derivative diff(expr, x[, n][, y, m …]) with the canonical ∂ (#46).
+     * LaTeX of a derivative diff(expr, x[, n][, y, m …]) with the canonical ∂.
      *
-     * diff(…) does not record whether d or ∂ was written, so ∂ is used throughout (Ralf's
-     * decision); the order of the variable/order pairs is kept as written.
+     * diff(…) does not record whether d or ∂ was written, so ∂ is used throughout (a
+     * deliberate design decision); the order of the variable/order pairs is kept as written.
      *
      * @param {string[]} args Arguments of diff (already split).
      * @param {Object} options Conversion options.
@@ -837,7 +837,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Replace derivative calls diff / 'diff / noundiff by placeholders holding their LaTeX (#46).
+     * Replace derivative calls diff / 'diff / noundiff by placeholders holding their LaTeX.
      *
      * @param {string} s Maxima expression.
      * @param {Object} options Conversion options.
@@ -874,7 +874,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Collapse "(A implies B) and (B implies A)" back into A ⇔ B (#35).
+     * Collapse "(A implies B) and (B implies A)" back into A ⇔ B.
      *
      * @param {string} s Maxima expression.
      * @returns {string} Expression with the ⇔ marker, or unchanged.
@@ -905,7 +905,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
 
     /**
      * Merge two alternatives that differ only in coupled signs into one
-     * expression carrying ± (\u00b1) and ∓ (\u2213) (#30).
+     * expression carrying ± (\u00b1) and ∓ (\u2213).
      *
      * Walks both strings in parallel. Equal characters are copied; "+" against
      * "-" becomes ±, "-" against "+" becomes ∓. A sign present in only one
@@ -963,7 +963,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Collapse exactly two sign alternatives back into one ± expression (#30).
+     * Collapse exactly two sign alternatives back into one ± expression.
      *
      * Reads "(A) nounor (B)" only. A logical "or" is never collapsed: it is a
      * statement a student made with the ∨ button, and turning it into ± would
@@ -1141,7 +1141,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Draw STACK's geometry functions in school notation again (#63).
+     * Draw STACK's geometry functions in school notation again.
      *
      * Only the constructs whose STACK form is unambiguous:
      *
@@ -1191,7 +1191,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * LaTeX label of each differential operator, by semantic id (#45).
+     * LaTeX label of each differential operator, by semantic id.
      *
      * @type {Object}
      */
@@ -1203,7 +1203,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     };
 
     /**
-     * Draw the configured differential operators with their label (#45).
+     * Draw the configured differential operators with their label.
      *
      * Runs on the finished LaTeX, where a function call is already \\left( ... \\right). Only
      * names the site has configured are recognised; anything else stays the function call it
@@ -1232,7 +1232,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Marker for a space that separates two factors in the CAS string (#64).
+     * Marker for a space that separates two factors in the CAS string.
      *
      * @type {string}
      */
@@ -1339,7 +1339,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Convert binomial(n,k) to \\binom{n}{k}, arguments and nesting included (#79).
+     * Convert binomial(n,k) to \\binom{n}{k}, arguments and nesting included.
      *
      * @param {string} s Maxima expression.
      * @returns {string} String with binomial() replaced.
@@ -1393,7 +1393,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         var before;
 
         // Nested absolute values need more than one pass: a call is replaced and its argument is
-        // left as it was, inner abs( and all (#79).
+        // left as it is, inner abs( and all.
         do {
             before = s;
             s = processAbsFunctionOnce(s);
@@ -1464,12 +1464,12 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
             ['exp', '\\exp', 'paren'],
             ['log', '\\ln', 'paren']
             // Deliberately without abs: processAbsFunction() owns it, and the generic wrapper
-            // here would open a bar it never closes (#79).
+            // here would open a bar it never closes.
         ];
-        // Repeat the whole list until nothing changes (#79). processFunc() replaces a call and
-        // leaves its argument as it was, so an inner sqrt( sat untouched inside the LaTeX the
-        // outer one had just produced - the student then saw a root sign wrapped around the word
-        // "sqrt". One more pass finds it, and the loop ends when a pass changes nothing.
+        // Repeat the whole list until nothing changes. processFunc() replaces a call and leaves
+        // its argument as it is, so after a single pass an inner sqrt( would sit untouched inside
+        // the LaTeX the outer one produced, and the student would see a root sign wrapped around
+        // the word "sqrt". One more pass finds it, and the loop ends when a pass changes nothing.
         var guard = 20;
         var before;
 
@@ -1500,7 +1500,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         var guard = 20;
         var before;
 
-        // Repeated until nothing changes, exactly as for the standard functions (#79): a
+        // Repeated until nothing changes, exactly as for the standard functions: a
         // configured function nested in itself is the same problem, and whether a function is
         // hardcoded or configured must not decide whether recursion works.
         do {
@@ -1593,7 +1593,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // literals now and write them as \\left\\{ ... \\right\\} at the end.
         s = s.replace(/\{/g, '\uE020').replace(/\}/g, '\uE021');
 
-        // Set functions and ⇔ become operator markers before any keyword pass (#35).
+        // Set functions and ⇔ become operator markers before any keyword pass.
         s = convertRelationSystemToCases(renderSetFunctions(collapseIff(s)));
 
         if (!s) {
@@ -1608,7 +1608,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = processLogicKeywords(s);
 
         // Only now: before this point a space also separates keywords ("x in A", "p and q"),
-        // and protecting those would keep the keyword passes from matching (#64).
+        // and protecting those would keep the keyword passes from matching.
         s = protectExplicitSpaces(s);
 
         // %-constants -> LaTeX (BEFORE Greek letter replacement).
@@ -1621,9 +1621,9 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         if (s.indexOf('%pi') >= 0) {
             s = s.replace(/%pi/g, '\\pi ');
         }
-        // Bare "pi" → \pi (after logic keyword processing, "pi" no longer matches "implies" etc.).
+        // Bare "pi" → \pi (after logic keyword processing, so "pi" cannot match inside "implies" etc.).
         // Not after a backslash: the constants pass may already have produced "\pi", and a second
-        // replacement turned it into "\\pi", a LaTeX line break followed by the letters pi.
+        // replacement would turn it into "\\pi", a LaTeX line break followed by the letters pi.
         s = s.replace(/(?<!\\)\bpi\b/g, '\\pi ');
         if (s.indexOf('inf') >= 0) {
             s = s.replace(/\bminf\b/g, '-\\infty ');
@@ -1651,7 +1651,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
 
         // Binomial: binomial(n,k) -> \\binom{n}{k}. The arguments are read with a bracket
         // counter and the pass repeats, so binomial(f(x),k) and a binomial inside another one
-        // both survive (#79) - the previous pattern forbade brackets in either argument.
+        // both survive.
         s = processBinomial(s);
 
         // Upper Greek fallback (if not handled by defs).
@@ -1721,7 +1721,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
 
         s = s.replace(/\s+/g, ' ').trim();
         // A space the user meant becomes MathQuill's control space, so the editor shows the
-        // boundary again after a pre-fill (#64).
+        // boundary again after a pre-fill.
         s = s.replace(new RegExp(EXPLICIT_SPACE, 'g'), '\\ ');
         return s;
     }

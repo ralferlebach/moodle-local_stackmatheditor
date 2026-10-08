@@ -21,11 +21,11 @@ namespace local_stackmatheditor;
  *
  * Lookup priority for get_config():
  *   1. Exact:      cmid + qbeid          (question-level)
- *   2. Quiz-def.:  cmid + qbeid IS NULL  (quiz-level default)  ← NEW
+ *   2. Quiz-def.:  cmid + qbeid IS NULL  (quiz-level default)
  *   3. Global:     cmid=0 + qbeid        (cross-quiz question default)
- *   4. questionid field, same quiz or global (very old records)
- *   5. Legacy:     questionid field      (very old records)
- *   6. Instance defaults                 (settings.php)
+ *   4. questionid: questionid column, same quiz or global only
+ *                  (records keyed by question id instead of question bank entry)
+ *   5. Instance defaults                 (settings.php)
  *
  * Quiz-level defaults are stored with questionbankentryid = NULL.
  * Question-level configs use a concrete questionbankentryid integer.
@@ -36,7 +36,13 @@ namespace local_stackmatheditor;
  */
 class config_manager {
     /** @var string Database table name. */
-    const TABLE = 'local_stackmatheditor';
+    public const TABLE = 'local_stackmatheditor';
+
+    /** @var string Total read order of a scope: newest first, id breaks ties within a second. */
+    public const READ_ORDER = 'timemodified DESC, id DESC';
+
+    /** @var int Seconds a writer waits for the scope lock (config locktimeout overrides it). */
+    private const LOCK_TIMEOUT = 10;
 
 
     // Instance-level helpers.
@@ -99,10 +105,9 @@ class config_manager {
      * @return string Normalised implicit multiplication mode.
      */
     public static function get_instance_variable_mode(): string {
-        // Since #65 the editor no longer has a setting of its own for implicit multiplication.
-        // STACK stores "insert stars" per input and is the only source of truth; the converter
-        // therefore always hands STACK what was typed. Values stored by earlier versions are
-        // ignored rather than migrated, so that turning the decision back over to STACK does not
+        // STACK is the sole source of truth for implicit multiplication: it stores "insert stars"
+        // per input, and the converter always hands STACK what was typed. Any other mode found in
+        // a stored configuration is ignored rather than migrated, so this behaviour does not
         // depend on an upgrade step having run.
         return definitions::IMPLICIT_STACK;
     }
@@ -160,7 +165,10 @@ class config_manager {
 
 
     /**
-     * Safe single-record fetch: returns newest matching record.
+     * Safe single-record fetch: returns the newest matching record.
+     *
+     * The order is total (timemodified has second resolution, id breaks the tie), so the record a
+     * read returns is the same one collapse_scope() keeps.
      *
      * @param string $where SQL WHERE clause.
      * @param array  $params Query parameters.
@@ -169,7 +177,7 @@ class config_manager {
     private static function get_one(string $where, array $params): ?\stdClass {
         global $DB;
         $sql     = "SELECT * FROM {" . self::TABLE . "} WHERE {$where}"
-                 . " ORDER BY timemodified DESC";
+                 . " ORDER BY " . self::READ_ORDER;
         $records = $DB->get_records_sql($sql, $params, 0, 1);
         return $records ? reset($records) : null;
     }
@@ -264,15 +272,15 @@ class config_manager {
      *   1. cmid + qbeid          (question-level)
      *   2. cmid + NULL           (quiz-level default)
      *   3. cmid=0 + qbeid        (global question default)
-     *   4. questionid field      (very old records, same quiz or global only)
+     *   4. questionid field      (records keyed by question id, same quiz or global only)
      *   5. instance defaults     (settings.php)
      *
-     * There is no "any qbeid" layer any more (#68): the same question bank entry used in
-     * another quiz is another context, and only the explicit global default crosses quizzes.
+     * There is deliberately no "any qbeid" layer: the same question bank entry used in another
+     * quiz is another context, and only the explicit global default crosses quizzes.
      *
      * @param int $cmid       Course module ID (0 for global).
      * @param int $qbeid      Question bank entry ID (0 to auto-resolve).
-     * @param int $questionid Question ID (for resolving qbeid and legacy lookup).
+     * @param int $questionid Question ID (for resolving qbeid and the questionid lookup).
      * @return array Merged config array.
      */
     public static function get_config(
@@ -287,9 +295,9 @@ class config_manager {
 
         $qbeid = self::ensure_qbeid($qbeid, $questionid) ?? 0;
 
-        // Lowest-priority legacy/global fallbacks first. Both are scoped: the same question bank
-        // entry in another quiz is a different context, and a configuration made there must not
-        // leak into this one (#68). Crossing quizzes is what the explicit global default
+        // Lowest-priority questionid/global fallbacks first. Both are scoped: the same question
+        // bank entry in another quiz is a different context, and a configuration made there must
+        // not leak into this one. Crossing quizzes is what the explicit global default
         // (cmid = 0) is for.
         if ($questionid > 0) {
             $columns = $DB->get_columns(self::TABLE);
@@ -355,9 +363,9 @@ class config_manager {
      * What one level has stored itself - nothing inherited, nothing merged.
      *
      * get_config() answers "what applies here"; a form that decides what to store needs "what
-     * did this level say". Asking the merged configuration instead made a question that had only
-     * inherited "on" from its quiz look as if it had chosen it, and the next save - of the
-     * toolbar groups alone - froze that into an override (#81).
+     * did this level say". Asking the merged configuration instead would make a question that
+     * only inherits "on" from its quiz look as if it had chosen it, and the next save - of the
+     * toolbar groups alone - would freeze that into an override.
      *
      * @param int $cmid Course module ID.
      * @param int $qbeid Question bank entry ID, 0 for the quiz level.
@@ -410,7 +418,7 @@ class config_manager {
      *
      * @param int   $cmid
      * @param array $qbeids
-     * @param array $questionids Optional qbeid => questionid map for legacy.
+     * @param array $questionids Optional qbeid => questionid map for the questionid layer.
      * @return array Map of qbeid => config.
      */
     public static function get_configs(
@@ -432,7 +440,7 @@ class config_manager {
             return $configs;
         }
 
-        // 1. Legacy questionid layer (lowest fallback).
+        // 1. Questionid layer (lowest fallback).
         // Preload all matching records in a single bulk query to avoid N+1.
         if (!empty($questionids)) {
             $columns = $DB->get_columns(self::TABLE);
@@ -448,12 +456,13 @@ class config_manager {
                     self::TABLE,
                     "questionid {$legacyinsql} AND questionid > 0"
                         . " AND (cmid = 0 OR cmid = :lcmid)",
-                    $legacyparams
+                    $legacyparams,
+                    self::READ_ORDER
                 );
-                // Index by questionid for O(1) lookup.
+                // Index by questionid for O(1) lookup; the newest record per questionid wins.
                 $legacybyqid = [];
                 foreach ($legacyrecs as $rec) {
-                    $legacybyqid[(int) $rec->questionid] = $rec;
+                    $legacybyqid[(int) $rec->questionid] ??= $rec;
                 }
                 foreach ($qbeids as $qbeid) {
                     if (!isset($questionids[$qbeid])) {
@@ -470,18 +479,17 @@ class config_manager {
             }
         }
 
-        // 2. Global question defaults (cmid=0 + qbeid). The batch path used to read every
-        // record with a matching qbeid here, whatever quiz it belonged to; that is gone (#68),
-        // so single and batch lookup follow the same hierarchy.
+        // 2. Global question defaults (cmid=0 + qbeid). Only these cross quizzes; records of
+        // other quizzes are never read, so single and batch lookup follow the same hierarchy.
         [$insql, $params] = $DB->get_in_or_equal($qbeids, SQL_PARAMS_NAMED);
         $params['cmid'] = 0;
         $records = $DB->get_records_select(
             self::TABLE,
             "cmid = :cmid AND questionbankentryid {$insql}",
-            $params
+            $params,
+            self::READ_ORDER
         );
-        foreach ($records as $rec) {
-            $qbeid = (int) $rec->questionbankentryid;
+        foreach (self::newest_per_qbeid($records) as $qbeid => $rec) {
             if (isset($configs[$qbeid])) {
                 $configs[$qbeid] = self::merge_config_layer(
                     $configs[$qbeid],
@@ -511,10 +519,10 @@ class config_manager {
             $records = $DB->get_records_select(
                 self::TABLE,
                 "cmid = :cmid AND questionbankentryid {$insql}",
-                $params
+                $params,
+                self::READ_ORDER
             );
-            foreach ($records as $rec) {
-                $qbeid = (int) $rec->questionbankentryid;
+            foreach (self::newest_per_qbeid($records) as $qbeid => $rec) {
                 if (isset($configs[$qbeid])) {
                     $configs[$qbeid] = self::merge_config_layer(
                         $configs[$qbeid],
@@ -530,6 +538,23 @@ class config_manager {
 
     // Public write API.
 
+
+    /**
+     * Keep only the first (newest) record per question bank entry of a READ_ORDER result.
+     *
+     * Without a unique index a scope may hold more than one row; merging all of them would mix
+     * an older configuration into the newer one. The runtime reads exactly one row per scope.
+     *
+     * @param \stdClass[] $records Records ordered by READ_ORDER.
+     * @return \stdClass[] Records keyed by question bank entry id.
+     */
+    private static function newest_per_qbeid(array $records): array {
+        $result = [];
+        foreach ($records as $rec) {
+            $result[(int) $rec->questionbankentryid] ??= $rec;
+        }
+        return $result;
+    }
 
     /**
      * Save question-level config (cmid + qbeid).
@@ -568,13 +593,22 @@ class config_manager {
     }
 
     /**
-     * Internal upsert. Handles both question-level (qbeid int) and
-     * quiz-level (qbeid null) records. Removes duplicates on update.
+     * Internal upsert. Handles both question-level (qbeid int) and quiz-level (qbeid null) records.
+     *
+     * The scope is made unique by the application, not by a unique index (decision recorded in
+     * docs/DATA-INTEGRITY.md): questionbankentryid is NULL for the quiz-level default, and
+     * databases disagree on whether NULLs collide in a unique index - PostgreSQL and MariaDB
+     * would let any number of quiz defaults through, which is the case that matters. Instead:
+     *   - writers of the same scope are serialised with the Moodle lock API;
+     *   - read, write and the removal of surplus rows run in one database transaction;
+     *   - after the write the scope is collapsed to the row every read returns, which also repairs
+     *     duplicates already in the table or caused by a lock factory that does not serialise.
      *
      * @param int      $cmid
      * @param int|null $qbeid  null for quiz-level default.
      * @param array    $elements
      * @param int      $userid
+     * @throws \moodle_exception When the scope lock cannot be obtained in time.
      */
     private static function upsert_record(
         int $cmid,
@@ -585,44 +619,90 @@ class config_manager {
         global $DB;
 
         $col  = self::get_config_column();
-        $now  = time();
         $json = json_encode($elements, JSON_THROW_ON_ERROR);
 
-        if ($qbeid === null) {
-            $where  = "cmid = :cmid AND questionbankentryid IS NULL";
-            $params = ['cmid' => $cmid];
-        } else {
-            $where  = "cmid = :cmid AND questionbankentryid = :qbeid";
-            $params = ['cmid' => $cmid, 'qbeid' => $qbeid];
+        $factory  = \core\lock\lock_config::get_lock_factory('local_stackmatheditor');
+        $resource = self::scope_lock_key($cmid, $qbeid);
+        $timeout  = (int) (get_config('local_stackmatheditor', 'locktimeout') ?: self::LOCK_TIMEOUT);
+        $lock     = $factory->get_lock($resource, max(1, $timeout));
+        if (!$lock) {
+            throw new \moodle_exception('locktimeout', 'moodle');
         }
 
-        $records = $DB->get_records_select(
-            self::TABLE,
-            $where,
-            $params,
-            'timemodified DESC'
-        );
+        try {
+            $transaction = $DB->start_delegated_transaction();
+            [$where, $params] = self::scope_condition($cmid, $qbeid);
+            $records = $DB->get_records_select(self::TABLE, $where, $params, self::READ_ORDER, '*', 0, 1);
+            $now = time();
 
-        if (!empty($records)) {
-            $keep               = array_shift($records);
-            $keep->$col         = $json;
-            $keep->usermodified = $userid;
-            $keep->timemodified = $now;
-            $DB->update_record(self::TABLE, $keep);
-
-            foreach ($records as $dupe) {
-                $DB->delete_records(self::TABLE, ['id' => $dupe->id]);
+            if ($records) {
+                $keep               = reset($records);
+                $keep->$col         = $json;
+                $keep->usermodified = $userid;
+                $keep->timemodified = max($now, (int) $keep->timemodified);
+                $DB->update_record(self::TABLE, $keep);
+            } else {
+                $record                      = new \stdClass();
+                $record->cmid                = $cmid;
+                $record->questionbankentryid = $qbeid; // Null for quiz-level defaults.
+                $record->$col                = $json;
+                $record->usermodified        = $userid;
+                $record->timecreated         = $now;
+                $record->timemodified        = $now;
+                $DB->insert_record(self::TABLE, $record);
             }
-        } else {
-            $record                      = new \stdClass();
-            $record->cmid                = $cmid;
-            $record->questionbankentryid = $qbeid; // Null for quiz-level defaults.
-            $record->$col                = $json;
-            $record->usermodified        = $userid;
-            $record->timecreated         = $now;
-            $record->timemodified        = $now;
-            $DB->insert_record(self::TABLE, $record);
+
+            self::collapse_scope($cmid, $qbeid);
+            $transaction->allow_commit();
+        } finally {
+            $lock->release();
         }
+    }
+
+    /**
+     * Reduce one scope to the row every read returns and delete the others.
+     *
+     * @param int      $cmid  Course module id (0 = global scope).
+     * @param int|null $qbeid Question bank entry id, null for the quiz-level default.
+     * @return int Number of deleted rows.
+     */
+    public static function collapse_scope(int $cmid, ?int $qbeid): int {
+        global $DB;
+        [$where, $params] = self::scope_condition($cmid, $qbeid);
+        $ids = $DB->get_fieldset_sql(
+            "SELECT id FROM {" . self::TABLE . "} WHERE {$where} ORDER BY " . self::READ_ORDER,
+            $params
+        );
+        $surplus = array_slice($ids, 1);
+        if ($surplus) {
+            $DB->delete_records_list(self::TABLE, 'id', $surplus);
+        }
+        return count($surplus);
+    }
+
+    /**
+     * SQL condition for one scope.
+     *
+     * @param int      $cmid  Course module id.
+     * @param int|null $qbeid Question bank entry id, null for the quiz-level default.
+     * @return array [where, params]
+     */
+    private static function scope_condition(int $cmid, ?int $qbeid): array {
+        if ($qbeid === null) {
+            return ['cmid = :cmid AND questionbankentryid IS NULL', ['cmid' => $cmid]];
+        }
+        return ['cmid = :cmid AND questionbankentryid = :qbeid', ['cmid' => $cmid, 'qbeid' => $qbeid]];
+    }
+
+    /**
+     * Lock resource name of one scope.
+     *
+     * @param int      $cmid  Course module id.
+     * @param int|null $qbeid Question bank entry id, null for the quiz-level default.
+     * @return string Resource key.
+     */
+    public static function scope_lock_key(int $cmid, ?int $qbeid): string {
+        return 'scope_' . $cmid . '_' . ($qbeid === null ? 'default' : $qbeid);
     }
 
 
@@ -677,7 +757,7 @@ class config_manager {
     }
 
     /**
-     * What to store for the activation of one level when its form is saved (#81).
+     * What to store for the activation of one level when its form is saved.
      *
      * A form always submits a value, because the checkbox is pre-filled with what the level
      * inherits. Storing that value unconditionally would turn every save - even one that only
@@ -714,12 +794,12 @@ class config_manager {
     }
 
     /**
-     * What to store for the student switch of one level when its form is saved (#73).
+     * What to store for the student switch of one level when its form is saved.
      *
      * While the editor is off at a level the checkbox is disabled, and a disabled field is not
-     * submitted. Reading that absence as "not allowed" used to overwrite the author's choice
-     * with 0, so switching the editor back on did not bring the switch back. The stored choice
-     * is kept instead; get_effective_student_toggle() already refuses the switch wherever the
+     * submitted. Reading that absence as "not allowed" would overwrite the author's choice with
+     * 0, and switching the editor back on would not bring the switch back. The stored choice is
+     * kept instead; get_effective_student_toggle() already refuses the switch wherever the
      * editor is off, so keeping it changes nothing until the editor returns.
      *
      * @param bool|null $existing The level's stored value, null when it has none.
@@ -748,12 +828,12 @@ class config_manager {
     }
 
     /**
-     * May any question on this page need the editor? (#80, #81)
+     * May any question on this page need the editor?
      *
-     * The page-level gate used to ask get_effective_enabled($cmid), which answers for the quiz
-     * and knows nothing about the questions in it. With "off by default, can be enabled per quiz
-     * or question", a quiz that stays off then stopped the runtime from loading at all - and a
-     * question that had been switched on explicitly never got the chance to say so.
+     * get_effective_enabled($cmid) is not a page-level gate: it answers for the quiz and knows
+     * nothing about the questions in it. With "off by default, can be enabled per quiz or
+     * question", a quiz that stays off would keep the runtime from loading at all - and a
+     * question switched on explicitly would never get the chance to say so.
      *
      * So this gate only decides what is true for the whole page. Mode 0 is off everywhere and
      * nothing below can change it; everything else loads the runtime and lets each slot decide.
@@ -765,7 +845,7 @@ class config_manager {
     }
 
     /**
-     * May students switch the editor off and on here? (#73)
+     * May students switch the editor off and on here?
      *
      * A subordinate permission: it is only ever asked when the editor is enabled at all, and any
      * level that says no is final. Lower levels may take the permission away, never give it back
@@ -806,10 +886,10 @@ class config_manager {
     }
 
     /**
-     * Site-wide permission for the student switch (#73).
+     * Site-wide permission for the student switch.
      *
-     * Defaults to true: the switch was available to everyone before this setting existed, and an
-     * upgrade must not quietly take it away.
+     * Defaults to true, so that a site that has never saved this setting keeps offering the
+     * switch; an upgrade must not quietly take it away.
      *
      * @return bool
      */
@@ -820,7 +900,7 @@ class config_manager {
     }
 
     /**
-     * Largest structure the choosers offer here (#76).
+     * Largest structure the choosers offer here.
      *
      * Ordinary inheritance, unlike the student switch: the most specific value wins, and a level
      * that says nothing passes the question up. 0, null and an empty string are not dimensions -

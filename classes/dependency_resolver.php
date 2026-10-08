@@ -17,9 +17,9 @@
 namespace local_stackmatheditor;
 
 /**
- * Are the CAS packages a toolbar group needs available in this question? (#66)
+ * Are the CAS packages a toolbar group needs available in this question?
  *
- * A verified mapping (#34) says an operation is supported in principle. It does not say the
+ * A verified mapping says an operation is supported in principle. It does not say the
  * function exists in the question at hand: `grad` needs Maxima's vect package, and a contrib
  * library has to be included by the question. Both are decisions of the question author, and
  * this class only reads them.
@@ -164,7 +164,7 @@ class dependency_resolver {
      * @param string $group Group key.
      * @param array $requires Requirements of the group.
      * @param string|null $variables Question variables, or null when unknown.
-     * @return array Status object as described in #66 §13.
+     * @return array Status object: group, available, unknown and the checked requirements.
      */
     public static function check_group(string $group, array $requires, ?string $variables): array {
         $requirements = [];
