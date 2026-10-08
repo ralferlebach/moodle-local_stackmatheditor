@@ -34,6 +34,15 @@ Version numbers follow `version.php`: the release name (`1.3.0`) and the build
 
 ### Fixed
 
+* Security: the configuration page shows and saves only questions of the quiz it is opened for. A
+  user who could manage one quiz could open the preview and the input semantics of any STACK
+  question on the site by changing the question id in the address (MDL Shield review,
+  2026-10-08).
+* The configuration link appears in the settings menu of an adaptive quiz whose question
+  categories contain a STACK question. The check behind it called a method that did not exist,
+  so the link never appeared.
+* The diagnostic script `cli/diagnose_legacy_config.php` runs; it stopped at its first line of
+  output.
 * Nested structures survive the conversion in both directions: a root inside a root, a function
   inside itself, absolute values and binomial coefficients within one another, at any depth. What
   cannot be converted is reported instead of being passed on as a plausible-looking but different

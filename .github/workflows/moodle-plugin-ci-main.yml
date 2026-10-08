@@ -105,11 +105,7 @@ jobs:
           restore-keys: composer-${{ runner.os }}-
       - name: Install Maxima and gnuplot (STACK CAS)
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq maxima gnuplot-nox
-          ver=$(maxima --version 2>&1 | grep -oP '\d+\.\d+(\.\d+)?' | head -1)
-          echo "Installed Maxima $ver"
-          dpkg --compare-versions "$ver" ge 5.46 || { echo "Maxima $ver < 5.46 - STACK will reject it."; exit 1; }
+          bash plugin/.github/install-maxima.sh
       - name: Initialise moodle-plugin-ci
         run: |
           composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
@@ -341,8 +337,7 @@ jobs:
           ini-values: max_input_vars=5000
       - name: Install Maxima and gnuplot (STACK CAS)
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq maxima gnuplot-nox
+          bash plugin/.github/install-maxima.sh
       - name: Initialise moodle-plugin-ci
         run: |
           composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
@@ -493,8 +488,7 @@ jobs:
 
       - name: Install Maxima (STACK)
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq maxima gnuplot-nox
+          bash plugin-new/.github/install-maxima.sh
 
       - name: Install a site with the previous release
         run: bash plugin-new/.github/build-test-site.sh

@@ -2926,3 +2926,116 @@ transcript will say where the focus went.
 
 `tests/load/__pycache__/` had been committed; `__pycache__/` is in `.gitignore` now, the
 directory has to be deleted by hand.
+
+
+## 75. Iteration 71 (2026100700, version unchanged): two flaky jobs, one cause each
+
+**Upgrade job** (main CI 37683136764, commit 758c5e7): cancelled by its 20-minute limit in
+"Install Maxima (STACK)". The log shows the step starting at 20:41:11 and nothing until the
+cancellation at 21:00:50 - `apt-get update -qq && apt-get install -y -qq` waiting on a mirror
+that does not answer, with `-qq` hiding which of the two it was. One run earlier the same job
+passed in three and a half minutes. Nothing in the upgrade path itself failed.
+
+The same two lines were in nine steps of six workflows. They are replaced by
+`.github/install-maxima.sh`: timeouts on every download, apt's own retries, IPv4 only, no
+prompt that can wait, each phase under a hard limit of 150 seconds and tried three times, the
+phase and attempt printed, and the Maxima version checked everywhere, not only in two of the
+workflows. Worst case about eighteen minutes instead of the job's whole limit; the usual case is
+unchanged. Run in the session: both phases first try, Maxima 5.46.0.
+
+**JMeter** (run 37683262811): `POST login: 9/10`, one HTTP 404. The result file shows which one:
+thread 2's login, sent while thread 1's - the first login in the life of the site - was still
+being processed (783 ms; every later login took about 40 ms). The 404 is a Moodle error page,
+21 799 bytes, not a missing file; the eight logins after it succeeded. The stricter verdict in
+`check_jtl.py` forgives a failed login only if the thread logs in later, and this plan stops a
+thread that could not log in - correctly, it has nothing to measure.
+
+`.github/warm-up-site.sh` now takes the site through its first login before a load plan
+starts: one seeded student who is not part of the plans logs in alone and opens the dashboard
+and the quiz. Used by the JMeter and the k6 workflow. Tried in the session against the local
+site, including the refusal of a wrong password.
+
+Not established: which exception Moodle raised - the result file does not keep response bodies,
+and ten runs against the local site, warm and with purged caches, did not produce it. The
+attempt to reproduce it on a site restored to its never-logged-in state was not completed. The
+warm-up removes the condition the failure occurred under; it is not proof of the cause.
+
+
+## 76. Iteration 72 (2026100700, version unchanged): Playwright - browser contexts that were never closed
+
+Playwright run 37687306651 (commit 758c5e7): 40 passed, 1 failed, 1 flaky, 4 did not run. Both
+failures are in `permissions.spec.js` and both are the same thing: `browser.newContext` answered
+"Protocol error (Target.createBrowserContext): Failed to create browser context", or did not
+answer until the test's three minutes were over. Run 22 had shown it once before, as a single
+"flaky" line. The run before and the run after this code passed.
+
+No assertion about the plugin failed. What the specs did: wherever a second user was needed,
+`(await browser.newContext()).newPage()` - and later `page.close()`, or nothing. That closes the
+page and leaves the context; Playwright closes only the context it created itself. The browser
+is one process for the whole run, and with `video: 'on'` and `trace: 'on'` every context that is
+left keeps its recorders. Counted from the code, in the order the files run: two from the axe
+spec, one from JSXGraph, three from performance, four from the permissions spec itself - about
+ten open contexts when the eleventh was refused.
+
+`helpers.js` has `openPage()`, `closePage()` and `closeLeftovers()` now. Every one of the
+nineteen places goes through them; contexts are remembered when they are opened, closed with
+their page, and whatever a failed test left behind is closed in `afterEach` (in the settings
+spec, whose three pages live for the whole file, in `afterAll`). No `browser.newContext` is left
+in a spec.
+
+Run in the session, whole suite: 46 passed, 1 skipped.
+
+Not established: that the left-over contexts were the cause and not merely a burden. The
+session runs without video and trace, so the refusal could not be provoked here. The leak is
+real and removed either way; the next runs show whether the refusals go with it.
+
+
+## 77. Iteration 73 (2026100700, version unchanged): MDL Shield review of 2026-10-08
+
+Review of commit 758c5e7, grade C (pass): one medium finding, three low. All four were confirmed
+in the code and fixed; for each the same kind of mistake was then looked for in every file.
+
+**1. Configuration page, broken access control (medium).** `configure.php` checked
+`mod/quiz:manage` on the quiz from `cmid` and then rendered whatever question bank entry the
+request named. New: `quiz_helper::quiz_uses_entry()`, called before anything about the entry is
+read; an entry the quiz does not use gets the same error as one that does not exist, so the page
+can be used neither to view nor to probe questions elsewhere. Checked against the running local
+site as administrator: the own question renders, quiz 1's question requested through quiz 2 and
+a non-existent entry both end on the same error page.
+
+The same pattern elsewhere - an id taken from the request and trusted because a page check came
+before:
+- `editor_injector` and `configure_injector` read `attempt` from the request.
+  `load_attempt_stack_slots()` takes the quiz now and returns nothing for an attempt of another
+  quiz. Core has checked the attempt on these pages already; the injectors no longer rely on it.
+- `editor_injector` on the question preview reads `id`. It checks
+  `question_has_capability_on(..., 'use')` itself now, as the preview page does.
+- The external function was already fail-closed (`load_quiz_qbeids`), as the review notes.
+
+**2. Undefined method in `lib.php` (low).** `quiz_helper::adaptivequiz_has_stack_questions()`
+did not exist; the catch-all around the call turned the error into a configuration link that
+never appeared for adaptive quizzes. Implemented against mod_adaptivequiz's own schema
+(`adaptivequiz_question.instance`, `.questioncategory` - read from the module's `install.xml`),
+returning false where the module is not installed.
+
+The same pattern elsewhere: eleven catch-alls, all logging programming errors to a developer log
+at most. `quiz_helper::caught()` reports an `\Error` (undefined method or function, type error)
+through `debugging()` - a failure in PHPUnit and Behat, silent in production - and keeps runtime
+exceptions quiet as before; every catch-all uses it. A tokenizer scan of all PHP files resolving
+every static call to the plugin's own classes found this one method and nothing else (486 calls);
+it is a PHPUnit test now. A scan for functions that need a library outside the bootstrap found
+`stack_inputs` calling `question_has_capability_on()` inside a catch-all without loading
+`questionlib.php` - it worked only because the one caller happened to load it. It loads it now.
+
+**3. CLI script without `clilib.php` (low).** Fixed; the script was run against the local site.
+A test checks every file that defines `CLI_SCRIPT` and calls a `cli_*` helper.
+
+**4. Wrong `@package` in two tools (low).** Fixed; a test checks every docblock `@package`.
+
+**Note from the review, privacy provider:** the export read `allowed_elements` directly while the
+plugin reads and writes through its column helper. It uses the helper now.
+
+Tests: `tests/unit/review_2026_10_08_test.php`, nine tests - entry membership, the order of the
+checks in `configure.php`, an attempt bound to its quiz, the adaptive-quiz query against a
+temporary table with the module's definition, the reporter, and the three code-wide scans.
+PHPUnit 189 green, Playwright 46 green and 1 skipped, PHPCS clean. Not run: Behat.

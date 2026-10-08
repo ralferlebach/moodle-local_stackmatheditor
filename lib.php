@@ -100,10 +100,8 @@ function local_stackmatheditor_extend_settings_navigation(
                 return;
             }
         } catch (\Throwable $e) {
-            // Suppress the link on any DB or class-loading error.
-            \local_stackmatheditor\quiz_helper::dbg(
-                'extend_settings_navigation: adaptivequiz STACK check failed: ' . $e->getMessage()
-            );
+            // Suppress the link on any DB or class-loading error; a programming error is reported.
+            \local_stackmatheditor\quiz_helper::caught($e, 'extend_settings_navigation: adaptivequiz STACK check');
             return;
         }
     }

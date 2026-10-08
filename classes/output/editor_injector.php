@@ -168,7 +168,11 @@ class editor_injector {
             return [];
         }
 
-        $stackdata = quiz_helper::load_attempt_stack_slots($attemptid);
+        // The attempt has to be one of this quiz's: the configuration is read for $cmid.
+        $stackdata = quiz_helper::load_attempt_stack_slots(
+            $attemptid,
+            quiz_helper::get_quiz_instance_id($cmid)
+        );
         if (empty($stackdata['slotmap'])) {
             return [];
         }
@@ -207,8 +211,21 @@ class editor_injector {
      * @return array Slot => config.
      */
     private static function resolve_preview_configs(int $cmid): array {
+        global $CFG, $DB;
+
         $questionid = optional_param('id', 0, PARAM_INT);
-        if (!$questionid) {
+        if (!$questionid || !$DB->record_exists('question', ['id' => $questionid])) {
+            return [];
+        }
+        // The preview page has checked this already; the injector does not rely on it, because it
+        // takes the question id from the request on its own (MDL Shield, 2026-10-08).
+        require_once($CFG->libdir . '/questionlib.php');
+        try {
+            if (!question_has_capability_on($questionid, 'use')) {
+                return [];
+            }
+        } catch (\Throwable $e) {
+            quiz_helper::caught($e, 'resolve_preview_configs');
             return [];
         }
         $qbeid = config_manager::resolve_qbeid($questionid);

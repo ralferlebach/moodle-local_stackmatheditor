@@ -105,4 +105,56 @@ async function open(page, url) {
     await expect(page.locator('body')).not.toContainText(/Coding error|Exception|Debug info/i);
 }
 
-module.exports = {env, fillStable, loginAs, open};
+// Contexts opened through openPage() and not closed yet.
+const opened = new Set();
+
+/**
+ * Open a page in a browser context of its own.
+ *
+ * Every spec that needs a second user - an administrator changing a setting, a student looking
+ * at the result - used `(await browser.newContext()).newPage()` and later closed the page. That
+ * leaves the context: Playwright closes only the one it created itself. With video and trace
+ * switched on, every left-over context keeps a recorder running, and the browser is the same
+ * one for the whole run. By the time the permissions spec asked for its next context there were
+ * about ten of them, and the request was answered with "Failed to create browser context" or not
+ * at all - on some runs, not on others. Contexts opened here are remembered, so they can be
+ * closed whatever happens to the test.
+ *
+ * @param {import('@playwright/test').Browser} browser The browser.
+ * @param {Object} [options] Options for browser.newContext().
+ * @returns {Promise<import('@playwright/test').Page>} A page in a new context.
+ */
+async function openPage(browser, options) {
+    const context = await browser.newContext(options);
+
+    opened.add(context);
+    return context.newPage();
+}
+
+/**
+ * Close a page together with its context.
+ *
+ * @param {import('@playwright/test').Page} page A page from openPage().
+ * @returns {Promise<void>}
+ */
+async function closePage(page) {
+    const context = page.context();
+
+    opened.delete(context);
+    await context.close();
+}
+
+/**
+ * Close every context openPage() opened and nobody closed - a test that failed half way, say.
+ * For `test.afterEach` or `test.afterAll`.
+ *
+ * @returns {Promise<void>}
+ */
+async function closeLeftovers() {
+    const contexts = Array.from(opened);
+
+    opened.clear();
+    await Promise.all(contexts.map((context) => context.close().catch(() => undefined)));
+}
+
+module.exports = {env, fillStable, loginAs, open, openPage, closePage, closeLeftovers};

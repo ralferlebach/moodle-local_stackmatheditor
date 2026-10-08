@@ -99,6 +99,7 @@ class quiz_helper {
             $cols   = $DB->get_columns('quiz_slots');
             $result = isset($cols['questionbankentryid']);
         } catch (\Throwable $e) {
+            self::caught($e, 'slots_have_qbeid');
             $result = false;
         }
         return $result;
@@ -126,7 +127,7 @@ class quiz_helper {
                 ? self::load_questions_direct($quizinstanceid)
                 : self::load_questions_via_refs($quizinstanceid);
         } catch (\Throwable $e) {
-            self::dbg('load_quiz_stack_questions: ' . $e->getMessage());
+            self::caught($e, 'load_quiz_stack_questions');
         }
 
         self::dbg('load_quiz_stack_questions: ' . count($data) . ' STACK questions');
@@ -180,11 +181,83 @@ class quiz_helper {
             }
         } catch (\Throwable $e) {
             // A quiz whose slots cannot be read scopes to nothing, never to everything.
-            self::dbg('load_quiz_qbeids: ' . $e->getMessage());
+            self::caught($e, 'load_quiz_qbeids');
             return [];
         }
 
         return $qbeids;
+    }
+
+    /**
+     * Does a quiz use a question bank entry?
+     *
+     * The configuration page takes the entry from the request. Without this check a user who
+     * may manage one quiz could open the configuration - and with it a rendered preview and the
+     * input semantics - of any STACK question on the site (MDL Shield, 2026-10-08).
+     *
+     * @param int $quizinstanceid Quiz instance id.
+     * @param int $qbeid Question bank entry id.
+     * @return bool True only if one of the quiz's slots refers to the entry.
+     */
+    public static function quiz_uses_entry(int $quizinstanceid, int $qbeid): bool {
+        if ($quizinstanceid <= 0 || $qbeid <= 0) {
+            return false;
+        }
+
+        return isset(self::load_quiz_qbeids($quizinstanceid)[$qbeid]);
+    }
+
+    /**
+     * Does an adaptive quiz draw from a question category that holds a STACK question?
+     *
+     * mod_adaptivequiz has no slots: an instance names question categories in
+     * {adaptivequiz_question}, and the questions are whatever those categories contain. The
+     * settings navigation offers the configuration link only when one of them is a STACK
+     * question. This method was called there for a long time without existing; the catch-all
+     * around the call turned the error into a link that never appeared (MDL Shield, 2026-10-08).
+     *
+     * @param int $instanceid Adaptive quiz instance id.
+     * @return bool True if at least one question in the instance's categories is a STACK question.
+     */
+    public static function adaptivequiz_has_stack_questions(int $instanceid): bool {
+        global $DB;
+
+        // Without mod_adaptivequiz there is nothing to look at.
+        if ($instanceid <= 0 || !$DB->get_manager()->table_exists('adaptivequiz_question')) {
+            return false;
+        }
+
+        $sql = "SELECT 1
+                  FROM {adaptivequiz_question} aq
+                  JOIN {question_bank_entries} qbe ON qbe.questioncategoryid = aq.questioncategory
+                  JOIN {question_versions} qv ON qv.questionbankentryid = qbe.id
+                  JOIN {question} q ON q.id = qv.questionid
+                 WHERE aq.instance = :instance
+                   AND q.qtype = :qtype";
+
+        return $DB->record_exists_sql($sql, ['instance' => $instanceid, 'qtype' => 'stack']);
+    }
+
+    /**
+     * Report something a catch-all caught.
+     *
+     * The catch-alls around page hooks and lookups exist so that a database or loading problem
+     * never breaks a quiz page for a student. They also caught a call to a method that did not
+     * exist, and the only trace of it was a developer log line nobody read. A programming error
+     * (\Error: undefined method or function, type error) is therefore reported through
+     * debugging() - visible on a development site and a failure in PHPUnit and Behat, silent on a
+     * production site like everything else here.
+     *
+     * @param \Throwable $e What was caught.
+     * @param string $where Where it was caught.
+     * @return void
+     */
+    public static function caught(\Throwable $e, string $where): void {
+        if ($e instanceof \Error) {
+            debugging("local_stackmatheditor: {$where}: " . get_class($e) . ': ' . $e->getMessage(), DEBUG_DEVELOPER);
+            return;
+        }
+        self::dbg("{$where}: " . $e->getMessage());
     }
 
     /**
@@ -344,20 +417,26 @@ class quiz_helper {
      *   qbeidmap (qbeid => questionid).
      * Result is cached per request.
      *
+     * The attempt id comes from the request. With a quiz instance id the attempt has to belong to
+     * that quiz, or the result is empty: the page's own quiz decides which configuration applies,
+     * and an attempt id from elsewhere must not mix another quiz's questions into it.
+     *
      * @param int $attemptid Quiz attempt ID.
+     * @param int $quizinstanceid Quiz the attempt has to belong to; 0 for no check.
      * @return array Slot mapping data.
      */
-    public static function load_attempt_stack_slots(int $attemptid): array {
-        if (isset(self::$attemptcache[$attemptid])) {
-            return self::$attemptcache[$attemptid];
+    public static function load_attempt_stack_slots(int $attemptid, int $quizinstanceid = 0): array {
+        $key = $attemptid . ':' . $quizinstanceid;
+        if (isset(self::$attemptcache[$key])) {
+            return self::$attemptcache[$key];
         }
         $result = ['slotmap' => [], 'qbeids' => [], 'qbeidmap' => []];
         try {
-            $result = self::do_load_attempt_slots($attemptid);
+            $result = self::do_load_attempt_slots($attemptid, $quizinstanceid);
         } catch (\Throwable $e) {
-            self::dbg('load_attempt_stack_slots: ' . $e->getMessage());
+            self::caught($e, 'load_attempt_stack_slots');
         }
-        self::$attemptcache[$attemptid] = $result;
+        self::$attemptcache[$key] = $result;
         return $result;
     }
 
@@ -365,14 +444,18 @@ class quiz_helper {
      * Internal implementation for load_attempt_stack_slots().
      *
      * @param int $attemptid Quiz attempt ID.
+     * @param int $quizinstanceid Quiz the attempt has to belong to; 0 for no check.
      * @return array Slot mapping data.
      */
-    private static function do_load_attempt_slots(int $attemptid): array {
+    private static function do_load_attempt_slots(int $attemptid, int $quizinstanceid = 0): array {
         global $DB;
         $result = ['slotmap' => [], 'qbeids' => [], 'qbeidmap' => []];
 
         $attempt = $DB->get_record('quiz_attempts', ['id' => $attemptid]);
         if (!$attempt) {
+            return $result;
+        }
+        if ($quizinstanceid > 0 && (int) $attempt->quiz !== $quizinstanceid) {
             return $result;
         }
 
@@ -426,6 +509,7 @@ class quiz_helper {
             $context = \context_module::instance($cmid);
             return has_capability('mod/quiz:manage', $context);
         } catch (\Throwable $e) {
+            self::caught($e, 'can_manage_quiz');
             return false;
         }
     }
@@ -453,6 +537,7 @@ class quiz_helper {
             $url = $PAGE->url->out(false);
             return ($url !== '') ? $url : $fallback;
         } catch (\Throwable $e) {
+            self::caught($e, 'get_return_url');
             return $fallback;
         }
     }

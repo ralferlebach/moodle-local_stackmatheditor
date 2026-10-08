@@ -85,7 +85,11 @@ if (!$quizmode) {
     if ($qbeid <= 0 && $questionid > 0) {
         $qbeid = config_manager::resolve_qbeid($questionid);
     }
-    if (!$qbeid) {
+    // Managing the quiz given by cmid is permission for the questions of that quiz, not for any
+    // question on the site. The entry has to be one the quiz uses - checked before anything is
+    // read about it, with the same answer for "not in this quiz" and "does not exist", so the page
+    // can neither show nor confirm a question from another course (MDL Shield, 2026-10-08).
+    if (!$qbeid || !\local_stackmatheditor\quiz_helper::quiz_uses_entry((int) $activity->id, (int) $qbeid)) {
         throw new \moodle_exception('cannotresolveqbeid', 'local_stackmatheditor');
     }
 
@@ -184,6 +188,7 @@ if (!$quizmode && $questionrecord) {
 
         $questionpreviewhtml = $quba->render_question($slot, $options);
     } catch (\Throwable $e) {
+        \local_stackmatheditor\quiz_helper::caught($e, 'configure question preview');
         $questionpreviewhtml = '';
     }
 }

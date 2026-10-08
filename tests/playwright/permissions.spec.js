@@ -26,7 +26,7 @@
  */
 
 const {test, expect} = require('@playwright/test');
-const {env, loginAs} = require('./helpers');
+const {env, loginAs, openPage, closePage, closeLeftovers} = require('./helpers');
 
 // Local reference: 30-60 s per test.
 test.describe.configure({mode: 'serial', timeout: 180000});
@@ -41,7 +41,7 @@ const ADMIN = () => ({user: env('SME_ADMIN_USER', 'admin'), pass: env('SME_ADMIN
  * @returns {Promise<void>}
  */
 async function siteSettings(browser, settings) {
-    const page = await (await browser.newContext()).newPage();
+    const page = await openPage(browser);
     const admin = ADMIN();
 
     await loginAs(page, admin.user, admin.pass);
@@ -75,7 +75,7 @@ async function siteSettings(browser, settings) {
     );
 
     await page.getByRole('button', {name: 'Save changes'}).click();
-    await page.close();
+    await closePage(page);
 }
 
 /**
@@ -86,7 +86,7 @@ async function siteSettings(browser, settings) {
  * @returns {Promise<void>}
  */
 async function quizSettings(browser, values) {
-    const page = await (await browser.newContext()).newPage();
+    const page = await openPage(browser);
     const admin = ADMIN();
 
     await loginAs(page, admin.user, admin.pass);
@@ -117,7 +117,7 @@ async function quizSettings(browser, values) {
     }
 
     await page.getByRole('button', {name: /Save/}).click();
-    await page.close();
+    await closePage(page);
 }
 
 /**
@@ -139,6 +139,9 @@ async function attempt(page, who) {
     await page.waitForSelector('.sme-mq-container, .sme-toolbar', {timeout: 60000});
 }
 
+// A test that fails half way does not reach its closePage(); this does.
+test.afterEach(closeLeftovers);
+
 // The load quiz is shared with the other specs. Hand it back as the seed made it: switch
 // allowed, chooser limit inherited - the last cases here leave it with neither.
 test.afterAll(async({browser}) => {
@@ -151,7 +154,7 @@ test.describe('#73: the student switch is a permission', () => {
         await siteSettings(browser, {enabled: 1, studentToggle: true, maxDimension: 5});
         await quizSettings(browser, {studentToggle: true});
 
-        const page = await (await browser.newContext()).newPage();
+        const page = await openPage(browser);
         await attempt(page, 'sme_student07');
 
         const toggle = page.locator('.sme-toggle input[type="checkbox"]').first();
@@ -192,7 +195,7 @@ test.describe('#73: the student switch is a permission', () => {
         });
         expect(latex).toContain('2+3');
 
-        await page.close();
+        await closePage(page);
     });
 
     test('a stored preference does not survive the author taking the permission away',
@@ -202,8 +205,7 @@ test.describe('#73: the student switch is a permission', () => {
             // editor, with no switch: a preference is not a permission.
             await siteSettings(browser, {enabled: 1, studentToggle: false, maxDimension: 5});
 
-            const context = await browser.newContext();
-            const page = await context.newPage();
+            const page = await openPage(browser);
             await attempt(page, 'sme_student07');
 
             await page.evaluate(() => {
@@ -219,20 +221,20 @@ test.describe('#73: the student switch is a permission', () => {
             await expect(page.locator('.sme-toggle input[type="checkbox"]')).toHaveCount(0);
             await expect(page.locator('.sme-mq-container').first()).toBeVisible();
 
-            await page.close();
+            await closePage(page);
         });
 
     test('the quiz can take the permission away when the site allows it', async({browser}) => {
         await siteSettings(browser, {enabled: 1, studentToggle: true, maxDimension: 5});
         await quizSettings(browser, {studentToggle: false});
 
-        const page = await (await browser.newContext()).newPage();
+        const page = await openPage(browser);
         await attempt(page, 'sme_student08');
 
         await expect(page.locator('.sme-toggle input[type="checkbox"]')).toHaveCount(0);
         await expect(page.locator('.sme-mq-container').first()).toBeVisible();
 
-        await page.close();
+        await closePage(page);
     });
 });
 
@@ -269,7 +271,7 @@ test.describe('#76: the chooser limit is inherited', () => {
         await siteSettings(browser, {enabled: 1, studentToggle: true, maxDimension: 5});
         await quizSettings(browser, {maxDimension: ''});
 
-        const page = await (await browser.newContext()).newPage();
+        const page = await openPage(browser);
         await attempt(page, 'sme_student09');
 
         const size = await chooserSize(page);
@@ -278,14 +280,14 @@ test.describe('#76: the chooser limit is inherited', () => {
         // The vector chooser offers 2..max.
         expect(size.vector).toBe(4);
 
-        await page.close();
+        await closePage(page);
     });
 
     test('a quiz override wins over the site value', async({browser}) => {
         await siteSettings(browser, {enabled: 1, studentToggle: true, maxDimension: 5});
         await quizSettings(browser, {maxDimension: 7});
 
-        const page = await (await browser.newContext()).newPage();
+        const page = await openPage(browser);
         await attempt(page, 'sme_student10');
 
         const size = await chooserSize(page);
@@ -293,14 +295,14 @@ test.describe('#76: the chooser limit is inherited', () => {
         expect(size.columns).toBe(7);
         expect(size.vector).toBe(6);
 
-        await page.close();
+        await closePage(page);
     });
 
     test('the keyboard cannot select beyond the limit', async({browser}) => {
         await siteSettings(browser, {enabled: 1, studentToggle: true, maxDimension: 5});
         await quizSettings(browser, {maxDimension: 3});
 
-        const page = await (await browser.newContext()).newPage();
+        const page = await openPage(browser);
         await attempt(page, 'sme_student11');
 
         await page.locator('.sme-tb-btn[data-command="matrix"]').first().click();
@@ -322,12 +324,12 @@ test.describe('#76: the chooser limit is inherited', () => {
         // Three rows: two line breaks inside the matrix environment, and no more.
         expect((latex.match(/\\\\/g) || []).length).toBe(2);
 
-        await page.close();
+        await closePage(page);
     });
 
     test('the field is disabled without a structured group, and keeps its value',
         async({browser}) => {
-            const page = await (await browser.newContext()).newPage();
+            const page = await openPage(browser);
             const admin = ADMIN();
 
             await loginAs(page, admin.user, admin.pass);
@@ -354,6 +356,6 @@ test.describe('#76: the chooser limit is inherited', () => {
             await expect(field).toBeEnabled();
             await expect(field).toHaveValue('6');
 
-            await page.close();
+            await closePage(page);
         });
 });

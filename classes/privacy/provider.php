@@ -137,6 +137,7 @@ class provider implements core_userlist_provider, metadata_provider, request_pro
                 continue;
             }
 
+            $column = \local_stackmatheditor\config_manager::get_config_column_public();
             $data = [];
             foreach ($records as $record) {
                 $data[] = (object)[
@@ -145,7 +146,8 @@ class provider implements core_userlist_provider, metadata_provider, request_pro
                     'questionbankentryid' => $record->questionbankentryid === null
                         ? null
                         : (int) $record->questionbankentryid,
-                    'allowed_elements'    => $record->allowed_elements,
+                    // Read through the same column helper the plugin writes with.
+                    'allowed_elements'    => $record->{$column} ?? null,
                     'usermodified'        => (int) $record->usermodified,
                     'timecreated'         => transform::datetime($record->timecreated),
                     'timemodified'        => transform::datetime($record->timemodified),

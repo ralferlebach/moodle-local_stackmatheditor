@@ -129,12 +129,19 @@ class stack_inputs {
             return null;
         }
 
+        // The page that calls this happens to load the question library; this method does not
+        // rely on it. A missing function inside the catch-all below would otherwise mean a link
+        // that silently never appears.
+        global $CFG;
+        require_once($CFG->libdir . '/questionlib.php');
+
         try {
             if (!question_has_capability_on($questionid, 'edit')) {
                 return null;
             }
         } catch (\Throwable $e) {
             // No category, no context, no answer: no link.
+            quiz_helper::caught($e, 'stack_inputs edit link');
             return null;
         }
 

@@ -26,7 +26,7 @@
  */
 
 const {test, expect} = require('@playwright/test');
-const {env, loginAs} = require('./helpers');
+const {env, loginAs, openPage, closePage} = require('./helpers');
 
 // Local reference: 40-60 s per test.
 test.describe.configure({mode: 'serial', timeout: 120000});
@@ -42,7 +42,7 @@ test.describe.configure({mode: 'serial', timeout: 120000});
  * @returns {Promise<void>}
  */
 async function enableEditorEverywhere(browser) {
-    const admin = await (await browser.newContext()).newPage();
+    const admin = await openPage(browser);
 
     await loginAs(admin, env('SME_ADMIN_USER', 'admin'), env('SME_ADMIN_PASS'));
     await admin.goto('/admin/settings.php?section=local_stackmatheditor');
@@ -54,7 +54,7 @@ async function enableEditorEverywhere(browser) {
         await groups.locator('option').evaluateAll((options) => options.map((o) => o.value))
     );
     await admin.getByRole('button', {name: 'Save changes'}).click();
-    await admin.close();
+    await closePage(admin);
 }
 
 /**

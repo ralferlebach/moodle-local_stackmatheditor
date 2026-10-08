@@ -212,7 +212,7 @@ class hook_callbacks {
                     editor_injector::inject($cmid);
                     quiz_helper::dbg('editor injected: cmid=' . $cmid);
                 } catch (\Throwable $e) {
-                    quiz_helper::dbg('editor injection error: ' . $e->getMessage());
+                    quiz_helper::caught($e, 'editor injection');
                 }
             }
         }
@@ -237,7 +237,7 @@ class hook_callbacks {
                     configure_injector::inject($cmid);
                 }
             } catch (\Throwable $e) {
-                quiz_helper::dbg('configure injection error: ' . $e->getMessage());
+                quiz_helper::caught($e, 'configure injection');
             }
         }
     }

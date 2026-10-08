@@ -29,7 +29,7 @@
  */
 
 const {test, expect} = require('@playwright/test');
-const {env, loginAs} = require('./helpers');
+const {env, loginAs, openPage, closePage} = require('./helpers');
 
 // Local reference: 40-70 s per test. A slider question is slow to instantiate.
 test.describe.configure({mode: 'serial', timeout: 180000});
@@ -41,13 +41,13 @@ test.describe.configure({mode: 'serial', timeout: 180000});
  * @returns {Promise<void>}
  */
 async function enableEditor(browser) {
-    const admin = await (await browser.newContext()).newPage();
+    const admin = await openPage(browser);
 
     await loginAs(admin, env('SME_ADMIN_USER', 'admin'), env('SME_ADMIN_PASS'));
     await admin.goto('/admin/settings.php?section=local_stackmatheditor');
     await admin.locator('select[name="s_local_stackmatheditor_enabled"]').selectOption('1');
     await admin.getByRole('button', {name: 'Save changes'}).click();
-    await admin.close();
+    await closePage(admin);
 }
 
 /**
