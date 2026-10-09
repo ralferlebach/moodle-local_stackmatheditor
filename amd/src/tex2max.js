@@ -81,10 +81,25 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     ];
 
     /**
+     * Words this converter writes for a LaTeX symbol (\nabla, \partial, \hbar, \dagger).
+     *
+     * They stand for one symbol, like a Greek letter, so the single-letter modes must not split
+     * them: \nabla is "nabla", never "n*a*b*l*a" (#45, #46).
+     *
+     * @type {string[]}
+     */
+    var SYMBOL_WORDS = ['nabla', 'del', 'hbar', 'dagger'];
+
+    /**
      * Maxima function names that are always recognised, independent of the
      * server-side definitions. Merged with defs.functionNames so that a
      * missing or partial definitions payload can never turn a function call
      * such as sqrt(x) into an implicit product (s*q*r*t*(x)).
+     *
+     * Every name this converter writes itself before the variable-mode pass belongs here:
+     * the structures it builds (matrix, determinant, the geometry functions) and the names its
+     * toolbar templates spell out (ident, transpose). The site-configured names (norm function,
+     * differential operators) are added from the definitions by getFunctionNameSet().
      *
      * @type {string[]}
      */
@@ -93,9 +108,16 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
         'arcsin', 'arccos', 'arctan', 'asin', 'acos', 'atan',
         'sinh', 'cosh', 'tanh', 'binomial', 'integrate', 'diff',
+        // Maxima's mod is a function, not an infix operator: mod(7,3), never "mod (7,3)".
+        'mod',
         // Maxima functions the editor has to know as complete tokens: without them
         // max(x,y) picks up an implicit multiplication star before the bracket.
-        'max', 'min'
+        'max', 'min',
+        // Linear algebra: matrix environments, |A| and \det, and the identity / transpose
+        // templates.
+        'matrix', 'determinant', 'ident', 'transpose',
+        // Elementary geometry (STACK's geometry.mac).
+        'Distance', 'Angle'
     ];
 
     /**
@@ -160,13 +182,28 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     /**
      * Return a word-set of function names: built-in list plus defs.
      *
+     * The norm function and the differential operators are written by this converter under the
+     * names the site configured, so those names are function names as well.
+     *
      * @param {Object} defs Definitions object from the server.
      * @returns {Object} Word set of function names.
      */
     function getFunctionNameSet(defs) {
         var d = defs || {};
+        var configured = [];
+        var operators = d.diffOps || {};
+
+        if (d.normFunction) {
+            configured.push(d.normFunction);
+        }
+        Object.keys(operators).forEach(function(semantic) {
+            if (typeof operators[semantic] === 'string') {
+                configured.push(operators[semantic]);
+            }
+        });
+
         return buildWordSet(
-            BUILTIN_FUNCTION_NAMES.concat(d.functionNames || d.functions || [])
+            BUILTIN_FUNCTION_NAMES.concat(d.functionNames || d.functions || [], configured)
         );
     }
 
@@ -186,6 +223,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         var protectedWords = Object.create(null);
         var sets = [
             buildWordSet(MAXIMA_OPERATOR_KEYWORDS),
+            buildWordSet(SYMBOL_WORDS),
             getFunctionNameSet(d),
             buildWordSet(d.constants || []),
             buildWordSet(d.greek || []),
@@ -284,8 +322,12 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     /**
      * Tokenize a LaTeX string for implicit multiplication detection.
      *
+     * A token that follows a token boundary or a typed space carries separated: true. Two
+     * operands that would otherwise read as one (x^2 and 3 after x^{2}3, x_1 and 2 after x_{1}2)
+     * are kept apart by that flag.
+     *
      * @param {string} s Preprocessed LaTeX string.
-     * @returns {Array} Array of token objects with type and value.
+     * @returns {Array} Array of token objects with type, value and separated.
      */
     function tokenizeForImplicitMultiplication(s) {
         var tokens = [];
@@ -293,64 +335,52 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         var ch;
         var rest;
         var m;
+        var separated = false;
+        var push = function(type, value) {
+            tokens.push({type: type, value: value, separated: separated});
+            separated = false;
+            i += value.length;
+        };
 
         while (i < s.length) {
             ch = s.charAt(i);
 
-            if (/\s/.test(ch) || ch === BOUNDARY || ch === EXPLICIT_SPACE) {
+            if (ch === BOUNDARY || ch === EXPLICIT_SPACE) {
+                separated = true;
+                i++;
+                continue;
+            }
+            if (/\s/.test(ch)) {
                 i++;
                 continue;
             }
 
             rest = s.substring(i);
 
-            // Placeholder of an already converted structure (integral): one atomic operand.
-            m = rest.match(/^\uE050\d+\uE051/);
+            // A placeholder of an already converted structure (integral), a %-constant or an
+            // identifier: one operand each.
+            m = rest.match(/^\uE050\d+\uE051/) || rest.match(/^%[a-zA-Z]+/)
+                || rest.match(/^[a-zA-Z]+(?:_[a-zA-Z0-9]+)?/);
             if (m) {
-                tokens.push({type: 'ident', value: m[0]});
-                i += m[0].length;
+                push('ident', m[0]);
                 continue;
             }
 
             m = rest.match(/^\d+(?:[.,]\d+)?/);
             if (m) {
-                tokens.push({type: 'number', value: m[0]});
-                i += m[0].length;
-                continue;
-            }
-
-            m = rest.match(/^%[a-zA-Z]+/);
-            if (m) {
-                tokens.push({type: 'ident', value: m[0]});
-                i += m[0].length;
-                continue;
-            }
-
-            m = rest.match(/^[a-zA-Z]+(?:_[a-zA-Z0-9]+)?/);
-            if (m) {
-                tokens.push({type: 'ident', value: m[0]});
-                i += m[0].length;
+                push('number', m[0]);
                 continue;
             }
 
             if (ch === '(') {
-                tokens.push({type: 'open', value: ch});
-                i++;
-                continue;
+                push('open', ch);
+            } else if (ch === ')') {
+                push('close', ch);
+            } else if (ch === ',') {
+                push('comma', ch);
+            } else {
+                push('other', ch);
             }
-            if (ch === ')') {
-                tokens.push({type: 'close', value: ch});
-                i++;
-                continue;
-            }
-            if (ch === ',') {
-                tokens.push({type: 'comma', value: ch});
-                i++;
-                continue;
-            }
-
-            tokens.push({type: 'other', value: ch});
-            i++;
         }
 
         return tokens;
@@ -375,6 +405,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         var protectedWords = buildProtectedWords(defs);
         var out = [];
         var i;
+        var j;
         var tok;
         var value;
         var parts;
@@ -403,9 +434,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
             }
 
             parts = value.split('');
-            parts.forEach(function(part) {
-                out.push({type: 'ident', value: part});
-            });
+            for (j = 0; j < parts.length; j++) {
+                // The first letter inherits the boundary in front of the whole word.
+                out.push({type: 'ident', value: parts[j], separated: j === 0 && !!tok.separated});
+            }
         }
 
         return out;
@@ -476,6 +508,12 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         if (prev.type === 'number' && curr.type === 'open') {
             return true;
         }
+        // A number after a boundary is a factor of its own: x^{2}3 is x^2 times 3, and
+        // x_{1}2 is x_1 times 2. Without a boundary the digits belong to the operand before
+        // them (x2 stays the identifier x2).
+        if ((prev.type === 'ident' || prev.type === 'number') && curr.type === 'number') {
+            return !!curr.separated;
+        }
         if (prev.type === 'ident' && curr.type === 'ident') {
             return true;
         }
@@ -494,7 +532,9 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
      *
      * At keyword operator boundaries (or, and, not, …) a plain space is
      * always used regardless of the configured separator, so that keywords
-     * are never glued to adjacent tokens with a "*" sign.
+     * are never glued to adjacent tokens with a "*" sign. A keyword that is also a function
+     * name and is applied to a bracket is a call, not an operator: a site can name its
+     * divergence "div", and div(F) has to stay a call.
      *
      * @param {string} s       Preprocessed string.
      * @param {Object} options Conversion options.
@@ -506,6 +546,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         var separator = getImplicitSeparator(mode);
         var tokens;
         var operatorKeywords;
+        var functionNames;
         var out = '';
         var i;
         var prevIsKeyword;
@@ -516,13 +557,16 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         }
 
         operatorKeywords = buildWordSet(MAXIMA_OPERATOR_KEYWORDS);
+        functionNames = getFunctionNameSet(opts.defs);
         tokens = tokenizeForImplicitMultiplication(s);
         tokens = expandIdentifiers(tokens, opts);
 
         for (i = 0; i < tokens.length; i++) {
             if (i > 0) {
+                // A function call: nothing goes between the name and its bracket.
                 prevIsKeyword = tokens[i - 1].type === 'ident'
-                    && operatorKeywords[tokens[i - 1].value];
+                    && operatorKeywords[tokens[i - 1].value]
+                    && !(tokens[i].type === 'open' && functionNames[tokens[i - 1].value]);
                 currIsKeyword = tokens[i].type === 'ident'
                     && operatorKeywords[tokens[i].value];
 
@@ -850,6 +894,16 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
             var applied = new RegExp(name + '(\\s*(?:\\\\left)?\\()', 'g');
             var bare = new RegExp(name, 'g');
 
+            // MathQuill keeps \operatorname{rot} only as the letters "rot", so the label applied
+            // to a bracket is the operator too - but only where the site has a CAS name for it.
+            // Without one, "rot(F)" stays what the student typed.
+            if (operators[semantic]) {
+                s = s.replace(
+                    new RegExp('(^|[^A-Za-z0-9_\\\\{])' + label + '(\\s*(?:\\\\left)?\\()', 'g'),
+                    '$1' + operators[semantic] + '$2'
+                );
+            }
+
             if (!bare.test(s)) {
                 return;
             }
@@ -877,8 +931,9 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // Laplace operator: a Delta with an operand. Without a bracket it is the Greek letter.
         if (/\\Delta\s*(?:\\left)?\(/.test(s)) {
             if (!operators.laplacian) {
-                local.problems.push('diffop_unavailable');
-                s = s.replace(/\\Delta(\s*(?:\\left)?\()/g, '$1');
+                // No Laplace operator on this site, so no button writes one: a Delta in front
+                // of a bracket is what the student typed, the Greek letter (#45).
+                return s;
             } else {
                 s = s.replace(/\\Delta(\s*(?:\\left)?\()/g, operators.laplacian + '$1');
             }
@@ -1012,7 +1067,9 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
                     if (!row) {
                         continue;
                     }
-                    row = row.replace(/\s*&\s*/g, '');
+                    // The alignment mark and the spaces around it are layout: "a &= 5" is "a=5",
+                    // not "a= 5", which would not survive a round trip in stack mode.
+                    row = row.replace(/\s*&\s*([=<>])\s*/g, '$1').replace(/\s*&\s*/g, '');
                     row = row.replace(/\s+/g, ' ').trim();
                     if (!row) {
                         continue;
@@ -1526,10 +1583,11 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     /**
      * Resolve the remaining token boundaries.
      *
-     * A boundary that separates an identifier from a following word becomes a
-     * space (so "a sqrt(b)" never fuses into "asqrt(b)"); every other boundary
-     * disappears without trace, which keeps e.g. "2sqrt(x)" and "(a)sqrt(b)"
-     * exactly as they were.
+     * A boundary becomes a space exactly where its two neighbours would otherwise read as one
+     * token: an identifier followed by a letter or digit ("a sqrt(b)" never fuses into
+     * "asqrt(b)", x_{1}2 never into x_12, e^{x}y never into e^xy), or a number followed by a
+     * digit (x^{2}3 never into x^23). Every other boundary disappears without trace, which keeps
+     * e.g. "2sqrt(x)", "(a)sqrt(b)" and "x^2y" exactly as they were.
      *
      * @param {string} s Converted string.
      * @returns {string} String without boundary markers.
@@ -1539,7 +1597,9 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         var i;
         var j;
         var next;
+        var first;
         var inIdentifier;
+        var inNumber;
 
         for (i = 0; i < s.length; i++) {
             if (s.charAt(i) !== BOUNDARY) {
@@ -1553,8 +1613,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
             while (j >= 0 && /[a-zA-Z0-9_]/.test(out.charAt(j))) {
                 j--;
             }
-            inIdentifier = j < out.length - 1 && /[a-zA-Z_]/.test(out.charAt(j + 1));
-            if (inIdentifier && /[a-zA-Z%]/.test(next)) {
+            first = j < out.length - 1 ? out.charAt(j + 1) : '';
+            inIdentifier = /[a-zA-Z_]/.test(first);
+            inNumber = /[0-9]/.test(first);
+            if ((inIdentifier && /[a-zA-Z0-9%]/.test(next)) || (inNumber && /[0-9]/.test(next))) {
                 out += ' ';
             }
         }
@@ -1878,6 +1940,51 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Turn every braced superscript ^{...} into a Maxima exponent, however deeply nested.
+     *
+     * The group is read with a bracket counter and its content is converted first, so a power
+     * tower x^{y^{z^{w}}} becomes x^(y^(z^w)) at any depth. An exponent keeps its parentheses
+     * unless it is a single unambiguous token: MathQuill writes x^{2} rather than x^2, and x^(2)
+     * would otherwise reach the CAS for every squared term. Anything longer than one digit group
+     * or one letter stays wrapped: x^ab would be split into x^a*b by implicit multiplication.
+     *
+     * The closing brace ends the exponent. When an unwrapped exponent is followed directly by a
+     * letter or digit, a token boundary keeps the two apart: x^{2}3 is x^2 times 3, never the
+     * power x^23, and e^{x}y is e^x times y, never e^(xy).
+     *
+     * @param {string} s LaTeX.
+     * @returns {string} String with Maxima exponents.
+     */
+    function convertSuperscripts(s) {
+        var out = '';
+        var i = 0;
+        var arg;
+        var exponent;
+
+        while (i < s.length) {
+            arg = s.charAt(i) === '^' && s.charAt(i + 1) === '{' ? readLatexArgument(s, i + 1) : null;
+            if (!arg) {
+                out += s.charAt(i);
+                i++;
+                continue;
+            }
+
+            exponent = convertSuperscripts(arg.text);
+            if (/^\d+$/.test(exponent) || /^[A-Za-z]$/.test(exponent)) {
+                out += '^' + exponent;
+                if (/[A-Za-z0-9]/.test(s.charAt(arg.end))) {
+                    out += BOUNDARY;
+                }
+            } else {
+                out += '^(' + exponent + ')';
+            }
+            i = arg.end;
+        }
+
+        return out;
+    }
+
+    /**
      * Match the differential "\mathrm{d}x" / "dx" at pos.
      *
      * @param {string} s LaTeX.
@@ -2073,6 +2180,24 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
+     * Parse a Leibniz numerator that carries its operand: \partial f, \partial^{2} f or
+     * \mathrm{d} f. "\frac{\partial f}{\partial x}" means the same as
+     * "\frac{\partial}{\partial x}(f)"; a bare "d" is not read here, "df" may be a product.
+     *
+     * @param {string} tex Numerator LaTeX.
+     * @returns {?Object} {order: ?number, operand: string} or null.
+     */
+    function parseDerivativeNumeratorWithOperand(tex) {
+        var m = tex.trim().match(
+            /^(?:\\partial|\\mathrm\{d\})(?![a-zA-Z])\s*(?:\^\s*(?:\{\s*(\d+)\s*\}|(\d)))?\s*([\s\S]+)$/
+        );
+        if (!m || !m[3].trim()) {
+            return null;
+        }
+        return {order: m[1] || m[2] ? Number(m[1] || m[2]) : null, operand: m[3].trim()};
+    }
+
+    /**
      * Parse the denominator: one or more "\partial x^{n}" (or "dx^{n}") factors.
      *
      * @param {string} tex Denominator LaTeX.
@@ -2144,6 +2269,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         var num;
         var den;
         var numerator;
+        var inline;
         var denominator;
         var operand;
         var total;
@@ -2156,11 +2282,15 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         num = readLatexArgument(s, start + 5);
         den = num ? readLatexArgument(s, num.end) : null;
         numerator = num ? parseDerivativeNumerator(num.text) : null;
+        inline = num && !numerator ? parseDerivativeNumeratorWithOperand(num.text) : null;
+        numerator = numerator || inline;
         denominator = numerator && den ? parseDerivativeDenominator(den.text) : null;
         if (!denominator) {
             return extractDerivatives(s, opts, ctx, start + 5);
         }
-        operand = readDerivativeOperand(s, den.end);
+        // The operand stands either in the numerator (\frac{\partial f}{\partial x}) or in the
+        // obligatory bracket after the operator.
+        operand = inline ? {text: inline.operand, end: den.end} : readDerivativeOperand(s, den.end);
         total = denominator.pairs.reduce(function(sum, pair) {
             return sum + pair.order;
         }, 0);
@@ -2218,7 +2348,6 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         var defs = opts.defs || {};
         var variableMode = opts.variableMode || 'stack';
         var s = latex;
-        var maxIter = 20;
         var placeholders = [];
         var local = {problems: ctx.problems, placeholders: placeholders};
 
@@ -2240,6 +2369,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         // The double bar is a norm, not an absolute value: abs() of a vector is not what the
         // button promises. Only with a configured norm function; without one the norm is not
         // converted here and is reported like any other unavailable operator.
+        // MathQuill knows the double bar only as \lVert ... \rVert: \left\| is dropped by its
+        // parser, so the norm button writes the lVert form. Both spellings mean the same here.
+        s = s.replace(/\\left\s*\\lVert\s?/g, '\\left\\|').replace(/\\right\s*\\rVert\s?/g, '\\right\\|');
+        s = s.replace(/\\lVert(?![a-zA-Z])\s?/g, '\\left\\|').replace(/\\rVert(?![a-zA-Z])\s?/g, '\\right\\|');
         if (defs && defs.normFunction) {
             var normname = defs.normFunction;
             s = replaceInnermostDelimiters(s, '\\left\\|', '\\right\\|', function(content) {
@@ -2276,18 +2409,19 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = replaceBracedCommand(s, 'binom', 2, function(top, bottom) {
             return 'binomial(' + top + ',' + bottom + ')';
         });
-
-        while (s.indexOf('\\frac') !== -1 && maxIter > 0) {
-            maxIter--;
-            s = s.replace(
-                /\\frac\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/,
-                '($1)/($2)'
-            );
-        }
+        s = replaceBracedCommand(s, 'frac', 2, function(numerator, denominator) {
+            return '(' + numerator + ')/(' + denominator + ')';
+        });
 
         // Mixed-fraction guard: N(p)/(q) → (N+p/q).
         // Prevents N*(p/q) implicit multiplication; supports multi-digit integers.
-        s = s.replace(new RegExp('(\\d+)' + BOUNDARY + '?\\((\\d+)\\)\\/\\((\\d+)\\)', 'g'), '($1+$2/$3)');
+        // Only a whole number counts: the digits of an exponent, a subscript, a decimal or an
+        // identifier in front of a fraction are not the integer part (x^2\frac{1}{2} is
+        // x^2 times one half, not x^(2+1/2)).
+        s = s.replace(
+            new RegExp('(^|[^A-Za-z0-9_.^])(\\d+)' + BOUNDARY + '?\\((\\d+)\\)\\/\\((\\d+)\\)', 'g'),
+            '$1($2+$3/$4)'
+        );
 
         s = replaceBracedCommand(s, 'sqrt', 1, function(radicand) {
             return 'sqrt(' + radicand + ')';
@@ -2301,20 +2435,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
                 return content;
             });
         });
-        // A superscript keeps its parentheses unless the exponent is a single unambiguous token.
-        // MathQuill writes x^{2} rather than x^2, and x^(2) would otherwise reach
-        // the CAS for every squared term. Anything longer than one digit group or one letter stays
-        // wrapped: x^ab would be split into x^a*b by implicit multiplication.
-        s = s.replace(
-            /\^\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g,
-            function(match, exponent) {
-                if (/^\d+$/.test(exponent) || /^[A-Za-z]$/.test(exponent)) {
-                    return '^' + exponent;
-                }
-
-                return '^(' + exponent + ')';
-            }
-        );
+        s = convertSuperscripts(s);
         // A subscript group that is followed directly by more characters is not part of the
         // subscript: U_{m}ax is U_m followed by ax, and must never collapse into U_max,
         // which is what U_{max} means. The boundary marker keeps the two apart for the
@@ -2344,7 +2465,10 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         s = s.replace(/\\cdot/g, '*');
         s = s.replace(/\\times/g, '*');
         s = s.replace(/\\div/g, '/');
-        s = s.replace(/\\%/g, '%');
+        // A percent sign is a hundredth: STACK has no % operator ("Unknown operator: %"), so
+        // 50\% is sent as 50/100. Typed Maxima constants (%pi, %e, %i, %phi, %gamma) stay.
+        s = s.replace(/\\%(?=(?:pi|e|i|phi|gamma)(?![A-Za-z0-9_]))/g, '%');
+        s = s.replace(/\\%/g, '/100');
         s = s.replace(/\\&/g, '&');
         s = s.replace(/\\leq?(?![a-zA-Z])/g, '<=');
         s = s.replace(/\\geq?(?![a-zA-Z])/g, '>=');

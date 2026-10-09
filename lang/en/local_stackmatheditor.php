@@ -317,6 +317,7 @@ $string['setting_vectorformat_matrix'] = 'Matrix: matrix([a,b,c])';
 $string['stacksemantics'] = 'STACK input semantics';
 $string['stacksemantics_desc'] = 'This is STACK\'s “Insert stars” setting for each input of this question. It decides how implicit multiplication and spaces are read. The editor passes on what was typed and does not change this behaviour.';
 $string['stacksemantics_edit'] = 'Edit STACK input settings';
+$string['stacksemantics_missingwords'] = 'The toolbar offers buttons that write {$a}. STACK accepts these names from students only if this input lists them under “Allowed words”; otherwise every answer that uses them is rejected as an unknown function. Add them in the STACK question.';
 $string['toggle_editor'] = 'Formula editor';
 $string['toggle_editor_off'] = 'Formula editor off: type the answer as plain text.';
 $string['toggle_editor_on'] = 'Formula editor on.';

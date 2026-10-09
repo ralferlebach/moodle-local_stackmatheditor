@@ -31,9 +31,10 @@ final class stack_inputs_test extends \advanced_testcase {
      * @param int $questionid Question id.
      * @param string $name Input name.
      * @param int $insertstars Value.
+     * @param string $allowwords STACK's allowed words, comma-separated.
      * @return void
      */
-    private function add_input(int $questionid, string $name, int $insertstars): void {
+    private function add_input(int $questionid, string $name, int $insertstars, string $allowwords = ''): void {
         global $DB;
 
         $DB->insert_record('qtype_stack_inputs', (object) [
@@ -47,7 +48,7 @@ final class stack_inputs_test extends \advanced_testcase {
             'syntaxhint'  => '',
             'syntaxattribute' => 0,
             'forbidwords' => '',
-            'allowwords'  => '',
+            'allowwords'  => $allowwords,
             'forbidfloat' => 1,
             'requirelowestterms' => 0,
             'checkanswertype' => 0,
@@ -187,5 +188,67 @@ final class stack_inputs_test extends \advanced_testcase {
         $this->assertSame('ans1', $summary['inputs'][0]['name']);
         $this->assertSame(0, $summary['inputs'][0]['value']);
         $this->assertNotEmpty($summary['inputs'][0]['label']);
+    }
+
+    /**
+     * The words the enabled buttons need: geometry, norm and the configured differential operators.
+     *
+     * @return void
+     */
+    public function test_required_words_follow_the_enabled_groups(): void {
+        $this->resetAfterTest();
+        set_config('diffopcurl', 'curl', 'local_stackmatheditor');
+        set_config('diffopgradient', 'grad', 'local_stackmatheditor');
+
+        $this->assertSame([], definitions::get_required_words([]));
+        $this->assertSame(['Angle', 'Distance'], definitions::get_required_words(['geometry' => true]));
+
+        $norm = definitions::get_norm_function();
+        $catalogue = definitions::export_button_catalogue();
+        $normgroup = null;
+        $diffgroup = null;
+        foreach ($catalogue as $button) {
+            if (strpos($button['template'], '\\lVert') !== false) {
+                $normgroup = $button['group'];
+            }
+            if ($button['semantic'] === 'curl') {
+                $diffgroup = $button['group'];
+            }
+        }
+        $this->assertNotNull($normgroup, 'the norm button is in the catalogue');
+        $this->assertNotNull($diffgroup, 'the curl button is in the catalogue once configured');
+        $this->assertContains($norm, definitions::get_required_words([$normgroup => true]));
+        $this->assertSame(['curl', 'grad'], definitions::get_required_words([$diffgroup => true]));
+    }
+
+    /**
+     * The summary names, per input, the required words STACK does not allow there yet.
+     *
+     * @return void
+     */
+    public function test_summary_reports_missing_allowed_words(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        if (!$DB->get_manager()->table_exists('qtype_stack_inputs')) {
+            $this->markTestSkipped('qtype_stack is not installed');
+        }
+
+        $questionid = 616161;
+        $this->add_input($questionid, 'ans1', 0, 'Distance, Angle');
+        $this->add_input($questionid, 'ans2', 0, 'Distance');
+        $this->add_input($questionid, 'ans3', 0, 'distance,angle');
+
+        $summary = stack_inputs::get_semantics_summary($questionid, 0, '', ['Angle', 'Distance']);
+        $missing = array_column($summary['inputs'], 'missingwords', 'name');
+
+        $this->assertSame([], $missing['ans1']);
+        $this->assertSame(['Angle'], $missing['ans2']);
+        // STACK compares the words as written.
+        $this->assertSame(['Angle', 'Distance'], $missing['ans3']);
+
+        // Without required words nothing is reported, and STACK's table is not read for them.
+        $summary = stack_inputs::get_semantics_summary($questionid, 0);
+        $this->assertSame([], $summary['inputs'][0]['missingwords']);
     }
 }

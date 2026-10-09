@@ -5,8 +5,10 @@ Operations that are deliberately **not** offered in the toolbar, with the reason
 everything here lacks one, and none of it is shipped, commented out or otherwise.
 
 To bring one back: add it to `definitions.php`, regenerate the button fixture
-(`tests/jest/export_buttons.php`), and give its group a scenario in
-`tests/behat/cas_contract.feature`. `cas_contract_test.php` fails until all three are done.
+(`tests/jest/export_buttons.php`), and give the button a contract in
+`tests/fixtures/math_contracts.json` (LaTeX, expected Maxima, packages, CAS expectation).
+`tests/jest/math_contracts.test.js` and `tests/unit/cas_contract_test.php` - the latter against the
+real STACK parser and Maxima - fail until all three are done.
 
 ## Number sets (ℕ, ℤ, ℚ, ℝ, ℂ) in the set theory group
 
@@ -131,3 +133,13 @@ To bring one back: add it to `definitions.php`, regenerate the button fixture
                 ],
             ],
 ```
+
+## Approximately equal (≈) in the comparators group
+
+**Why not shipped:** Removed in 1.4.0 (#96). Maxima has no approximately-equal operator: tex2max writes `x~= 2`, and STACK rejects the answer ("Expected ... received ="). The contract `approx` in `tests/fixtures/math_contracts.json` keeps pinning what pasted LaTeX produces.
+
+```php
+                    ['display' => '≈', 'cmd'   => '\\approx',
+                        'tooltip' => get_string('btn_approx', $p)],
+```
+

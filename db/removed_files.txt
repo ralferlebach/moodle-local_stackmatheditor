@@ -18,3 +18,9 @@
 thirdparty/mathquill/font
 # 2026091300: the vendored library no longer carries a placeholder README.
 thirdparty/mathquill/README.md
+
+# 2026100801 (#96): Behat scenarios moved to Jest, PHPUnit (real STACK CAS) and Playwright;
+# docs/TEST-MIGRATION.md maps every one. An old copy would run them again, with CAS resets.
+tests/behat/tex2max_conversion.feature
+tests/behat/editor_rendering.feature
+tests/behat/multiline_editor.feature

@@ -45,9 +45,10 @@ jobs:
   test:
     name: "CI / ${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.database }}"
     runs-on: ubuntu-24.04
-    # The whole Behat suite runs in every row, and it has grown with the CAS contract: seven of
-    # eight rows ran into the former 35 minutes without having failed anything.
-    timeout-minutes: 75
+    # PHPUnit and the static checks run in every row: the server side has to work on every
+    # supported Moodle, PHP and database. Behat - a handful of Moodle stories, the browser
+    # contracts are Playwright tests (#96) - runs only in the two boundary rows marked behat.
+    timeout-minutes: 45
     services:
       postgres:
         # Moodle 5.3 requires PostgreSQL 17 and MariaDB 11.4; the older branches run on the
@@ -74,7 +75,7 @@ jobs:
         # grunt only where amd/build is produced (MOODLE_405_STABLE, see `make amd`): grunt
         # fails on a stale build, and another Moodle branch may minify differently.
         include:
-          - { moodle: MOODLE_405_STABLE, php: '8.2', database: pgsql, grunt: true }
+          - { moodle: MOODLE_405_STABLE, php: '8.2', database: pgsql, grunt: true, behat: true }
           - { moodle: MOODLE_405_STABLE, php: '8.3', database: mariadb, grunt: true }
           - { moodle: MOODLE_500_STABLE, php: '8.2', database: mariadb, grunt: false }
           - { moodle: MOODLE_500_STABLE, php: '8.3', database: pgsql, grunt: false }
@@ -83,7 +84,7 @@ jobs:
           - { moodle: MOODLE_502_STABLE, php: '8.3', database: mariadb, grunt: false }
           - { moodle: MOODLE_502_STABLE, php: '8.4', database: pgsql, grunt: false }
           - { moodle: MOODLE_503_STABLE, php: '8.3', database: pgsql, grunt: false, pg: '17' }
-          - { moodle: MOODLE_503_STABLE, php: '8.4', database: mariadb, grunt: false, mariadb: '11.4' }
+          - { moodle: MOODLE_503_STABLE, php: '8.4', database: mariadb, grunt: false, mariadb: '11.4', behat: true }
     steps:
       - name: Check out repository code
         uses: actions/checkout@v6
@@ -130,6 +131,26 @@ jobs:
         env:
           DB: ${{ matrix.database }}
           MOODLE_BRANCH: ${{ matrix.moodle }}
+      # --- #96: a real CAS for tests/unit/cas_contract_test.php -------------------------------
+      # qtype_stack reads these constants in qtype_stack_test_config::setup_test_maxima_connection().
+      # Plain Maxima from install-maxima.sh, no optimised image: the image STACK builds during
+      # the PHPUnit install lives in the PHPUnit dataroot and is not guaranteed to survive its
+      # resets. The test only accepts an explicit configuration; SME_REQUIRE_CAS on the PHPUnit
+      # step below turns a missing one into a failure instead of a skip.
+      - name: Configure the STACK CAS for PHPUnit
+        run: |
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_PLATFORM", "linux");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMAVERSION", "default");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMACOMMAND", "maxima");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMACOMMANDOPT", "");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMACOMMANDSERVER", "");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASTIMEOUT", "300");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASRESULTSCACHE", "none");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASPREPARSE", "true");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMALIBRARIES", "");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_PLOTCOMMAND", "");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASDEBUGGING", "0");'
+      # --- end #96 ------------------------------------------------------------------------------
       # A run is only evidence if it says what it ran against (#70). The branch variables
       # above are moving targets; these are the revisions this run actually used.
       - name: Record dependency revisions
@@ -186,23 +207,46 @@ jobs:
       - name: PHPUnit tests
         if: ${{ always() }}
         run: moodle-plugin-ci phpunit --fail-on-warning --testdox 2>&1 | tee ci-logs/phpunit.log
+        env:
+          # #96: cas_contract_test must not skip its CAS part here.
+          SME_REQUIRE_CAS: '1'
       - name: Initialise STACK CAS for the Behat site
         id: stackinit
-        if: ${{ always() }}
+        if: ${{ always() && matrix.behat }}
         working-directory: moodle
         run: php "$GITHUB_WORKSPACE/plugin/.github/stack-behat-init.php" 2>&1 | tee ../ci-logs/stack-behat-init.log
       - name: Behat - STACK CAS preflight (@stack_init)
         id: behat-preflight
-        if: ${{ always() && steps.stackinit.outcome == 'success' }}
+        if: ${{ always() && matrix.behat && steps.stackinit.outcome == 'success' }}
+        env:
+          SME_BEHAT_TIMINGS: ${{ github.workspace }}/ci-logs/behat-timings.jsonl
         run: |
           moodle-plugin-ci behat --profile chrome --auto-rerun 0 \
             --tags "@stack_init&&~@broken&&~@wip" --dump 2>&1 | tee ci-logs/behat-stack-init.log
       - name: Behat - all plugin scenarios
         id: behat
-        if: ${{ always() && steps.behat-preflight.outcome == 'success' }}
+        if: ${{ always() && matrix.behat && steps.behat-preflight.outcome == 'success' }}
+        env:
+          SME_BEHAT_TIMINGS: ${{ github.workspace }}/ci-logs/behat-timings.jsonl
         run: |
           moodle-plugin-ci behat --profile chrome --auto-rerun 0 \
             --tags "@local_stackmatheditor&&~@broken&&~@wip&&~@stack_init" --dump 2>&1 | tee ci-logs/behat.log
+      # Per feature and per scenario: feature, scenario, start, duration, result (#96, part A).
+      # A Behat row that recorded nothing fails here - an unmeasured run is not a measured one.
+      - name: Behat timings
+        if: ${{ always() && matrix.behat && steps.behat-preflight.outcome != 'skipped' }}
+        run: |
+          python3 plugin/.github/behat-timings.py ci-logs/behat-timings.jsonl ci-logs/behat-timings --top=10 \
+            >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload Behat timings
+        if: ${{ always() && matrix.behat }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: behat-timings-${{ matrix.moodle }}-${{ matrix.php }}-${{ matrix.database }}
+          path: ci-logs/behat-timings
+          retention-days: 30
+          if-no-files-found: warn
       - name: Collect error summary
         if: ${{ always() }}
         run: |

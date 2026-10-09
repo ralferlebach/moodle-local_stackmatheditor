@@ -80,6 +80,38 @@ class stack_inputs {
     }
 
     /**
+     * Return the allowed words of every input of a STACK question.
+     *
+     * @param int $questionid Question id.
+     * @return array Input name => list of allowed words, ordered by input name.
+     */
+    public static function get_allowwords(int $questionid): array {
+        global $DB;
+
+        if ($questionid <= 0 || !$DB->get_manager()->table_exists('qtype_stack_inputs')) {
+            return [];
+        }
+
+        $records = $DB->get_records(
+            'qtype_stack_inputs',
+            ['questionid' => $questionid],
+            'name ASC',
+            'id, name, allowwords'
+        );
+
+        $values = [];
+        foreach ($records as $record) {
+            // STACK stores a comma-separated list and compares the words as written.
+            $values[$record->name] = array_values(array_filter(
+                array_map('trim', explode(',', (string) $record->allowwords)),
+                'strlen'
+            ));
+        }
+
+        return $values;
+    }
+
+    /**
      * Label for an insertstars value, in STACK's own words.
      *
      * @param int $value Value from qtype_stack_inputs.insertstars.
@@ -159,19 +191,23 @@ class stack_inputs {
      * @param int $questionid Question id.
      * @param int $courseid Course id.
      * @param string $returnurl Return URL for the question editor.
-     * @return array Array with 'inputs' (name, value, label) and 'editurl' (moodle_url|null).
+     * @param array $requiredwords Words the enabled buttons need allowed (definitions::get_required_words()).
+     * @return array Array with 'inputs' (name, value, label, missingwords) and 'editurl' (moodle_url|null).
      */
     public static function get_semantics_summary(
         int $questionid,
         int $courseid,
-        string $returnurl = ''
+        string $returnurl = '',
+        array $requiredwords = []
     ): array {
+        $allowed = $requiredwords ? self::get_allowwords($questionid) : [];
         $inputs = [];
         foreach (self::get_insertstars($questionid) as $name => $value) {
             $inputs[] = [
                 'name'  => $name,
                 'value' => $value,
                 'label' => self::get_insertstars_label($value),
+                'missingwords' => array_values(array_diff($requiredwords, $allowed[$name] ?? [])),
             ];
         }
 

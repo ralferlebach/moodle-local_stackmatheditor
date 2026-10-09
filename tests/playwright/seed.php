@@ -242,6 +242,16 @@ $unitscm = local_stackmatheditor_seed_optional_quiz(
     ['stack_units.xml', 'stack_algebraic.xml']
 );
 
+// An equivalence-reasoning input (#23): Enter copies the current step, a system is copied as a
+// whole. Its own quiz, for the same reason as the units quiz.
+$equivcm = local_stackmatheditor_seed_optional_quiz(
+    $gen,
+    $course,
+    $category,
+    'SME Equiv Quiz',
+    ['stack_equiv.xml']
+);
+
 // Warm STACK's CAS result cache: instantiate every question once now. Otherwise the first
 // attempts of all simulated students start at the same moment, each instantiating ten STACK
 // questions with a fresh Maxima process, and the herd runs into the CAS timeout on a small CI
@@ -333,6 +343,7 @@ $exports = [
     'SME_LOAD_CMID' => $loadcm,
     'SME_JSXGRAPH_CMID' => $jsxgraphcm,
     'SME_UNITS_CMID' => $unitscm,
+    'SME_EQUIV_CMID' => $equivcm,
     'SME_USER_PASS' => $password,
     'SME_STUDENTS' => $students,
 ];

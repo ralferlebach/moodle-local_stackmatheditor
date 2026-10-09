@@ -15,9 +15,9 @@ schlagen auf die Umgebung durch:
 
 **STACK braucht Maxima.** `qtype_stack` ist eine harte Abhängigkeit. STACK installiert zwar auch
 ohne funktionierende Maxima-Verbindung, bewertet dann aber nichts. Genau die interessanten
-Behat-Szenarien (tex2max über das echte CAS, Pre-Fill nach dem Speichern) sind ohne Maxima
-wertlos — sie überspringen sich oder scheitern an einer Stelle, die nichts mit dem Plugin zu tun
-hat.
+Prüfungen (die CAS-Verträge in `tests/unit/cas_contract_test.php`, der Behat-Smoke über das echte
+CAS) sind ohne Maxima wertlos — sie überspringen sich oder scheitern an einer Stelle, die nichts
+mit dem Plugin zu tun hat. `SME_REQUIRE_CAS=1` macht aus dem Überspringen einen Fehler.
 
 **STACK bringt eigene Abhängigkeiten mit.** Seit STACK 4.13 verlangt `qtype_stack` neben
 `qbehaviour_adaptivemultipart` auch `qbehaviour_dfexplicitvaildate`,
@@ -174,16 +174,18 @@ anderer Moodle-Zweig kann anders minifizieren; deshalb läuft der Grunt-Gate nur
 
 | Art | Ort | Deckt ab | Deckt bewusst nicht ab |
 |---|---|---|---|
-| PHPUnit | `tests/unit/` | definitions, config_manager, quiz_helper, page_helper | Alles, was einen Browser braucht |
-| Behat | `tests/behat/` | Editor im Quizversuch, tex2max über das echte CAS, Toolbar-Konfiguration, Pre-Fill | Last, Asset-Auslieferung im Detail |
-| Jest | `tests/jest/` | `tex2max.js` / `max2tex.js` ohne Moodle, mit den echten Definitionen (`fixtures/definitions.json`) — schnellster Ort für Roundtrip-Tabellen | DOM, MathQuill, STACK |
-| Playwright | `tests/playwright/` | Einstellungsseite, ausgeliefertes `amd/build` über `requirejs.php`, Videos + Traces | Fachliche Bewertung durch STACK |
+| PHPUnit | `tests/unit/` | Konfiguration, Vererbung, Aktivierung, Zugriff, Formulare, Datenschutz, Backup, Upgrade; jeder Vertrag aus `tests/fixtures/math_contracts.json` gegen STACK und Maxima | Alles, was einen Browser braucht |
+| Behat | `tests/behat/` | 6 Szenarien seit 1.4.0 (#96): CAS-Preflight, ein Ende-zu-Ende-Smoke über STACK, vier Geschichten der Konfigurationsseite | Konvertierungsregeln, CAS-Verträge, Editorverhalten |
+| Jest | `tests/jest/` | `tex2max.js` / `max2tex.js` ohne Moodle, mit den echten Definitionen (`fixtures/definitions.json`) — schnellster Ort für Roundtrip-Tabellen; die Verträge zusätzlich durch das gebündelte MathQuill in jsdom | DOM der Moodle-Seite, STACK |
+| Playwright | `tests/playwright/` | Editor im echten Versuch (Tippen, Pre-Fill, Toolbar, Mehrzeilig, Äquivalenzumformung, externe Werte), Einstellungsseite, a11y, ausgeliefertes `amd/build`, Videos + Traces | Fachliche Bewertung durch STACK |
 | k6 / JMeter | `tests/load/` | Latenz und Fehlerrate der Lese-Pfade unter Parallelität | Funktionale Korrektheit |
 
 Die Aufteilung ist keine Geschmacksfrage. Die Konvertierungsregeln (#30, #34, #35, #39, #42)
 brauchen dutzende Ein-/Ausgabepaare; in Behat kostet jedes Paar einen Seitenaufbau samt CAS,
-in Jest eine Millisekunde. Umgekehrt beweist Jest nichts darüber, ob MathQuill den Ausdruck
-überhaupt so liefert (`\land` wird intern zu `\wedge`) — das bleibt Behat vorbehalten.
+in Jest eine Millisekunde. Ob MathQuill den Ausdruck überhaupt so liefert (`\land` wird intern
+zu `\wedge`), prüft Jest mit dem gebündelten MathQuill in jsdom; echte Tastatureingaben prüft
+Playwright. Welche Schicht was trägt und wohin jedes frühere Behat-Szenario gewandert ist:
+`docs/TEST-ARCHITECTURE.md`, `docs/TEST-MIGRATION.md`.
 
 ### Jest-Definitionen
 
@@ -251,11 +253,11 @@ GitHub-Lauf der neuen Suiten nachgeschärft.
 
 | Workflow / Job | gemessen | Höchstlaufzeit |
 |---|---|---|
-| Main: `CI / <Moodle> / <PHP> / <DB>` (8 Zellen) | 14,1–20,1 min (davon Behat 9,8–15,3 min) | 35 min |
+| Main: `CI / <Moodle> / <PHP> / <DB>` (8 Zellen) | 14,1–20,1 min (davon Behat 9,8–15,3 min); seit 1.4.0 Behat nur noch in zwei Zellen, lokal 79 s (Baseline und Messung: `docs/TEST-MIGRATION.md`) | 45 min |
 | Main: Coverage | 3,4 min | 12 min |
 | Main: Jest / Release-Artefakt / Stale files / Gates | je < 0,5 min | je 5 min |
 | Main gesamt | 20,5 min | – |
-| Dev gesamt | 14,3–17,3 min | Jobs: PHP/Codeanalyse 10, Quality/JS-CSS 15, PHPUnit 20, Behat 30, Rest 5 min |
+| Dev gesamt | 14,3–17,3 min | Jobs: PHP/Codeanalyse 10, JS-CSS 15, Quality 20 (installiert die Site für die CLI-Skripte), PHPUnit 20, Behat 60, Rest 5 min |
 | Playwright (nur Smoke) | 2,7–4,5 min | 20 min (inkl. Matrix, Performance, a11y) |
 | k6 (nur Smoke) | 2,8–3,2 min | 15 min (inkl. Attempt-Last) |
 | JMeter (nur Smoke) | 2,8–3,2 min | 15 min (inkl. Attempt-Last) |
@@ -308,13 +310,15 @@ Before changing code:
    setdifference, elementp, subsetp). Logic buttons write and/or (STACK judges the statement as
    a whole); nounand/nounor are reserved for structures whose parts STACK assesses one by one:
    equation systems (SYSTEM_JOIN) and ± solution sets (SOLUTION_JOIN). Every rule change gets Jest
-   cases (tests/jest) and, where MathQuill's own normalisation matters, a Behat scenario.
+   cases (tests/jest), a contract in tests/fixtures/math_contracts.json when STACK has to accept
+   the result, and, where MathQuill's own key handling matters, a Playwright test.
 5. Toolbar entries are defined server-side (classes/definitions.php) and exported to JS; the
    client does not invent operators the server does not know.
 6. The original STACK input stays in the DOM, positioned off-screen — never display:none
    (focusability, accessibility tree, STACK validation).
-7. Every CAS-dependent Behat scenario resets the platform through the explicit step
-   "the STACK CAS platform is reset to direct Maxima". Feature files use English UI strings.
+7. Behat is reserved for the stories listed in docs/TEST-ARCHITECTURE.md. No scenario resets the
+   CAS or purges caches; the step library only repairs CAS settings that differ from the
+   baseline. Feature files use English UI strings.
 8. make check is a fast local pre-check; GitHub CI is the authoritative release gate. Run the
    checks inside a Moodle tree — several sniffs stay silent on a standalone directory.
 
@@ -335,8 +339,9 @@ Before finishing:
    Never overwrite an earlier session's file.
 2. Record changed files, conversion rules touched (with input/output examples), tests written or
    run, decisions taken and their reasons, and unresolved risks.
-3. Verify every conversion rule change has Jest cases and, where needed, a Behat scenario.
-4. Run make check plus the relevant PHPUnit and Behat tests. Record skips honestly — a skipped
+3. Verify every conversion rule change has Jest cases and, where needed, a contract or a
+   Playwright test.
+4. Run make check plus the relevant PHPUnit, Playwright and Behat tests. Record skips honestly — a skipped
    STACK test is not a passing STACK test.
 5. Rebuild AMD (make amd) and commit amd/build. A stale build ships old conversion logic while
    amd/src looks perfectly current.
@@ -354,7 +359,7 @@ Before finishing:
 |---|---|
 | „Dependencies check failed for qtype_stack" | Eine der vier STACK-Abhängigkeiten fehlt (Abschnitt 3) |
 | STACK-Test „passed", ohne etwas zu prüfen | Maxima fehlt oder CAS nicht initialisiert — `make behat-stack` |
-| Behat: CAS-Szenario scheitert trotz grünem Healthcheck | Plattform im Behat-DB ≠ `linux`; der `@BeforeScenario`-Hook allein reicht nicht, der explizite Schritt ist Pflicht |
+| Behat: CAS-Szenario scheitert trotz grünem Healthcheck | Plattform im Behat-DB ≠ `linux`: `make behat-stack` (`.github/stack-behat-init.php`) setzt sie; der `@BeforeScenario`-Hook repariert nur abweichende Einstellungen |
 | JS-Änderung wirkt nicht | `amd/build/` nicht neu gebaut, oder `$CFG->cachejs` nicht auf `false` |
 | Grunt in der CI: „File is stale" | `make amd` nicht ausgeführt oder mit anderem Node/Moodle-Zweig gebaut |
 | PHPCS lokal grün, CI rot | Außerhalb des Moodle-Baums geprüft, oder ältere `moodle-cs` |

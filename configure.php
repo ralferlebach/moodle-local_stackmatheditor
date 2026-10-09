@@ -255,7 +255,8 @@ $mform = new configure_form($pageurl->out(false), [
     'stacksemantics' => \local_stackmatheditor\stack_inputs::get_semantics_summary(
         $questionid,
         (int) $course->id,
-        $PAGE->url->out(false)
+        $PAGE->url->out(false),
+        definitions::get_required_words($config)
     ),
 ]);
 

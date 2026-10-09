@@ -579,6 +579,9 @@ define([
                 }
                 self.addStep(template);
                 self.focusStep(self.rows.length - 1, 0);
+                // A new line changes the answer (an empty line, or a copied step): it reaches
+                // STACK like typing does, not only when the attempt is submitted (#23).
+                self.debouncedSync();
                 // The "+" (Add line) button adds a line like Enter does, and says so.
                 Bridge.signalEnter(self.$ta[0], {trigger: 'button', inputType: self.inputType, slot: self.slot});
             });
@@ -871,6 +874,7 @@ define([
                     }
                     self.addStep(template, pos.stepIdx + 1);
                     self.focusStep(pos.stepIdx + 1, pos.fieldIdx < template.length ? pos.fieldIdx : 0);
+                    self.debouncedSync();
                     // Enter stays observable for external scripts.
                     Bridge.signalEnter(self.$ta[0], {trigger: 'key', inputType: self.inputType, slot: self.slot});
                 }

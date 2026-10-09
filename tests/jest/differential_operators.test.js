@@ -80,12 +80,21 @@ describe('tex2max: operators that are not available', () => {
     test.each([
         '\\operatorname{grad}\\left(f\\right)',
         '\\operatorname{div}\\left(F\\right)',
-        '\\operatorname{rot}\\left(F\\right)',
-        '\\Delta\\left(f\\right)'
+        '\\operatorname{rot}\\left(F\\right)'
     ])('%s is reported, not guessed', (latex) => {
         const result = tex2max.analyse(latex);
         expect(result.problems).toContain('diffop_unavailable');
         expect(result.maxima).toBe('');
+    });
+
+    test('without a Laplace operator, Delta before a bracket is the Greek letter (#45)', () => {
+        // No button writes a Laplace operator on such a site: the student typed a Delta.
+        ['\\Delta\\left(f\\right)', '2\\Delta\\left(x+1\\right)'].forEach((latex) => {
+            const result = tex2max.analyse(latex);
+            expect(result.problems).toEqual([]);
+            expect(result.maxima).toMatch(/Delta/);
+            expect(result.maxima).not.toMatch(/laplacian/);
+        });
     });
 
     test('an operator without an operand is reported', () => {

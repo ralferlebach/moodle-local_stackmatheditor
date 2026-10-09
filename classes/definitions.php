@@ -115,7 +115,7 @@ class definitions {
                         'tooltip' => get_string('btn_cdot', $p)],
                     ['display' => '÷', 'cmd'   => '\\div',
                         'tooltip' => get_string('btn_div', $p)],
-                    ['label'        => '\\frac{a}{b}', 'write' => '\\frac{}{}',
+                    ['label'        => '\\frac{a}{b}', 'write' => '\\frac{}{}', 'left' => 2,
                         'display_html'  => '<sup>a</sup>&#x2044;<sub>b</sub>',
                         'tooltip'       => get_string('btn_fraction', $p)],
                     ['display' => '%', 'write' => '\\%',
@@ -128,11 +128,11 @@ class definitions {
                 'label'           => get_string('group_power_root', $p),
                 'default_enabled' => true,
                 'elements'        => [
-                    ['display' => "x\u{207F}", 'write' => '^{}',
+                    ['display' => "x\u{207F}", 'write' => '^{}', 'left' => 1,
                         'tooltip' => get_string('btn_power', $p)],
-                    ['display' => "\u{221A}", 'write' => '\\sqrt{}',
+                    ['display' => "\u{221A}", 'write' => '\\sqrt{}', 'left' => 1,
                         'tooltip' => get_string('btn_sqrt', $p)],
-                    ['display' => "ⁿ\u{221A}", 'write' => '\\nthroot{}{}',
+                    ['display' => "ⁿ\u{221A}", 'write' => '\\nthroot{}{}', 'left' => 2,
                         'tooltip' => get_string('btn_nthroot', $p)],
                 ],
             ],
@@ -160,8 +160,8 @@ class definitions {
                         'tooltip' => get_string('btn_equal', $p)],
                     ['display' => '≠', 'cmd'   => '\\neq',
                         'tooltip' => get_string('btn_neq', $p)],
-                    ['display' => '≈', 'cmd'   => '\\approx',
-                        'tooltip' => get_string('btn_approx', $p)],
+                    // No approximately-equal sign: Maxima has no such operator, and STACK
+                    // rejects every answer that contains one (#96). It is not offered.
                     ['display' => '<', 'write' => '<',
                         'tooltip' => get_string('btn_less', $p)],
                     ['display' => '>', 'write' => '>',
@@ -303,7 +303,7 @@ class definitions {
                     ['type' => 'stack_core', 'package' => 'geometry.mac'],
                 ],
                 'elements'        => array_merge(self::get_geometry_elements($p), [
-                    ['label'   => '\\overline{AB}', 'write' => '\\overline{}',
+                    ['label'   => '\\overline{AB}', 'write' => '\\overline{}', 'left' => 1,
                         'display' => 'AB̅',
                         'tooltip' => get_string('btn_overline', $p)],
                     // The degree sign, the bare angle symbol and the perpendicular sign have no
@@ -694,6 +694,7 @@ class definitions {
             [
                 'label'   => '\\vec{v}',
                 'write'   => '\\vec{}',
+                'left'    => 1,
                 'display' => 'v⃗',
                 'tooltip' => get_string('btn_vec', $p),
             ],
@@ -707,7 +708,9 @@ class definitions {
         if (self::get_norm_function() !== '') {
             $elements[] = [
                 'display' => '‖v‖',
-                'write'   => '\\left\\|\\right\\|',
+                // MathQuill parses the double bar only as \lVert ... \rVert; \left\| is dropped
+                // without a trace, and the button would write nothing.
+                'write'   => '\\left\\lVert \\right\\rVert ',
                 'left'    => 1,
                 'tooltip' => get_string('btn_norm', $p),
             ];
@@ -762,7 +765,7 @@ class definitions {
                 'display' => '|AB|',
                 'semantic' => 'segmentlength',
                 'write'   => '\\left|\\overline{}\\right|',
-                'left'    => 1,
+                'left'    => 2,
                 'tooltip' => get_string('btn_segment_length', $p),
             ],
         ];
@@ -902,6 +905,43 @@ class definitions {
         }
 
         return $catalogue;
+    }
+
+    /**
+     * CAS words the enabled buttons write that STACK accepts from a student only when allowed.
+     *
+     * STACK rejects a function name it does not know in a student answer unless the input lists
+     * it under "Allowed words". The geometry functions, the norm and the differential operators
+     * are such names: a question that offers their buttons without allowing them gets an
+     * "unknown function" message for every answer that uses one (#96).
+     *
+     * @param array $config Configuration: group key => enabled.
+     * @return array Sorted list of words.
+     */
+    public static function get_required_words(array $config): array {
+        $diffops = self::get_differential_operators();
+        $words = [];
+
+        foreach (self::export_button_catalogue() as $button) {
+            if (empty($config[$button['group']])) {
+                continue;
+            }
+            $semantic = $button['semantic'];
+            $segment = $button['group'] === 'geometry' && $button['template'] === '\\overline{}';
+            if ($segment || in_array($semantic, ['distance', 'segmentlength'], true)) {
+                $words[] = 'Distance';
+            } else if ($semantic === 'angle') {
+                $words[] = 'Angle';
+            } else if (strpos($button['template'], '\\lVert') !== false) {
+                $words[] = self::get_norm_function();
+            } else if (($diffops[$semantic] ?? '') !== '') {
+                $words[] = $diffops[$semantic];
+            }
+        }
+
+        $words = array_values(array_unique(array_filter($words, 'strlen')));
+        sort($words);
+        return $words;
     }
 
     /**

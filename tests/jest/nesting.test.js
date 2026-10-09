@@ -304,11 +304,11 @@ describe('the rest of the #79 matrix', () => {
     });
 
     test('a structure beyond the safety limit is reported, not silently mangled', () => {
-        // Forty nested fractions exhaust the iteration limit. Before, the generic fallback
-        // stripped the backslashes and produced "frac1 frac1 frac1 ..." - a plausible-looking
-        // expression that means nothing like the input.
+        // 250 nested fractions exhaust the reader's limit of 200 replacements. Before, the
+        // generic fallback stripped the backslashes and produced "frac1 frac1 frac1 ..." - a
+        // plausible-looking expression that means nothing like the input.
         let deep = 'x';
-        for (let i = 0; i < 40; i += 1) {
+        for (let i = 0; i < 250; i += 1) {
             deep = '\\frac{1}{' + deep + '}';
         }
 
@@ -317,9 +317,9 @@ describe('the rest of the #79 matrix', () => {
         expect(result.problems).toContain('nested_structure_unparsed');
     });
 
-    test('a structure within the limit is converted without a complaint', () => {
+    test.each([10, 40])('%i nested fractions are within the limit and converted without a complaint', (depth) => {
         let deep = 'x';
-        for (let i = 0; i < 10; i += 1) {
+        for (let i = 0; i < depth; i += 1) {
             deep = '\\frac{1}{' + deep + '}';
         }
 

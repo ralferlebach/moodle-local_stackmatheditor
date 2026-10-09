@@ -246,13 +246,126 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
     }
 
     /**
-     * Convert ^(expr) -> ^{expr}.
+     * Find the matching closing brace.
+     *
+     * @param {string} s String.
+     * @param {number} openPos Position of '{'.
+     * @returns {number} Position of '}' or -1.
+     */
+    function findCloseBrace(s, openPos) {
+        var depth = 0;
+        var i;
+
+        for (i = openPos; i < s.length; i++) {
+            if (s[i] === '{') {
+                depth++;
+            } else if (s[i] === '}') {
+                depth--;
+                if (depth === 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Read one operand of a power, starting right after "^".
+     *
+     * An operand is a bracket group, a brace group, or a token: an optionally negative number or
+     * an identifier (subscript included), with the argument brackets of a function call. Anything
+     * else (a LaTeX command produced by an earlier pass) is not read here.
+     *
+     * @param {string} s String.
+     * @param {number} pos Position after "^".
+     * @returns {?Object} {start, end, inner, grouped} or null; inner is the text without the
+     *     group brackets.
+     */
+    function readPowerOperand(s, pos) {
+        var ch = s.charAt(pos);
+        var close;
+        var m;
+        var end;
+
+        if (ch === '(' || ch === '{') {
+            close = ch === '(' ? findCloseParen(s, pos) : findCloseBrace(s, pos);
+            if (close === -1) {
+                return null;
+            }
+            return {start: pos, end: close + 1, inner: s.substring(pos + 1, close), grouped: true};
+        }
+
+        // Group 1 is a number, group 2 an identifier.
+        m = s.substring(pos).match(/^-?(?:(\d+(?:\.\d+)?|\.\d+)|([A-Za-z%][A-Za-z0-9_%]*))/);
+        if (!m) {
+            return null;
+        }
+        end = pos + m[0].length;
+        // An identifier directly followed by a bracket is a function call: x^f(y) is x^(f(y)).
+        if (m[2] && s.charAt(end) === '(') {
+            close = findCloseParen(s, end);
+            if (close !== -1) {
+                end = close + 1;
+            }
+        }
+        return {start: pos, end: end, inner: s.substring(pos, end), grouped: false};
+    }
+
+    /**
+     * Write every Maxima exponent as a LaTeX superscript group.
+     *
+     * x^(expr) becomes x^{expr}; an exponent of more than one character is braced (x^11 is
+     * x^{11}, a^ab is a^{ab}), because LaTeX would otherwise raise only its first character.
+     * Maxima's ^ is right-associative, so in a chain the rest of the chain is the exponent:
+     * x^y^z is x^{y^{z}}. Inside an exponent every superscript is braced, which is also what
+     * MathQuill writes, so a tower comes back as the LaTeX it came from. A single character at the
+     * top level stays as it is (x^2).
      *
      * @param {string} s Input.
+     * @param {boolean} [inExponent] True for the content of an exponent.
      * @returns {string} Converted.
      */
-    function processExponents(s) {
-        return fixpoint(s, /\^\(([^()]*?)\)/, '^{$1}');
+    function processExponents(s, inExponent) {
+        var out = '';
+        var i = 0;
+        var operand;
+        var end;
+        var next;
+        var exponent;
+
+        while (i < s.length) {
+            operand = s.charAt(i) === '^' ? readPowerOperand(s, i + 1) : null;
+            if (!operand) {
+                out += s.charAt(i);
+                i++;
+                continue;
+            }
+
+            // A chain: the exponent runs to the end of the chain.
+            end = operand.end;
+            while (s.charAt(end) === '^') {
+                next = readPowerOperand(s, end + 1);
+                if (!next) {
+                    break;
+                }
+                end = next.end;
+            }
+
+            if (end !== operand.end) {
+                exponent = processExponents(s.substring(operand.start, end), true);
+            } else {
+                exponent = processExponents(operand.inner, true);
+            }
+
+            if (!inExponent && end === operand.end && !operand.grouped && exponent.length === 1) {
+                out += '^' + exponent;
+            } else {
+                out += '^{' + exponent + '}';
+            }
+            i = end;
+        }
+
+        return out;
     }
 
     /**
@@ -1678,11 +1791,7 @@ define(['local_stackmatheditor/operator_map'], function(OperatorMap) {
         }
 
         // Exponents.
-        prev = '';
-        while (s !== prev) {
-            prev = s;
-            s = processExponents(s);
-        }
+        s = processExponents(s, false);
 
         // Subscripts.
         s = processSubscripts(s);

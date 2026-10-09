@@ -12,9 +12,14 @@ static moodle-plugin-ci pipeline and have their own workflow (`.github/workflows
 | `toolbar_layout.spec.js` | the toolbar follows the width of its container, not of the window: drawer open and closed, a container narrowed to 420 px, and a sweep from 700 down to 300 px in 4 px steps - at no width is a button outside the toolbar, and no group of up to five buttons and no cluster of a larger group breaks while it fits on a line |
 | `rtl.spec.js` | a right-to-left page (the seed writes a minimal `he` language pack with `thisdirection = rtl` into the dataroot): the toolbar follows the page and its keyboard order runs right to left, while formula, button symbols and the matrix grid stay left to right; matrix and vector choosers open under their button and stay in the window; no editor element outside the viewport; the switch turns the editor off and on with the answer; typed `(x-1)*2` reaches STACK unchanged; axe on editor and configuration page |
 | `a11y.spec.js` | axe-core (WCAG 2.0/2.1 A/AA) on editors, toolbars and the configuration page; every toolbar button named from the language pack; keyboard input |
+| `conversion-browser.spec.js` | #96: tex2max in a real attempt - LaTeX written through MathQuill arrives in the STACK input as Maxima, identifiers and functions typed on the keyboard stay what was typed, a value written into the STACK input from outside reaches the editor and back without drift, `pi`/`%pi`, a nested root survives saving and reloading |
+| `editor-rendering.spec.js` | #96: editor and toolbar appear and the original input is hidden, typing fills the hidden input, a stored answer is restored (reload, next page and back), every template button leaves the cursor in its first slot, Enter in a single-line editor adds nothing and changes nothing (#23, #43), the cells of a matrix are reached with arrow keys and Tab (#40), no editor in mode 0 or for a question disabled in mode 3 |
+| `multiline.spec.js` | #96, #41, #23: multi-line editor for STACK textarea inputs - clearing, Backspace and Delete on empty lines, the last line is never removed, an emptied denominator does not survive, Enter and Backspace keep the line order, the "Add line" button syncs at once, a system row is added, edited and removed when its sub-row is emptied, empty lines leave a system alone, the remove buttons and the numbering with the mouse, and after saving and reloading the lines are the ones STACK kept (STACK drops empty rows) |
+| `equiv.spec.js` | #23: STACK equiv input (quiz `SME_EQUIV_CMID`) - Enter copies the current step and the copy is edited, Enter in a system copies every relation, "Add line" copies the active step and syncs at once |
 
 `seed.php` (idempotent, disposable test sites only) creates course `SMETEST`, a teacher, 20
-students and two quizzes from the Moodle XML fixtures in `tests/fixtures`, and prints the
+students and the test quizzes (settings, load, JSXGraph, units, equivalence reasoning) from the
+Moodle XML fixtures in `tests/fixtures`, and prints the
 `SME_*` variables; `php seed.php --reset` removes the quiz/question configuration of the settings
 quiz (used between the matrix tests).
 

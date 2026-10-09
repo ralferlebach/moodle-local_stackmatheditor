@@ -326,6 +326,23 @@ class configure_form extends \moodleform {
                     s($input['name']),
                     \html_writer::span(s($input['label']))
                 );
+                if (!empty($input['missingwords'])) {
+                    // Without these allowed words STACK answers every use of the button with
+                    // "unknown function": the author has to add them in the question.
+                    $mform->addElement(
+                        'static',
+                        'stackmissingwords' . $index,
+                        '',
+                        \html_writer::div(
+                            get_string(
+                                'stacksemantics_missingwords',
+                                'local_stackmatheditor',
+                                s(implode(', ', $input['missingwords']))
+                            ),
+                            'alert alert-warning mb-0 sme-missing-words'
+                        )
+                    );
+                }
             }
 
             $mform->addElement(

@@ -37,7 +37,7 @@
         "kind": "write",
         "template": "\\frac{}{}",
         "semantic": "",
-        "left": 0
+        "left": 2
     },
     {
         "group": "basic_operators",
@@ -53,7 +53,7 @@
         "kind": "write",
         "template": "^{}",
         "semantic": "",
-        "left": 0
+        "left": 1
     },
     {
         "group": "power_root",
@@ -61,7 +61,7 @@
         "kind": "write",
         "template": "\\sqrt{}",
         "semantic": "",
-        "left": 0
+        "left": 1
     },
     {
         "group": "power_root",
@@ -69,7 +69,7 @@
         "kind": "write",
         "template": "\\nthroot{}{}",
         "semantic": "",
-        "left": 0
+        "left": 2
     },
     {
         "group": "exponential_log",
@@ -108,14 +108,6 @@
         "display": "≠",
         "kind": "cmd",
         "template": "\\neq",
-        "semantic": "",
-        "left": 0
-    },
-    {
-        "group": "comparators",
-        "display": "≈",
-        "kind": "cmd",
-        "template": "\\approx",
         "semantic": "",
         "left": 0
     },
@@ -421,7 +413,7 @@
         "kind": "write",
         "template": "\\left|\\overline{}\\right|",
         "semantic": "segmentlength",
-        "left": 1
+        "left": 2
     },
     {
         "group": "geometry",
@@ -429,7 +421,7 @@
         "kind": "write",
         "template": "\\overline{}",
         "semantic": "",
-        "left": 0
+        "left": 1
     },
     {
         "group": "trigonometry",
@@ -493,7 +485,7 @@
         "kind": "write",
         "template": "\\vec{}",
         "semantic": "",
-        "left": 0
+        "left": 1
     },
     {
         "group": "vector_operators",
@@ -507,7 +499,7 @@
         "group": "vector_operators",
         "display": "‖v‖",
         "kind": "write",
-        "template": "\\left\\|\\right\\|",
+        "template": "\\left\\lVert \\right\\rVert ",
         "semantic": "",
         "left": 1
     },

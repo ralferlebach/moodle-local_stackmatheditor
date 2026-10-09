@@ -111,7 +111,9 @@ To update this library:
 1. Check out the fork and build it:
 
      git clone https://github.com/ralferlebach/mathquill
-     cd mathquill && npm ci && make
+     cd mathquill
+     git checkout <commit to ship>    # never an unpinned branch head
+     npm ci && make
 
 2. Note the exact commit you built (git rev-parse HEAD) - it belongs in this
    file. Then copy from the fork's build/ directory into

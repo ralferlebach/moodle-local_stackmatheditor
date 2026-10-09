@@ -1,0 +1,1472 @@
+[
+    {
+        "id": "basic-arithmetic",
+        "group": "basic_operators",
+        "latex": "1+2\\cdot 3-4\\div 5",
+        "maxima": "1+2* 3-4/ 5",
+        "packages": [],
+        "cas": "accept",
+        "value": "31/5",
+        "behatScenario": "Basic arithmetic",
+        "browserSmoke": false
+    },
+    {
+        "id": "powers-and-roots",
+        "group": "power_root",
+        "latex": "\\sqrt{x^{2}+\\sqrt{y}}",
+        "maxima": "sqrt(x^2+sqrt(y))",
+        "packages": [],
+        "cas": "accept",
+        "behatScenario": "Powers and roots",
+        "browserSmoke": false
+    },
+    {
+        "id": "exponential-and-logarithm",
+        "group": "exponential_log",
+        "latex": "\\ln\\left(e^{x}\\right)",
+        "maxima": "log(e^x)",
+        "packages": [],
+        "cas": "accept",
+        "value": "x",
+        "note": "A plain e (typed, not the constants button) is Euler's number in STACK: log(e^x) evaluates to x.",
+        "behatScenario": "Exponential and logarithm",
+        "browserSmoke": false
+    },
+    {
+        "id": "trigonometry",
+        "group": "trigonometry",
+        "latex": "\\sin\\left(x\\right)+\\cos\\left(2x\\right)+\\tan\\left(x\\right)",
+        "maxima": "sin(x)+cos(2x)+tan(x)",
+        "packages": [],
+        "cas": "accept",
+        "behatScenario": "Trigonometry",
+        "browserSmoke": false
+    },
+    {
+        "id": "absolute-value",
+        "group": "absolute",
+        "button": "\\left|\\right|",
+        "latex": "\\left|x-1\\right|",
+        "maxima": "abs(x-1)",
+        "packages": [],
+        "cas": "accept",
+        "behatScenario": "Absolute value",
+        "browserSmoke": false
+    },
+    {
+        "id": "comparators",
+        "group": "comparators",
+        "button": "\\geq",
+        "latex": "x\\geq 2",
+        "maxima": "x>= 2",
+        "packages": [],
+        "cas": "accept",
+        "behatScenario": "Comparators",
+        "browserSmoke": false
+    },
+    {
+        "id": "set-theory",
+        "group": "set_theory",
+        "button": "\\cup",
+        "latex": "\\left\\{1,2\\right\\}\\cup\\left\\{3\\right\\}",
+        "maxima": "union({1,2},{3})",
+        "packages": [],
+        "cas": "accept",
+        "value": "{1,2,3}",
+        "behatScenario": "Set theory",
+        "browserSmoke": false
+    },
+    {
+        "id": "logic",
+        "group": "logic",
+        "button": "\\land",
+        "latex": "x>0\\land x<1",
+        "maxima": "x>0 and x<1",
+        "packages": [],
+        "cas": "accept",
+        "behatScenario": "Logic",
+        "browserSmoke": false
+    },
+    {
+        "id": "matrix",
+        "group": "matrix_operators",
+        "button": "matrix",
+        "latex": "\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}",
+        "maxima": "matrix([1,2],[3,4])",
+        "packages": [],
+        "cas": "accept",
+        "value": "matrix([1,2],[3,4])",
+        "behatScenario": "Matrices",
+        "browserSmoke": true
+    },
+    {
+        "id": "determinant",
+        "group": "matrix_operators",
+        "button": "\\det\\left(\\right)",
+        "latex": "\\det\\left(\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}\\right)",
+        "maxima": "determinant(matrix([1,2],[3,4]))",
+        "packages": [],
+        "cas": "accept",
+        "value": "-2",
+        "behatScenario": "Determinant and transpose",
+        "browserSmoke": false
+    },
+    {
+        "id": "column-vector",
+        "group": "matrix_operators",
+        "button": "vector",
+        "latex": "\\begin{pmatrix}1\\\\2\\\\3\\end{pmatrix}",
+        "maxima": "matrix([1],[2],[3])",
+        "packages": [],
+        "cas": "accept",
+        "value": "matrix([1],[2],[3])",
+        "behatScenario": "Column vectors",
+        "browserSmoke": false
+    },
+    {
+        "id": "point-2d",
+        "group": "geometry",
+        "button": "\\left(|\\right)",
+        "latex": "\\left(2|3\\right)",
+        "maxima": "[2,3]",
+        "packages": [],
+        "cas": "accept",
+        "value": "[2,3]",
+        "behatScenario": "Geometry with points as lists",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-letters",
+        "group": "greek_lower",
+        "latex": "\\alpha+\\beta\\cdot\\gamma",
+        "maxima": "alpha+beta*gamma",
+        "packages": [],
+        "cas": "accept",
+        "behatScenario": "Greek letters",
+        "browserSmoke": false
+    },
+    {
+        "id": "constants",
+        "group": "constants_math",
+        "latex": "\\pi+e",
+        "maxima": "pi+e",
+        "packages": [],
+        "cas": "accept",
+        "value": "%pi+%e",
+        "behatScenario": "Mathematical constants",
+        "browserSmoke": false
+    },
+    {
+        "id": "integral-indefinite",
+        "group": "integral_operators",
+        "latex": "\\int x\\,\\mathrm{d}x",
+        "maxima": "integrate(x,x)",
+        "packages": [],
+        "cas": "accept",
+        "value": "x^2/2",
+        "mathquillDefect": "MathQuill has no thin space: it turns \"\\,\" into a literal comma, and the field then sends integrate(x,,x). The toolbar template (integral-template-indefinite) does not write \"\\,\", so this only bites pasted or prefilled LaTeX.",
+        "behatScenario": "Integrals",
+        "browserSmoke": false
+    },
+    {
+        "id": "derivative-d",
+        "group": "differential_operators",
+        "latex": "\\frac{\\mathrm{d}}{\\mathrm{d}x}\\left(x^{2}\\right)",
+        "maxima": "diff(x^2,x)",
+        "packages": [],
+        "cas": "accept",
+        "value": "2*x",
+        "behatScenario": "Derivatives",
+        "browserSmoke": false
+    },
+    {
+        "id": "plus",
+        "group": "basic_operators",
+        "button": "+",
+        "latex": "x+1",
+        "maxima": "x+1",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "minus",
+        "group": "basic_operators",
+        "button": "-",
+        "latex": "x-1",
+        "maxima": "x-1",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "cdot",
+        "group": "basic_operators",
+        "button": "\\cdot",
+        "latex": "2\\cdot x",
+        "maxima": "2* x",
+        "packages": [],
+        "cas": "accept",
+        "value": "2*x",
+        "browserSmoke": false
+    },
+    {
+        "id": "div",
+        "group": "basic_operators",
+        "button": "\\div",
+        "latex": "x\\div 2",
+        "maxima": "x/ 2",
+        "packages": [],
+        "cas": "accept",
+        "value": "x/2",
+        "browserSmoke": false
+    },
+    {
+        "id": "fraction",
+        "group": "basic_operators",
+        "button": "\\frac{}{}",
+        "latex": "\\frac{x}{2}",
+        "maxima": "(x)/(2)",
+        "packages": [],
+        "cas": "accept",
+        "value": "x/2",
+        "browserSmoke": false
+    },
+    {
+        "id": "percent",
+        "group": "basic_operators",
+        "button": "\\%",
+        "latex": "50\\%",
+        "maxima": "50/100",
+        "packages": [],
+        "cas": "accept",
+        "value": "1/2",
+        "note": "A percent sign is a hundredth: STACK has no % operator, so tex2max writes /100 (#96).",
+        "browserSmoke": false
+    },
+    {
+        "id": "power",
+        "group": "power_root",
+        "button": "^{}",
+        "latex": "x^{2}",
+        "maxima": "x^2",
+        "packages": [],
+        "cas": "accept",
+        "value": "x^2",
+        "browserSmoke": false
+    },
+    {
+        "id": "sqrt",
+        "group": "power_root",
+        "button": "\\sqrt{}",
+        "latex": "\\sqrt{x}",
+        "maxima": "sqrt(x)",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "nthroot",
+        "group": "power_root",
+        "button": "\\nthroot{}{}",
+        "latex": "\\sqrt[3]{x}",
+        "maxima": "(x)^(1/(3))",
+        "packages": [],
+        "cas": "accept",
+        "value": "x^(1/3)",
+        "browserSmoke": false
+    },
+    {
+        "id": "exp",
+        "group": "exponential_log",
+        "button": "\\exp\\left(\\right)",
+        "latex": "\\exp\\left(x\\right)",
+        "maxima": "exp(x)",
+        "packages": [],
+        "cas": "accept",
+        "value": "%e^x",
+        "browserSmoke": false
+    },
+    {
+        "id": "log",
+        "group": "exponential_log",
+        "button": "\\log\\left(\\right)",
+        "latex": "\\log\\left(x\\right)",
+        "maxima": "log(x)",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "ln",
+        "group": "exponential_log",
+        "button": "\\ln\\left(\\right)",
+        "latex": "\\ln\\left(x\\right)",
+        "maxima": "log(x)",
+        "packages": [],
+        "cas": "accept",
+        "value": "log(x)",
+        "browserSmoke": false
+    },
+    {
+        "id": "equal",
+        "group": "comparators",
+        "button": "=",
+        "latex": "x=2",
+        "maxima": "x=2",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "neq",
+        "group": "comparators",
+        "button": "\\neq",
+        "latex": "x\\neq 2",
+        "maxima": "x# 2",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "approx",
+        "group": "comparators",
+        "latex": "x\\approx 2",
+        "maxima": "x~= 2",
+        "packages": [],
+        "cas": "known-defect",
+        "defectStage": "parser",
+        "defect": "tex2max writes \"x~= 2\" and STACK cannot parse it (\"Expected ... received =\"). Maxima has no approximately-equal operator, so the toolbar no longer offers the sign (#96); the contract pins what pasted or legacy LaTeX with \\approx still produces.",
+        "browserSmoke": false
+    },
+    {
+        "id": "less",
+        "group": "comparators",
+        "button": "<",
+        "latex": "x<2",
+        "maxima": "x<2",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greater",
+        "group": "comparators",
+        "button": ">",
+        "latex": "x>2",
+        "maxima": "x>2",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "leq",
+        "group": "comparators",
+        "button": "\\leq",
+        "latex": "x\\leq 2",
+        "maxima": "x<= 2",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "plus-minus",
+        "group": "absolute",
+        "button": "\\pm",
+        "latex": "x=\\pm 2",
+        "maxima": "(x=2) nounor (x=-2)",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "minus-plus",
+        "group": "absolute",
+        "button": "\\mp",
+        "latex": "2\\mp x",
+        "maxima": "(2-x) nounor (2+x)",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "element-of",
+        "group": "set_theory",
+        "button": "\\in",
+        "latex": "x\\in\\left\\{1,2\\right\\}",
+        "maxima": "elementp(x,{1,2})",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "not-element-of",
+        "group": "set_theory",
+        "button": "\\notin",
+        "latex": "x\\notin\\left\\{1,2\\right\\}",
+        "maxima": "not elementp(x,{1,2})",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "intersection",
+        "group": "set_theory",
+        "button": "\\cap",
+        "latex": "\\left\\{1,2\\right\\}\\cap\\left\\{2,3\\right\\}",
+        "maxima": "intersection({1,2},{2,3})",
+        "packages": [],
+        "cas": "accept",
+        "value": "{2}",
+        "browserSmoke": false
+    },
+    {
+        "id": "set-difference",
+        "group": "set_theory",
+        "button": "\\setminus",
+        "latex": "\\left\\{1,2\\right\\}\\setminus\\left\\{2\\right\\}",
+        "maxima": "setdifference({1,2},{2})",
+        "packages": [],
+        "cas": "accept",
+        "value": "{1}",
+        "browserSmoke": false
+    },
+    {
+        "id": "subseteq",
+        "group": "set_theory",
+        "button": "\\subseteq",
+        "latex": "\\left\\{1\\right\\}\\subseteq\\left\\{1,2\\right\\}",
+        "maxima": "subsetp({1},{1,2})",
+        "packages": [],
+        "cas": "accept",
+        "value": "true",
+        "browserSmoke": false
+    },
+    {
+        "id": "supseteq",
+        "group": "set_theory",
+        "button": "\\supseteq",
+        "latex": "\\left\\{1,2\\right\\}\\supseteq\\left\\{1\\right\\}",
+        "maxima": "subsetp({1},{1,2})",
+        "packages": [],
+        "cas": "accept",
+        "value": "true",
+        "browserSmoke": false
+    },
+    {
+        "id": "subset",
+        "group": "set_theory",
+        "button": "\\subset",
+        "latex": "\\left\\{1\\right\\}\\subset\\left\\{1,2\\right\\}",
+        "maxima": "(subsetp({1},{1,2}) and {1}#{1,2})",
+        "packages": [],
+        "cas": "accept",
+        "value": "true",
+        "browserSmoke": false
+    },
+    {
+        "id": "supset",
+        "group": "set_theory",
+        "button": "\\supset",
+        "latex": "\\left\\{1,2\\right\\}\\supset\\left\\{1\\right\\}",
+        "maxima": "(subsetp({1},{1,2}) and {1}#{1,2})",
+        "packages": [],
+        "cas": "accept",
+        "value": "true",
+        "browserSmoke": false
+    },
+    {
+        "id": "subset-equal-sets",
+        "group": "set_theory",
+        "latex": "\\left\\{1,2\\right\\}\\subset\\left\\{1,2\\right\\}",
+        "maxima": "(subsetp({1,2},{1,2}) and {1,2}#{1,2})",
+        "packages": [],
+        "cas": "accept",
+        "value": "false",
+        "note": "A proper subset is strict: a set is not a proper subset of itself (#35).",
+        "browserSmoke": false
+    },
+    {
+        "id": "not",
+        "group": "logic",
+        "button": "\\neg",
+        "latex": "\\neg a",
+        "maxima": "not a",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "or",
+        "group": "logic",
+        "button": "\\lor",
+        "latex": "a\\lor b",
+        "maxima": "a or b",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "implies",
+        "group": "logic",
+        "button": "\\Rightarrow",
+        "latex": "a\\Rightarrow b",
+        "maxima": "a implies b",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "implied-by",
+        "group": "logic",
+        "button": "\\Leftarrow",
+        "latex": "a\\Leftarrow b",
+        "maxima": "b implies a",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "iff",
+        "group": "logic",
+        "button": "\\Leftrightarrow",
+        "latex": "a\\Leftrightarrow b",
+        "maxima": "(a implies b) and (b implies a)",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "partial",
+        "group": "differential_operators",
+        "button": "\\frac{\\partial}{\\partial x}\\left(\\right)",
+        "latex": "\\frac{\\partial}{\\partial x}\\left(x^{2}\\right)",
+        "maxima": "diff(x^2,x)",
+        "packages": [],
+        "cas": "accept",
+        "value": "2*x",
+        "browserSmoke": false
+    },
+    {
+        "id": "partial-leibniz-numerator",
+        "group": "differential_operators",
+        "latex": "\\frac{\\partial\\left(x^{2}y\\right)}{\\partial x}",
+        "maxima": "diff(x^2y,x)",
+        "packages": [],
+        "cas": "accept",
+        "value": "2*x*y",
+        "note": "Leibniz notation with the operand in the numerator (#46).",
+        "browserSmoke": false
+    },
+    {
+        "id": "partial-n",
+        "group": "differential_operators",
+        "button": "\\frac{\\partial^{2}}{\\partial x^{2}}\\left(\\right)",
+        "latex": "\\frac{\\partial^{2}}{\\partial x^{2}}\\left(x^{3}\\right)",
+        "maxima": "diff(x^3,x,2)",
+        "packages": [],
+        "cas": "accept",
+        "value": "6*x",
+        "browserSmoke": false
+    },
+    {
+        "id": "partial-mixed",
+        "group": "differential_operators",
+        "button": "\\frac{\\partial^{2}}{\\partial x\\partial y}\\left(\\right)",
+        "latex": "\\frac{\\partial^{2}}{\\partial x\\partial y}\\left(x^{2}y\\right)",
+        "maxima": "diff(x^2y,x,1,y,1)",
+        "packages": [],
+        "cas": "accept",
+        "value": "2*x",
+        "browserSmoke": false
+    },
+    {
+        "id": "integral-definite",
+        "group": "integral_operators",
+        "button": "\\int_{}^{}\\left(\\right)\\mathrm{d}x",
+        "latex": "\\int_{0}^{1}\\left(x^{2}\\right)\\mathrm{d}x",
+        "maxima": "integrate(x^2,x,0,1)",
+        "packages": [],
+        "cas": "accept",
+        "value": "1/3",
+        "browserSmoke": false
+    },
+    {
+        "id": "integral-template-indefinite",
+        "group": "integral_operators",
+        "button": "\\int_{}^{}\\left(\\right)\\mathrm{d}x",
+        "latex": "\\int_{}^{}\\left(x^{2}\\right)\\mathrm{d}x",
+        "maxima": "integrate(x^2,x)",
+        "packages": [],
+        "cas": "accept",
+        "value": "x^3/3",
+        "browserSmoke": false
+    },
+    {
+        "id": "round-brackets",
+        "group": "brackets",
+        "button": "\\left(\\right)",
+        "latex": "\\left(x+1\\right)\\cdot 2",
+        "maxima": "(x+1)* 2",
+        "packages": [],
+        "cas": "accept",
+        "value": "2*(x+1)",
+        "browserSmoke": false
+    },
+    {
+        "id": "square-brackets",
+        "group": "brackets",
+        "button": "\\left[\\right]",
+        "latex": "\\left[1,2\\right]",
+        "maxima": "[1,2]",
+        "packages": [],
+        "cas": "accept",
+        "value": "[1,2]",
+        "browserSmoke": false
+    },
+    {
+        "id": "curly-brackets",
+        "group": "brackets",
+        "button": "\\left\\{\\right\\}",
+        "latex": "\\left\\{1,2\\right\\}",
+        "maxima": "{1,2}",
+        "packages": [],
+        "cas": "accept",
+        "value": "{1,2}",
+        "browserSmoke": false
+    },
+    {
+        "id": "pi",
+        "group": "constants_math",
+        "button": "\\pi",
+        "latex": "2\\pi",
+        "maxima": "2pi",
+        "packages": [],
+        "cas": "accept",
+        "value": "2*%pi",
+        "browserSmoke": false
+    },
+    {
+        "id": "infinity",
+        "group": "constants_math",
+        "button": "\\infty",
+        "latex": "\\infty",
+        "maxima": "inf",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "euler",
+        "group": "constants_math",
+        "button": "\\mathrm{e}",
+        "latex": "\\mathrm{e}^{2}",
+        "maxima": "%e^2",
+        "packages": [],
+        "cas": "accept",
+        "value": "%e^2",
+        "browserSmoke": false
+    },
+    {
+        "id": "imaginary",
+        "group": "constants_math",
+        "button": "\\mathrm{i}",
+        "latex": "2+3\\mathrm{i}",
+        "maxima": "2+3%i",
+        "packages": [],
+        "cas": "accept",
+        "value": "3*%i+2",
+        "browserSmoke": false
+    },
+    {
+        "id": "point-3d",
+        "group": "geometry",
+        "button": "\\left(||\\right)",
+        "latex": "\\left(1|2|3\\right)",
+        "maxima": "[1,2,3]",
+        "packages": [],
+        "cas": "accept",
+        "value": "[1,2,3]",
+        "browserSmoke": false
+    },
+    {
+        "id": "distance",
+        "group": "geometry",
+        "button": "d\\left(,\\right)",
+        "latex": "d\\left(A,B\\right)",
+        "maxima": "Distance(A,B)",
+        "packages": [],
+        "cas": "known-defect",
+        "defectStage": "cas",
+        "allowWords": "Distance",
+        "defect": "STACK's CAS validation evaluates Distance with the bare point names the template produces and stops with \"Distance expects its arguments to be lists\"; the student sees a CAS error instead of a validated answer. The names cannot come from the question either: STACK forbids students to use question variables.",
+        "browserSmoke": false
+    },
+    {
+        "id": "angle",
+        "group": "geometry",
+        "button": "\\angle ",
+        "latex": "\\angle ABC",
+        "maxima": "Angle(A,B,C)",
+        "packages": [],
+        "cas": "known-defect",
+        "defectStage": "cas",
+        "allowWords": "Angle",
+        "defect": "STACK's CAS validation evaluates Angle with the bare point names the template produces and stops with \"Angle expects its arguments to be lists\"; the student sees a CAS error instead of a validated answer. The names cannot come from the question either: STACK forbids students to use question variables.",
+        "browserSmoke": false
+    },
+    {
+        "id": "segment-length",
+        "group": "geometry",
+        "button": "\\left|\\overline{}\\right|",
+        "latex": "\\left|\\overline{AB}\\right|",
+        "maxima": "Distance(A,B)",
+        "packages": [],
+        "cas": "known-defect",
+        "defectStage": "cas",
+        "allowWords": "Distance",
+        "defect": "STACK's CAS validation evaluates Distance with the bare point names the template produces and stops with \"Distance expects its arguments to be lists\"; the student sees a CAS error instead of a validated answer. The names cannot come from the question either: STACK forbids students to use question variables.",
+        "browserSmoke": false
+    },
+    {
+        "id": "segment",
+        "group": "geometry",
+        "button": "\\overline{}",
+        "latex": "\\overline{AB}",
+        "maxima": "Distance(A,B)",
+        "packages": [],
+        "cas": "known-defect",
+        "defectStage": "cas",
+        "allowWords": "Distance",
+        "defect": "STACK's CAS validation evaluates Distance with the bare point names the template produces and stops with \"Distance expects its arguments to be lists\"; the student sees a CAS error instead of a validated answer. The names cannot come from the question either: STACK forbids students to use question variables.",
+        "browserSmoke": false
+    },
+    {
+        "id": "sin",
+        "group": "trigonometry",
+        "button": "\\sin\\left(\\right)",
+        "latex": "\\sin\\left(x\\right)",
+        "maxima": "sin(x)",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "cos",
+        "group": "trigonometry",
+        "button": "\\cos\\left(\\right)",
+        "latex": "\\cos\\left(x\\right)",
+        "maxima": "cos(x)",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "tan",
+        "group": "trigonometry",
+        "button": "\\tan\\left(\\right)",
+        "latex": "\\tan\\left(x\\right)",
+        "maxima": "tan(x)",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "arcsin",
+        "group": "trigonometry",
+        "button": "\\arcsin\\left(\\right)",
+        "latex": "\\arcsin\\left(x\\right)",
+        "maxima": "arcsin(x)",
+        "packages": [],
+        "cas": "accept",
+        "value": "asin(x)",
+        "browserSmoke": false
+    },
+    {
+        "id": "arccos",
+        "group": "trigonometry",
+        "button": "\\arccos\\left(\\right)",
+        "latex": "\\arccos\\left(x\\right)",
+        "maxima": "arccos(x)",
+        "packages": [],
+        "cas": "accept",
+        "value": "acos(x)",
+        "browserSmoke": false
+    },
+    {
+        "id": "arctan",
+        "group": "trigonometry",
+        "button": "\\arctan\\left(\\right)",
+        "latex": "\\arctan\\left(x\\right)",
+        "maxima": "arctan(x)",
+        "packages": [],
+        "cas": "accept",
+        "value": "atan(x)",
+        "browserSmoke": false
+    },
+    {
+        "id": "cross-product-list",
+        "group": "vector_products",
+        "button": "\\times",
+        "latex": "\\begin{pmatrix}1\\\\2\\\\3\\end{pmatrix}\\times\\begin{pmatrix}4\\\\5\\\\6\\end{pmatrix}",
+        "maxima": "express([1,2,3] ~ [4,5,6])",
+        "packages": [
+            "vect"
+        ],
+        "cas": "known-defect",
+        "defectStage": "cas",
+        "settings": {
+            "vectorFormat": "list"
+        },
+        "defect": "Maxima parses a whole STACK session before any of it runs, and \"~\" is only an infix operator once vect is loaded: the answer ends the session with \"syntax error: ~ is not an infix operator\". STACK offers no way to preload vect (not in qtype_stack maximalibraries) and refuses load() in question variables.",
+        "browserSmoke": false
+    },
+    {
+        "id": "cross-product-matrix",
+        "group": "vector_products",
+        "button": "\\times",
+        "latex": "\\begin{pmatrix}1\\\\2\\\\3\\end{pmatrix}\\times\\begin{pmatrix}4\\\\5\\\\6\\end{pmatrix}",
+        "maxima": "express(matrix([1],[2],[3]) ~ matrix([4],[5],[6]))",
+        "packages": [
+            "vect"
+        ],
+        "cas": "known-defect",
+        "defectStage": "cas",
+        "defect": "With the default vector format (matrix) tex2max writes express(matrix([1],[2],[3]) ~ matrix([4],[5],[6])). Besides the session-wide \"~\" syntax error of cross-product-list, vect itself refuses column matrices: \"~ used with improper arguments\".",
+        "browserSmoke": false
+    },
+    {
+        "id": "vector-arrow",
+        "group": "vector_operators",
+        "button": "\\vec{}",
+        "latex": "\\vec{a}+\\vec{b}",
+        "maxima": "a+b",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "vector-dot",
+        "group": "vector_operators",
+        "button": "\\cdot",
+        "latex": "\\vec{a}\\cdot\\vec{b}",
+        "maxima": "a*b",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "norm",
+        "group": "vector_operators",
+        "button": "\\left\\lVert \\right\\rVert ",
+        "latex": "\\left\\lVert v\\right\\rVert ",
+        "maxima": "norm(v)",
+        "packages": [],
+        "cas": "accept",
+        "allowWords": "norm",
+        "browserSmoke": false,
+        "note": "MathQuill parses the double bar only as \\lVert ... \\rVert; \\left\\| is dropped by its parser. tex2max reads both spellings (#96)."
+    },
+    {
+        "id": "gradient",
+        "group": "vector_differential",
+        "button": "\\operatorname{grad}\\left(\\right)",
+        "latex": "\\operatorname{grad}\\left(x^{2}y\\right)",
+        "maxima": "grad(x^2y)",
+        "packages": [
+            "vect"
+        ],
+        "cas": "accept",
+        "allowWords": "grad",
+        "settings": {
+            "diffOps": {
+                "gradient": "grad",
+                "divergence": "div",
+                "curl": "curl",
+                "laplacian": "laplacian"
+            }
+        },
+        "browserSmoke": false
+    },
+    {
+        "id": "divergence",
+        "group": "vector_differential",
+        "button": "\\operatorname{div}\\left(\\right)",
+        "latex": "\\operatorname{div}\\left(F\\right)",
+        "maxima": "div(F)",
+        "packages": [
+            "vect"
+        ],
+        "cas": "accept",
+        "allowWords": "div",
+        "settings": {
+            "diffOps": {
+                "gradient": "grad",
+                "divergence": "div",
+                "curl": "curl",
+                "laplacian": "laplacian"
+            }
+        },
+        "browserSmoke": false
+    },
+    {
+        "id": "curl",
+        "group": "vector_differential",
+        "button": "\\operatorname{rot}\\left(\\right)",
+        "latex": "\\operatorname{rot}\\left(F\\right)",
+        "maxima": "curl(F)",
+        "packages": [
+            "vect"
+        ],
+        "cas": "accept",
+        "allowWords": "curl",
+        "settings": {
+            "diffOps": {
+                "gradient": "grad",
+                "divergence": "div",
+                "curl": "curl",
+                "laplacian": "laplacian"
+            }
+        },
+        "browserSmoke": false,
+        "note": "MathQuill stores \\operatorname{rot} as the letters \"rot\"; tex2max maps the label applied to a bracket to the configured CAS name (#96)."
+    },
+    {
+        "id": "laplacian",
+        "group": "vector_differential",
+        "button": "\\Delta\\left(\\right)",
+        "latex": "\\Delta\\left(f\\right)",
+        "maxima": "laplacian(f)",
+        "packages": [
+            "vect"
+        ],
+        "cas": "accept",
+        "allowWords": "laplacian",
+        "settings": {
+            "diffOps": {
+                "gradient": "grad",
+                "divergence": "div",
+                "curl": "curl",
+                "laplacian": "laplacian"
+            }
+        },
+        "browserSmoke": false
+    },
+    {
+        "id": "identity",
+        "group": "matrix_operators",
+        "button": "\\operatorname{ident}\\left(\\right)",
+        "latex": "\\operatorname{ident}\\left(2\\right)",
+        "maxima": "ident(2)",
+        "packages": [],
+        "cas": "accept",
+        "value": "matrix([1,0],[0,1])",
+        "browserSmoke": false
+    },
+    {
+        "id": "transpose",
+        "group": "matrix_operators",
+        "button": "\\operatorname{transpose}\\left(\\right)",
+        "latex": "\\operatorname{transpose}\\left(\\begin{bmatrix}1&2\\\\3&4\\end{bmatrix}\\right)",
+        "maxima": "transpose(matrix([1,2],[3,4]))",
+        "packages": [],
+        "cas": "accept",
+        "value": "matrix([1,3],[2,4])",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-alpha",
+        "group": "greek_lower",
+        "button": "\\alpha",
+        "latex": "\\alpha",
+        "maxima": "alpha",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-beta",
+        "group": "greek_lower",
+        "button": "\\beta",
+        "latex": "\\beta",
+        "maxima": "beta",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-gamma",
+        "group": "greek_lower",
+        "button": "\\gamma",
+        "latex": "\\gamma",
+        "maxima": "gamma",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-delta",
+        "group": "greek_lower",
+        "button": "\\delta",
+        "latex": "\\delta",
+        "maxima": "delta",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-epsilon",
+        "group": "greek_lower",
+        "button": "\\epsilon",
+        "latex": "\\epsilon",
+        "maxima": "epsilon",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-zeta",
+        "group": "greek_lower",
+        "button": "\\zeta",
+        "latex": "\\zeta",
+        "maxima": "zeta",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-eta",
+        "group": "greek_lower",
+        "button": "\\eta",
+        "latex": "\\eta",
+        "maxima": "eta",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-theta",
+        "group": "greek_lower",
+        "button": "\\theta",
+        "latex": "\\theta",
+        "maxima": "theta",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-iota",
+        "group": "greek_lower",
+        "button": "\\iota",
+        "latex": "\\iota",
+        "maxima": "iota",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-kappa",
+        "group": "greek_lower",
+        "button": "\\kappa",
+        "latex": "\\kappa",
+        "maxima": "kappa",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-lambda",
+        "group": "greek_lower",
+        "button": "\\lambda",
+        "latex": "\\lambda",
+        "maxima": "lambda",
+        "packages": [],
+        "cas": "accept",
+        "value": "lambda",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-mu",
+        "group": "greek_lower",
+        "button": "\\mu",
+        "latex": "\\mu",
+        "maxima": "mu",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-nu",
+        "group": "greek_lower",
+        "button": "\\nu",
+        "latex": "\\nu",
+        "maxima": "nu",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-xi",
+        "group": "greek_lower",
+        "button": "\\xi",
+        "latex": "\\xi",
+        "maxima": "xi",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-omicron",
+        "group": "greek_lower",
+        "button": "o",
+        "latex": "o",
+        "maxima": "o",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-pi",
+        "group": "greek_lower",
+        "button": "\\pi",
+        "latex": "\\pi",
+        "maxima": "pi",
+        "packages": [],
+        "cas": "accept",
+        "value": "%pi",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-rho",
+        "group": "greek_lower",
+        "button": "\\rho",
+        "latex": "\\rho",
+        "maxima": "rho",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-sigma",
+        "group": "greek_lower",
+        "button": "\\sigma",
+        "latex": "\\sigma",
+        "maxima": "sigma",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-tau",
+        "group": "greek_lower",
+        "button": "\\tau",
+        "latex": "\\tau",
+        "maxima": "tau",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upsilon",
+        "group": "greek_lower",
+        "button": "\\upsilon",
+        "latex": "\\upsilon",
+        "maxima": "upsilon",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-phi",
+        "group": "greek_lower",
+        "button": "\\phi",
+        "latex": "\\phi",
+        "maxima": "phi",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-chi",
+        "group": "greek_lower",
+        "button": "\\chi",
+        "latex": "\\chi",
+        "maxima": "chi",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-psi",
+        "group": "greek_lower",
+        "button": "\\psi",
+        "latex": "\\psi",
+        "maxima": "psi",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-omega",
+        "group": "greek_lower",
+        "button": "\\omega",
+        "latex": "\\omega",
+        "maxima": "omega",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-alpha",
+        "group": "greek_upper",
+        "button": "A",
+        "latex": "A",
+        "maxima": "A",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-beta",
+        "group": "greek_upper",
+        "button": "B",
+        "latex": "B",
+        "maxima": "B",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-gamma",
+        "group": "greek_upper",
+        "button": "\\Gamma",
+        "latex": "\\Gamma",
+        "maxima": "Gamma",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-delta",
+        "group": "greek_upper",
+        "button": "\\Delta",
+        "latex": "\\Delta",
+        "maxima": "Delta",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-epsilon",
+        "group": "greek_upper",
+        "button": "E",
+        "latex": "E",
+        "maxima": "E",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-zeta",
+        "group": "greek_upper",
+        "button": "Z",
+        "latex": "Z",
+        "maxima": "Z",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-eta",
+        "group": "greek_upper",
+        "button": "H",
+        "latex": "H",
+        "maxima": "H",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-theta",
+        "group": "greek_upper",
+        "button": "\\Theta",
+        "latex": "\\Theta",
+        "maxima": "Theta",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-iota",
+        "group": "greek_upper",
+        "button": "I",
+        "latex": "I",
+        "maxima": "I",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-kappa",
+        "group": "greek_upper",
+        "button": "K",
+        "latex": "K",
+        "maxima": "K",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-lambda",
+        "group": "greek_upper",
+        "button": "\\Lambda",
+        "latex": "\\Lambda",
+        "maxima": "Lambda",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-mu",
+        "group": "greek_upper",
+        "button": "M",
+        "latex": "M",
+        "maxima": "M",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-nu",
+        "group": "greek_upper",
+        "button": "N",
+        "latex": "N",
+        "maxima": "N",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-xi",
+        "group": "greek_upper",
+        "button": "\\Xi",
+        "latex": "\\Xi",
+        "maxima": "Xi",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-omicron",
+        "group": "greek_upper",
+        "button": "O",
+        "latex": "O",
+        "maxima": "O",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-pi",
+        "group": "greek_upper",
+        "button": "\\Pi",
+        "latex": "\\Pi",
+        "maxima": "Pi",
+        "packages": [],
+        "cas": "accept",
+        "value": "%pi",
+        "note": "STACK reads the variable name Pi as the constant %pi, so the capital-pi button means pi in the CAS, not a variable named Pi. Pinned so that a change in either direction is noticed.",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-rho",
+        "group": "greek_upper",
+        "button": "P",
+        "latex": "P",
+        "maxima": "P",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-sigma",
+        "group": "greek_upper",
+        "button": "\\Sigma",
+        "latex": "\\Sigma",
+        "maxima": "Sigma",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-tau",
+        "group": "greek_upper",
+        "button": "T",
+        "latex": "T",
+        "maxima": "T",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-upsilon",
+        "group": "greek_upper",
+        "button": "\\Upsilon",
+        "latex": "\\Upsilon",
+        "maxima": "Upsilon",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-phi",
+        "group": "greek_upper",
+        "button": "\\Phi",
+        "latex": "\\Phi",
+        "maxima": "Phi",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-chi",
+        "group": "greek_upper",
+        "button": "X",
+        "latex": "X",
+        "maxima": "X",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-psi",
+        "group": "greek_upper",
+        "button": "\\Psi",
+        "latex": "\\Psi",
+        "maxima": "Psi",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "greek-upper-omega",
+        "group": "greek_upper",
+        "button": "\\Omega",
+        "latex": "\\Omega",
+        "maxima": "Omega",
+        "packages": [],
+        "cas": "accept",
+        "browserSmoke": false
+    },
+    {
+        "id": "mod-function",
+        "group": "basic_operators",
+        "latex": "\\operatorname{mod}\\left(7,3\\right)",
+        "maxima": "mod(7,3)",
+        "packages": [],
+        "cas": "accept",
+        "value": "1",
+        "note": "mod is a Maxima function, never an infix keyword (#42).",
+        "browserSmoke": false
+    }
+]

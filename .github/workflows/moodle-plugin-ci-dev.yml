@@ -30,8 +30,9 @@
 #   of qtype_stack, not of this plugin. A real site installation aborts without
 #   them before this plugin is even reached.
 # - Behat: `.github/stack-behat-init.php` sets platform=linux in the Behat DB,
-#   the @stack_init preflight proves the CAS works, and every CAS-dependent
-#   scenario resets the platform through an explicit Gherkin step.
+#   the @stack_init preflight proves the CAS works, and the step library only
+#   repairs CAS settings that differ from that baseline - no reset, no cache
+#   purge per scenario (#96).
 ##############################################################################
 
 name: Moodle Plugin CI Dev
@@ -170,7 +171,8 @@ jobs:
   quality:
     name: "Quality (codechecker / phpdoc / savepoints / validate / mustache / gherkinlint)"
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # 15 for the checks, about 3 more for installing the site the CLI scripts run against.
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
@@ -236,14 +238,20 @@ jobs:
       - name: Gherkin lint (Behat features)
         if: ${{ always() }}
         run: moodle-plugin-ci grunt -t gherkinlint 2>&1 | tee ci-logs/gherkinlint.log
-      # The CLI scripts against the clean installation above (#91): exit code 0, and no PHP error
-      # in the output - diagnose_legacy_config.php once stopped at its first line because clilib
-      # was not loaded. repair_config.php runs as a dry run; neither may change anything.
+      # The CLI scripts against a clean installation (#91): exit code 0, and no PHP error in the
+      # output - diagnose_legacy_config.php once stopped at its first line because clilib was not
+      # loaded. repair_config.php runs as a dry run; neither may change anything.
+      # moodle-plugin-ci installs only the code and config.php (--no-init: not even the test
+      # sites), so the site itself is installed here first. Without it both scripts only report
+      # that their table does not exist, which is not a run of the scripts.
       - name: CLI scripts on a clean installation
         if: ${{ always() }}
         run: |
           web=moodle; [ -d moodle/public ] && web=moodle/public
           set -o pipefail
+          php "$web/admin/cli/install_database.php" --agree-license --fullname="SME CI" --shortname="SME CI" \
+            --adminuser=admin --adminpass='Admin!23' --adminemail=admin@example.com \
+            > ci-logs/cli-install.log 2>&1 || { tail -50 ci-logs/cli-install.log; exit 1; }
           for script in diagnose_legacy_config.php repair_config.php; do
             echo "=== $script"
             php "$web/local/stackmatheditor/cli/$script" 2>&1 | tee "ci-logs/cli-$script.log"
@@ -253,6 +261,7 @@ jobs:
               exit 1
             fi
           done
+          grep -q 'Configuration records:' ci-logs/cli-diagnose_legacy_config.php.log
           grep -q 'Dry run - nothing changed' ci-logs/cli-repair_config.php.log
       - name: Collect error summary
         if: ${{ always() }}
@@ -431,9 +440,25 @@ jobs:
         env:
           DB: ${{ matrix.database }}
           MOODLE_BRANCH: ${{ matrix.moodle }}
+      # The math contracts go through the real STACK parser and Maxima (tests/unit/cas_contract_test.php).
+      - name: Configure the STACK CAS for PHPUnit
+        run: |
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_PLATFORM", "linux");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMAVERSION", "default");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMACOMMAND", "maxima");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMACOMMANDOPT", "");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMACOMMANDSERVER", "");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASTIMEOUT", "300");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASRESULTSCACHE", "none");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASPREPARSE", "true");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMALIBRARIES", "");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_PLOTCOMMAND", "");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASDEBUGGING", "0");'
       - name: PHPUnit tests
         if: ${{ always() }}
         run: moodle-plugin-ci phpunit --fail-on-warning --testdox 2>&1 | tee ci-logs/phpunit.log
+        env:
+          SME_REQUIRE_CAS: '1'
       - name: Collect error summary
         if: ${{ always() }}
         run: |
@@ -516,30 +541,32 @@ jobs:
       # MOODLE_START_BEHAT_SERVERS=YES into ci/.env. --auto-rerun 0 keeps failures deterministic.
       - name: Behat - STACK CAS preflight (@stack_init)
         id: behat-preflight
+        env:
+          SME_BEHAT_TIMINGS: ${{ github.workspace }}/ci-logs/behat-timings.jsonl
         run: |
           moodle-plugin-ci behat --profile chrome --auto-rerun 0 \
             --tags "@stack_init&&~@broken&&~@wip" --dump 2>&1 | tee ci-logs/behat-stack-init.log
+      # The Moodle stories and the one CAS browser smoke; the full math contract runs in PHPUnit
+      # against the real STACK parser and Maxima (#96).
       - name: Behat - all plugin scenarios
         id: behat
+        env:
+          SME_BEHAT_TIMINGS: ${{ github.workspace }}/ci-logs/behat-timings.jsonl
         run: |
           moodle-plugin-ci behat --profile chrome --auto-rerun 0 \
-            --tags "@local_stackmatheditor&&~@broken&&~@wip&&~@stack_init&&~@local_stackmatheditor_cas" \
+            --tags "@local_stackmatheditor&&~@broken&&~@wip&&~@stack_init" \
             --dump 2>&1 | tee ci-logs/behat.log
-      # The CAS contract (#34) is its own step: every scenario waits for a real Maxima answer, so
-      # it is the slow part, and a failure there means "the CAS disagrees with a button" rather
-      # than "the editor is broken". Keeping the two apart keeps that distinction readable.
-      - name: Behat - CAS contract (@local_stackmatheditor_cas)
-        id: behat-cas
+      - name: Behat timings
+        if: ${{ always() && steps.behat-preflight.outcome != 'skipped' }}
         run: |
-          moodle-plugin-ci behat --profile chrome --auto-rerun 0 \
-            --tags "@local_stackmatheditor_cas&&~@broken&&~@wip" --dump 2>&1 \
-            | tee ci-logs/behat-cas.log
+          python3 plugin/.github/behat-timings.py ci-logs/behat-timings.jsonl ci-logs/behat-timings --top=10 \
+            >> "$GITHUB_STEP_SUMMARY"
 
       - name: Show relevant Behat failures
         if: ${{ failure() }}
         run: |
           grep -h -n -E 'Scenario:|Exception|Error|Failed|Coding error|stack_cas_connection|Fatal error|not found|does not equal' \
-            ci-logs/behat-stack-init.log ci-logs/behat.log ci-logs/behat-cas.log \
+            ci-logs/behat-stack-init.log ci-logs/behat.log \
             2>/dev/null | head -200 || true
       - name: Collect error summary and Behat dumps
         if: ${{ always() }}

@@ -64,6 +64,74 @@ build 2026100800 with these fixes under the release name 1.3.0 existed for testi
   quiz default: the quiz default is stored with question bank entry 0 instead of an empty value,
   and (activity, question bank entry) is a unique index. Writes of one scope are additionally
   serialised by a lock, so a second writer waits instead of failing.
+* Conversion (#96): a fraction argument may nest to any depth (`\frac{1}{\sqrt{x_{1}}}` was
+  reported as unparsed); the converter's own function names (matrix, determinant, ident,
+  transpose, the geometry functions, the norm and the differential operators) are never split
+  into single letters; what follows a closed `^{…}` or `_{…}` group is a new factor
+  (`x^{2}3` is not `x^23`); max2tex braces every longer exponent and nests power chains
+  (`x^y^z` → `x^{y^{z}}`).
+* `x^2\frac{1}{2}` is x² times one half. The digits of an exponent, a subscript, a decimal or an
+  identifier in front of a fraction were read as the integer part of a mixed number (`x^(2+1/2)`).
+* Every template button leaves the cursor in its first slot (fraction, power, roots, overline,
+  vector arrow, segment length). Typing after a click went behind the template.
+* The norm button writes a norm. It wrote `\left\|…\right\|`, which MathQuill drops without a
+  trace; it now writes `\left\lVert…\right\rVert`, and both spellings become the configured norm
+  function.
+* `rot(F)` reaches STACK as the configured curl. MathQuill keeps `\operatorname{rot}` only as the
+  letters "rot"; where the site has a CAS name for curl, those letters applied to a bracket are
+  the operator.
+* `50%` reaches STACK as `50/100`. STACK has no `%` operator and rejected every answer with a
+  percent sign. A typed Maxima constant (`%pi`, `%e`, `%i`, `%phi`, `%gamma`) keeps its sign.
+
+* Leibniz notation with the operand in the numerator is a derivative: `\frac{\partial f}{\partial x}`
+  reaches STACK as `diff(f,x)` (also with an order and mixed), not as `(del f)/(del x)` (#46).
+* `\nabla` and `\partial` stay one word in the single-letter modes (`nabla`, not `n*a*b*l*a`).
+* `mod(7,3)` is a function call in every mode; the explicit modes wrote `mod (7,3)` (#42).
+* An equation system is string-stable over TeX → Maxima → TeX → Maxima in stack mode as well:
+  the alignment mark left a space behind the relation (`a= 5`) (#42).
+* Where the site has no Laplace operator, Δ in front of a bracket is the Greek letter. It was
+  reported as an unavailable operator and the answer was emptied, so `Δ(x+1)` could not be
+  entered at all (#45).
+* A line added with the "Add line" button or with Enter in a multi-line input reaches STACK at
+  once, as typing does; before, only when the attempt was submitted (#23).
+
+### Behaviour changes
+
+* The approximately-equal button (≈) is gone. Maxima has no such operator, and STACK rejected
+  every answer that contained it. Pasted LaTeX with `\approx` is still converted as before
+  (`~=`), and STACK still rejects it.
+
+### For question authors
+
+* The question configuration lists, per STACK input, the function names the enabled buttons write
+  that the input does not allow yet (Distance, Angle, the norm function, the configured
+  differential operators). STACK accepts them from students only when they are under "Allowed
+  words"; without that, every answer that uses such a button is rejected as an unknown function.
+* Known limits, pinned in `tests/fixtures/math_contracts.json` so that a fix shows up as a failing
+  test: STACK's CAS validation evaluates Distance and Angle with the bare point names the geometry
+  templates produce and stops with "expects its arguments to be lists"; the cross product needs
+  the vect package, which STACK cannot preload for a student answer; MathQuill turns a pasted thin
+  space `\,` into a comma (the toolbar templates do not write one).
+* STACK's textarea input drops empty rows when it reads an answer: the editor keeps an empty
+  line between two others and the attempt stores it, but after a reload the answer has the lines
+  STACK kept (#41, pinned in `tests/playwright/multiline.spec.js`).
+
+### Tests (#96)
+
+* Behat runs 6 scenarios instead of 92 (preflight, one STACK end-to-end smoke, four configuration
+  page scenarios) and only in the cells 4.5/8.2/PostgreSQL and 5.3/8.4/MariaDB 11.4. The other
+  86 scenario instances moved to Jest, to PHPUnit against a real STACK and Maxima, and to
+  Playwright; `docs/TEST-MIGRATION.md` maps every one of them. Locally the Behat run takes
+  79 seconds instead of 20 - 33 minutes per cell, without CAS resets or cache purges between the
+  scenarios.
+* Every Behat run writes per-scenario timings (`SME_BEHAT_TIMINGS`, `.github/behat-timings.py`)
+  into the job summary and an artefact.
+* New browser tests for the equivalence reasoning input (`equiv.spec.js`, quiz
+  `SME_EQUIV_CMID` from `stack_equiv.xml`), systems, the remove buttons and the numbering in the
+  multi-line editor, Enter in a single-line editor and keyboard navigation in a matrix.
+* `tests/fixtures/math_contracts.json` holds one contract per button and per former CAS scenario;
+  it is checked through tex2max, through MathQuill and through STACK's validation and Maxima. The
+  CAS part is required in the main CI (`SME_REQUIRE_CAS=1`).
 
 ### For administrators
 

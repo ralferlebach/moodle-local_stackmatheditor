@@ -131,10 +131,11 @@ function xmldb_local_stackmatheditor_upgrade(int $oldversion): bool {
              HAVING COUNT(1) > 1"
         );
         foreach ($scopes as $scope) {
+            // One line per literal with a brace: the savepoint check of moodle-plugin-ci reads
+            // string literals line by line and loses the block structure otherwise.
             $ids = $DB->get_fieldset_sql(
-                "SELECT id FROM {" . $tablename . "}
-                  WHERE cmid = :cmid AND questionbankentryid = :qbeid
-               ORDER BY timemodified DESC, id DESC",
+                "SELECT id FROM {" . $tablename . "} WHERE cmid = :cmid AND questionbankentryid = :qbeid" .
+                    " ORDER BY timemodified DESC, id DESC",
                 ['cmid' => $scope->cmid, 'qbeid' => $scope->questionbankentryid]
             );
             $surplus = array_slice($ids, 1);

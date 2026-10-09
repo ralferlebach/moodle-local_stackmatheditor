@@ -317,6 +317,7 @@ $string['setting_vectorformat_matrix'] = 'Matrix: matrix([a,b,c])';
 $string['stacksemantics'] = 'STACK-Eingabesemantik';
 $string['stacksemantics_desc'] = 'Das ist STACKs Einstellung „Insert stars“ für jede Eingabe dieser Frage. Sie entscheidet, wie implizite Multiplikation und Leerzeichen gelesen werden. Der Editor reicht das Getippte weiter und ändert dieses Verhalten nicht.';
 $string['stacksemantics_edit'] = 'STACK-Eingabeeinstellungen bearbeiten';
+$string['stacksemantics_missingwords'] = 'Die Werkzeugleiste bietet Schaltflächen an, die {$a} schreiben. STACK akzeptiert diese Namen von Studierenden nur, wenn diese Eingabe sie unter „Erlaubte Wörter“ auflistet; sonst wird jede Antwort, die sie verwendet, als unbekannte Funktion abgelehnt. Bitte in der STACK-Frage ergänzen.';
 $string['toggle_editor'] = 'Formeleditor';
 $string['toggle_editor_off'] = 'Formeleditor aus: Antwort als Text eingeben.';
 $string['toggle_editor_on'] = 'Formeleditor an.';

@@ -3324,3 +3324,60 @@ Release name 1.4.0 (maintainer), build 2026100801.
   section is again the one that was published.
 - GitHub was not reachable from the session (connector unlinked, the read-only token refused by
   the sandbox), so issues could not be read or updated; the texts are delivered separately.
+
+## 83. Iteration 79 (2026100801, 1.4.0, version unchanged): issue #96 and the open criteria of the older issues
+
+Release name and build unchanged (1.4.0, 2026100801): no database change since iteration 78.
+
+- **#96 test pyramid:** Behat from 92 scenario instances to 6 (preflight, one STACK end-to-end
+  smoke with a matrix, four configuration page stories). `tex2max_conversion.feature`,
+  `editor_rendering.feature` and `multiline_editor.feature` removed; `configure_toolbar.feature`
+  rewritten; `cas_contract.feature` reduced to the `browserSmoke` contract. Every removed instance
+  is mapped in `docs/TEST-MIGRATION.md`; the layers are described in `docs/TEST-ARCHITECTURE.md`.
+- **CAS resets:** no full reset and no `purge_all_caches()` per scenario any more; the step
+  library repairs only CAS settings that differ from the baseline. Storing a fresh Behat snapshot
+  after the STACK init was tried and reverted (it captured scenario data).
+- **Timings:** `@AfterScenario` hook writes one JSON line per scenario (`SME_BEHAT_TIMINGS`);
+  `.github/behat-timings.py` makes JSON, CSV and Markdown, job summary and artefact (30 days).
+  Local: 6 scenarios, 55 steps, 78.7 s in the scenarios (baseline 20:45 - 33:32 min per cell).
+- **CI:** Behat only in 4.5/8.2/pgsql and 5.3/8.4/MariaDB 11.4; PHPUnit gets the STACK CAS
+  defines and `SME_REQUIRE_CAS=1` in main and dev.
+- **Contracts:** `tests/fixtures/math_contracts.json` (one per button and per former CAS
+  scenario) through tex2max, through MathQuill in jsdom, and through STACK and Maxima
+  (`cas_contract_test.php`, 8 tests, about 2600 assertions with a real CAS).
+- **Defects found and fixed:** fraction arguments at any depth, the converter's own function
+  names never split, a new factor after a closed script group, max2tex exponent braces and power
+  chains, the cursor after every template button, the mixed-number guard (`x^2\frac{1}{2}`), the
+  norm button (`\left\lVert…\right\rVert`; MathQuill drops `\left\|`), `rot(` → configured curl,
+  `50\%` → `50/100`, the ≈ button removed (no Maxima operator), Leibniz notation with the operand
+  in the numerator, `\nabla`/`\partial` not split, `mod(...)` a call, the cases alignment space in
+  stack mode, Δ before a bracket without a Laplace operator, sync after "Add line" and Enter in the
+  multi-line editor.
+- **Configuration page:** per STACK input the function names the enabled buttons write and the
+  input does not allow ("Allowed words"): Distance, Angle, norm, configured differential operators.
+- **Still pinned as known defects:** Distance/Angle with bare point names (STACK evaluates them
+  during validation), cross product (STACK cannot preload vect; the group's precondition cannot be
+  met, so it never shows), the thin space `\,` that MathQuill turns into a comma, ≈ in pasted
+  LaTeX. STACK's textarea input drops empty rows when it reads an answer (pinned in Playwright).
+- **New browser tests:** `equiv.spec.js` (new quiz from `stack_equiv.xml`, `SME_EQUIV_CMID`),
+  systems, mouse and numbering in `multiline.spec.js`, single-line Enter and matrix keyboard
+  navigation in `editor-rendering.spec.js`.
+- GitHub was again only readable through the public web pages; the issue texts are delivered
+  separately. Nothing was pushed.
+- **CI fix (dev run #71 on be3ae9d, Quality job red):**
+  - `moodle-plugin-ci savepoints` reported "version 2026100801 is missing corresponding savepoint
+    call". The checker reads string literals line by line, and a multi-line SQL literal with
+    `{table}` braces in step 2026100801 broke its brace matching. The literal now closes on the
+    line that has the braces.
+  - "CLI scripts on a clean installation" never ran the scripts: `moodle-plugin-ci install
+    --no-init` installs no site, so both scripts only said that their table does not exist, and
+    the final `grep 'Dry run - nothing changed'` failed. The step now installs the site
+    (`admin/cli/install_database.php`, about 2 minutes; job timeout 15 → 20 min) and also checks
+    that `diagnose_legacy_config.php` printed its report. `release-artefact.yml` checks the same
+    two lines.
+  - Node 20 deprecation warnings: `upload-artifact@v4` → v7, `download-artifact@v4` → v6,
+    `setup-node@v4` → v6, `action-gh-release@v2` → v3 in `release-artefact.yml` and
+    `release-evidence.yml`.
+  - Reproduced locally with moodle-plugin-ci 4: savepoints, codechecker, phpdoc, validate,
+    mustache, grunt (incl. gherkinlint and build freshness) green; the CLI scripts against a
+    freshly installed site print their reports.
