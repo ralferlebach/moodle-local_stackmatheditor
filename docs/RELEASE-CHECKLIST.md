@@ -50,32 +50,34 @@ green although main CI was still running and Playwright had not run: the old che
 result inside a `{ ... } | tee` block, a subshell, and lost it. Evidence for 1.4.0 is produced
 with the corrected workflow.
 
-The evidence lists the commit, the SHA-256 of the release archive and the links of these runs,
-and the state of the manual sign-off (section 5).
+The evidence lists the commit, the SHA-256 of the release archive and the links of these runs.
 
 It also stops on a high or critical dependency finding. The audit itself still runs to
 completion, so the evidence records what was found either way.
 
-## 3. Branch protection: deliberately not used - the release is gated instead
+## 3. Branch protection: deliberately not used - the release is tested instead
 
 `main` is not branch-protected, and that is a decision: a failing check stops the work and gets
 fixed, or knowingly does not, but it does not block the merge mechanically. `ci-complete` stays
 the honest signal, not a gate with a key.
 
-The gate sits where a release is made:
+Since #99 there are no formal release gates: no job waits for a maturity declaration, a sign-off
+file or a guard that turns hand-made releases into drafts. What stops a release is technical and
+stays fail-closed:
 
 * `release-artefact.yml` runs on a pushed tag `v<release>`. It refuses a tag that does not match
-  `$plugin->release`, a stable tag on a build that is not declared stable, a commit whose
-  check-runs are not all green, a commit without the green gates of section 2 and a green
-  release evidence (checked directly with `.github/required-runs.sh`, not only through the
-  evidence), and a stable tag while an item of `docs/RELEASE-SIGNOFF.json` is open. It then
-  builds the ZIP and tests exactly that file - installed into fresh 4.5 and 5.3 sites and
-  smoked (configuration, backup and restore, deletion, concurrent writes, CLI), installed as an
-  upgrade over the build the plugins directory published before (4.5 on PostgreSQL and MariaDB,
-  5.3 on PostgreSQL), PHPUnit and Behat run from the archive - and only then publishes it with
-  its SHA-256.
-* `release-guard.yml` turns a GitHub release that was published by hand back into a draft and
-  fails, so a release cannot appear past the gate by accident.
+  `$plugin->release` (the archive would be mislabelled), a commit whose functional CI of section
+  2 is not green (checked directly with `.github/required-runs.sh`), and every failure of the
+  archive itself. It builds the ZIP and tests exactly that file - installed into fresh 4.5 and
+  5.3 sites and smoked (configuration, backup and restore, deletion, concurrent writes, CLI),
+  installed as an upgrade over the build the plugins directory published before (4.5 on
+  PostgreSQL and MariaDB, 5.3 on PostgreSQL), PHPUnit and Behat run from the archive - and only
+  then publishes it with its SHA-256. The declared maturity is reported in the job summary and
+  the release notes, not enforced.
+* `CI complete` in `moodle-plugin-ci-main.yml` depends directly on the matrix, Jest, the archive
+  contents, the coverage floor, stale files, upgrade and concurrency; `.github/ci-complete.sh
+  --self-test` proves on every run that a failing job is red and that no formal gate is part of
+  the graph.
 
 Two separate steps, in this order:
 
@@ -85,8 +87,7 @@ Two separate steps, in this order:
    SHA-256 in the release issue. No other archive - not one built locally, not GitHub's
    automatic source archive.
 
-No workflow can see step 2; that is residual risk R2 in `docs/RESIDUAL-RISKS.md`, to be accepted
-in `docs/RELEASE-SIGNOFF.json` before the tag.
+No workflow can see step 2; that is residual risk R2 in `docs/RESIDUAL-RISKS.md`.
 
 ## 4. Screen reader evidence
 
@@ -108,9 +109,9 @@ pixel targets, keyboard reach and a visible focus.
 
 ## 5. What no workflow can do for you
 
-`docs/MANUAL-ACCEPTANCE.md` has the steps and the tables to fill in; the result goes into
-`docs/RELEASE-SIGNOFF.json` (status `done` or `accepted`, `date`, `by`), which
-`release-artefact.yml` checks before it publishes a stable release.
+`docs/MANUAL-ACCEPTANCE.md` has the steps and the tables to fill in; the result is recorded in
+the release issue and in `docs/RESIDUAL-RISKS.md`. It informs the maintainer's release decision;
+no workflow waits for it (#99).
 
 * The judgement half of the accessibility sample: read the transcripts from section 4 and say
   whether they describe something a person can work with. Record date, browser and NVDA version.
@@ -118,9 +119,9 @@ pixel targets, keyboard reach and a visible focus.
   and do not need repeating by hand.
 * Real Android devices: the first soft-keyboard input in a fresh field, in Chrome, Opera,
   Firefox and Firefox Klar, and with a keyboard other than Gboard.
-* The decision on every open P0 and P1: closed, or accepted as a residual risk - the reason in
-  `docs/RESIDUAL-RISKS.md`, the name and the date in `docs/RELEASE-SIGNOFF.json`. An open,
-  unexplained P1 cannot sit next to a stable release: the tag is refused.
+* The decision on every open P0 and P1: closed, or accepted as a residual risk with reason, name
+  and date in `docs/RESIDUAL-RISKS.md`. That is the maintainer's decision, not a workflow gate -
+  but an open functional P1 is a failing or missing test, and those keep the CI red.
 
 ## 6. Only then: flip the release metadata
 
@@ -130,8 +131,8 @@ explicitly (#69, item 32): a stable release whose browser, accessibility and loa
 collected after the flag, not before it. The evidence still has to be produced; what was given up
 is only that it gated the flag.
 
-1.4.0 (build 2026100801) is the first release published through the gate of section 3: its
-archive is tested before anyone can download it, and its tag waits for the sign-off.
+1.4.0 is published through the tests of section 3: its archive is tested before anyone can
+download it. The sign-off file that the tag used to wait for was removed with #99.
 
 Atomically, in one commit:
 

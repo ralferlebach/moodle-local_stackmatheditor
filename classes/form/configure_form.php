@@ -43,6 +43,22 @@ use local_stackmatheditor\definitions;
  */
 class configure_form extends \moodleform {
     /**
+     * The question version as it goes into the page.
+     *
+     * A version is a number; anything else that reaches this field - a mock, a string from a
+     * later API - is escaped, never written into the HTML as it is (#97).
+     *
+     * @param mixed $version Version from the question record.
+     * @return string Safe text.
+     */
+    public static function version_label($version): string {
+        if (is_int($version) || (is_string($version) && preg_match('/^\d+$/', $version))) {
+            return (string) (int) $version;
+        }
+        return s((string) $version);
+    }
+
+    /**
      * Build the form elements.
      *
      * @return void
@@ -88,7 +104,7 @@ class configure_form extends \moodleform {
                 get_string('question'),
                 format_string($questionrecord->name)
                     . ' <span class="text-muted">(v'
-                    . $questionrecord->version . ')</span>'
+                    . self::version_label($questionrecord->version ?? '') . ')</span>'
             );
 
             if (!empty($previewhtml)) {

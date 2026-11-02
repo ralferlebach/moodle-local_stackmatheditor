@@ -49,3 +49,12 @@ Each Behat run appends one JSON line per scenario to `$SME_BEHAT_TIMINGS`;
 `.github/behat-timings.py` turns them into JSON, CSV and a Markdown table for the job summary and
 the artefact `behat-timings-<moodle>-<php>-<db>`. The baseline before #96 and the local numbers
 after it are in `docs/TEST-MIGRATION.md`.
+
+## Release formalities are not tests (#99)
+
+`CI complete` depends directly on the functional jobs. There is no job for a maturity
+declaration, a sign-off or a release guard: those are the maintainer's decisions and are recorded
+in `docs/RESIDUAL-RISKS.md`. Everything that tests something stays fail-closed - a failing,
+cancelled or skipped job keeps `CI complete` red, which `.github/ci-complete.sh --self-test`
+checks on every run.
+

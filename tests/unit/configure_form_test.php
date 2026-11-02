@@ -145,4 +145,61 @@ final class configure_form_test extends \advanced_testcase {
             $html
         );
     }
+
+    /**
+     * Data for the version label: what the record holds and what the page may show.
+     *
+     * @return array
+     */
+    public static function version_provider(): array {
+        return [
+            'integer' => [3, '3'],
+            'numeric string' => ['12', '12'],
+            'markup from a mock' => ['<b onclick="x()">7</b>', '&lt;b onclick=&quot;x()&quot;&gt;7&lt;/b&gt;'],
+            'text' => ['draft', 'draft'],
+        ];
+    }
+
+    /**
+     * #97: the version is a number in the page, and anything else is escaped.
+     *
+     * @dataProvider version_provider
+     * @param mixed $version Version from the question record.
+     * @param string $expected Text in the page.
+     * @return void
+     */
+    public function test_the_question_version_is_typed_or_escaped($version, string $expected): void {
+        $this->assertSame($expected, configure_form::version_label($version));
+    }
+
+    /**
+     * #97: in the rendered form - the name keeps format_string(), the version cannot add markup.
+     *
+     * @return void
+     */
+    public function test_the_rendered_version_cannot_carry_markup(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $course = $this->getDataGenerator()->create_course();
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id, 'name' => 'Test Quiz']);
+        $form = new configure_form('/local/stackmatheditor/configure.php', [
+            'mode' => 'question',
+            'modname' => 'quiz',
+            'questionrecord' => (object) ['id' => 1, 'name' => 'Q <i>one</i>', 'version' => '<script>alert(1)</script>'],
+            'activity' => $quiz,
+            'grouplabels' => definitions::get_group_labels_with_examples(),
+            'previewhtml' => '',
+            'returnurl' => '',
+            'instancemode' => 1,
+            'dependencies' => [],
+            'stacksemantics' => ['inputs' => [], 'editurl' => null],
+        ]);
+        ob_start();
+        $form->display();
+        $html = ob_get_clean();
+
+        $this->assertStringNotContainsString('<script>alert(1)</script>', $html);
+        $this->assertStringContainsString('(v&lt;script&gt;alert(1)&lt;/script&gt;)', $html);
+        $this->assertStringContainsString(format_string('Q <i>one</i>'), $html);
+    }
 }

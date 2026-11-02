@@ -3,9 +3,10 @@
 #
 # Runs ONLY on push / PR to main and provides the "CI complete" status check
 # for branch protection. Full SEQUENTIAL pipeline per matrix cell across the
-# supported Moodle 4.5 / 5.0 / 5.1 / 5.2 x PHP x DB matrix, plus the release
-# gates: release artefact, coverage floor, Jest, stale files and an
-# aggregating release gate. The fast parallel pipeline lives in
+# supported Moodle 4.5 - 5.3 x PHP x DB matrix, plus Jest, the release artefact
+# contents, the coverage floor, stale files, upgrade and concurrency. "CI complete"
+# aggregates exactly these functional jobs; release formalities (maturity,
+# sign-off) are not CI gates (#99). The fast parallel pipeline lives in
 # moodle-plugin-ci-dev.yml.
 #
 # STACK notes: see the header of moodle-plugin-ci-dev.yml and
@@ -434,45 +435,6 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  maturity-gate:
-    name: Release gate
-    needs: [test, jest, release-artefact, coverage]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    # Without always() this job is skipped whenever one of its dependencies fails - and a skipped
-    # job is not re-executed by "re-run failed jobs", so it stays skipped for good and keeps
-    # ci-complete red even after every real failure has been fixed.
-    if: always()
-    steps:
-      - name: Check out plugin
-        uses: actions/checkout@v6
-      - name: Every release gate must be green
-        run: |
-          rc=0
-          for entry in \
-            "test=${{ needs.test.result }}" \
-            "jest=${{ needs.jest.result }}" \
-            "release-artefact=${{ needs.release-artefact.result }}" \
-            "coverage=${{ needs.coverage.result }}"; do
-            echo "  ${entry%%=*}: ${entry#*=}"
-            if [[ "${entry#*=}" != "success" ]]; then
-              rc=1
-            fi
-          done
-          if [[ $rc -ne 0 ]]; then
-            echo "At least one release gate is not green (see list above)."
-            exit 1
-          fi
-          maturity=$(grep -oE 'MATURITY_[A-Z]+' version.php | head -1)
-          release=$(grep -oE "\\\$plugin->release[[:space:]]*=[[:space:]]*'[^']+'" version.php | grep -oE "'[^']+'")
-          echo "Declared maturity: ${maturity:-unknown}, release ${release:-unknown}"
-          echo "All release gates are green."
-      # The manual sign-off of this build: well-formed, for the build in version.php, every
-      # risk described. Open items are listed here; release-artefact.yml refuses a stable tag
-      # while one is open.
-      - name: Release sign-off file
-        run: python3 .github/check-signoff.py . | tee -a "$GITHUB_STEP_SUMMARY"
-
   stale-files:
     name: Stale files
     runs-on: ubuntu-24.04
@@ -663,28 +625,27 @@ jobs:
 
   ci-complete:
     name: CI complete
-    needs: [maturity-gate, stale-files, upgrade, concurrency]
+    # #99: the status check depends directly on the jobs that test something. There is no
+    # release-formality job (maturity, sign-off) in between any more: a pending administrative
+    # decision cannot keep a functionally green build red, and a real test failure stays red.
+    needs: [test, jest, release-artefact, coverage, stale-files, upgrade, concurrency]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    # Without always() this job is skipped whenever one of its dependencies fails - and a skipped
+    # job is not re-executed by "re-run failed jobs", so it would stay skipped for good.
     if: always()
     steps:
-      - name: All gates must have succeeded
+      - name: Check out plugin
+        uses: actions/checkout@v6
+      - name: The aggregation itself - a real failure is red, a formality is no job (#99)
+        run: bash .github/ci-complete.sh --self-test
+      - name: All functional jobs must have succeeded
         run: |
-          # Only the two aggregating jobs are evaluated here; the matrix, Jest, artefact and
-          # coverage results are judged once, inside maturity-gate.
-          rc=0
-          for entry in \
-            "maturity-gate=${{ needs.maturity-gate.result }}" \
+          bash .github/ci-complete.sh \
+            "test=${{ needs.test.result }}" \
+            "jest=${{ needs.jest.result }}" \
+            "release-artefact=${{ needs.release-artefact.result }}" \
+            "coverage=${{ needs.coverage.result }}" \
             "stale-files=${{ needs.stale-files.result }}" \
             "upgrade=${{ needs.upgrade.result }}" \
-            "concurrency=${{ needs.concurrency.result }}"; do
-            echo "  ${entry%%=*}: ${entry#*=}"
-            if [[ "${entry#*=}" != "success" ]]; then
-              rc=1
-            fi
-          done
-          if [[ $rc -ne 0 ]]; then
-            echo "At least one gate is not green (see list above)."
-            exit 1
-          fi
-          echo "All CI gates passed."
+            "concurrency=${{ needs.concurrency.result }}"

@@ -118,10 +118,6 @@ jobs:
 
       - name: What still needs a human
         run: |
-          # The sign-off file as it stands on this commit; release-artefact.yml refuses a stable
-          # tag while an item is open.
-          python3 .github/check-signoff.py . > evidence/signoff.txt || true
-          cat evidence/signoff.txt
           zipsum=$(sha256sum evidence/stackmatheditor.zip | cut -d' ' -f1)
           {
             echo "Release candidate"
@@ -136,11 +132,9 @@ jobs:
             echo "  200 and 400 per cent zoom with the core workflow, a narrow viewport,"
             echo "  24 x 24 targets, keyboard reach, visible focus."
             echo ""
-            echo "Judgement a workflow cannot make, and the risks accepted instead:"
-            echo "  recorded in docs/RELEASE-SIGNOFF.json (status, date, by); state on this commit:"
-            sed 's/^/  /' evidence/signoff.txt
-            echo "  How to make the checks: docs/MANUAL-ACCEPTANCE.md. A stable tag is refused"
-            echo "  while an item is open."
+            echo "Judgement a workflow cannot make, and the residual risks:"
+            echo "  docs/RESIDUAL-RISKS.md and docs/MANUAL-ACCEPTANCE.md. They inform the release"
+            echo "  decision; they are not a gate of any workflow (#99)."
             echo ""
             echo "After the GitHub release (docs/RELEASE-CHECKLIST.md, section 3):"
             echo "  upload exactly the ZIP of the GitHub release to the Moodle plugins directory,"

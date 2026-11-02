@@ -24,3 +24,9 @@ thirdparty/mathquill/README.md
 tests/behat/tex2max_conversion.feature
 tests/behat/editor_rendering.feature
 tests/behat/multiline_editor.feature
+
+# 2026110200 (#99): formal release gates removed. A copy left behind would block releases again
+# on a sign-off or turn manually published releases into drafts.
+.github/workflows/release-guard.yml
+.github/check-signoff.py
+docs/RELEASE-SIGNOFF.json

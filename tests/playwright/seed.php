@@ -252,6 +252,17 @@ $equivcm = local_stackmatheditor_seed_optional_quiz(
     ['stack_equiv.xml']
 );
 
+// Issues #100 / #101: what the student sees is what is submitted. Two algebraic inputs (several
+// inputs stay independent), a STACK equiv input with a prescribed first line (firstline,
+// mustverify) for the four-line chain 1+2*3^3, 1+2*27, 1+54, 55, and a textarea input.
+$visiblecm = local_stackmatheditor_seed_optional_quiz(
+    $gen,
+    $course,
+    $category,
+    'SME Visible Value Quiz',
+    ['stack_algebraic.xml', 'stack_algebraic.xml', 'stack_equiv_chain.xml', 'stack_textarea.xml']
+);
+
 // Warm STACK's CAS result cache: instantiate every question once now. Otherwise the first
 // attempts of all simulated students start at the same moment, each instantiating ten STACK
 // questions with a fresh Maxima process, and the herd runs into the CAS timeout on a small CI
@@ -344,6 +355,7 @@ $exports = [
     'SME_JSXGRAPH_CMID' => $jsxgraphcm,
     'SME_UNITS_CMID' => $unitscm,
     'SME_EQUIV_CMID' => $equivcm,
+    'SME_VISIBLE_CMID' => $visiblecm,
     'SME_USER_PASS' => $password,
     'SME_STUDENTS' => $students,
 ];

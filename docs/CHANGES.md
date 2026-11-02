@@ -8,12 +8,49 @@ Version numbers follow `version.php`: the release name (`1.4.0`) and the build
 (`YYYYMMDDNN`).
 
 
-1.4.0 (2026100801) - stable
+1.4.0 (2026110200) - stable
 ----------------------------
 
 1.3.0 (build 2026100700) was published on 7 October 2026. 1.4.0 adds the security, privacy,
 lifecycle, backup and data integrity fixes below, found in the reviews of 8 October 2026. A
-build 2026100800 with these fixes under the release name 1.3.0 existed for testing only.
+build 2026100800 with these fixes under the release name 1.3.0 existed for testing only. Build
+2026100801 of 1.4.0 was never published; build 2026110200 adds the fixes of the re-audit of
+2 November 2026 (#97 - #101). No database change since 2026100801.
+
+### Fixed (build 2026110200)
+
+* The answer that is submitted is the answer the student sees (#100). With the editor switched
+  off, the Check and Submit hand-over wrote the stale value of the hidden editor over what the
+  student had typed into the visible field - in the one-line, the relation-system and the
+  multi-line editor, on pointer, touch, keyboard and native submit. Switched off, the original
+  field is now the answer and nothing writes over it. Switched on, an editor writes only what was
+  changed in it since it last read the field, so a value typed while the editor was off is not
+  rewritten in the editor's spelling either.
+* An editor starts from the field's current value, not from its value attribute (#101). A value
+  the browser restored after a reload, a script wrote, or the student emptied is kept; the old
+  attribute value no longer comes back. The multi-line editor no longer writes its own
+  serialisation into the textarea when it is built, so a prescribed first line (STACK's
+  `firstline`) and every other line stay exactly as STACK rendered them.
+* A question replaced in the page (CAPQuiz, StudentQuiz, StackMathGame) leaves no hand-over behind
+  that writes into the removed field, and building an editor again does not make the list of
+  hand-overs grow (#100).
+* A multi-line question (equiv, textarea) that is replaced in the page or inserted after the
+  page loaded gets its editor; until now only single-line inputs were attached again (#101).
+* The question version on the configuration page is a number or escaped text (#97).
+* The toolbar group setting shows all groups through core's own rendering; the list height is set
+  on the select element by its id instead of replacing the text `size="10"` in core's markup
+  (#98).
+
+### Release process (build 2026110200)
+
+* No formal release gates (#99): the "Release gate" job of the main CI, the release guard that
+  turned hand-made releases into drafts, the sign-off file `docs/RELEASE-SIGNOFF.json` and its
+  checker are gone. "CI complete" depends directly on the functional jobs (matrix, Jest, archive
+  contents, coverage floor, stale files, upgrade, concurrency); `.github/ci-complete.sh
+  --self-test` proves on every run that a failing job is red and that no formal gate is in the
+  graph. The release workflow still refuses a tag that does not match the release name, a commit
+  whose functional CI is not green and every failure of the archive; the maturity is reported,
+  not enforced. The accepted residual risks are recorded in `docs/RESIDUAL-RISKS.md`.
 
 ### Fixed
 

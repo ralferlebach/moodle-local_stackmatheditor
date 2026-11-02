@@ -304,12 +304,12 @@ final class documentation_test extends \advanced_testcase {
     /**
      * version.php, the change log and the README describe the same release.
      *
-     * #71: README, version.php, tag and release metadata are set consistently for stable. The
-     * tag is checked where it is made - release-artefact.yml refuses a tag other than
-     * "v" plus the release name and a stable tag on a build that is not declared stable. This
-     * test covers what is in the repository: the newest change-log entry names the release, the
-     * build and the maturity of version.php, and the README does not call a stable build
-     * "in development".
+     * #71: README, version.php, tag and release metadata describe the same release. The tag is
+     * checked where it is made - release-artefact.yml refuses a tag other than "v" plus the
+     * release name, because the archive would be mislabelled (the declared maturity is reported
+     * there, not enforced, #99). This test covers what is in the repository: the newest
+     * change-log entry names the release, the build and the maturity of version.php, and the
+     * README does not call a stable build "in development".
      *
      * @return void
      */

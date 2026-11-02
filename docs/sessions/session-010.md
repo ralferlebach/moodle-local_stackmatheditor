@@ -3381,3 +3381,43 @@ Release name and build unchanged (1.4.0, 2026100801): no database change since i
   - Reproduced locally with moodle-plugin-ci 4: savepoints, codechecker, phpdoc, validate,
     mustache, grunt (incl. gherkinlint and build freshness) green; the CLI scripts against a
     freshly installed site print their reports.
+
+## 84. Iteration 80 (1.4.0, build 2026110200): re-audit of 2 November 2026 (#96 - #101)
+
+Release name 1.4.0 unchanged, build 2026110200 (no database change; 2026100801 was never
+published). Baseline of the audit: development `5251061e` = the state of iteration 79.
+
+- **#100 (P1):** the bridge's flush wrote the hidden editor into the original input also when the
+  editor was switched off (one-line, relation system, multi-line). Reproduced with the real
+  modules in jsdom (`tests/jest/visible_value_100_101.test.js`: 20 of 28 tests fail against the
+  2026100801 sources) and in the browser (`tests/playwright/visible-value.spec.js` against the
+  2026100801 build: 8 of 11 fail; e.g. visible `2*2=4` → request and stored step `x+1`, the
+  stale editor value). Fix: switched off, nothing writes; switched on, an editor writes only what
+  changed since it last read the input (single-line: LaTeX shown vs. now; system and multi-line:
+  changed/dirty flag). Flush registry keyed by element, detached inputs dropped, re-registration
+  replaces (`Bridge.registeredCount()`).
+- **#101 (P1):** editors start from `value`, not `defaultValue`; the multi-line editor no longer
+  writes its serialisation at build time; textarea editors are attached to questions inserted
+  after load (MutationObserver like input_fields). New fixture `stack_equiv_chain.xml`
+  (`ta:[1+2*3^3,1+2*27,1+54,55]`, simplify off, syntax hint and option `firstline`,
+  `mustverify`, answer test EquivFirst) in the new quiz `SME Visible Value Quiz`
+  (`SME_VISIBLE_CMID`). The chain is validated, then graded 1; an omitted first line stays
+  omitted and STACK answers "You have used the wrong first line in your argument!".
+- **Evidence helper:** `tests/playwright/attempt-state.php` reads the stored question-engine step
+  (read-only); the spec compares request form data, stored step and page after reload.
+- **#99:** `maturity-gate` job, `release-guard.yml`, `.github/check-signoff.py` and
+  `docs/RELEASE-SIGNOFF.json` removed; `CI complete` needs the functional jobs directly and
+  aggregates them with `.github/ci-complete.sh`, whose `--self-test` (run in the job) proves a
+  failing/cancelled/skipped job is red and no formal gate is in the graph. Release workflow:
+  maturity reported, not enforced; tag/release-name match, functional CI on the commit
+  (`required-runs.sh`) and all archive tests stay. Accepted risks moved into
+  `docs/RESIDUAL-RISKS.md`.
+- **#97:** `configure_form::version_label()` - integer or escaped text; PHPUnit for int,
+  numeric string, markup, text and the rendered form.
+- **#98:** `admin_setting_multiselect_sized::size_select()` sets `size` on the select found by
+  id through the DOM extension; PHPUnit for all options, size, `multiple`, name, hidden marker,
+  label, save/reload, three markup variants, UTF-8, missing element.
+- **StackMathGame (second audit, N01 - N09):** delegated to a separate working tree and test site
+  (`/home/claude/gm`, prefix `gm_`); results in `docs/REVIEW-1.4.0-FINAL.md`.
+- GitHub: the editor repository could not be cloned or written from the session (authentication),
+  the issue texts are delivered separately. Nothing was pushed.

@@ -511,6 +511,9 @@ define([
         this.activeStepIdx = 0;
         this.activeFieldIdx = 0;
         this.syncTimer = null;
+        // True once the student changed the editor since it last took its steps from the
+        // textarea. Until then the textarea holds the answer and nothing writes over it (#100).
+        this.dirty = false;
 
         dbg('Init: ' + name
             + ' (slot ' + this.slot
@@ -519,12 +522,14 @@ define([
 
         this.build();
 
-        // Check / Submit always send the visible state, even while a debounced sync is still
-        // pending; a stale "invalid" result from STACK is re-checked once.
+        // Check / Submit send the visible state, even while a debounced sync is still pending -
+        // but only the editor's own changes, and never while the editor is switched off: then
+        // the textarea is what the student sees and edits (#100). A stale "invalid" result from
+        // STACK is re-checked once.
         var self = this;
         Bridge.register(function() {
-            self.syncNow({silent: true});
-        });
+            self.writeEditorState();
+        }, $ta[0]);
         Bridge.guardStaleValidation($ta[0]);
     }
 
@@ -588,7 +593,11 @@ define([
         A11y.label(this.$addBtn[0], 'aria_add_line', true);
         this.$wrap.append(this.$addBtn);
 
-        startValue = (this.$ta[0].defaultValue || this.$ta.val() || '').trim();
+        // The textarea's current value, not its default: a value the browser restored, a script
+        // wrote or the student emptied is the answer, and the default would bring back steps
+        // nobody sees any more (#101).
+        this.loading = true;
+        startValue = (typeof this.$ta[0].value === 'string' ? this.$ta[0].value : (this.$ta[0].defaultValue || '')).trim();
         steps = parseInitialSteps(startValue, this.inputType);
         for (i = 0; i < steps.length; i++) {
             this.addStep(steps[i]);
@@ -607,7 +616,37 @@ define([
         }
 
         dbg('created: ' + this.rows.length + ' steps, id=' + this.$ta.attr('id'));
-        this.syncNow();
+        // Nothing is written back at start: the steps were read from the textarea, which already
+        // holds the answer. Writing the editor's serialisation over it would change an answer
+        // nobody touched, including prescribed start lines (#101).
+        this.loading = false;
+        this.dirty = false;
+        if (this.syncTimer) {
+            clearTimeout(this.syncTimer);
+            this.syncTimer = null;
+        }
+    };
+
+    /**
+     * Is the editor switched off? Then the textarea is what the student sees.
+     *
+     * @returns {boolean} True while the editor is hidden.
+     */
+    EquivEditor.prototype.isHidden = function() {
+        return this.$rows.hasClass(Toggle.HIDDEN_CLASS);
+    };
+
+    /**
+     * Write the editor's changes into the textarea without events (before Check or Submit, and
+     * when the editor is switched off).
+     *
+     * @returns {void}
+     */
+    EquivEditor.prototype.writeEditorState = function() {
+        if (this.isHidden() || !(this.dirty || this.syncTimer)) {
+            return;
+        }
+        this.syncNow({silent: true});
     };
 
     /**
@@ -672,7 +711,8 @@ define([
             editor: [this.$tb[0], this.$rows[0], this.$addBtn ? this.$addBtn[0] : null],
             strings: (this.ctx.defs && this.ctx.defs.strings) || {},
             toInput: function() {
-                self.syncNow({silent: true});
+                // Called while the editor is still visible.
+                self.writeEditorState();
                 handedover = self.$ta.val();
             },
             toEditor: function() {
@@ -706,6 +746,13 @@ define([
         var steps = parseInitialSteps(value, this.inputType);
         var i;
 
+        if (this.syncTimer) {
+            clearTimeout(this.syncTimer);
+            this.syncTimer = null;
+        }
+        // Reading the textarea is not a change by the student (see debouncedSync()).
+        this.loading = true;
+
         this.rows = [];
         this.$rows.empty();
         this.activeStepIdx = 0;
@@ -718,6 +765,8 @@ define([
         if (this.rows.length) {
             this.focusStep(0, 0);
         }
+        this.loading = false;
+        this.dirty = false;
     };
 
     /**
@@ -1123,6 +1172,12 @@ define([
      */
     EquivEditor.prototype.debouncedSync = function() {
         var self = this;
+        // MathQuill reports the content the editor is built with as an edit as well; that is
+        // the textarea's own answer, not a change to write back.
+        if (this.loading) {
+            return;
+        }
+        this.dirty = true;
         if (this.syncTimer) {
             clearTimeout(this.syncTimer);
         }
@@ -1165,6 +1220,7 @@ define([
         });
         var value = lines.join('\n');
         var oldVal = this.$ta.val();
+        this.dirty = false;
         LocalValidation.show(this.$rows[0], problems);
         this.$ta.val(value);
         this.lastwritten = value;
@@ -1174,32 +1230,75 @@ define([
         }
     };
 
+    /**
+     * Attach an editor to every supported textarea that does not have one yet.
+     *
+     * Idempotent: the editor marks its textarea with data-sme-init, so a second pass touches only
+     * textareas that are new.
+     *
+     * @param {Object} ctx Shared context.
+     */
+    function attach(ctx) {
+        var $areas = $(selector());
+        if (!$areas.length) {
+            ctx.dbg('No supported textareas found');
+            return;
+        }
+        $areas.each(function() {
+            if ($(this).attr('data-sme-init') === '1') {
+                return;
+            }
+            var aname = $(this).attr('name') || '';
+            var aslot = ctx.extractSlot(aname);
+            // Same rule as for single-line inputs: the slot map answers per question,
+            // and where it says nothing the page default decides.
+            var aknown = ctx.slotEnabled
+                && Object.prototype.hasOwnProperty.call(ctx.slotEnabled, aslot);
+            if (aknown ? !ctx.slotEnabled[aslot] : ctx.defaultEnabled === false) {
+                ctx.dbg('Textarea ' + aname + ' -> slot ' + aslot + ' not enabled, skipping');
+                return;
+            }
+            new EquivEditor(this, ctx);
+        });
+    }
+
+    /**
+     * Watch for questions rendered after page load, as input_fields.js does.
+     *
+     * CAPQuiz, StudentQuiz, StackMathGame and embedded questions replace a question in place; a
+     * multi-line input in the new question gets its editor as a single-line one does (#101).
+     * Throttled through a timeout, so a burst of mutations leads to one pass.
+     *
+     * @param {Object} ctx Shared context.
+     */
+    function observe(ctx) {
+        var pending = null;
+
+        if (typeof window.MutationObserver !== 'function' || !document.body) {
+            return;
+        }
+        new window.MutationObserver(function(mutations) {
+            var relevant = mutations.some(function(mutation) {
+                return mutation.addedNodes && mutation.addedNodes.length;
+            });
+            if (!relevant || pending) {
+                return;
+            }
+            pending = window.setTimeout(function() {
+                pending = null;
+                attach(ctx);
+            }, 50);
+        }).observe(document.body, {childList: true, subtree: true});
+    }
+
     return {
         init: function(ctx) {
             A11y.useStrings(ctx.defs && ctx.defs.strings);
             ensureStyles();
-            var $areas = $(selector());
-            if (!$areas.length) {
-                ctx.dbg('No supported textareas found');
-                return;
-            }
-            ctx.dbg('Found ' + $areas.length + ' textareas');
-            $areas.each(function() {
-                if ($(this).attr('data-sme-init') === '1') {
-                    return;
-                }
-                var aname = $(this).attr('name') || '';
-                var aslot = ctx.extractSlot(aname);
-                // Same rule as for single-line inputs: the slot map answers per question,
-                // and where it says nothing the page default decides.
-                var aknown = ctx.slotEnabled
-                    && Object.prototype.hasOwnProperty.call(ctx.slotEnabled, aslot);
-                if (aknown ? !ctx.slotEnabled[aslot] : ctx.defaultEnabled === false) {
-                    ctx.dbg('Textarea ' + aname + ' -> slot ' + aslot + ' not enabled, skipping');
-                    return;
-                }
-                new EquivEditor(this, ctx);
-            });
-        }
+            ctx.dbg('Found ' + $(selector()).length + ' textareas');
+            attach(ctx);
+            observe(ctx);
+        },
+        attach: attach
     };
 });

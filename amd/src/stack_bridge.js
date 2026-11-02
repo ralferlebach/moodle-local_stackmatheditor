@@ -52,7 +52,16 @@ define([], function() {
     /** @type {number} STACK's typing delay before it sends a validation request (input.js). */
     var STACK_TYPING_DELAY = 1000;
 
-    /** @type {Function[]} Registered flush functions. */
+    /**
+     * Registered flush functions, each with the original input it writes into.
+     *
+     * One entry per input: an editor built again for the same input replaces its entry, and an
+     * entry whose input has left the document is dropped on the next flush (#100). A question
+     * replaced over AJAX therefore neither leaves a callback behind that writes into a detached
+     * input nor makes the list grow with every replacement.
+     *
+     * @type {Array<{fn: Function, el: ?HTMLElement}>}
+     */
     var flushers = [];
 
     /** @type {boolean} Whether the document-level listeners are installed. */
@@ -162,12 +171,22 @@ define([], function() {
      * Run every registered flush function. Errors of one editor never stop the others.
      */
     function flushAll() {
-        flushers.forEach(function(fn) {
+        prune();
+        flushers.slice().forEach(function(entry) {
             try {
-                fn();
+                entry.fn();
             } catch (e) {
                 // A broken editor must not block the submission of the others.
             }
+        });
+    }
+
+    /**
+     * Drop the entries whose input is no longer part of the document.
+     */
+    function prune() {
+        flushers = flushers.filter(function(entry) {
+            return !entry.el || entry.el.isConnected !== false;
         });
     }
 
@@ -228,11 +247,42 @@ define([], function() {
     /**
      * Register an editor's flush function.
      *
+     * The function decides itself whether there is anything to write: an editor that is
+     * switched off must not write at all, because then the original input is what the student
+     * sees and edits (#100).
+     *
      * @param {Function} fn Writes the editor state into the original input without events.
+     * @param {HTMLElement} [el] The original input the function writes into. With it, a second
+     *     registration for the same input replaces the first, and the entry ends with the input.
+     * @returns {Function} Removes this registration.
      */
-    function register(fn) {
+    function register(fn, el) {
+        var entry = {fn: fn, el: el || null};
+
         install();
-        flushers.push(fn);
+        prune();
+        if (entry.el) {
+            flushers = flushers.filter(function(other) {
+                return other.el !== entry.el;
+            });
+        }
+        flushers.push(entry);
+
+        return function() {
+            flushers = flushers.filter(function(other) {
+                return other !== entry;
+            });
+        };
+    }
+
+    /**
+     * Number of registered flush functions (after dropping detached inputs).
+     *
+     * @returns {number} Count.
+     */
+    function registeredCount() {
+        prune();
+        return flushers.length;
     }
 
     /**
@@ -270,6 +320,7 @@ define([], function() {
         triggerValidation: triggerValidation,
         signalEnter: signalEnter,
         register: register,
+        registeredCount: registeredCount,
         flushAll: flushAll,
         guardStaleValidation: guardStaleValidation
     };

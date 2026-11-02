@@ -77,6 +77,21 @@ define([
     }
 
     /**
+     * The value an input holds now.
+     *
+     * The current value, not the value attribute: a browser that restored a form after reload,
+     * a script that wrote the input, or a student who emptied it all leave the attribute behind,
+     * and reading the attribute would bring back an answer nobody sees any more (#101). The
+     * attribute is only the fallback for an element without a value property.
+     *
+     * @param {HTMLElement} el Input or textarea.
+     * @returns {string} Value.
+     */
+    function currentValue(el) {
+        return typeof el.value === 'string' ? el.value : (el.defaultValue || '');
+    }
+
+    /**
      * Sync MathQuill to hidden input.
      *
      * @param {Object} mqField MathQuill field.
@@ -368,13 +383,20 @@ define([
             editor: [spec.$tb[0], spec.$container[0]],
             strings: strings,
             toInput: function() {
-                syncSystemToInput(spec.rows, spec.$input, spec.convOpts, spec.ctx.dbg, true);
+                // Only a change in the rows is handed over: unchanged rows were read from the
+                // input, and writing them back would replace what the student typed there with
+                // its round trip through the editor (#100).
+                if (spec.mayWrite()) {
+                    syncSystemToInput(spec.rows, spec.$input, spec.convOpts, spec.ctx.dbg, true);
+                    spec.changed = false;
+                }
                 handedOver = spec.$input.val();
             },
             toEditor: function() {
                 var current = spec.$input.val();
                 if (current !== handedOver) {
                     rebuildSystemRows(spec, current);
+                    spec.changed = false;
                 }
                 spec.$input.val(current);
             }
@@ -443,6 +465,9 @@ define([
                     if (row.prefilling) {
                         return;
                     }
+                    if (rows.changed) {
+                        rows.changed();
+                    }
                     syncSystemToInput(rows, $input, convOpts, ctx.dbg);
                 },
                 enter: function() {
@@ -483,6 +508,9 @@ define([
                 rows[index].mqField.focus();
             } else if (rows[index - 1]) {
                 rows[index - 1].mqField.focus();
+            }
+            if (rows.changed) {
+                rows.changed();
             }
             syncSystemToInput(rows, $input, convOpts, ctx.dbg);
         });
@@ -722,16 +750,10 @@ define([
         Toggle.hideOriginal($input[0]);
         $input.attr('data-sme-init', '1');
 
-        // Read the initial Maxima value from the HTML attribute (defaultValue)
-        // rather than the JS .value property.
-        //
-        // WHY: STACK or Moodle JS can clear input.value before our AMD module
-        // initialises (e.g. during STACK's own input validation setup). The
-        // .defaultValue property always holds the value="" attribute written by
-        // PHP, and is immune to JS manipulation unless form.reset() is called.
-        // We fall back to .val() for dynamically created inputs where PHP never
-        // set a value attribute but JS may have set the property.
-        var initialMaxima = $input[0].defaultValue || $input.val();
+        // The answer the editor starts from is what the input holds now (#101). Earlier versions
+        // preferred the value attribute, which brought an old answer back over a value the
+        // browser had restored or a script had written, and over a deliberately emptied input.
+        var initialMaxima = currentValue($input[0]);
 
         var systemParts = getRelationSystemParts(initialMaxima);
         var prefilling = (initialMaxima && initialMaxima.trim()) ? true : false;
@@ -824,13 +846,14 @@ define([
                 );
                 row.prefilling = false;
                 row.mqField.focus();
+                rows.changed();
                 syncSystemToInput(rows, $input, convOpts, ctx.dbg);
                 // The "+" button adds a row like Enter does, and says so.
                 Bridge.signalEnter($input[0], {trigger: 'button', inputType: 'system'});
             });
 
             // On/off switch for the system editor; see attachSystemToggle().
-            var systemToggle = attachSystemToggle({
+            var systemSpec = {
                 ctx: ctx,
                 $input: $input,
                 $wrap: $wrap,
@@ -842,8 +865,20 @@ define([
                 varMode: varMode,
                 getActiveField: getActiveField,
                 slot: slot,
-                mayToggle: mayToggleEditor(ctx, slot)
-            });
+                mayToggle: mayToggleEditor(ctx, slot),
+                // Set by every change in the rows, cleared when the rows are read from the input.
+                changed: false,
+                mayWrite: function() {
+                    var settling = rows.some(function(row) {
+                        return row.prefilling;
+                    });
+                    return systemSpec.changed && !settling && !$container.hasClass(Toggle.HIDDEN_CLASS);
+                }
+            };
+            rows.changed = function() {
+                systemSpec.changed = true;
+            };
+            var systemToggle = attachSystemToggle(systemSpec);
 
             toolbar.typeset($tb);
             setTimeout(function() {
@@ -857,10 +892,14 @@ define([
                 }, 0);
             }, 0);
 
-            // Check / Submit always send the visible system.
+            // Check / Submit send the visible system - but only while the editor is visible and
+            // has been changed since it last took its rows from the input. Switched off, the
+            // plain input is what the student sees and edits; its value is the answer (#100).
             Bridge.register(function() {
-                syncSystemToInput(rows, $input, convOpts, ctx.dbg, true);
-            });
+                if (systemSpec.mayWrite()) {
+                    syncSystemToInput(rows, $input, convOpts, ctx.dbg, true);
+                }
+            }, $input[0]);
             Bridge.guardStaleValidation($input[0]);
             return;
         }
@@ -898,6 +937,48 @@ define([
             }
         });
         A11y.labelEditor(mqField);
+
+        // What the editor showed when it last took its content from the input. Until the
+        // student changes the editor, the input already holds the answer - possibly written
+        // differently from the editor's own serialisation - and nothing may write over it (#100).
+        var shownLatex = '';
+
+        /**
+         * Remember the editor's content as the one read from the input.
+         */
+        function markShown() {
+            shownLatex = mqField.latex();
+        }
+
+        /**
+         * Is the editor switched off? Then the original input is what the student sees.
+         *
+         * @returns {boolean} True while the editor is hidden.
+         */
+        function editorHidden() {
+            return $container.hasClass(Toggle.HIDDEN_CLASS);
+        }
+
+        /**
+         * Write the editor into the input before a submit or a switch-off, when there is
+         * something of the editor's own to write.
+         *
+         * Never while the editor is hidden: the student is editing the input itself then, and a
+         * stale editor value written over it would replace the visible answer (#100). Never while
+         * the pre-fill is settling or the input holds a value the editor could not show, and not
+         * when the editor still shows what it read from the input.
+         */
+        function writeEditorState() {
+            if (editorHidden() || prefilling || holdsUnshownValue() || mqField.latex() === shownLatex) {
+                return;
+            }
+            syncingToInput = true;
+            try {
+                lastwritten = syncToInput(mqField, $input, convOpts, ctx.dbg, true);
+            } finally {
+                syncingToInput = false;
+            }
+        }
 
         // The original STACK input is the integration point in both directions. STACK's
         // JSXGraph bindings, and any other script, write into it and dispatch an event; without
@@ -944,6 +1025,7 @@ define([
                 } else {
                     mqField.latex('');
                 }
+                markShown();
                 $input.val(current);
                 lastwritten = current;
             } finally {
@@ -986,14 +1068,8 @@ define([
             editor: [$tb[0], $container[0]],
             strings: (ctx.defs && ctx.defs.strings) || {},
             toInput: function() {
-                if (!prefilling && !holdsUnshownValue()) {
-                    syncingToInput = true;
-                    try {
-                        lastwritten = syncToInput(mqField, $input, convOpts, ctx.dbg, true);
-                    } finally {
-                        syncingToInput = false;
-                    }
-                }
+                // Called while the editor is still visible.
+                writeEditorState();
             },
             toEditor: function() {
                 var current = $input.val();
@@ -1004,6 +1080,7 @@ define([
                 } else {
                     mqField.latex('');
                 }
+                markShown();
                 $input.val(current);
                 setTimeout(function() {
                     prefilling = false;
@@ -1014,17 +1091,9 @@ define([
             $wrap.prepend(toggle.element);
         }
 
-        // Check / Submit always send the visible state.
-        Bridge.register(function() {
-            if (!prefilling && !holdsUnshownValue()) {
-                syncingToInput = true;
-                try {
-                    lastwritten = syncToInput(mqField, $input, convOpts, ctx.dbg, true);
-                } finally {
-                    syncingToInput = false;
-                }
-            }
-        });
+        // Check / Submit send the visible state: the editor's while it is on, the input's own
+        // while it is off (#100).
+        Bridge.register(writeEditorState, $input[0]);
         Bridge.guardStaleValidation($input[0]);
 
         // Typeset toolbar (delayed for MathJax).
@@ -1057,6 +1126,7 @@ define([
                 // Write the pre-filled LaTeX into the MathQuill field.
                 prefill(mqField, initialMaxima,
                     ctx.defs, varMode, ctx.dbg);
+                markShown();
                 // Immediately restore the known-good Maxima value into the
                 // hidden input. This is more reliable than calling syncToInput()
                 // which would round-trip through tex2max and might produce a
@@ -1077,6 +1147,7 @@ define([
                         prefilling = true;
                         prefill(mqField, initialMaxima,
                             ctx.defs, varMode, ctx.dbg);
+                        markShown();
                         $input.val(initialMaxima);
                         setTimeout(function() {
                             prefilling = false;

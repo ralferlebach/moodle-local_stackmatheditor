@@ -5,7 +5,9 @@
 # backup and restore, deletion, concurrent writes, the CLI scripts); installed as an upgrade over
 # the version the Moodle plugins directory published before it; and the plugin's PHPUnit tests
 # and Behat scenarios run from the archive. The ZIP's SHA-256 is published next to it.
-# release-guard.yml makes sure no release reaches GitHub any other way.
+# #99: release formalities are not gates here. The maturity declared in version.php is reported,
+# not enforced, and there is no sign-off file to wait for; what stops a release is a failing test,
+# a broken archive or a commit whose functional CI is not green.
 #
 # Taken over from moodle-mod_vimipad and adapted: a local plugin (root folder "stackmatheditor",
 # installed into local/), STACK and its behaviours as dependencies of the install check, and the
@@ -307,26 +309,12 @@ jobs:
           fi
           echo "Alle Pflichtdateien im Archiv vorhanden."
 
-      - name: Refuse to publish a stable tag that is not declared stable
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+      # Reported for the release notes, not enforced (#99): the maturity is the maintainer's
+      # declaration, not a test result.
+      - name: Declared maturity
         run: |
-          release="${{ steps.version.outputs.release }}"
-          maturity="${{ steps.version.outputs.maturity }}"
-          case "$release" in
-            *RC*|*beta*|*alpha*) echo "Vorabversion ($release)."; exit 0 ;;
-          esac
-          if [ "$maturity" != "200" ]; then
-            echo "Release '$release' ist kein Vorabrelease, version.php meldet aber maturity $maturity statt 200."
-            exit 1
-          fi
-          echo "Release $release ist als MATURITY_STABLE deklariert."
-
-      # What no workflow can check - the NVDA judgement, the Android devices - and the residual
-      # risks accepted instead of them: a stable release waits until every item of
-      # docs/RELEASE-SIGNOFF.json is done or accepted, with a date and a name.
-      - name: Require the manual sign-off of a stable release
-        if: ${{ startsWith(github.ref, 'refs/tags/') && steps.version.outputs.maturity == '200' }}
-        run: python3 plugin/.github/check-signoff.py plugin --complete
+          echo "Release ${{ steps.version.outputs.release }}, maturity ${{ steps.version.outputs.maturity }}" \
+            "(200 = MATURITY_STABLE)." | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Keep the artefact for the install check
         id: intern
