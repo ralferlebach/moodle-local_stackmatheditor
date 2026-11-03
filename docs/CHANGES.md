@@ -8,15 +8,33 @@ Version numbers follow `version.php`: the release name (`1.4.0`) and the build
 (`YYYYMMDDNN`).
 
 
-1.4.0 (2026110201) - stable
+1.4.0 (2026110300) - stable
 ----------------------------
 
 1.3.0 (build 2026100700) was published on 7 October 2026. 1.4.0 adds the security, privacy,
 lifecycle, backup and data integrity fixes below, found in the reviews of 8 October 2026. A
 build 2026100800 with these fixes under the release name 1.3.0 existed for testing only. Build
 2026100801 of 1.4.0 was never published; build 2026110200 adds the fixes of the re-audit of
-2 November 2026 (#97 - #101); build 2026110201 those of its follow-up (#102 - #104). No database
-change since 2026100801.
+2 November 2026 (#97 - #101); build 2026110201 those of its follow-up (#102 - #104); build
+2026110300 only tests and the CI of the re-audit of 3 November 2026 (#105). No database change
+since 2026100801, no change of the editor's code since 2026110201.
+
+### Tests and CI (build 2026110300)
+
+* The Moodle 5.3 Playwright job of run 41585693053 was ended by the job limit of 35 minutes
+  after 93 of 107 tests (#105). `seed.php --reset`, called before each case of `settings.spec.js`
+  and `editor-rendering.spec.js`, ran the whole seed with the CAS warm-up of all quizzes every
+  time (about 37 s per call on a warm Moodle 5.3); it now ends right after the settings quiz
+  (about 3 s). The job limit is 70 minutes; Playwright's own `globalTimeout` (55 minutes in CI)
+  ends a run that is still too slow early enough to write its report. On Moodle 5.3 the CI run
+  allows no optional skip (`SME_NO_OPTIONAL_SKIPS=1`).
+* `interop.spec.js` compares STACK's grading of every question with the editor off and on;
+  GeoGebra `set` is proven by building the right answer from the values `set` puts into the applet;
+  a GeoGebra that cannot load; JSXGraph fast changes typed and checked at once and a replaced
+  question; free text with STACK's `[[ascii]]` extractor and `[[hint]]`; a delayed adapt block;
+  Parsons steps chosen by their key; free text with special characters.
+* `visible-value.spec.js`: a wrong step in an equivalence chain gets STACK's step marks, not the
+  first-line message (#101).
 
 ### Fixed (build 2026110201)
 

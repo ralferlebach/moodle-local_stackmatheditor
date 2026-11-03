@@ -72,6 +72,37 @@ function stored(user, cmid) {
 }
 
 /**
+ * What the question engine graded per slot for a user's latest attempt.
+ *
+ * @param {string} user Username.
+ * @param {string} cmid Quiz.
+ * @returns {Object} By slot: {state, fraction}.
+ */
+function grades(user, cmid) {
+    const state = JSON.parse(execFileSync('php', [__dirname + '/attempt-state.php', user, cmid]).toString());
+    const out = {};
+    Object.entries(state.slots || {}).forEach(([slot, s]) => {
+        out[slot] = {state: s.state, fraction: s.fraction};
+    });
+    return out;
+}
+
+/**
+ * Finish the open attempt: "Submit all and finish", so that STACK grades every question.
+ *
+ * @param {import('@playwright/test').Page} page Page on the attempt.
+ * @param {string} cmid Quiz.
+ * @returns {Promise<void>}
+ */
+async function finishAttempt(page, cmid) {
+    const id = new URL(page.url()).searchParams.get('attempt');
+    await open(page, `/mod/quiz/summary.php?attempt=${id}&cmid=${cmid}`);
+    await page.getByRole('button', {name: 'Submit all and finish'}).click();
+    await page.getByRole('dialog').getByRole('button', {name: 'Submit all and finish'}).click();
+    await page.waitForURL(/review\.php/, {timeout: 90000});
+}
+
+/**
  * Whether a form field name is an answer field: q<usage>:<slot>_<name>, not a validation echo,
  * a sequence check, a button or Moodle's language marker.
  *
@@ -279,14 +310,16 @@ function editorLatex(page, key) {
  * @param {string[]} supported Keys that get an editor when it is on.
  * @param {Function} [same] Normalises a value for the reload comparison (a widget that writes its
  *     field again on load, as JSXGraph's bindings do, may round differently).
+ * @param {string[]} [flushed] Keys whose editor was typed into right before the submit: the editor
+ *     writes them in the submit itself, so the field held the older value a moment before.
  */
-function expectContract(r, mode, supported, same = (v) => v) {
+function expectContract(r, mode, supported, same = (v) => v, flushed = []) {
     Object.entries(r.before).forEach(([key, f]) => {
         const should = mode === 'on' && supported.includes(key);
         expect(f.editor, `${key} (${f.type}) editor in mode ${mode}`).toBe(should);
         expect(f.wrapped, `${key} wrapped`).toBe(false);
     });
-    Object.entries(r.before).forEach(([key, f]) => {
+    Object.entries(r.before).filter(([key]) => !flushed.includes(key)).forEach(([key, f]) => {
         // The submit sends what the field held.
         expect(r.posted[key], `${key} (${f.type}) sent`).toBe(f.value);
         // The question engine stored it (an empty field is not stored).
@@ -335,6 +368,10 @@ async function play(browser, s, mode) {
     });
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
+    for (const pattern of s.block || []) {
+        // A widget whose script or content cannot load, as behind a blocking CSP or proxy.
+        await page.route(pattern, (route) => route.abort('blockedbyclient'));
+    }
     try {
         await loginAs(page, s.user, env('SME_USER_PASS'));
         await freshAttempt(page, s.cmid);
@@ -343,7 +380,9 @@ async function play(browser, s, mode) {
             await expect(page.locator('.sme-toggle-input, .sme-mq-container')).toHaveCount(0);
         }
         const notes = (await s.act(page, mode)) || {};
-        await page.waitForTimeout(800);
+        if (!s.immediate) {
+            await page.waitForTimeout(800);
+        }
         const before = await pageFields(page);
         const request = await check(page, s.slot);
         const posted = postedFields(request);
@@ -351,8 +390,13 @@ async function play(browser, s, mode) {
         await settled(page, mode, s.frames);
         const reloaded = await pageFields(page);
         const after = s.afterReload ? await s.afterReload(page, mode) : null;
-        expect(errors, 'no script error on the page').toEqual([]);
-        return {before, posted, stored: storedvalues, reloaded, notes, after};
+        // The editor raises no script error; errors of a widget deliberately blocked are STACK's.
+        const pageErrors = errors.filter((e) => !(s.blockedErrors && s.blockedErrors.test(e)));
+        expect(pageErrors, 'no script error on the page: ' + JSON.stringify(pageErrors)).toEqual([]);
+        // STACK grades every question: the result is compared between the runs, not only the fields.
+        await finishAttempt(page, s.cmid);
+        const graded = grades(s.user, s.cmid);
+        return {before, posted, stored: storedvalues, reloaded, notes, after, graded};
     } finally {
         siteMode(previous);
         await page.context().close();
@@ -397,9 +441,10 @@ async function widgetFrame(page, n) {
  * @param {number} pick Index among the board's draggable objects.
  * @param {number} dx Pixels right.
  * @param {number} dy Pixels down.
+ * @param {number} [pause] Milliseconds to wait after the drop (0: none, for fast changes).
  * @returns {Promise<void>}
  */
-async function dragJsx(page, n, pick, dx, dy) {
+async function dragJsx(page, n, pick, dx, dy, pause = 500) {
     const {frame, box} = await widgetFrame(page, n);
     await frame.waitForFunction(() => window.JXG && Object.keys(window.JXG.boards).length > 0, null, {timeout: 30000});
     const at = await frame.evaluate((i) => {
@@ -412,9 +457,11 @@ async function dragJsx(page, n, pick, dx, dy) {
     }, pick);
     await page.mouse.move(box.x + at.x, box.y + at.y);
     await page.mouse.down();
-    await page.mouse.move(box.x + at.x + dx, box.y + at.y + dy, {steps: 10});
+    await page.mouse.move(box.x + at.x + dx, box.y + at.y + dy, {steps: pause ? 10 : 3});
     await page.mouse.up();
-    await page.waitForTimeout(500);
+    if (pause) {
+        await page.waitForTimeout(pause);
+    }
 }
 
 /**
@@ -482,7 +529,7 @@ test.describe('STACK widgets next to the editor (#102, #103, #104)', () => {
                 await q('ans7_sub_1_1').fill('4');
                 await q('ans8').fill('1 2\n3 4');
                 await q('ans10').selectOption('true');
-                await q('ans11').fill('The derivative is 2*x because ...');
+                await q('ans11').fill('Ünïcödé £ ∫ <b>x</b> & "q" \\ 2*x\nsecond line');
                 await q('ans12').fill('[1,2]');
                 await q('ans12').press('Tab');
                 await typeAlgebraic(page, mode, '1:ans1', 'x^2');
@@ -497,7 +544,10 @@ test.describe('STACK widgets next to the editor (#102, #103, #104)', () => {
         expectContract(runs.on, 'on', supported);
         expectSameForeign(runs, supported);
         expect(runs.on.posted['1:ans1']).toBe(runs.off.posted['1:ans1']);
+        expect(runs.on.posted['1:ans11']).toBe('Ünïcödé £ ∫ <b>x</b> & "q" \\ 2*x\nsecond line');
         expect(Object.keys(runs.on.before).length).toBeGreaterThanOrEqual(14);
+        // STACK grades the same answers the same way.
+        expect(runs.on.graded).toEqual(runs.off.graded);
     });
 
     test('JSXGraph bindings: points, sliders, pairs, lists, groups and a custom binding', async({browser}) => {
@@ -562,9 +612,10 @@ test.describe('STACK widgets next to the editor (#102, #103, #104)', () => {
             expect(shape(runs.on.posted[key]), `${key} on = off (format)`).toBe(shape(runs.off.posted[key]));
         });
         expect(runs.on.posted['1:bp']).toBe(runs.off.posted['1:bp']);
+        expect(runs.on.graded).toEqual(runs.off.graded);
     });
 
-    test('GeoGebra: watched numbers and points, remember in a string and a geogebra input, two boards', async({browser}) => {
+    test('GeoGebra: set, watch and remember on two boards; the answer built from set is graded right', async({browser}) => {
         requireFixture(test, Number(env('SME_INTEROP_GGB_CMID', '0')) > 0, 'SME Interop GeoGebra Quiz');
         const supported = ['1:ans1', '2:ans1', '2:A', '3:ans1'];
         const scenario = {
@@ -573,27 +624,31 @@ test.describe('STACK widgets next to the editor (#102, #103, #104)', () => {
             frames: 2,
             slot: 3,
             act: async(page, mode) => {
-                // Move the points through the applet; GeoGebra's listeners write the fields.
-                await ggb(page, 0, (api) => {
+                // set: STACK's random gradient m and intercept c are in the applet.
+                const set1 = await ggb(page, 0, (api) => [api.getValue('m'), api.getValue('c')]);
+                const set2 = await ggb(page, 1, (api) => [api.getValue('m'), api.getValue('c')]);
+                // A line perpendicular to y = m x + c, with negative coordinates: gradient -1/m.
+                await ggb(page, 0, (api, m) => {
                     api.setCoords('A', -2, 4);
-                    api.setCoords('B', 2, 2);
-                });
-                await ggb(page, 1, (api) => {
+                    api.setCoords('B', -2 + m, 3);
+                }, set1[0]);
+                await ggb(page, 1, (api, m) => {
                     api.setCoords('A', 1, 3);
-                    api.setCoords('B', 3, -1);
-                });
+                    api.setCoords('B', 1 + m, 2);
+                }, set2[0]);
                 await page.waitForTimeout(1500);
                 const value = (k) => page.locator(`[name$=":${k.replace(':', '_')}"]`).inputValue();
-                const notes = {q1: await value('1:ans1'), q2a: await value('2:A'), r1: await value('1:remember'),
-                    r2: await value('2:remember')};
+                const notes = {set1, set2, q1: await value('1:ans1'), q2: await value('2:ans1'), q2a: await value('2:A'),
+                    r1: await value('1:remember'), r2: await value('2:remember')};
                 if (mode === 'on') {
                     notes.latex = await editorLatex(page, '2:A');
+                    notes.latex1 = await editorLatex(page, '1:ans1');
                 }
                 await typeAlgebraic(page, mode, '3:ans1', 'a+b');
                 return notes;
             },
             afterReload: async(page) => ({
-                q1: await ggb(page, 0, (api) => [api.getXcoord('A'), api.getYcoord('A'), api.getXcoord('B')]),
+                q1: await ggb(page, 0, (api) => [api.getXcoord('A'), api.getYcoord('A'), api.getXcoord('B'), api.getValue('m')]),
                 q2: await ggb(page, 1, (api) => [api.getXcoord('B'), api.getYcoord('B')]),
             }),
         };
@@ -601,47 +656,167 @@ test.describe('STACK widgets next to the editor (#102, #103, #104)', () => {
         for (const mode of ['off', 'on']) {
             const r = runs[mode];
             expectContract(r, mode, supported);
-            // The watched slope (a number) and the watched point (a list) arrived in the fields.
-            expect(r.notes.q1, `watched number (${mode})`).toMatch(/-?0?\.5|-1\/2/);
+            const [m1, c1] = r.notes.set1;
+            const [m2] = r.notes.set2;
+            // set: the question variables of the attempt (rand_with_step(1,3,1)) arrived in the applet.
+            [m1, c1, m2].forEach((v) => expect([1, 2, 3], `set value ${v} (${mode})`).toContain(v));
+            // watch: the gradient (a number) and a point (a list) arrived in the fields.
+            expect(parseFloat(r.notes.q1), `watched number (${mode})`).toBeCloseTo(-1 / m1, 4);
+            expect(parseFloat(r.notes.q2), `watched number, board 2 (${mode})`).toBeCloseTo(-1 / m2, 4);
             expect(r.notes.q2a, `watched point (${mode})`).toMatch(/^\[\s*1(\.0+)?\s*,\s*3(\.0+)?\s*\]$/);
             // remember: JSON kept by GeoGebra in a string and in a geogebra input.
             expect(r.notes.r1).toMatch(/^\{.*"A".*\}$/);
             expect(r.notes.r2).toMatch(/^\{.*"B".*\}$/);
-            // The reload restores the remembered points from the stored JSON.
-            expect(r.after.q1).toEqual([-2, 4, 2]);
-            expect(r.after.q2).toEqual([3, -1]);
+            // The reload restores the remembered points; set gives the same variant again.
+            expect(r.after.q1).toEqual([-2, 4, -2 + m1, m1]);
+            expect(r.after.q2).toEqual([1 + m2, 2]);
+            // STACK grades the line built from the set values as right, in both questions.
+            expect(r.graded['1'].fraction, `board 1 graded (${mode})`).toBe(1);
+            expect(r.graded['2'].fraction, `board 2 graded (${mode})`).toBe(1);
+            expect(r.graded['3'].fraction).toBe(0);
         }
         expect(runs.on.notes.latex).toMatch(/1.*3/);
-        expectSameForeign(runs, supported);
-        supported.forEach((k) => expect(runs.on.posted[k], `${k} on = off`).toBe(runs.off.posted[k]));
+        expect(runs.on.notes.latex1).toMatch(/\d/);
+        expect(runs.on.posted['3:ans1']).toBe(runs.off.posted['3:ans1']);
+        // The random variant differs between the two attempts; what is compared is the grading.
+        ['1', '2', '3'].forEach((slot) => expect(runs.on.graded[slot]).toEqual(runs.off.graded[slot]));
     });
 
-    test('Parsons proof and grid, reveal, adapt and STACK-JS next to an algebraic editor', async({browser}) => {
+    // Only GeoGebra: when JSXGraph's script cannot load, STACK's own Check does not submit the
+    // page (STACK 4.13.1, with the editor off as well), so there is nothing of the editor to test.
+    test('GeoGebra that cannot load (blocked geogebra.org): the editor still works and sends', async({browser}) => {
+        requireFixture(test, Number(env('SME_INTEROP_GGB_CMID', '0')) > 0, 'SME Interop GeoGebra Quiz');
+        const blocked = [
+            {
+                user: 'sme_student16',
+                cmid: env('SME_INTEROP_GGB_CMID'),
+                frames: 2,
+                slot: 3,
+                block: ['**/*geogebra.org/**'],
+                supported: ['1:ans1', '2:ans1', '2:A', '3:ans1'],
+                // Slots 1 and 2 have a random gradient per attempt; slot 3 is fixed.
+                gradedSlots: ['3'],
+                act: async(page, mode) => {
+                    await typeAlgebraic(page, mode, '1:ans1', '-0.5');
+                    await typeAlgebraic(page, mode, '3:ans1', 'a+b');
+                },
+            },
+        ];
+        for (const scenario of blocked) {
+            scenario.blockedErrors = /GGBApplet|JXG|stack_jxg|geogebra|Failed to load|net::/i;
+            const runs = {off: await play(browser, scenario, 'off'), on: await play(browser, scenario, 'on')};
+            for (const mode of ['off', 'on']) {
+                expectContract(runs[mode], mode, scenario.supported);
+            }
+            Object.keys(runs.off.before).forEach((key) => {
+                expect(runs.on.posted[key], `${key} on = off with the widget blocked`).toBe(runs.off.posted[key]);
+            });
+            (scenario.gradedSlots || Object.keys(runs.off.graded)).forEach((slot) => {
+                expect(runs.on.graded[slot], `slot ${slot} graded the same`).toEqual(runs.off.graded[slot]);
+            });
+        }
+    });
+
+    test('JSXGraph: fast drags and typing right before the Check, and a replaced question', async({browser}) => {
+        requireFixture(test, Number(env('SME_INTEROP_JSX_CMID', '0')) > 0, 'SME Interop JSXGraph Quiz');
+        const supported = ['bp', 'bs', 'dp', 'dpr', 'dpd', 'p1', 'p2', 'poly', 'p1b', 'p2b', 'polyb'].map((n) => `1:${n}`);
+        const scenario = {
+            user: 'sme_student15',
+            cmid: env('SME_INTEROP_JSX_CMID'),
+            frames: 6,
+            slot: 1,
+            immediate: true,
+            act: async(page, mode) => {
+                // Fast changes without a pause: the custom binding's serializer stays in charge.
+                for (const [dx, dy] of [[20, 0], [0, 20], [-15, -5]]) {
+                    await dragJsx(page, 5, 0, dx, dy, 0);
+                }
+                for (const [dx, dy] of [[30, 0], [0, -25], [10, 10]]) {
+                    await dragJsx(page, 0, 0, dx, dy, 0);
+                }
+                // Typed into the editor (or the field) and checked at once, without waiting.
+                await page.waitForTimeout(300);
+                if (mode === 'on') {
+                    await page.evaluate(() => {
+                        const el = document.querySelector('[name$=":1_bp"]');
+                        window.wrapOf(el).setAttribute('data-sme-test-target', '1');
+                    });
+                    await page.locator('[data-sme-test-target] .sme-mq-container').click();
+                    await page.keyboard.press('Control+a');
+                    await page.keyboard.press('Backspace');
+                    await page.keyboard.type('[1,1]');
+                } else {
+                    await page.locator('[name$=":1_bp"]').fill('[1,1]');
+                    await page.locator('[name$=":1_bp"]').dispatchEvent('change');
+                }
+                return {custom: await page.locator('[name$=":1_custom"]').inputValue()};
+            },
+            afterReload: async(page) => {
+                const point = (await jsxPoints(page, 0))[0];
+                // Replace the question in the page, as a consumer that swaps fragments does.
+                await page.evaluate(async() => {
+                    const html = await (await fetch(window.location.href, {credentials: 'same-origin'})).text();
+                    const doc = new DOMParser().parseFromString(html, 'text/html');
+                    const selector = '.que:has([name$=":1_bp"])';
+                    document.querySelector(selector).replaceWith(document.importNode(doc.querySelector(selector), true));
+                });
+                await page.waitForTimeout(3000);
+                const flushes = await page.evaluate(() => new Promise((resolve) => {
+                    window.require(['local_stackmatheditor/stack_bridge'], (bridge) => resolve(bridge.registeredCount()));
+                }));
+                const editors = await page.locator('.que.stack [data-sme-init="1"]').count();
+                return {point, flushes, editors, latex: await editorLatex(page, '1:bp')};
+            },
+        };
+        const runs = {off: await play(browser, scenario, 'off'), on: await play(browser, scenario, 'on')};
+        for (const mode of ['off', 'on']) {
+            const r = runs[mode];
+            expectContract(r, mode, supported, rounded, ['1:bp']);
+            // The editor's last state went out with the Check itself.
+            expect(r.posted['1:bp'], `typed right before the Check (${mode})`).toBe('[1,1]');
+            expect(r.stored['1:bp']).toBe('[1,1]');
+            expect(r.after.point, `board restored (${mode})`).toEqual([1, 1]);
+            // The custom field holds what the serializer wrote last, unchanged.
+            expect(r.posted['1:custom']).toBe(r.notes.custom);
+            expect(r.notes.custom).not.toBe('');
+            // A replaced question: one flush per editor field, the editor shows the stored value.
+            expect(r.after.flushes).toBe(r.after.editors);
+            if (mode === 'on') {
+                expect(r.after.editors).toBe(supported.length);
+                expect(r.after.latex).toMatch(/1.*1/);
+            }
+        }
+        const shape = (v) => (v === undefined ? v : v.replace(/-?\d+(\.\d+)?(e-?\d+)?/g, 'N'));
+        expect(shape(runs.on.posted['1:custom'])).toBe(shape(runs.off.posted['1:custom']));
+    });
+
+    test('Parsons proof and grid, reveal, adapt, STACK-JS, free text with ASCII extractor and hint', async({browser}) => {
         requireFixture(test, Number(env('SME_INTEROP_GOODIES_CMID', '0')) > 0, 'SME Interop Goodies Quiz');
-        const supported = ['3:ans3', '4:ans1', '5:ans1', '6:ans1'];
+        const supported = ['3:ans3', '4:ans1', '5:ans1', '6:ans1', '7:ans2'];
         const scenario = {
             user: 'sme_student17',
             cmid: env('SME_INTEROP_GOODIES_CMID'),
-            frames: 6,
+            frames: 8,
             slot: 6,
             act: async(page, mode) => {
                 const notes = {};
-                // Parsons proof: move two steps into the proof with STACK's double-click.
+                // Parsons proof: move two named steps into the proof with STACK's double-click.
+                // The steps are picked by their key, not by their place in the shuffled list, so
+                // both runs build the same proof.
                 let {frame} = await widgetFrame(page, 0);
-                for (let i = 0; i < 2; i += 1) {
-                    await frame.locator('#availableList li').first().dblclick();
+                for (const key of ['Y29udHJh', 'YXNzdW1l']) {
+                    await frame.locator(`#availableList li[data-id="${key}"]`).dblclick();
                     await page.waitForTimeout(500);
                 }
                 // Parsons grid: drag the first available item into the first cell. The press is a
                 // real mouse press; the HTML5 drag events are dispatched in the iframe, because
                 // Chromium under Playwright does not complete a native drag inside an iframe.
                 ({frame} = await widgetFrame(page, 1));
-                const item = await frame.locator('#availableList li').first().boundingBox();
+                const item = await frame.locator('#availableList li[data-id="Zw=="]').boundingBox();
                 await page.mouse.move(item.x + item.width / 2, item.y + item.height / 2);
                 await page.mouse.down();
                 await frame.evaluate(() => {
-                    const dragged = document.querySelector('#availableList li.sortable-chosen')
-                        || document.querySelector('#availableList li');
+                    const dragged = document.querySelector('#availableList li[data-id="Zw=="]');
                     const cell = document.querySelector('#usedList_00');
                     const rect = cell.getBoundingClientRect();
                     const transfer = new DataTransfer();
@@ -682,6 +857,17 @@ test.describe('STACK widgets next to the editor (#102, #103, #104)', () => {
                 await page.waitForTimeout(1500);
                 notes.stackjs = await page.locator('[name$=":5_ans1"]').inputValue();
                 await typeAlgebraic(page, mode, '6:ans1', 'a+b');
+                // Free text: STACK's [[ascii]] extractor writes the last line into a hidden algebraic
+                // field, which the editor shows and must not rewrite. The hint opens and closes.
+                await page.locator('.que:has([name$=":7_ans1"]) details.stack-hint summary').click();
+                await expect(page.locator('.que:has([name$=":7_ans1"]) .stack-hint-content')).toBeVisible();
+                await page.locator('[name$=":7_ans1"]').fill('lg(x+17,3)-2 = lg(2*x,3)\nx = 1');
+                await page.locator('[name$=":7_ans1"]').press('Tab');
+                await page.waitForTimeout(1500);
+                notes.extracted = await page.locator('[name$=":7_ans2"]').inputValue();
+                // Adapt with a delay: the block with the numerical field appears by itself.
+                await expect(page.locator('[name$=":8_ans1"]')).toBeVisible({timeout: 15000});
+                await page.locator('[name$=":8_ans1"]').fill('3');
                 return notes;
             },
         };
@@ -696,14 +882,18 @@ test.describe('STACK widgets next to the editor (#102, #103, #104)', () => {
             expect(grid.used[0][0].length, `one grid cell filled (${mode})`).toBe(1);
             expect(r.notes.stackjs, `STACK-JS wrote the algebraic field (${mode})`).toBe('pound(a,b)');
             expect(r.posted['5:ans1']).toBe('pound(a,b)');
+            expect(r.notes.extracted, `the extractor wrote the hidden field (${mode})`).toBe('x = 1');
+            expect(r.posted['7:ans2']).toBe('x = 1');
         }
-        // The Parsons fields differ only in their timestamp (and in which step came first, the
-        // available list being shuffled per attempt); their structure is the same on and off.
-        const parsonsShape = (v) => JSON.stringify(JSON.parse(v)[0][0].used.map((col) => col.map((cell) => cell.length)));
+        // The Parsons fields differ only in their timestamp: the used steps and cells are the same
+        // with the editor on and off.
+        const used = (v) => JSON.stringify(JSON.parse(v)[0][0].used);
         ['1:ans1', '2:ans1'].forEach((k) => {
-            expect(parsonsShape(runs.on.posted[k]), `${k} on = off (structure)`).toBe(parsonsShape(runs.off.posted[k]));
+            expect(used(runs.on.posted[k]), `${k} on = off`).toBe(used(runs.off.posted[k]));
         });
         expectSameForeign(runs, supported, ['1:ans1', '2:ans1']);
+        // STACK grades every question - Parsons, reveal, adapt, STACK-JS, free text - the same way.
+        expect(runs.on.graded).toEqual(runs.off.graded);
         supported.forEach((k) => expect(runs.on.posted[k], `${k} on = off`).toBe(runs.off.posted[k]));
     });
 });

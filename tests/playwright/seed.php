@@ -210,6 +210,16 @@ $settingscm = local_stackmatheditor_seed_quiz(
     'SME Settings Quiz',
     ['stack_algebraic.xml', 'stack_algebraic.xml']
 );
+// Option --reset removes every quiz- and question-level configuration of the settings quiz, so each
+// browser test starts from the admin settings alone. It needs nothing but the settings quiz, so it
+// ends here: settings.spec.js and editor-rendering.spec.js call it before each case, and running the
+// rest of the seed - the other quizzes and the CAS warm-up of all their questions - every time cost
+// about 37 s per call on a warm Moodle 5.3 and more on a CI runner (#105).
+if (in_array('--reset', $argv ?? [], true)) {
+    $DB->delete_records('local_stackmatheditor', ['cmid' => $settingscm]);
+    echo "reset cmid {$settingscm}\n";
+    exit(0);
+}
 $loadcm = local_stackmatheditor_seed_quiz(
     $gen,
     $course,
@@ -299,6 +309,8 @@ $interopgoodiescm = local_stackmatheditor_seed_optional_quiz(
         'interop/stack_adapt.xml',
         'interop/stack_stackjs.xml',
         'stack_algebraic.xml',
+        'interop/stack_freetext_ascii.xml',
+        'interop/stack_adapt_delay.xml',
     ]
 );
 
@@ -374,14 +386,6 @@ if (in_array('--all-groups', $argv ?? [], true)) {
     // The NVDA run also has to hear the student switch; it is on by default, this makes the
     // promise explicit instead of depending on the default (#89).
     set_config('allowstudenttoggle', 1, 'local_stackmatheditor');
-}
-
-// Option --reset removes every quiz- and question-level configuration of the settings quiz, so each
-// browser test starts from the admin settings alone.
-if (in_array('--reset', $argv ?? [], true)) {
-    $DB->delete_records('local_stackmatheditor', ['cmid' => $settingscm]);
-    echo "reset cmid {$settingscm}\n";
-    exit(0);
 }
 
 $exports = [

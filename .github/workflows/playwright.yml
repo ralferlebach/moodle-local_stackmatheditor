@@ -48,8 +48,12 @@ jobs:
       fail-fast: false
       matrix:
         branch: ${{ fromJSON((inputs.moodle_branch == '' || inputs.moodle_branch == 'all') && '["MOODLE_405_STABLE","MOODLE_503_STABLE"]' || format('["{0}"]', inputs.moodle_branch)) }}
-    # A green run takes about ten minutes; a red one retries every failure with video and trace.
-    timeout-minutes: 35
+    # Measured on 3 November 2026 (run 41585693053): set-up about 6 minutes, the tests 21 minutes on
+    # 4.5 and more than 29 minutes on 5.3, where the job hit the former limit of 35 minutes after
+    # 93 of 107 tests (#105). A red run also retries every failure with video and trace. The limit
+    # leaves room for that; Playwright's own globalTimeout (55 minutes, playwright.config.js) ends
+    # a run that is still too slow early enough to write its report.
+    timeout-minutes: 70
     services:
       postgres:
         # 17: Moodle 5.3 requires it (the moodle_branch input can name 5.3), 4.5 accepts it.
@@ -111,6 +115,8 @@ jobs:
           SME_ADMIN_PASS: ${{ env.MOODLE_ADMIN_PASS }}
           # The seed promises every fixture: a missing one fails instead of skipping (#89).
           SME_STRICT_FIXTURES: '1'
+          # Moodle 5.3 offers every optional feature (colour modes): nothing may skip there (#105).
+          SME_NO_OPTIONAL_SKIPS: ${{ matrix.branch == 'MOODLE_503_STABLE' && '1' || '0' }}
         run: |
           # The web server is started inside THIS step (see serve-test-site.sh).
           . plugin/.github/serve-test-site.sh
@@ -124,6 +130,7 @@ jobs:
         if: ${{ always() }}
         env:
           SME_STRICT_FIXTURES: '1'
+          SME_NO_OPTIONAL_SKIPS: ${{ matrix.branch == 'MOODLE_503_STABLE' && '1' || '0' }}
         run: |
           web=moodle; [ -d moodle/public ] && web=moodle/public
           cd "$web/local/stackmatheditor/tests/playwright"

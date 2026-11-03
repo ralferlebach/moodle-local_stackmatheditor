@@ -1,4 +1,4 @@
-# Residual risks of 1.4.0 (build 2026110201)
+# Residual risks of 1.4.0 (build 2026110300)
 
 This file describes every point a release of this build goes out with although it is not closed,
 why it is tolerable, what limits it, and who accepted it when. It records the maintainer's
@@ -14,6 +14,7 @@ keep the CI red.
 | R4 | The test bed installs STACK from its moving branches, so a green run cannot be repeated exactly | #70 | Deliberate: the matrix is meant to notice when STACK changes (`docs/RELEASE-CHECKLIST.md`, section 7) | Each run writes the STACK revisions it tested into `ci-logs/dependency-revisions.txt` | Accepted permanently, 27 September 2026 |
 | R5 | No browser run on a `mod_geogebra` activity | #102 | The editor loads on no `mod_geogebra` page in any activation mode (`context_resolver_test::test_geogebra_activity_pages`); the GeoGebra applet in STACK questions is tested in the browser with the editor off and on (`interop.spec.js`) | What remains unproven is a page the editor does not load on | A browser run with `mod_geogebra` installed on the test site, comment in #102 |
 | R6 | The interoperability runs are Chromium only | #102 - #104 | The editor's decision which field it takes is browser-independent DOM logic, covered by Jest; the widgets are STACK's | A Gecko- or WebKit-only difference would be in STACK's widgets or in MathQuill, both used without the editor too | A Firefox run of `interop.spec.js`, comment in #104 |
+| R7 | No end-to-end run of the editor inside StackMathGame | #100, #101 | The editor's own contract for questions inserted or replaced by another plugin is tested in the browser (one flush per field, the stored value shown, the typed value sent; `visible-value.spec.js`, `interop.spec.js`); the integration itself is StackMathGame's code, which this repository does not change | A run needs StackMathGame and its quiz set-up on the test site; the issues name it, this work was limited to the editor by the maintainer | A browser run of a StackMathGame quiz with the editor on and off, or a scope decision recorded in #100/#101 |
 
 ## Acceptance
 
@@ -25,6 +26,7 @@ keep the CI red.
 | R4 | accepted permanently | 2026-09-27 | Ralf Erlebach |
 | R5 | open - maintainer's decision for 1.4.0 | | |
 | R6 | open - maintainer's decision for 1.4.0 | | |
+| R7 | open - maintainer's decision for 1.4.0 | | |
 
 These decisions were recorded in `docs/RELEASE-SIGNOFF.json` until build 2026100801; the file and
 its checker were removed with #99, and the table above carries them over unchanged.

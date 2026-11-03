@@ -1,6 +1,6 @@
 # Test migration for issue #96: from Behat to the test pyramid
 
-Version 1.4.0 (2026100801). Every Behat scenario instance that existed before #96 is listed below with
+Version 1.4.0 (mapping written for build 2026100801, audited for build 2026110300). Every Behat scenario instance that existed before #96 is listed below with
 the test that now carries its assertion. Nothing was dropped: every row names at least one test that
 runs in CI. A scenario outline counts once per example row, which is how Behat counted the 92
 scenarios of the baseline.
@@ -54,8 +54,9 @@ The local numbers come from the timing hook (`SME_BEHAT_TIMINGS`) and `.github/b
 
 Each CI run with Behat publishes the same table in the job summary and uploads
 `behat-timings-<moodle>-<php>-<db>` (JSON, CSV, Markdown, 30 days). The first CI run of 1.4.0 is the
-reference for the CI runtime after #96; the step count above is from the local run. Jest now: 28
-suites, 3203 tests.
+reference for the CI runtime after #96; the step count above is from the local run. Jest at build
+2026100801: 28 suites, 3203 tests; at build 2026110300 (and at commit `7a24fc8f`, build 2026110201):
+31 suites, 3393 tests.
 
 ## Where the coverage went
 
@@ -170,7 +171,7 @@ instances are in the table (rows marked `configure_toolbar.feature`). `stack_cas
 unchanged.
 
 
-## Audit of the mapping (build 2026110201)
+## Audit of the mapping (builds 2026110201 and 2026110300)
 
 The table above was checked against the tests it names, not only against file names:
 

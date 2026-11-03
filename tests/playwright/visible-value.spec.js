@@ -217,7 +217,12 @@ async function check(page, slot, how) {
         {timeout: 60000});
     const navigated = page.waitForNavigation({waitUntil: 'domcontentloaded', timeout: 90000});
     if (how === 'keyboard') {
-        await button.focus();
+        // STACK's instant validation of the field the student just left can take the focus back
+        // while it renders; press Enter only once the Check button has it.
+        await expect(async() => {
+            await button.focus();
+            await expect(button).toBeFocused({timeout: 500});
+        }).toPass({timeout: 15000});
         await page.keyboard.press('Enter');
     } else if (how === 'tap') {
         await button.tap();
@@ -418,6 +423,30 @@ test.describe('the visible answer is the stored answer (#100, #101)', () => {
             await expect(page.locator(`${que(3)} .sme-equiv-row`)).toHaveCount(4);
             await expect.poll(async() => shown(page, 3)).toBe(typed.split('\n').slice(0, 4).join('\n'));
         });
+
+    test('equiv: a wrong step is sent as typed and STACK answers about the step, not the first line', async() => {
+        const page = student;
+        await attempt(page, true);
+        const wrong = ['1+2*3^3', '1+2*27', '1+50', '55'].join('\n');
+        await editor(page, 3, false);
+        await typeVisible(page, 3, wrong);
+        await editor(page, 3, true);
+        let request = await check(page, 3, 'click');
+        expect(posted(request, 3)).toBe(wrong);
+        request = await check(page, 3, 'click');
+        expect(posted(request, 3)).toBe(wrong);
+        const slot = stored().slots['3'];
+        expect(lines(slot.vars.ans1)).toBe(wrong);
+        expect(slot.fraction).toBe(0);
+        // A wrong step and a missing first line are different findings: STACK's answer here is
+        // not the first-line message, and the chain it shows is the one that was typed.
+        const text = await page.locator(que(3)).innerText();
+        expect(text).not.toContain(FIRSTLINE_MESSAGE);
+        // EquivFirst marks the steps: the first line accepted, the second equivalent, the third -
+        // the wrong one - and everything after it not equivalent.
+        expect(slot.summary).toContain('ATEquivFirst:(EMPTYCHAR,CHECKMARK,QMCHAR,QMCHAR)');
+        await expect(page.locator(`${que(3)} .sme-equiv-row`)).toHaveCount(4);
+    });
 
     test('equiv: an emptied textarea sends nothing and nothing is put back', async() => {
         const page = student;

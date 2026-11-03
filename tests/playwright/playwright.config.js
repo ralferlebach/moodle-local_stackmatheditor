@@ -42,6 +42,10 @@ module.exports = defineConfig({
     expect: {timeout: 10000},
     // One retry in CI only; a flaky pass is still visible in the report.
     retries: process.env.CI ? 1 : 0,
+    // In CI, Playwright ends the run itself before the job limit (playwright.yml, 70 minutes) and
+    // still writes its reports: a run that runs out of time is reported with the tests it did not
+    // reach, instead of being killed without a result file (#105). The summary gate stays red.
+    globalTimeout: process.env.CI ? 55 * 60 * 1000 : 0,
     // PHP's built-in server is the CI target; parallel workers would only queue up behind it.
     workers: 1,
     use: {

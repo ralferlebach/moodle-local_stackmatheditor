@@ -14,6 +14,8 @@ Imported by `tests/playwright/seed.php` into four quizzes and played by
 | `stack_reveal.xml` | `.../Authoring-Docs/Question-blocks/Reveal_block_example.xml` | - |
 | `stack_adapt.xml` | `.../Authoring-Docs/Question-blocks/Adapt_button_block.xml` | - |
 | `stack_stackjs.xml` | `samplequestions/stack-js/stack-js-issue-specific-example-938.xml` | - |
+| `stack_freetext_ascii.xml` | `.../Specialist-Tools-Docs/Free-text-input/Free-text_with_algebraic_answer.xml` (free text, `[[ascii]]` extractor into a hidden algebraic input, `[[hint]]`) | - |
+| `stack_adapt_delay.xml` | `.../Authoring-Docs/Question-blocks/Adapt_delay_block.xml` (`[[adaptauto]]` with a delay, numerical input) | - |
 
 STACK's sample questions are distributed with `qtype_stack` under the GNU GPL v3 or later, the
 licence of this plugin. Each file holds the single question of its source.

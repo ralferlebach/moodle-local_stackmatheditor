@@ -3452,3 +3452,27 @@ its own repository).
 - **#96:** the 92 rows of `docs/TEST-MIGRATION.md` checked against the tests they name (section
   "Audit of the mapping").
 - Nothing was pushed; the issue texts are delivered separately.
+
+## 86. Iteration 82 (1.4.0, build 2026110300): re-audit of 3 November 2026 (#96 - #105)
+
+Tests and CI only; the editor's code is that of 2026110201.
+
+- **#105:** the 5.3 job of Playwright run 41585693053 started at 05:44:53 and was cancelled at
+  06:20:07 - 35 min 14 s, the job's `timeout-minutes: 35`; the 4.5 job of the same run had
+  finished at 06:10 (no concurrency cancel: that would have ended both). Time per spec from the
+  log: `settings.spec.js` 511 s on 5.3 (323 s on 4.5), `interop.spec.js` 328 s, set-up about
+  6 min. Cause of the settings time: `seed.php --reset` ran the whole seed including the CAS
+  warm-up of 31 questions on every call (37 s locally on 5.3, nine calls); the reset now ends
+  after the settings quiz (3 s). Job limit 70 min, Playwright `globalTimeout` 55 min in CI (the
+  report is written), `SME_NO_OPTIONAL_SKIPS=1` on 5.3.
+- **#102:** GeoGebra `set` proven by reading m and c from the applet and building the
+  perpendicular line from them (graded 1 on both boards, editor off and on); geogebra.org
+  blocked: editor, submit and grading unaffected. STACK reads watched objects every 300 ms.
+- **#103:** fast drags and typing right before the Check; a replaced question (one flush per
+  field). Finding: with JSXGraph's script blocked, STACK's Check does not submit at all (editor
+  off as well).
+- **#104:** grading compared between editor off and on for every question; free text with
+  `[[ascii]]` extractor and `[[hint]]`, delayed adapt block, Parsons steps chosen by key.
+- **#101:** a wrong step gets `ATEquivFirst:(EMPTYCHAR,CHECKMARK,QMCHAR,QMCHAR)`, not the
+  first-line message.
+- R7 (no StackMathGame end-to-end run) added for the maintainer's decision, next to R5 and R6.
