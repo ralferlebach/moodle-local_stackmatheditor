@@ -1,103 +1,95 @@
-# 1.4.0 - final review (build 2026110200)
+# 1.4.0 - final review (build 2026110201)
 
-Answer to the re-audits of 2 November 2026 ("Nacharbeitsauftrag STACK Math Editor 1.4.0" and
-"StackMathGame und StackMathEditor 1.4 - Re-Audit"). Baseline of the audit: development
-`5251061e` (build 2026100801). This document lists, per issue, what was changed, how it is
-proven, what is still open, and the resulting release decision.
+Answer to the critical-friend re-audit of 2 November 2026 (audited commit `5ed3c1eb`, build
+2026110200) and to the re-audit before it. Scope: this plugin only. StackMathGame and other
+plugins are not decided here; foreign STACK components are tested only for how the editor
+behaves next to them.
 
-All runs below are local runs on the working tree of build 2026110200 - Moodle 4.5.15 (PHP 8.3,
-PostgreSQL 16) and Moodle 5.3 (PHP 8.3, PostgreSQL 16), STACK with Maxima 5.46, Chromium 141.
-Nothing has been pushed from this work, so there is no GitHub run on the final SHA yet; every
-point that requires one is marked open.
+All runs below are local runs on the working tree of build 2026110201 - Moodle 4.5.15 and
+Moodle 5.3 (PHP 8.3, PostgreSQL 16), STACK 4.13.1 with Maxima 5.46, Chromium 141. Nothing has been
+pushed from this work, so there is no GitHub run on the final SHA yet; every point that requires
+one is marked open. Local runs do not replace that evidence.
 
 ## Overview
 
 | Issue | Prio | State after this work | Open until |
 |---|---|---|---|
-| #100 switched-off editor overwrote the visible answer | P1 | fixed; reproduced before, green after (Jest with the real modules, Playwright 4.5 and 5.3) | CI on the pushed SHA; StackMathGame part see below |
-| #101 equivalence chains: value/default, serialisation, life cycle | P1 | fixed; firstline/mustverify fixture, chain validated and graded, omitted first line stays omitted; multi-line questions inserted later now get their editor | CI on the pushed SHA; StackMathGame part see below |
-| #99 formal release gates | - | removed (`maturity-gate`, `release-guard.yml`, sign-off file and checker); `CI complete` depends on the functional jobs directly, self-test in the job | first main run with the new graph |
-| #96 test pyramid acceptance | P1 | Playwright 4.5/5.3, PHPUnit 4.5/5.3 incl. CAS contracts, Behat 6/6 on the final working tree | main CI incl. upgrade, concurrency, coverage on the pushed SHA |
-| #71 release documentation | P1 | version, README, change log agree; P1s fixed, not accepted | release artefact and its SHA-256 from the tag |
-| #97 question version in HTML | P3 | integer or escaped; PHPUnit | main CI |
-| #98 admin multiselect | P3 | DOM-based sizing by element id; PHPUnit for options, size, semantics, save/reload, markup variants | main CI |
+| #102 / #104 foreign STACK input types got an editor | P0 | fixed: the explicit STACK type decides, the `_ansN` name is no proof; reproduced before (Jest 24/71 red, browser), green after | CI on the pushed SHA |
+| #100 submit / switch / form | P1 | fixed in 2026110200; now also: question replaced three times, Check by keyboard, revisit; widget-written values on mixed pages | GitHub Playwright 4.5/5.3 on the pushed SHA |
+| #101 equiv / firstline / textarea | P1 | four-line chain validated and graded; omitted first line stays omitted; fractions, powers, an invalid line through off/on, reload, revisit; emptied textarea | GitHub Playwright 4.5/5.3 on the pushed SHA |
+| #102 GeoGebra and `mod_geogebra` | P1 | STACK GeoGebra: two boards, watched number and point into editor fields, `remember` in a string and a `geogebra` input, reload - editor off and on, 4.5 and 5.3. `mod_geogebra`: no editor on its pages (PHPUnit) | a browser run with `mod_geogebra` installed (R5); GitHub run |
+| #103 JSXGraph | P1 | all bindings of STACK's binding demo by mouse drag, two-way through the editor, reload; custom binding's string native | GitHub run; Firefox (R6) |
+| #104 Parsons, reveal, adapt, STACK-JS, mixed types | P1 | four goodie fixtures plus a question with every STACK input type, editor off and on, 4.5 and 5.3 | GitHub run; Firefox (R6) |
+| #96 test pyramid | P2 | Playwright 4.5 and 5.3 complete and green; migration mapping audited against the tests it names | main CI incl. upgrade, concurrency, coverage on the pushed SHA |
+| #99 formal gates | P2 | removed (2026110200); no formal gate added since | first main run with the new graph, link in #99 |
+| #97 question version | P3 | integer or escaped (PHPUnit); configuration page in the browser on 4.5/5.3 (`settings.spec.js`, `configure-access.spec.js`) | main CI |
+| #98 admin multiselect | P3 | DOM sizing (option C, see below); real admin page on 4.5 and 5.3: size, label, keyboard, save, reload | main CI |
+| #71 release | P2 | version, change log, README, AMD build agree on 2026110201 | tag, release artefact and its SHA-256 from the pushed commit; maintainer's decision on R5/R6 |
 
-## #100 / #101: before and after
+## #102 / #104: which field gets an editor
 
-The defect was reproduced with real interaction before it was fixed:
+`input_fields.js::fieldKind()`: an explicit `data-stack-input-type` is authoritative - `algebraic`
+and `units` get the one-line editor, everything else (geogebra, string - also Parsons and JSXGraph
+custom bindings -, json, freetext, notes, numerical, singlechar, matrix, varmatrix, boolean,
+dropdown, an unknown future type) stays native. Without type metadata only a text input with
+STACK's class `algebraic` in a `.que.stack`, named or identified `..._ansN`, gets one.
+`textarea_fields.js` already took only `equiv` and `textarea`.
 
-* `tests/jest/visible_value_100_101.test.js` loads the real `input_fields`, `textarea_fields`,
-  `stack_bridge` and `editor_toggle` with the bundled MathQuill and jQuery in jsdom; only Moodle's
-  string loader is stubbed. Against the sources of build 2026100801, 20 of its 28 tests fail;
-  with build 2026110200 all pass.
-* `tests/playwright/visible-value.spec.js` clicks the switch, types into the visible field, and
-  clicks, taps or presses STACK's Check button. It compares the request form data, the stored
-  question-engine step (`tests/playwright/attempt-state.php`, read-only) and the page after the
-  reload. With the AMD build of 2026100801 on Moodle 4.5, 8 of its 11 tests failed then (the
-  twelfth, a replaced equiv question, was added afterwards and found the missing observer):
+Before (build 2026110200): `tests/jest/foreign_input_types_102_104.test.js` - 24 of 71 red (typed
+geogebra, string, json, parsons, numerical, singlechar, matrix and an unknown type named `_ans1` or
+`_ans12` got MathQuill; untyped non-algebraic fields were converted; a mixed page had three
+editors instead of two). In the browser with the old AMD build on 4.5, `interop.spec.js` stopped at
+the first assertion: the string field of the mixed-types question had an editor. After: 71/71 and
+4/4.
 
-  | Case | Visible | Sent and stored with 2026100801 |
-  |---|---|---|
-  | editor off, typed `2*2=4`, Check by click | `2*2=4` | `x+1` (stale editor) |
-  | editor off, typed `2*2=4`, Check by tap | `2*2=4` | `x+1` |
-  | on, off, typed `3 * x`, on, Check | `3 * x` | `3x` |
-  | two inputs, one off | `a-1` | `z^2` |
-  | textarea off, `x=1` / `y=2` | two lines | empty |
+## Interoperability (#102 - #104)
 
-  With build 2026110200: 12 of 12 green on Moodle 4.5 and on Moodle 5.3.
+`docs/INTEROP.md` has the rule, the matrix and the limits. `interop.spec.js` plays each scenario
+with the editor switched off for the whole site (no editor script) and on, and compares for every
+answer field: value before the Check = request = stored step (`attempt-state.php`) = page after
+the reload, and the widgets' values between the two runs.
 
-The equivalence-chain fixture (`tests/fixtures/stack_equiv_chain.xml`) is a STACK equiv input
-with `ta:[1+2*3^3,1+2*27,1+54,55]`, simplification off, syntax hint and option `firstline`,
-`mustverify` and the answer test EquivFirst. The browser test shows the prescribed first line in
-the textarea and in the editor, sends the four-line chain, sees it validated on the first Check
-and graded 1 on the second. A deliberately omitted first line stays omitted - in the request, the
-stored step and after the reload - and STACK answers "You have used the wrong first line in your
-argument!": a rule of the question, not a transfer error. The STACK rules were not changed.
+| Scenario | 4.5 | 5.3 |
+|---|---|---|
+| every STACK input type (12 inputs) | green | green |
+| JSXGraph: `bind_point`, `bind_slider`, `bind_point_dual`, `bind_point_relative`, `bind_point_direction`, `bind_list_of`, `define_group`, `custom_bind`; typing `[2,-1]` into the editor moves the point | green | green |
+| GeoGebra: two boards, watch (number, point), remember (string, geogebra input), reload | green | green |
+| Parsons proof and grid, reveal, adapt, STACK-JS, algebraic editor on the same page | green | green |
+
+Findings that are not the editor's, recorded so they are not mistaken for it later: STACK's
+JSXGraph demo with `width="100%"` collapses to zero width in a quiz without the editor (fixture
+uses 360px); a Parsons block takes the focus on the first click into the page with the editor off
+as well; JSXGraph serialises a restored board again with a different floating-point tail.
+
+## #98: decision for option C
+
+The size is set on the `<select>` found by its id through PHP's DOM extension
+(`admin_setting_multiselect_sized::size_select()`), instead of a string replacement of
+`size="10"` (A) or a template override (B). Serialisation risks: the DOM round trip may change
+attribute quoting and entity spelling of the surrounding markup; the method parses a wrapper with
+an explicit UTF-8 declaration, returns the markup unchanged when the element is not found, and
+PHPUnit covers three markup variants, UTF-8 labels and the missing element. A and B are
+alternatives, not further requirements.
 
 ## Test runs on the final working tree
 
 | Suite | Moodle 4.5 | Moodle 5.3 |
 |---|---|---|
-| Jest | 30 suites, 3322 tests, all green | - |
-| PHPUnit (`SME_REQUIRE_CAS=1`) | 247 tests, 4619 assertions, 1 skip (adaptivequiz is installed: the "without adaptivequiz" case) | 247 tests, 4598 assertions, 4 skips (adaptivequiz not installed) |
-| Playwright (strict fixtures) | 97 passed, 2 optional skips (dark mode, no colour modes on 4.5) | 99 passed, 0 skipped (`SME_NO_OPTIONAL_SKIPS=1`) |
-| Playwright run-summary gate | green | green |
-| Behat | 6/6 scenarios, 55 steps, 113.5 s in the scenarios | - (CI cell 5.3/MariaDB) |
-| moodle-plugin-ci savepoints, validate, phpdoc, codechecker | green | - |
-| phpcs (moodle) | 0 errors, 0 warnings | - |
-| `.github/ci-complete.sh --self-test` | green; `test=success jest=failure` exits 1 | - |
+| Jest | 31 suites, 3393 tests, all green | - |
+| PHPUnit (`SME_REQUIRE_CAS=1`) | 248 tests, 4627 assertions, all green, 1 skip (adaptivequiz installed: the "without adaptivequiz" case) | 248 tests, 4606 assertions, all green, 4 skips (adaptivequiz not installed) |
+| Playwright (strict fixtures, gate) | 105 passed, 2 optional skips (dark mode: no colour modes on 4.5), gate green | 107 passed, 0 skipped (`SME_NO_OPTIONAL_SKIPS=1`), gate green |
+| Behat | 6/6 scenarios, 55 steps | - (CI cell 5.3/MariaDB) |
+| moodle-plugin-ci validate, savepoints, phpdoc, phpcs (`--max-warnings 0`) | green | - |
+| AMD build | rebuilt with grunt, identical to the shipped files | - |
+| `.github/ci-complete.sh --self-test` | green | - |
 
-Not run here (GitHub only): the main CI matrix (4.5 - 5.3 x PHP x DB), upgrade from the
-published release, concurrency, coverage floor, NVDA, k6, JMeter, release artefact.
-
-## StackMathGame (second audit, N01 - N09)
-
-Worked in `local_stackmathgame` (build 2026090250 -> 2026090251, release 0.9.0, ALPHA) on its own
-Moodle 4.5.15 site (PostgreSQL 16, PHP 8.3, Maxima 5.46, qtype_stack 4.13.1, this editor build
-installed). Not pushed either.
-
-| Item | Change | Proven by | Not proven |
-|---|---|---|---|
-| N01 session key in the event log | `collectAnswers()` no longer sends `sesskey`; `submit_answer` drops it and logs an allow-list of named answer fields; upgrade 2026090251 redacts old rows (idempotent, marks `sesskeyredacted`) | PHPUnit `runtime_endpoints_security_test` (written `payloadjson`, refused submit without key, key among answers does not authorise), `eventlog_redaction_test` (5), `stack_submit_test` with real STACK; Jest | a genuine answer of exactly ten alphanumerics in an old row is also removed (documented price) |
-| N02 / N10 editor in the game | see #100 / #101 above | `rpg-verified-play.spec.js`: editor off stores exactly the visible value; editor on with the four-line equiv chain, omitted first line stays omitted | 1 flake in 24 runs: after a fragment swap the editor did not re-attach and the fallback reload did not fire; cause not found |
-| N03 check under failure | flat submit chain; render errors caught, never resent or rewarded; no reload without a native submitter; optional bootstrap calls cannot block the start; `aria-live` status line | Jest "the check under failure" (7, real RPG mode, injected failures per stage) | - |
-| N04 unsaved state | per-field baseline; newer edits carried into the swapped question; re-init reload waits and never discards unsaved values | Jest "the unsaved-changes state" (10) | Moodle 4.5 has no per-field dirty flag; form-level only |
-| N05 settings and labels | `default` label created at install and by the upgrade; access check against the cmid's context; validated, transactional writes; bounded design list | PHPUnit `quiz_settings_service_test` (9 new, incl. real rollback); the two formerly red Behat scenarios green | - |
-| N06 resolver, active slot, quest stages | configured wrong-answer rule executed; future quest stages not playable; server-resolved slot presented; navtiming scenarios wait for STACK validation, exclusion removed from CI | PHPUnit resolver/page-group/output-hooks/endpoint tests; Behat `branch_navigation` 5/5, new `page_groups` 3/3 | - |
-| N07 HUD cache | cache keyed by user and campaign, other players' entries dropped, server state wins | Jest `rpg_hud_cache.test.js` (5; 5/5 red before) | - |
-| N08 fragment endpoint | own running attempts only, same playability check as submit; now returns the question's JavaScript (STACK validation after a swap) | PHPUnit (7 fragment cases) | - |
-| N09 real browser play | `rpg-verified-play.spec.js`: keyboard MathQuill, wrong then right, back/forward, reload, equiv chain, real finish checked against the database; 390 px and 200 % zoom | 4 tests, 24 runs, last 3x4 and 2x4 runs all green | Firefox; Moodle 5.x; MariaDB; a site without the editor plugin. `rpg-full-ui.spec.js` still red in its last step (core "Invalid parameter value detected" on `mod/quiz/edit.php`, aborted requests on page change), cause not investigated |
-| ESLint `game_engine.js:461/482` | removed with the restructuring | ESLint `--max-warnings 0` clean; AMD build byte-identical to grunt | - |
-
-Game totals on the final working tree: Jest 55/55; PHPUnit 309 tests, 1331 assertions, 9 skips
-(block_xp/block_stash not installed, 4 existing placeholders); Behat 34 scenarios, 382 steps;
-phpcs clean except one pre-existing finding in each of four unchanged `.github/*.php` scripts.
-Spot-checked independently: Jest 55/55, phpcs on classes/db/amd/tests clean, the N01 security and
-redaction tests 18/18.
+Not run here (GitHub only): the main CI matrix (4.5 - 5.3 x PHP x PostgreSQL/MariaDB), upgrade
+from the published release, concurrency, coverage floor, NVDA, k6, JMeter, release artefact, and
+any Firefox run.
 
 ## Release decision
 
-1.4.0 build 2026110200 is releasable for the editor's own scope once the pushed SHA has a green
-main CI and a green Playwright run on 4.5 and 5.3 - no P1 of the editor is open or accepted as a
-risk. The integration with StackMathGame is released with the game's own state (alpha); what is
-proven of it is listed in the game section.
+1.4.0 build 2026110201 is releasable for the editor's own scope once the pushed SHA has a green
+main CI and a green Playwright run on 4.5 and 5.3. No P0/P1 of the editor is open as a defect.
+Two points are not proven and need the maintainer's decision before the tag (`docs/RESIDUAL-RISKS.md`):
+R5 (no browser run on a `mod_geogebra` activity) and R6 (interoperability in Chromium only).

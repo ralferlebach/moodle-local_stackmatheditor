@@ -128,10 +128,10 @@ suites, 3203 tests.
 | 56 | `editor_rendering.feature` | 55 | Toolbar buttons insert correct LaTeX |  | Playwright `editor-rendering.spec.js` "the square root button inserts a square root", "every template button leaves the cursor in its first slot"; Jest `button_contract.test.js`, `math_contracts.test.js` |
 | 57 | `editor_rendering.feature` | 63 | Editor is absent when plugin is globally disabled |  | Playwright `editor-rendering.spec.js` "no editor when the plugin is disabled globally (mode 0)"; PHPUnit `activation_matrix_test.php` |
 | 58 | `editor_rendering.feature` | 71 | Editor is absent when disabled at question level in mode 3 |  | Playwright `editor-rendering.spec.js` "no editor for a question disabled at question level (mode 3)"; PHPUnit `activation_matrix_test.php::test_mode_three` |
-| 59 | `multiline_editor.feature` | 32 | Clearing a line keeps it as an empty line; a second Backspace removes it |  | Playwright `multiline.spec.js` (same title) |
+| 59 | `multiline_editor.feature` | 32 | Clearing a line keeps it as an empty line; a second Backspace removes it |  | Playwright `multiline.spec.js` "clearing a line keeps it as an empty line; a second Backspace removes it" |
 | 60 | `multiline_editor.feature` | 50 | Delete removes an already empty line as well |  | Playwright `multiline.spec.js` (same title) |
-| 61 | `multiline_editor.feature` | 65 | The last remaining line is never removed |  | Playwright `multiline.spec.js` (same title) |
-| 62 | `multiline_editor.feature` | 77 | An emptied denominator does not survive the finished fraction |  | Playwright `multiline.spec.js` (same title) |
+| 61 | `multiline_editor.feature` | 65 | The last remaining line is never removed |  | Playwright `multiline.spec.js` "the last remaining line is never removed" |
+| 62 | `multiline_editor.feature` | 77 | An emptied denominator does not survive the finished fraction |  | Playwright `multiline.spec.js` "an emptied denominator does not survive the finished fraction" |
 | 63 | `configure_toolbar.feature` | 25 | Navigation selector contains MathQuill entry when STACK questions exist |  | Behat `configure_toolbar.feature` "The quiz navigation offers the editor configuration, and the quiz page opens from it"; PHPUnit `configure_capability_test.php::test_navigation_link_follows_capability` |
 | 64 | `configure_toolbar.feature` | 31 | Quiz-level configure page opens without question ID |  | Behat `configure_toolbar.feature` "The quiz navigation offers the editor configuration, and the quiz page opens from it" |
 | 65 | `configure_toolbar.feature` | 39 | Question-level configure page shows question preview |  | Behat `configure_toolbar.feature` "The question configuration opens from the question in the quiz"; Playwright `configure-access.spec.js` "the quiz's own question opens with its preview"; PHPUnit `preview_config_test.php` |
@@ -169,3 +169,20 @@ suites, 3203 tests.
 instances are in the table (rows marked `configure_toolbar.feature`). `stack_cas_init.feature` is
 unchanged.
 
+
+## Audit of the mapping (build 2026110201)
+
+The table above was checked against the tests it names, not only against file names:
+
+* All 92 rows name tests that exist. 75 rows name a test by its title or test method; each title
+  was found in the named file and each method exists. Three titles differed from the scenario
+  title only in capitalisation and are now quoted as the test spells them (rows 59, 61, 62).
+* The 16 contract rows (77 - 92) name contract ids; every id exists in `math_contracts.json`,
+  and both `cas_contract_test.php` (real STACK and Maxima) and `math_contracts.test.js` iterate
+  every contract of the file.
+* The Playwright tests named by title passed in the full run of build 2026110201 on Moodle 4.5
+  (105 passed, 2 optional dark-mode skips, strict gate green); the Jest suite (31 suites, 3393
+  tests) and the PHPUnit suite ran green on the same tree.
+
+What the audit cannot replace: whether an assertion is as strict as the Behat step it replaced was
+judged when each row was written (#96); this check proves that every named test exists and runs.

@@ -77,6 +77,22 @@ final class context_resolver_test extends \advanced_testcase {
     }
 
     /**
+     * The pages of mod_geogebra never load the editor (#102): the activity keeps its own applet, its
+     * own form and its own way of storing an attempt, with the editor on or off for the site.
+     *
+     * @return void
+     */
+    public function test_geogebra_activity_pages(): void {
+        $this->resetAfterTest();
+        foreach (['mod-geogebra-view', 'mod-geogebra-attempt', 'mod-geogebra-report', 'mod-geogebra-index'] as $pagetype) {
+            set_config('enabled', 1, 'local_stackmatheditor');
+            $this->assertFalse(context_resolver::supports_page($pagetype), $pagetype);
+            set_config('enabled', 3, 'local_stackmatheditor');
+            $this->assertFalse(context_resolver::supports_page($pagetype), $pagetype);
+        }
+    }
+
+    /**
      * An administrator can add a module without a code change.
      *
      * @return void

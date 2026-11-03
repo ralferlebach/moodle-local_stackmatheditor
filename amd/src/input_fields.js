@@ -50,19 +50,55 @@ define([
     var TYPES = ['algebraic', 'units'];
 
     /**
-     * Build selector for supported types.
+     * A STACK field name or id: ..._ansN, the end of the name, never a sub-field (..._ansN_val,
+     * ..._ansN_sub_0_0).
+     */
+    var LEGACY_NAME = /(^|_)ans\d+$/;
+
+    /**
+     * Build the selector for candidate fields.
+     *
+     * The typed selectors find what STACK 4.4+ marks; the *_ans* selectors only find candidates
+     * for the legacy path - which of them really gets an editor is decided by fieldKind().
      *
      * @returns {string} Selector.
      */
-        function selector() {
-        // Primary: STACK attribute selectors.
+    function selector() {
         var attrSelectors = TYPES.map(function(t) {
             return 'input[data-stack-input-type="' + t + '"]';
         });
-        // Fallback: STACK-typical *_ansN name/id patterns for STACK versions
-        // that do not emit data-stack-input-type.
         attrSelectors.push('input[name*="_ans"]', 'input[id*="_ans"]');
         return attrSelectors.join(',');
+    }
+
+    /**
+     * Decide from the STACK metadata whether a field is one the editor supports.
+     *
+     * The explicit data-stack-input-type is authoritative: algebraic and units are supported, any
+     * other value - geogebra, string (also the field of a Parsons block or of a JSXGraph custom
+     * binding), json, freetext, numerical, singlechar, matrix, varmatrix, or a type a later STACK
+     * adds - is not, whatever the field is called. Without the metadata (STACK before 4.4) a field
+     * is supported only when it is positively an algebraic STACK input: a text input with STACK's
+     * class "algebraic" (or "algebraic-right"), in a STACK question, whose name or id ends in
+     * _ansN. The name convention alone is no proof of the type.
+     *
+     * @param {jQuery} $input Candidate input.
+     * @returns {string} 'supported', 'foreign' (typed, not supported) or 'unknown'.
+     */
+    function fieldKind($input) {
+        var type = $input.attr('data-stack-input-type');
+        if (typeof type === 'string') {
+            return TYPES.indexOf(type) !== -1 ? 'supported' : 'foreign';
+        }
+        var htmltype = ($input.attr('type') || 'text').toLowerCase();
+        var cls = ' ' + ($input.attr('class') || '') + ' ';
+        var named = LEGACY_NAME.test($input.attr('name') || '') || LEGACY_NAME.test($input.attr('id') || '');
+        if (htmltype === 'text' && named
+                && (cls.indexOf(' algebraic ') !== -1 || cls.indexOf(' algebraic-right ') !== -1)
+                && $input.closest('.que.stack').length) {
+            return 'supported';
+        }
+        return 'unknown';
     }
 
     /**
@@ -663,12 +699,12 @@ define([
             return true;
         }
 
-        // Skip inputs that matched *_ans patterns but are not STACK inputs.
-        // A genuine STACK algebraic input name ends with _ansN (one or more digits).
-        if (!$input.attr('data-stack-input-type')
-                && !/(^|_)ans\d+$/.test(name)
-                && !/(^|_)ans\d+$/.test(inputid)) {
-            ctx.dbg('Skipping non-STACK input: ' + name);
+        // Only a type the editor supports gets an editor (#102, #104): a foreign STACK input
+        // keeps its own widget, events and stored format, and an unknown field is not converted.
+        var kind = fieldKind($input);
+        if (kind !== 'supported') {
+            ctx.dbg('Leaving ' + kind + ' input alone: ' + name + ' (type='
+                + ($input.attr('data-stack-input-type') || 'none') + ', id=' + inputid + ')');
             return true;
         }
 

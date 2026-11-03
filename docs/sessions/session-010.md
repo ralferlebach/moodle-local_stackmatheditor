@@ -3421,3 +3421,34 @@ published). Baseline of the audit: development `5251061e` = the state of iterati
   (`/home/claude/gm`, prefix `gm_`); results in `docs/REVIEW-1.4.0-FINAL.md`.
 - GitHub: the editor repository could not be cloned or written from the session (authentication),
   the issue texts are delivered separately. Nothing was pushed.
+
+## 85. Iteration 81 (1.4.0, build 2026110201): follow-up re-audit of 2 November 2026 (#96 - #104)
+
+Scope: the editor only; StackMathGame is out of scope from here on (its earlier part stays in
+its own repository).
+
+- **#102/#104 (P0):** `input_fields.js` `fieldKind()`: the explicit `data-stack-input-type` is
+  authoritative - only `algebraic` and `units`; the `_ans` selectors only collect legacy
+  candidates, which get an editor only as a text input with STACK's class `algebraic` (or
+  `algebraic-right`) in a `.que.stack`, named or identified `..._ansN`. Before: a typed
+  geogebra/string/json/numerical/singlechar/matrix field named `_ans1` got MathQuill (Jest: 24 of
+  71 new tests red on 2026110200; Playwright on 4.5 with the old build: the string field of the
+  mixed question got an editor).
+- **Interop fixtures** (`tests/fixtures/interop`, STACK's GPL sample questions plus a question
+  with every input type) in four quizzes (`SME_INTEROP_*_CMID`); `interop.spec.js` plays each with
+  the editor off for the site (`editor-switch.php`, mode 0) and on: JSXGraph bindings by mouse
+  drag and two-way through the editor, GeoGebra watch/remember on two boards through the applet
+  API, Parsons proof (double-click) and grid (mouse press + HTML5 drag events in the iframe),
+  reveal, adapt, STACK-JS. Findings that are not the editor's: the JSXGraph demo's 100%-wide
+  boards collapse to zero width in a quiz without the editor (fixture fixed to 360px); a Parsons
+  block takes the focus on the first click into the page, with the editor off as well; JSXGraph
+  re-serialises a restored board with a different floating-point tail.
+- **#100/#101:** three more browser cases (fractions/powers/invalid line through off/on, Check by
+  keyboard, reload and revisit; emptied equiv textarea; a question replaced three times).
+- **#98:** `admin-multiselect.spec.js` on the real admin page of 4.5 and 5.3.
+- **mod_geogebra:** installing it on the test sites was refused in this environment; its pages are
+  not editor pages (`context_resolver_test::test_geogebra_activity_pages`). Open: a browser run with
+  the module installed (R5 in `docs/RESIDUAL-RISKS.md`).
+- **#96:** the 92 rows of `docs/TEST-MIGRATION.md` checked against the tests they name (section
+  "Audit of the mapping").
+- Nothing was pushed; the issue texts are delivered separately.

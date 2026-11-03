@@ -87,7 +87,7 @@ function local_stackmatheditor_seed_import(string $file, stdClass $category, std
     global $DB;
     $xml = file_get_contents(__DIR__ . '/../fixtures/' . $file);
     $xml = preg_replace('~<name>\s*<text>[^<]*</text>~', '<name><text>' . $name . '</text>', $xml, 1);
-    $tmp = make_request_directory() . '/' . $file;
+    $tmp = make_request_directory() . '/' . basename($file);
     file_put_contents($tmp, $xml);
     $format = new qformat_xml();
     $format->setCategory($category);
@@ -263,6 +263,45 @@ $visiblecm = local_stackmatheditor_seed_optional_quiz(
     ['stack_algebraic.xml', 'stack_algebraic.xml', 'stack_equiv_chain.xml', 'stack_textarea.xml']
 );
 
+// Issues #102 - #104: STACK's own widgets next to the editor. The fixtures in tests/fixtures/interop
+// are STACK's documented sample questions (GPL, from qtype_stack's samplequestions) plus a question
+// with one input of every STACK type. Each quiz puts an algebraic editor field on the same page.
+$interoptypescm = local_stackmatheditor_seed_optional_quiz(
+    $gen,
+    $course,
+    $category,
+    'SME Interop Types Quiz',
+    ['interop/stack_mixed_types.xml']
+);
+$interopjsxcm = local_stackmatheditor_seed_optional_quiz(
+    $gen,
+    $course,
+    $category,
+    'SME Interop JSXGraph Quiz',
+    ['interop/stack_jsxgraph_bindings.xml']
+);
+$interopggbcm = local_stackmatheditor_seed_optional_quiz(
+    $gen,
+    $course,
+    $category,
+    'SME Interop GeoGebra Quiz',
+    ['interop/stack_geogebra_watch.xml', 'interop/stack_geogebra_input.xml', 'stack_algebraic.xml']
+);
+$interopgoodiescm = local_stackmatheditor_seed_optional_quiz(
+    $gen,
+    $course,
+    $category,
+    'SME Interop Goodies Quiz',
+    [
+        'interop/stack_parsons_proof.xml',
+        'interop/stack_parsons_grid.xml',
+        'interop/stack_reveal.xml',
+        'interop/stack_adapt.xml',
+        'interop/stack_stackjs.xml',
+        'stack_algebraic.xml',
+    ]
+);
+
 // Warm STACK's CAS result cache: instantiate every question once now. Otherwise the first
 // attempts of all simulated students start at the same moment, each instantiating ten STACK
 // questions with a fresh Maxima process, and the herd runs into the CAS timeout on a small CI
@@ -356,6 +395,10 @@ $exports = [
     'SME_UNITS_CMID' => $unitscm,
     'SME_EQUIV_CMID' => $equivcm,
     'SME_VISIBLE_CMID' => $visiblecm,
+    'SME_INTEROP_TYPES_CMID' => $interoptypescm,
+    'SME_INTEROP_JSX_CMID' => $interopjsxcm,
+    'SME_INTEROP_GGB_CMID' => $interopggbcm,
+    'SME_INTEROP_GOODIES_CMID' => $interopgoodiescm,
     'SME_USER_PASS' => $password,
     'SME_STUDENTS' => $students,
 ];

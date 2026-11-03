@@ -202,6 +202,11 @@ the value stays as it is shown.
 Questions that arrive after page load — CAPQuiz and StudentQuiz replace them over AJAX — are
 picked up as well, and never twice: an input that already carries an editor is skipped.
 
+Only algebraic and units inputs (one line) and equiv and textarea inputs (several lines) get an
+editor; the explicit STACK input type decides, not the field name. GeoGebra, JSXGraph, Parsons,
+reveal, adapt, STACK-JS and every other STACK input type keep their own widgets and data - see
+[docs/INTEROP.md](docs/INTEROP.md) for the rule, the tests and their limits.
+
 
 ### Implicit multiplication
 

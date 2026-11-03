@@ -386,6 +386,80 @@ test.describe('the visible answer is the stored answer (#100, #101)', () => {
             await expect(page.locator(`${que(3)} .sme-equiv-row`)).toHaveCount(3);
         });
 
+    test('equiv: fractions, powers and an invalid line arrive exactly and survive off/on, reload and a revisit',
+        async() => {
+            const page = student;
+            await attempt(page, true);
+            const typed = ['1+2*3^3', '1+2*27/1', '1+*54', '(110)/2', '55^1'].join('\n');
+            await editor(page, 3, false);
+            await typeVisible(page, 3, typed);
+            // On and off again without an edit in the editor: the lines are not rewritten.
+            await editor(page, 3, true);
+            await expect(page.locator(`${que(3)} .sme-equiv-row`)).toHaveCount(5);
+            await expect(page.locator(que(3)).getByRole('button', {name: 'Add line', exact: true})).toBeVisible();
+            await editor(page, 3, false);
+            expect(await shown(page, 3)).toBe(typed);
+
+            const request = await check(page, 3, 'keyboard');
+            expect(posted(request, 3)).toBe(typed);
+            expect(lines(stored().slots['3'].vars.ans1)).toBe(typed);
+            // STACK validated what arrived and objects to the invalid line, not to a lost one.
+            await expect(page.locator(`${que(3)} .stackinputfeedback`).first()).toBeVisible();
+            expect(await shown(page, 3)).toBe(typed);
+
+            // A revisit: leave the attempt and continue it.
+            await editor(page, 3, true);
+            await open(page, `/mod/quiz/view.php?id=${env('SME_VISIBLE_CMID')}`);
+            await attempt(page, false);
+            expect(await shown(page, 3)).toBe(typed);
+            await expect(page.locator(`${que(3)} .sme-equiv-row`)).toHaveCount(5);
+            // The line controls are there and work on the restored chain.
+            await page.locator(`${que(3)} .sme-equiv-row`).nth(4).locator('.sme-equiv-del').click();
+            await expect(page.locator(`${que(3)} .sme-equiv-row`)).toHaveCount(4);
+            await expect.poll(async() => shown(page, 3)).toBe(typed.split('\n').slice(0, 4).join('\n'));
+        });
+
+    test('equiv: an emptied textarea sends nothing and nothing is put back', async() => {
+        const page = student;
+        await attempt(page, true);
+        expect(await shown(page, 3)).toBe(CHAIN[0]);
+        await editor(page, 3, false);
+        await typeVisible(page, 3, '');
+        const request = await check(page, 3, 'click');
+        expect(posted(request, 3)).toBe('');
+        expect(stored().slots['3'].vars.ans1 || '').toBe('');
+    });
+
+    test('a question replaced three times keeps one flush per field and shows the stored value', async() => {
+        const page = student;
+        await attempt(page, true);
+        await typeEditor(page, 1, 'k+2');
+        await check(page, 1, 'click');
+        const replace = () => page.evaluate(async(selector) => {
+            const html = await (await fetch(window.location.href, {credentials: 'same-origin'})).text();
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            document.querySelector(selector).replaceWith(document.importNode(doc.querySelector(selector), true));
+        }, que(1));
+        const flushes = () => page.evaluate(() => new Promise((resolve) => {
+            window.require(['local_stackmatheditor/stack_bridge'], (bridge) => resolve(bridge.registeredCount()));
+        }));
+        for (let i = 0; i < 3; i += 1) {
+            await replace();
+            await page.locator(`${que(1)} .sme-toggle-input`).waitFor({state: 'attached', timeout: 30000});
+            await page.waitForTimeout(800);
+            expect(await flushes()).toBe(await page.locator('.que.stack [data-sme-init="1"]').count());
+        }
+        // The replacement was rendered with the stored answer: the editor starts from it.
+        expect(await page.locator(`${que(1)} .mq-editable-field`).first().evaluate(
+            (el) => window.MathQuill.getInterface(2)(el).latex())).toBe('k+2');
+        // Untouched, it sends the stored value unchanged; switched off, the field is the answer.
+        await editor(page, 1, false);
+        await typeVisible(page, 1, 'k+3');
+        const request = await check(page, 1, 'tap');
+        expect(posted(request, 1)).toBe('k+3');
+        expect(stored().slots['1'].vars.ans1).toBe('k+3');
+    });
+
     test('textarea: editor off, lines changed, Check: exactly the visible lines are stored', async() => {
         const page = student;
         await editor(page, 4, false);

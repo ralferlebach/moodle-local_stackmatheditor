@@ -8,14 +8,42 @@ Version numbers follow `version.php`: the release name (`1.4.0`) and the build
 (`YYYYMMDDNN`).
 
 
-1.4.0 (2026110200) - stable
+1.4.0 (2026110201) - stable
 ----------------------------
 
 1.3.0 (build 2026100700) was published on 7 October 2026. 1.4.0 adds the security, privacy,
 lifecycle, backup and data integrity fixes below, found in the reviews of 8 October 2026. A
 build 2026100800 with these fixes under the release name 1.3.0 existed for testing only. Build
 2026100801 of 1.4.0 was never published; build 2026110200 adds the fixes of the re-audit of
-2 November 2026 (#97 - #101). No database change since 2026100801.
+2 November 2026 (#97 - #101); build 2026110201 those of its follow-up (#102 - #104). No database
+change since 2026100801.
+
+### Fixed (build 2026110201)
+
+* The editor leaves foreign STACK inputs alone (#102, #104). Fields of other STACK input types -
+  GeoGebra, string (also the field of a Parsons block or of a JSXGraph custom binding), JSON,
+  free text, notes, numerical, single character, matrix, variable matrix, true/false, drop-down,
+  or a type a later STACK adds - could get a MathQuill editor when their name ended in `_ansN`:
+  the name convention was taken as proof of the type. The explicit `data-stack-input-type` is
+  now authoritative: only algebraic and units (one-line) and equiv and textarea (multi-line)
+  get an editor. A field without type metadata (STACK before 4.4) gets one only when it is
+  positively an algebraic STACK input - a text input with STACK's class `algebraic` in a STACK
+  question, named or identified `..._ansN`. Unknown fields are not converted.
+
+### Tests (build 2026110201)
+
+* `tests/jest/foreign_input_types_102_104.test.js`: 13 explicit types x 4 name variants, legacy
+  fields with and without the algebraic marker, a mixed page (submit, focus, events, switch).
+  24 of its 71 tests fail against build 2026110200.
+* `tests/playwright/interop.spec.js`: STACK's own sample questions for JSXGraph bindings,
+  GeoGebra (two boards), Parsons proof and grid, reveal, adapt and STACK-JS, and a question with
+  an input of every STACK type - each played with the editor off for the whole site and on, with
+  the request, the stored step and the reload compared (`docs/INTEROP.md`).
+* `tests/playwright/visible-value.spec.js`: equivalence chains with fractions, powers and an
+  invalid line through off/on, reload and a revisit; an emptied textarea; a question replaced
+  three times.
+* `tests/playwright/admin-multiselect.spec.js`: the sized toolbar-group list on the real admin
+  page (#98).
 
 ### Fixed (build 2026110200)
 
